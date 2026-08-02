@@ -1,3 +1,4 @@
+pub mod linux_graphics;
 mod settings;
 mod worker;
 mod commands;

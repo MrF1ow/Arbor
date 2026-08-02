@@ -2,5 +2,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    desktop_lib::run()
+  desktop_lib::linux_graphics::apply_workarounds();
+  desktop_lib::run()
 }
