@@ -1,43 +1,46 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="stylesheet" href="/src/styles.css" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tauri App</title>
-    <script type="module" src="/src/main.ts" defer></script>
+    <title>Arbor</title>
+    <link rel="stylesheet" href="/src/styles.css" />
   </head>
-
   <body>
-    <main class="container">
-      <h1>Welcome to Tauri</h1>
+    <main class="app">
+      <h1>Arbor</h1>
 
-      <div class="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/src/assets/vite.svg" class="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img
-            src="/src/assets/tauri.svg"
-            class="logo tauri"
-            alt="Tauri logo"
-          />
-        </a>
-        <a href="https://www.typescriptlang.org/docs" target="_blank">
-          <img
-            src="/src/assets/typescript.svg"
-            class="logo typescript"
-            alt="typescript logo"
-          />
-        </a>
-      </div>
-      <p>Click on the Tauri logo to learn more about the framework</p>
+      <section class="row">
+        <label>Knowledge folder</label>
+        <div class="folder">
+          <span id="root-path" class="path">No folder selected</span>
+          <button id="choose-folder">Choose folder…</button>
+          <button id="open-folder" disabled>Open</button>
+        </div>
+      </section>
 
-      <form class="row" id="greet-form">
-        <input id="greet-input" placeholder="Enter a name..." />
-        <button type="submit">Greet</button>
-      </form>
-      <p id="greet-msg"></p>
+      <p class="guidance">
+        Handwritten / GoodNotes markup → export and upload as PDF.
+        Clean digital slides with no ink → PPTX is fine.
+      </p>
+
+      <section class="row">
+        <label for="model">Model</label>
+        <select id="model"></select>
+      </section>
+
+      <section class="row status">
+        <span id="codex-status" class="badge">Checking Codex…</span>
+        <a id="codex-docs" href="#" target="_blank" rel="noreferrer" hidden>Set up Codex</a>
+      </section>
+
+      <section class="row actions">
+        <button id="update" disabled>Update Knowledge</button>
+        <button id="cancel" disabled>Cancel</button>
+      </section>
+
+      <pre id="log" class="log" aria-live="polite"></pre>
     </main>
+    <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

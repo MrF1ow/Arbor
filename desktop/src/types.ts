@@ -17,6 +17,7 @@ export interface Settings {
 export interface WorkerEvent {
   type: string;
   ts?: string;
+  model_id?: string;
   // common optional fields
   lecture_dir?: string;
   source?: string;
