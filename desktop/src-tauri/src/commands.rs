@@ -43,21 +43,22 @@ pub fn save_settings(app: tauri::AppHandle, settings: Settings) -> Result<(), St
     settings::save(&app, &settings)
 }
 
-// Stubs for Tasks 5–7; replaced in follow-up tasks.
 #[tauri::command]
-pub fn start_update(
-    _app: tauri::AppHandle,
-    _root: String,
-    _model: String,
-) -> Result<(), String> {
-    Err("start_update not implemented".into())
+pub fn start_update(app: tauri::AppHandle, root: String, model: String) -> Result<(), String> {
+    let cancel = worker::cancel_file_path();
+    let _ = std::fs::remove_file(&cancel); // clear stale cancel
+    let app_dir = repo_dir(&app);
+    worker::spawn_update_stream(app, app_dir, root, model, cancel);
+    Ok(())
 }
 
 #[tauri::command]
 pub fn cancel_update(_app: tauri::AppHandle) -> Result<(), String> {
-    Err("cancel_update not implemented".into())
+    let cancel = worker::cancel_file_path();
+    std::fs::write(&cancel, b"stop").map_err(|e| e.to_string())
 }
 
+// Stubs for Task 7; replaced in follow-up task.
 #[tauri::command]
 pub fn open_folder(_path: String) -> Result<(), String> {
     Err("open_folder not implemented".into())

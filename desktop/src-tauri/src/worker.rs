@@ -1,4 +1,6 @@
-use std::path::Path;
+use std::io::{BufRead, BufReader};
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 
 pub fn resolve_worker_argv(
     env: &dyn Fn(&str) -> Option<String>,
@@ -49,6 +51,57 @@ pub fn run_worker_json(app_dir: &Path, sub_args: &[&str]) -> Result<serde_json::
             )
         })?;
     serde_json::from_str(last).map_err(|e| format!("invalid worker json: {e}: {last}"))
+}
+
+#[cfg(feature = "desktop-runtime")]
+pub fn cancel_file_path() -> PathBuf {
+    std::env::temp_dir().join("arbor-cancel.flag")
+}
+
+#[cfg(feature = "desktop-runtime")]
+pub fn spawn_update_stream(
+    app: tauri::AppHandle,
+    app_dir: PathBuf,
+    root: String,
+    model: String,
+    cancel_file: PathBuf,
+) {
+    use tauri::Emitter;
+
+    let cancel_str = cancel_file.to_string_lossy().to_string();
+    let sub_args = ["update", "--root", &root, "--model", &model, "--cancel-file", &cancel_str];
+    let argv = resolve_worker_argv(&|k| std::env::var(k).ok(), &default_python_dir(&app_dir), &sub_args);
+
+    std::thread::spawn(move || {
+        let mut child = match Command::new(&argv[0])
+            .args(&argv[1..])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+        {
+            Ok(c) => c,
+            Err(e) => {
+                let _ = app.emit(
+                    "arbor://progress",
+                    serde_json::json!({ "line": format!("{{\"type\":\"error\",\"message\":\"failed to launch worker: {e}\"}}") }),
+                );
+                return;
+            }
+        };
+
+        if let Some(stdout) = child.stdout.take() {
+            let reader = BufReader::new(stdout);
+            for line in reader.lines().map_while(Result::ok) {
+                let _ = app.emit("arbor://progress", serde_json::json!({ "line": line }));
+            }
+        }
+
+        let code = child.wait().ok().and_then(|s| s.code()).unwrap_or(-1);
+        let _ = app.emit(
+            "arbor://progress",
+            serde_json::json!({ "line": format!("{{\"type\":\"worker_exit\",\"code\":{code}}}") }),
+        );
+    });
 }
 
 #[cfg(test)]
