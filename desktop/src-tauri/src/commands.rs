@@ -58,10 +58,20 @@ pub fn cancel_update(_app: tauri::AppHandle) -> Result<(), String> {
     std::fs::write(&cancel, b"stop").map_err(|e| e.to_string())
 }
 
-// Stubs for Task 7; replaced in follow-up task.
 #[tauri::command]
-pub fn open_folder(_path: String) -> Result<(), String> {
-    Err("open_folder not implemented".into())
+pub fn open_folder(path: String) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    let program = "open";
+    #[cfg(target_os = "linux")]
+    let program = "xdg-open";
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    return Err("open_folder not supported on this platform".into());
+
+    Command::new(program)
+        .arg(&path)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
