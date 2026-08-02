@@ -28,6 +28,29 @@ pub fn default_python_dir(app_dir: &Path) -> String {
     app_dir.join("python").to_string_lossy().to_string()
 }
 
+#[cfg(feature = "desktop-runtime")]
+pub fn run_worker_json(app_dir: &Path, sub_args: &[&str]) -> Result<serde_json::Value, String> {
+    use std::process::Command;
+
+    let argv = resolve_worker_argv(&|k| std::env::var(k).ok(), &default_python_dir(app_dir), sub_args);
+    let output = Command::new(&argv[0])
+        .args(&argv[1..])
+        .output()
+        .map_err(|e| format!("failed to launch worker: {e}"))?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let last = stdout
+        .lines()
+        .rev()
+        .find(|l| !l.trim().is_empty())
+        .ok_or_else(|| {
+            format!(
+                "worker produced no output (stderr: {})",
+                String::from_utf8_lossy(&output.stderr)
+            )
+        })?;
+    serde_json::from_str(last).map_err(|e| format!("invalid worker json: {e}: {last}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
