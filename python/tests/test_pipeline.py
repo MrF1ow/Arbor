@@ -96,3 +96,34 @@ def test_cancel_before_second_lecture(git_repo: Path, make_pdf, tmp_path: Path):
     assert res.processed == 1  # only first lecture
     events = parse_lines(buf.getvalue())
     assert any(e["type"] == "cancelled" for e in events)
+
+
+def test_git_state_error_emits_run_done(tmp_path: Path):
+    em, buf = _emitter()
+    res = run_update(tmp_path, "m", FakeProvider(GOOD_MD), em, default_settings())
+    assert res.processed == 0 and res.commit is None
+    events = parse_lines(buf.getvalue())
+    assert events[0]["type"] == "run_started"
+    assert any(e["type"] == "error" for e in events)
+    assert any(e["type"] == "run_done" for e in events)
+    assert events[-1]["type"] == "run_done"
+
+
+def test_write_failure_removes_lecture_md(git_repo: Path, make_pdf, monkeypatch):
+    from arbor_worker import pipeline as pipeline_mod
+
+    d = git_repo / "Bio" / "L1"
+    d.mkdir(parents=True)
+    make_pdf(d / "source.pdf", pages=1)
+
+    def fail_metadata(meta, dest):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(pipeline_mod, "write_metadata", fail_metadata)
+    em, buf = _emitter()
+    res = run_update(git_repo, "m", FakeProvider(GOOD_MD), em, default_settings())
+    assert res.failed == 1
+    assert not (d / "lecture.md").exists()
+    assert not (d / "metadata.json").exists()
+    events = parse_lines(buf.getvalue())
+    assert any(e["type"] == "lecture_failed" and e["stage"] == "write" for e in events)

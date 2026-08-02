@@ -56,5 +56,6 @@ def cmd_update(args) -> int:
         result = run_update(root, args.model, provider, emitter, settings, cancel_file=cancel_file)
     except Exception as e:  # surface unexpected failures as an error event
         emitter.error(message=str(e))
+        emitter.run_done(processed=0, failed=0, skipped=0)
         return 1
     return 0 if result.failed == 0 else 1

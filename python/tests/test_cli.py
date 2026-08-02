@@ -69,3 +69,26 @@ def test_update_with_fake_provider_processes(tmp_path, monkeypatch):
     types = [e["type"] for e in [_json.loads(l) for l in out.splitlines() if l.strip()]]
     assert "committed" in types
     assert (d / "lecture.md").exists()
+
+
+def test_update_codex_unauthenticated(tmp_path, monkeypatch):
+    from arbor_worker.auth import AuthResult
+
+    root = tmp_path / "K"
+    root.mkdir()
+    d = root / "Bio" / "L1"
+    d.mkdir(parents=True)
+    (d / "source.pdf").write_bytes(b"not-a-real-pdf")
+
+    monkeypatch.setattr(
+        "arbor_worker.commands.check_codex_auth",
+        lambda: AuthResult(False, "Not logged in"),
+    )
+
+    code, out, _ = run(["update", "--root", str(root), "--model", "m", "--provider", "codex"])
+    assert code == 3
+    events = [_json.loads(line) for line in out.splitlines() if line.strip()]
+    assert [e["type"] for e in events] == ["auth_failed"]
+    assert events[0]["reason"] == "Not logged in"
+    assert not (d / "lecture.md").exists()
+    assert not (d / "metadata.json").exists()

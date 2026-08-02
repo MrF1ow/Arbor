@@ -7,6 +7,7 @@ from arbor_worker.cache import CacheDir, ensure_gitignored
 from arbor_worker.digest import build_prompt, validate_digest, DigestError
 from arbor_worker.events import EventEmitter
 from arbor_worker.gitstate import (
+    GitStateError,
     commit_batch,
     dirty_sources,
     validate_single_source_per_lecture,
@@ -53,8 +54,13 @@ def run_update(
     root = Path(root)
     emitter.run_started(root=str(root), model_id=model_id, provider=provider.name)
 
-    sources = dirty_sources(root)
-    validate_single_source_per_lecture(sources)
+    try:
+        sources = dirty_sources(root)
+        validate_single_source_per_lecture(sources)
+    except GitStateError as e:
+        emitter.error(message=str(e))
+        emitter.run_done(processed=0, failed=0, skipped=0)
+        return RunResult(0, 0, 0, None, [])
 
     if not sources:
         emitter.nothing_to_process()
@@ -130,15 +136,17 @@ def run_update(
 
         # Write ---------------------------------------------------------
         emitter.stage(lecture_dir=lecture_dir_rel, stage="write", status="start")
+        lecture_md = abs_dir / "lecture.md"
+        metadata_json = abs_dir / "metadata.json"
         try:
-            lecture_md = abs_dir / "lecture.md"
-            metadata_json = abs_dir / "metadata.json"
             lecture_md.write_text(result.markdown if result.markdown.endswith("\n") else result.markdown + "\n")
             meta = build_metadata(abs_source, src.source_type, source_hash, model_id, prep.processing_path)
             write_metadata(meta, metadata_json)
             if lecture_md.stat().st_size == 0 or metadata_json.stat().st_size == 0:
                 raise OSError("Wrote empty digest artifacts")
         except OSError as e:
+            if lecture_md.is_file():
+                lecture_md.unlink()
             failed += 1
             emitter.stage(lecture_dir=lecture_dir_rel, stage="write", status="fail", detail=str(e))
             emitter.lecture_failed(lecture_dir=lecture_dir_rel, stage="write", message=str(e))
@@ -158,8 +166,13 @@ def run_update(
         commit_paths.append(Path(".gitignore"))
         done_dirs = [o.lecture_dir for o in outcomes if o.ok]
         message = "digest: " + ", ".join(done_dirs)
-        commit = commit_batch(root, commit_paths, message)
-        emitter.committed(commit=commit, lectures=done_dirs)
+        try:
+            commit = commit_batch(root, commit_paths, message)
+            emitter.committed(commit=commit, lectures=done_dirs)
+        except GitStateError as e:
+            emitter.error(message=str(e))
+            emitter.run_done(processed=processed, failed=failed, skipped=skipped)
+            return RunResult(processed, failed, skipped, None, outcomes)
 
     skipped = 0  # unchanged sources never enter `sources`
     emitter.run_done(processed=processed, failed=failed, skipped=skipped)
