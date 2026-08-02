@@ -11,7 +11,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command")
 
     sub.add_parser("check-auth", help="Check Codex CLI authentication.")
-    sub.add_parser("list-models", help="List selectable models as JSON.")
+    lm = sub.add_parser("list-models", help="List selectable models as JSON.")
+    lm.add_argument("--root", default=None, help="Knowledge root to read .arbor/models.json from.")
 
     up = sub.add_parser("update", help="Process new/changed sources under a Knowledge root.")
     up.add_argument("--root", required=True, help="Path to the Knowledge git repo.")
