@@ -1,0 +1,28 @@
+[project]
+name = "arbor-worker"
+version = "0.1.0"
+description = "Arbor knowledge worker: turns lecture sources into structured digests via the Codex CLI."
+requires-python = ">=3.11"
+dependencies = [
+    "pymupdf>=1.24",
+    "python-pptx>=0.6.23",
+]
+
+[project.scripts]
+arbor-worker = "arbor_worker.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/arbor_worker"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
