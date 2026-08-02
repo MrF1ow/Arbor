@@ -1,6 +1,7 @@
 use crate::settings::{self, Settings};
 use crate::worker;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 use tauri::Manager;
 
 fn repo_dir(app: &tauri::AppHandle) -> PathBuf {
@@ -63,6 +64,28 @@ pub fn open_folder(_path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn init_knowledge_repo(_path: String) -> Result<bool, String> {
-    Err("init_knowledge_repo not implemented".into())
+pub fn init_knowledge_repo(path: String) -> Result<bool, String> {
+    let root = Path::new(&path);
+    if !root.is_dir() {
+        return Err(format!("Not a folder: {path}"));
+    }
+    if root.join(".git").exists() {
+        return Ok(false);
+    }
+    let run = |args: &[&str]| -> Result<(), String> {
+        let out = Command::new("git")
+            .arg("-C")
+            .arg(&path)
+            .args(args)
+            .output()
+            .map_err(|e| e.to_string())?;
+        if out.status.success() {
+            Ok(())
+        } else {
+            Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+        }
+    };
+    run(&["init"])?;
+    run(&["commit", "--allow-empty", "-m", "Initialize Arbor knowledge library"])?;
+    Ok(true)
 }
