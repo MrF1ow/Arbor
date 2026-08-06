@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Arbor</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <h1>Arbor</h1>
+
+      <section class="row">
+        <label>Knowledge folder</label>
+        <div class="folder">
+          <span id="root-path" class="path">No folder selected</span>
+          <button id="choose-folder">Choose folder…</button>
+          <button id="open-folder" disabled>Open</button>
+        </div>
+      </section>
+
+      <p class="guidance">
+        Handwritten / GoodNotes markup → export and upload as PDF.
+        Clean digital slides with no ink → PPTX is fine.
+      </p>
+
+      <section class="row">
+        <label for="model">Model</label>
+        <select id="model"></select>
+      </section>
+
+      <section class="row status">
+        <span id="codex-status" class="badge">Checking Codex…</span>
+        <a id="codex-docs" href="#" target="_blank" rel="noreferrer" hidden>Set up Codex</a>
+      </section>
+
+      <section class="row actions">
+        <button id="update" disabled>Update Knowledge</button>
+        <button id="cancel" disabled>Cancel</button>
+      </section>
+
+      <pre id="log" class="log" aria-live="polite"></pre>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
