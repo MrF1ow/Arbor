@@ -4,7 +4,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from arbor_worker.cache import CacheDir, ensure_gitignored
+from arbor_worker.chunk_generate import ChunkedResult, chunked_generate
 from arbor_worker.digest import build_prompt, validate_digest, DigestError
+from arbor_worker.errors import ChunkGenerateError, SynthesisError
 from arbor_worker.events import EventEmitter
 from arbor_worker.gitstate import (
     GitStateError,
@@ -117,16 +119,46 @@ def run_update(
 
         # Generate ------------------------------------------------------
         emitter.stage(lecture_dir=lecture_dir_rel, stage="generate", status="start")
-        request = ProviderRequest(
-            prompt=build_prompt(abs_source.name, prep),
-            model_id=model_id,
-            image_paths=[p.resolve() for p in prep.image_paths],
-            cwd=abs_dir,
+        images = prep.image_paths
+        use_chunking = (
+            prep.text is None
+            and len(images) > settings.pdf_chunk_threshold_pages
         )
+        generate_mode = "single"
+        chunk_count = None
+        chunk_size_used = None
+        page_ranges = None
         try:
-            result = provider.run(request)
-            validate_digest(result.markdown)
-        except (DigestError, Exception) as e:  # provider errors surface here
+            if use_chunking:
+                chunked: ChunkedResult = chunked_generate(
+                    provider,
+                    source_name=abs_source.name,
+                    image_paths=images,
+                    model_id=model_id,
+                    cwd=abs_dir,
+                    cache_dir=cache.for_hash(source_hash),
+                    chunk_size=settings.pdf_chunk_size_pages,
+                    concurrency=settings.pdf_chunk_concurrency,
+                    emitter=emitter,
+                    lecture_dir=lecture_dir_rel,
+                    cancel_requested=lambda: _cancel_requested(cancel_file),
+                )
+                markdown = chunked.markdown
+                generate_mode = "chunked"
+                chunk_count = chunked.chunk_count
+                chunk_size_used = chunked.chunk_size
+                page_ranges = chunked.page_ranges
+            else:
+                request = ProviderRequest(
+                    prompt=build_prompt(abs_source.name, prep),
+                    model_id=model_id,
+                    image_paths=[p.resolve() for p in images],
+                    cwd=abs_dir,
+                )
+                result = provider.run(request)
+                markdown = result.markdown
+                validate_digest(markdown)
+        except (DigestError, ChunkGenerateError, SynthesisError, Exception) as e:
             failed += 1
             emitter.stage(lecture_dir=lecture_dir_rel, stage="generate", status="fail", detail=str(e))
             emitter.lecture_failed(lecture_dir=lecture_dir_rel, stage="generate", message=str(e))
@@ -139,8 +171,14 @@ def run_update(
         lecture_md = abs_dir / "lecture.md"
         metadata_json = abs_dir / "metadata.json"
         try:
-            lecture_md.write_text(result.markdown if result.markdown.endswith("\n") else result.markdown + "\n")
-            meta = build_metadata(abs_source, src.source_type, source_hash, model_id, prep.processing_path)
+            lecture_md.write_text(markdown if markdown.endswith("\n") else markdown + "\n")
+            meta = build_metadata(
+                abs_source, src.source_type, source_hash, model_id, prep.processing_path,
+                generate_mode=generate_mode,
+                chunk_count=chunk_count,
+                chunk_size=chunk_size_used,
+                page_ranges=page_ranges,
+            )
             write_metadata(meta, metadata_json)
             if lecture_md.stat().st_size == 0 or metadata_json.stat().st_size == 0:
                 raise OSError("Wrote empty digest artifacts")
