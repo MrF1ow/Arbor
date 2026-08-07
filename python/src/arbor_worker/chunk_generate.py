@@ -131,6 +131,8 @@ def chunked_generate(
         raise ChunkGenerateError(f"Chunk generation failed: {failed_error}")
     if not manifest.all_ok():
         raise ChunkGenerateError("Chunk generation incomplete (cancelled or stopped)")
+    if cancel_requested():
+        raise ChunkGenerateError("Chunk generation incomplete (cancelled or stopped)")
 
     emitter.synthesis_started(lecture_dir=lecture_dir, chunk_count=len(plans))
     manifest.set_synthesis("pending")

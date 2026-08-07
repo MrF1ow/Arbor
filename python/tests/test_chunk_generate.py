@@ -110,7 +110,7 @@ def test_resume_reuses_ok_chunks(tmp_path: Path):
 
     # First run: synthesis fails after all chunks succeed (call 4 fails).
     prov1 = SeqProvider(fail_on=4)
-    em1, _ = _emitter()
+    em1, buf1 = _emitter()
     with pytest.raises(SynthesisError):
         chunked_generate(
             prov1, source_name="source.pdf", image_paths=images, model_id="m",
@@ -118,6 +118,8 @@ def test_resume_reuses_ok_chunks(tmp_path: Path):
             emitter=em1, lecture_dir="Bio/L1", cancel_requested=lambda: False,
         )
     assert len(prov1.calls) == 4  # 3 chunks + failed synthesis
+    types1 = [e["type"] for e in parse_lines(buf1.getvalue())]
+    assert "synthesis_failed" in types1
 
     # Second run: chunks are cached; only synthesis should be called.
     prov2 = SeqProvider()
@@ -148,3 +150,49 @@ def test_cancel_stops_new_chunks(tmp_path: Path):
         )
     assert prov.calls == []
     assert "synthesis_started" not in [e["type"] for e in parse_lines(buf.getvalue())]
+
+
+def test_cancel_before_synthesis(tmp_path: Path):
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    images = _imgs(tmp_path, 5)
+
+    # Complete all chunks; synthesis fails so digests remain on disk.
+    prov1 = SeqProvider(fail_on=4)
+    with pytest.raises(SynthesisError):
+        chunked_generate(
+            prov1, source_name="source.pdf", image_paths=images, model_id="m",
+            cwd=tmp_path, cache_dir=cache, chunk_size=2, concurrency=1,
+            emitter=_emitter()[0], lecture_dir="Bio/L1", cancel_requested=lambda: False,
+        )
+
+    prov2 = SeqProvider()
+    em2, buf2 = _emitter()
+    with pytest.raises(ChunkGenerateError, match="cancelled or stopped"):
+        chunked_generate(
+            prov2, source_name="source.pdf", image_paths=images, model_id="m",
+            cwd=tmp_path, cache_dir=cache, chunk_size=2, concurrency=1,
+            emitter=em2, lecture_dir="Bio/L1", cancel_requested=lambda: True,
+        )
+    assert prov2.calls == []
+    types = [e["type"] for e in parse_lines(buf2.getvalue())]
+    assert "synthesis_started" not in types
+
+
+def test_chunk_failure_preserves_ok_digest_with_concurrency(tmp_path: Path):
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    images = _imgs(tmp_path, 5)
+    prov = SeqProvider(fail_on=3)  # third call fails (chunk 3 after two parallel ok)
+    em, buf = _emitter()
+
+    with pytest.raises(ChunkGenerateError):
+        chunked_generate(
+            prov, source_name="source.pdf", image_paths=images, model_id="m",
+            cwd=tmp_path, cache_dir=cache, chunk_size=2, concurrency=2,
+            emitter=em, lecture_dir="Bio/L1", cancel_requested=lambda: False,
+        )
+    assert (cache / "chunk-0001.md").is_file()
+    types = [e["type"] for e in parse_lines(buf.getvalue())]
+    assert "chunk_failed" in types
+    assert "synthesis_started" not in types
