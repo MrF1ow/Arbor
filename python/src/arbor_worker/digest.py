@@ -57,3 +57,79 @@ def validate_digest(markdown: str) -> None:
     for section in REQUIRED_SECTIONS:
         if f"## {section}" not in markdown:
             raise DigestError(f"Digest missing required section: {section}")
+
+
+_CHUNK_TEMPLATE = """You are creating structured study notes from PART of a graduate lecture.
+
+This part covers pages {page_start}-{page_end} of {total_pages}.
+
+{image_count} page image(s) for this part are attached. Read all of them, including
+any handwritten annotations, and produce concise structured notes for THIS PART
+ONLY, as GitHub-flavored Markdown with these sections:
+
+## Overview
+## Key Concepts
+## Important Details
+
+Do not invent content from other parts of the lecture. Output only Markdown, no
+preamble or code fences.
+
+Source file: {source_name}
+"""
+
+_SYNTHESIS_TEMPLATE = """You are assembling final study notes for a single graduate lecture from
+ordered notes about consecutive parts of that lecture.
+
+Combine the part notes below into ONE coherent digest. Merge duplicate points,
+keep the logical order, and do not lose important details. Output ONLY
+GitHub-flavored Markdown, no preamble or code fences, using exactly these
+sections in this order:
+
+# <a concise lecture title>
+## Overview
+## Key Concepts
+## Important Details
+## Questions to Review
+
+Guidance:
+- Overview: 2-4 sentence summary of the whole lecture.
+- Key Concepts: bulleted list of the main ideas across all parts.
+- Important Details: specifics, definitions, formulas, and facts worth remembering.
+- Questions to Review: 3-6 self-test questions covering the whole lecture.
+
+Source file: {source_name}
+
+The part notes are below, in order, between markers.
+"""
+
+
+def build_chunk_prompt(
+    source_name: str,
+    page_start: int,
+    page_end: int,
+    total_pages: int,
+    image_count: int,
+) -> str:
+    return _CHUNK_TEMPLATE.format(
+        source_name=source_name,
+        page_start=page_start,
+        page_end=page_end,
+        total_pages=total_pages,
+        image_count=image_count,
+    )
+
+
+def build_synthesis_prompt(source_name: str, chunk_digests: list[str]) -> str:
+    prompt = _SYNTHESIS_TEMPLATE.format(source_name=source_name)
+    for i, digest in enumerate(chunk_digests, start=1):
+        prompt += (
+            f"\n-----BEGIN PART {i}-----\n"
+            f"{digest}\n"
+            f"-----END PART {i}-----\n"
+        )
+    return prompt
+
+
+def validate_chunk_digest(markdown: str) -> None:
+    if len(markdown.strip()) < _MIN_BODY_CHARS:
+        raise DigestError("Chunk digest is empty or too short")
