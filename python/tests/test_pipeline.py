@@ -170,6 +170,43 @@ def test_large_pdf_uses_chunked(git_repo: Path, make_pdf):
     assert len(prov.calls) == 4
 
 
+def test_pptx_images_fallback_uses_chunked(git_repo: Path, make_pptx, monkeypatch):
+    from arbor_worker import pipeline as pipeline_mod
+    from arbor_worker.prepare import PrepareResult
+
+    d = git_repo / "Bio" / "L1"
+    d.mkdir(parents=True)
+    make_pptx(d / "source.pptx", ["hi"])
+
+    cache_imgs_dir = git_repo / "_arbor_cache" / "stub"
+    cache_imgs_dir.mkdir(parents=True)
+    images = []
+    for i in range(5):
+        p = cache_imgs_dir / f"page-{i + 1:05d}.png"
+        p.write_bytes(b"\x89PNG")
+        images.append(p)
+
+    def stub_prepare(*_args, **_kwargs):
+        return PrepareResult(
+            "pptx_images_fallback",
+            image_paths=images,
+            text=None,
+            detail={"page_count": len(images)},
+        )
+
+    monkeypatch.setattr(pipeline_mod, "prepare_source", stub_prepare)
+    prov = FakeProvider(GOOD_MD)
+    em, buf = _emitter()
+    res = run_update(git_repo, "m", prov, em, _chunk_settings())
+    assert res.processed == 1 and res.failed == 0
+    meta = (d / "metadata.json").read_text()
+    assert '"generate_mode": "chunked"' in meta
+    assert '"processing_path": "pptx_images_fallback"' in meta
+    types = [e["type"] for e in parse_lines(buf.getvalue())]
+    assert types.count("chunk_done") == 3
+    assert "synthesis_done" in types
+
+
 def test_chunk_synthesis_failure_excluded_from_commit(git_repo: Path, make_pdf):
     d = git_repo / "Bio" / "L1"
     d.mkdir(parents=True)

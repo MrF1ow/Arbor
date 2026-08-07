@@ -49,6 +49,50 @@ def test_plan_change_resets(tmp_path: Path):
     assert all(c["status"] == "pending" for c in m2.data["chunks"])
 
 
+def test_chunk_size_change_resets(tmp_path: Path):
+    plans = plan_chunks(_imgs(60), 25)
+    m = ChunkManifest.load_or_create(tmp_path, plans=plans, chunk_size=25, page_count=60, model_id="m")
+    (tmp_path / "chunk-0001.md").write_text("## Overview\nlong enough body content here\n")
+    m.mark_ok("0001", "chunk-0001.md")
+
+    plans2 = plan_chunks(_imgs(60), 10)
+    m2 = ChunkManifest.load_or_create(tmp_path, plans=plans2, chunk_size=10, page_count=60, model_id="m")
+    assert all(c["status"] == "pending" for c in m2.data["chunks"])
+
+
+def test_page_count_change_resets(tmp_path: Path):
+    plans = plan_chunks(_imgs(60), 25)
+    m = ChunkManifest.load_or_create(tmp_path, plans=plans, chunk_size=25, page_count=60, model_id="m")
+    (tmp_path / "chunk-0001.md").write_text("## Overview\nlong enough body content here\n")
+    m.mark_ok("0001", "chunk-0001.md")
+
+    plans2 = plan_chunks(_imgs(50), 25)
+    m2 = ChunkManifest.load_or_create(tmp_path, plans=plans2, chunk_size=25, page_count=50, model_id="m")
+    assert all(c["status"] == "pending" for c in m2.data["chunks"])
+
+
+def test_stale_ok_demoted_when_digest_missing(tmp_path: Path):
+    plans = plan_chunks(_imgs(60), 25)
+    m = ChunkManifest.load_or_create(tmp_path, plans=plans, chunk_size=25, page_count=60, model_id="m")
+    digest = tmp_path / "chunk-0001.md"
+    digest.write_text("## Overview\nlong enough body content here\n")
+    m.mark_ok("0001", "chunk-0001.md")
+    digest.unlink()
+
+    m2 = ChunkManifest.load_or_create(tmp_path, plans=plans, chunk_size=25, page_count=60, model_id="m")
+    assert [c["id"] for c in m2.pending_chunks()] == ["0001", "0002", "0003"]
+
+
+def test_stale_ok_demoted_when_digest_empty(tmp_path: Path):
+    plans = plan_chunks(_imgs(60), 25)
+    m = ChunkManifest.load_or_create(tmp_path, plans=plans, chunk_size=25, page_count=60, model_id="m")
+    (tmp_path / "chunk-0001.md").write_text("   \n")
+    m.mark_ok("0001", "chunk-0001.md")
+
+    m2 = ChunkManifest.load_or_create(tmp_path, plans=plans, chunk_size=25, page_count=60, model_id="m")
+    assert [c["id"] for c in m2.pending_chunks()] == ["0001", "0002", "0003"]
+
+
 def test_ordered_digests(tmp_path: Path):
     plans = plan_chunks(_imgs(50), 25)
     m = ChunkManifest.load_or_create(tmp_path, plans=plans, chunk_size=25, page_count=50, model_id="m")
