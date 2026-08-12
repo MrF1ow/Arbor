@@ -43,6 +43,20 @@ def test_validate_rejects_empty():
         validate_digest("   ")
 
 
+def test_build_prompt_mentions_window_start():
+    prep = PrepareResult("pdf_images", image_paths=[Path("a.png"), Path("b.png")])
+    prompt = build_prompt("mega.pdf", prep, page_start=151, image_count=2)
+    assert "page 151" in prompt
+    assert "2 page image(s)" in prompt
+
+
+def test_build_prompt_without_window_is_unchanged():
+    prep = PrepareResult("pdf_images", image_paths=[Path("a.png")])
+    prompt = build_prompt("mega.pdf", prep)
+    assert "page 151" not in prompt
+    assert "1 page image(s)" in prompt
+
+
 def test_build_chunk_prompt_includes_page_range():
     from arbor_worker.digest import build_chunk_prompt
 
@@ -65,3 +79,27 @@ def test_validate_chunk_digest():
     validate_chunk_digest("## Overview\n" + "content that is clearly long enough to pass validation")
     with pytest.raises(DigestError):
         validate_chunk_digest("   ")
+
+
+def test_build_prompt_mentions_window_start():
+    from pathlib import Path
+
+    from arbor_worker.digest import build_prompt
+    from arbor_worker.prepare import PrepareResult
+
+    prep = PrepareResult("pdf_images", image_paths=[Path("a.png"), Path("b.png")])
+    prompt = build_prompt("mega.pdf", prep, page_start=151, image_count=2)
+    assert "page 151" in prompt
+    assert "2 page image(s)" in prompt
+
+
+def test_build_prompt_without_window_is_unchanged():
+    from pathlib import Path
+
+    from arbor_worker.digest import build_prompt
+    from arbor_worker.prepare import PrepareResult
+
+    prep = PrepareResult("pdf_images", image_paths=[Path("a.png")])
+    prompt = build_prompt("mega.pdf", prep)
+    assert "page 151" not in prompt
+    assert "1 page image(s)" in prompt
