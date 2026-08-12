@@ -30,20 +30,38 @@ class EventEmitter:
     def nothing_to_process(self, **f):
         return self.emit("nothing_to_process", **f)
 
-    def lecture_started(self, **f):
-        return self.emit("lecture_started", **f)
+    def course_started(self, **f):
+        return self.emit("course_started", **f)
+
+    def course_done(self, **f):
+        return self.emit("course_done", **f)
+
+    def source_started(self, **f):
+        return self.emit("source_started", **f)
+
+    def source_done(self, **f):
+        return self.emit("source_done", **f)
+
+    def source_failed(self, **f):
+        return self.emit("source_failed", **f)
+
+    def source_deleted(self, **f):
+        return self.emit("source_deleted", **f)
+
+    def course_synthesis_started(self, **f):
+        return self.emit("course_synthesis_started", **f)
+
+    def course_synthesis_done(self, **f):
+        return self.emit("course_synthesis_done", **f)
+
+    def course_synthesis_failed(self, **f):
+        return self.emit("course_synthesis_failed", **f)
 
     def stage(self, **f):
         return self.emit("stage", **f)
 
     def warning(self, **f):
         return self.emit("warning", **f)
-
-    def lecture_done(self, **f):
-        return self.emit("lecture_done", **f)
-
-    def lecture_failed(self, **f):
-        return self.emit("lecture_failed", **f)
 
     def cancelled(self, **f):
         return self.emit("cancelled", **f)
