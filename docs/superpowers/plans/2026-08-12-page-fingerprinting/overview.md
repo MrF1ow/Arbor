@@ -38,6 +38,7 @@ Course-centric ingest (PR #7) uses whole-file hashes and a single optional start
 - Chunked generate remains the engine for large windows
 - Always full `course.md` resynthesis after a successful course batch
 - Preserve cooperative cancel at range boundaries
+- Known baseline sharp edges to fix in phase 8: `end_page` always equals full `page_count` today; windowing is start→EOF only; chunk page indexes are relative to the clipped list; `pptx_text` cannot window (must image-fallback or reject partial ranges)
 
 ## Alternatives
 

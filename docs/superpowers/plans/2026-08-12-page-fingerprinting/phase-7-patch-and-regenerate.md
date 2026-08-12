@@ -16,7 +16,7 @@ When a confirmed range overlaps existing digest coverage, update those digests i
 ## Data structures
 
 - `DigestAction`: discriminated union `create | patch | regenerate` with target `digest_file` and `PageRange`
-- Record coverage derived from `start_page`/`end_page` today, evolving to marker-declared ranges when present
+- Record coverage derived from `start_page`/`end_page` (must become true window bounds once phase 8 fixes today’s always-`page_count` `end_page`), preferring marker-declared ranges when present
 
 ## Verification
 
