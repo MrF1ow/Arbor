@@ -59,3 +59,21 @@ class EventEmitter:
 
     def error(self, **f):
         return self.emit("error", **f)
+
+    def chunk_started(self, **f):
+        return self.emit("chunk_started", **f)
+
+    def chunk_done(self, **f):
+        return self.emit("chunk_done", **f)
+
+    def chunk_failed(self, **f):
+        return self.emit("chunk_failed", **f)
+
+    def synthesis_started(self, **f):
+        return self.emit("synthesis_started", **f)
+
+    def synthesis_done(self, **f):
+        return self.emit("synthesis_done", **f)
+
+    def synthesis_failed(self, **f):
+        return self.emit("synthesis_failed", **f)

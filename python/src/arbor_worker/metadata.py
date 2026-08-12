@@ -16,6 +16,10 @@ class Metadata:
     model_id: str
     processing_path: str
     status: str
+    generate_mode: str = "single"
+    chunk_count: int | None = None
+    chunk_size: int | None = None
+    page_ranges: list[str] | None = None
 
 
 def build_metadata(
@@ -24,6 +28,11 @@ def build_metadata(
     source_hash: str,
     model_id: str,
     processing_path: str,
+    *,
+    generate_mode: str = "single",
+    chunk_count: int | None = None,
+    chunk_size: int | None = None,
+    page_ranges: list[str] | None = None,
 ) -> Metadata:
     return Metadata(
         source_filename=source.name,
@@ -34,6 +43,10 @@ def build_metadata(
         model_id=model_id,
         processing_path=processing_path,
         status="ok",
+        generate_mode=generate_mode,
+        chunk_count=chunk_count,
+        chunk_size=chunk_size,
+        page_ranges=page_ranges,
     )
 
 

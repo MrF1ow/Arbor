@@ -20,6 +20,9 @@ class WorkerSettings:
     pptx_min_chars: int = 200
     pdf_render_dpi: int = 150
     pdf_warn_pages: int = 50
+    pdf_chunk_threshold_pages: int = 25
+    pdf_chunk_size_pages: int = 25
+    pdf_chunk_concurrency: int = 2
     docs_url: str = DOCS_URL
     models: list[Model] = field(default_factory=lambda: list(DEFAULT_MODELS))
 

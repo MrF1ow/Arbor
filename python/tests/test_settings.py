@@ -19,6 +19,15 @@ def test_load_models_defaults_when_absent(tmp_path: Path):
     assert models == default_settings().models
 
 
+def test_chunking_defaults():
+    from arbor_worker.settings import default_settings
+
+    s = default_settings()
+    assert s.pdf_chunk_threshold_pages == 25
+    assert s.pdf_chunk_size_pages == 25
+    assert s.pdf_chunk_concurrency == 2
+
+
 def test_load_models_from_file(tmp_path: Path):
     cfg = tmp_path / ".arbor"
     cfg.mkdir()

@@ -41,3 +41,27 @@ def test_validate_rejects_missing_section():
 def test_validate_rejects_empty():
     with pytest.raises(DigestError):
         validate_digest("   ")
+
+
+def test_build_chunk_prompt_includes_page_range():
+    from arbor_worker.digest import build_chunk_prompt
+
+    p = build_chunk_prompt("source.pdf", page_start=26, page_end=50, total_pages=129, image_count=25)
+    assert "26" in p and "50" in p and "129" in p
+    assert "source.pdf" in p
+
+
+def test_build_synthesis_prompt_orders_parts():
+    from arbor_worker.digest import build_synthesis_prompt
+
+    p = build_synthesis_prompt("source.pdf", ["PART A body", "PART B body"])
+    assert p.index("PART A body") < p.index("PART B body")
+    assert "## Questions to Review" in p
+
+
+def test_validate_chunk_digest():
+    from arbor_worker.digest import validate_chunk_digest
+
+    validate_chunk_digest("## Overview\n" + "content that is clearly long enough to pass validation")
+    with pytest.raises(DigestError):
+        validate_chunk_digest("   ")
