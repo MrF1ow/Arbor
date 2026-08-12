@@ -3,11 +3,23 @@ from __future__ import annotations
 from pathlib import Path
 
 
+def clip_images_range(image_paths: list[Path], start_page: int, end_page: int) -> list[Path]:
+    if start_page < 1:
+        raise ValueError("start_page must be >= 1")
+    if end_page < start_page:
+        raise ValueError("end_page must be >= start_page")
+    ordered = list(image_paths)
+    if end_page > len(ordered):
+        raise ValueError(
+            f"end_page {end_page} is past the last page ({len(ordered)})"
+        )
+    return ordered[start_page - 1 : end_page]
+
+
 def clip_images(image_paths: list[Path], start_page: int) -> list[Path]:
     if start_page < 1:
         raise ValueError("start_page must be >= 1")
     ordered = list(image_paths)
-    clipped = ordered[start_page - 1:]
-    if not clipped:
+    if start_page > len(ordered):
         raise ValueError(f"start_page {start_page} is past the last page ({len(ordered)})")
-    return clipped
+    return clip_images_range(ordered, start_page, len(ordered))
