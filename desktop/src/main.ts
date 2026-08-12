@@ -31,6 +31,30 @@ function refreshUpdateEnabled() {
   updateBtn.disabled = !(authed && knowledgeRoot);
 }
 
+function formatRanges(ranges: [number, number][]): string {
+  return ranges
+    .map(([start, end]) => (start === end ? String(start) : `${start}-${end}`))
+    .join(", ");
+}
+
+function parseRanges(text: string, pageCount: number): [number, number][] | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  const ranges: [number, number][] = [];
+  for (const part of trimmed.split(",")) {
+    const token = part.trim();
+    if (!token) continue;
+    const bounds = token.includes("-") ? token.split("-", 2) : [token, token];
+    const start = Number(bounds[0]);
+    const end = Number(bounds[1]);
+    if (!Number.isInteger(start) || !Number.isInteger(end) || start < 1 || end < start || end > pageCount) {
+      throw new Error(`Invalid range "${token}" for page count ${pageCount}`);
+    }
+    ranges.push([start, end]);
+  }
+  return ranges.length ? ranges : null;
+}
+
 function renderReview(pending: PendingSource[]) {
   reviewRowsEl.innerHTML = "";
   for (const p of pending) {
@@ -42,17 +66,24 @@ function renderReview(pending: PendingSource[]) {
     const pages = document.createElement("td");
     pages.textContent = String(p.page_count);
 
-    const startCell = document.createElement("td");
+    const rangeCell = document.createElement("td");
     const input = document.createElement("input");
-    input.type = "number";
-    input.min = "1";
-    input.max = String(p.page_count);
+    input.type = "text";
     input.placeholder = "all";
     input.dataset.path = p.path;
-    if (p.suggested_start_page !== null) input.value = String(p.suggested_start_page);
-    startCell.appendChild(input);
+    input.dataset.pageCount = String(p.page_count);
+    if (p.suggested_ranges.length > 0) {
+      input.value = formatRanges(p.suggested_ranges);
+    }
+    rangeCell.appendChild(input);
+    if (p.alignment_status === "ambiguous") {
+      const note = document.createElement("div");
+      note.className = "range-note";
+      note.textContent = "Alignment uncertain — set page ranges manually.";
+      rangeCell.appendChild(note);
+    }
 
-    row.append(file, pages, startCell);
+    row.append(file, pages, rangeCell);
     reviewRowsEl.appendChild(row);
   }
   reviewEl.hidden = false;
@@ -60,10 +91,13 @@ function renderReview(pending: PendingSource[]) {
 
 function collectSelections(): Selection[] {
   const inputs = Array.from(reviewRowsEl.querySelectorAll("input")) as HTMLInputElement[];
-  return inputs.map((input) => ({
-    path: input.dataset.path as string,
-    start_page: input.value.trim() === "" ? null : Number(input.value),
-  }));
+  return inputs.map((input) => {
+    const pageCount = Number(input.dataset.pageCount);
+    return {
+      path: input.dataset.path as string,
+      ranges: parseRanges(input.value, pageCount),
+    };
+  });
 }
 
 async function loadSettings() {
@@ -164,7 +198,13 @@ updateBtn.addEventListener("click", async () => {
 
 confirmBtn.addEventListener("click", async () => {
   if (!knowledgeRoot || !modelSel.value) return;
-  const selections = collectSelections();
+  let selections: Selection[];
+  try {
+    selections = collectSelections();
+  } catch (e) {
+    logLine(`Invalid ranges: ${e}`);
+    return;
+  }
   reviewEl.hidden = true;
   updateBtn.disabled = true;
   cancelBtn.disabled = false;
@@ -192,6 +232,11 @@ cancelBtn.addEventListener("click", async () => {
   logLine("Cancel requested; stopping after the current stage…");
 });
 
+function formatRangeList(ranges?: [number, number][]): string {
+  if (!ranges || ranges.length === 0) return "all pages";
+  return formatRanges(ranges);
+}
+
 function renderEvent(ev: WorkerEvent) {
   switch (ev.type) {
     case "run_started":
@@ -204,10 +249,18 @@ function renderEvent(ev: WorkerEvent) {
       logLine(`\n■ ${ev.course_dir} (${ev.sources} source(s))`);
       break;
     case "source_started":
-      logLine(`  • ${ev.source} from page ${ev.start_page}`);
+      logLine(`  • ${ev.source}`);
+      break;
+    case "range_started":
+      logLine(`    pages ${formatRangeList(ev.ranges)}`);
+      break;
+    case "digest_created":
+    case "digest_patched":
+    case "digest_regenerated":
+      logLine(`    ${ev.type.replace("digest_", "")} ${ev.digest} (${formatRangeList(ev.ranges)})`);
       break;
     case "source_done":
-      logLine(`    ✓ ${ev.digest}`);
+      logLine(`    ✓ ${ev.source}`);
       break;
     case "source_failed":
       logLine(`    ✗ ${ev.source}: ${ev.message}`);
@@ -228,7 +281,7 @@ function renderEvent(ev: WorkerEvent) {
       logLine(`  ${ev.course_dir}: ${ev.digests} new digest(s)`);
       break;
     case "stage":
-      logLine(`   ${ev.stage}: ${ev.status}${ev.detail ? " — " + ev.detail : ""}`);
+      logLine(`   ${ev.stage}: ${ev.status}${ev.detail ? " — " + ev.detail : ""}${ev.action ? ` (${ev.action})` : ""}`);
       break;
     case "warning":
       logLine(`   ⚠ ${ev.message}`);
