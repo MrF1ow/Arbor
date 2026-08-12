@@ -4,6 +4,10 @@
 **Status:** Approved (design)  
 **Category:** Knowledge layout + worker/desktop Update flow (see `PROJECT.md`, `docs/superpowers/specs/2026-08-02-arbor-v1-design.md`, `docs/superpowers/specs/2026-08-06-large-pdf-chunked-generate-design.md`)
 
+> **Superseded in part:** incremental control moved from a single optional start page to
+> fingerprint-suggested page ranges, marker-bounded digests, and surgical patch/regenerate.
+> See [`2026-08-12-page-fingerprinting-design.md`](2026-08-12-page-fingerprinting-design.md).
+
 ## Problem
 
 V1 assumes a rigid layout: one lecture folder → one primary source → one `lecture.md`. Git dirtiness on the source triggers a full reprocess of that lecture.
