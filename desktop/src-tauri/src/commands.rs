@@ -34,6 +34,17 @@ pub fn list_models(app: tauri::AppHandle, root: Option<String>) -> Result<serde_
 }
 
 #[tauri::command]
+pub fn plan_update(app: tauri::AppHandle, root: String) -> Result<serde_json::Value, String> {
+    worker::run_worker_json(&repo_dir(&app), &["plan-update", "--root", &root])
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Clone)]
+pub struct Selection {
+    pub path: String,
+    pub start_page: Option<u32>,
+}
+
+#[tauri::command]
 pub fn get_settings(app: tauri::AppHandle) -> Settings {
     settings::load(&app)
 }
@@ -44,11 +55,25 @@ pub fn save_settings(app: tauri::AppHandle, settings: Settings) -> Result<(), St
 }
 
 #[tauri::command]
-pub fn start_update(app: tauri::AppHandle, root: String, model: String) -> Result<(), String> {
+pub fn start_update(
+    app: tauri::AppHandle,
+    root: String,
+    model: String,
+    selections: Vec<Selection>,
+) -> Result<(), String> {
     let cancel = worker::cancel_file_path();
     let _ = std::fs::remove_file(&cancel); // clear stale cancel
+
+    let plan_path = worker::plan_file_path();
+    let body = serde_json::json!({ "selections": selections });
+    std::fs::write(
+        &plan_path,
+        serde_json::to_vec(&body).map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
+
     let app_dir = repo_dir(&app);
-    worker::spawn_update_stream(app, app_dir, root, model, cancel);
+    worker::spawn_update_stream(app, app_dir, root, model, cancel, plan_path);
     Ok(())
 }
 

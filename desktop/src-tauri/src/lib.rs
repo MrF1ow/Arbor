@@ -10,6 +10,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::check_auth,
             commands::list_models,
+            commands::plan_update,
             commands::get_settings,
             commands::save_settings,
             commands::start_update,
