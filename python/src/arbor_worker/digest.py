@@ -32,7 +32,13 @@ Source file: {source_name}
 """
 
 
-def build_prompt(source_name: str, prep: PrepareResult) -> str:
+def build_prompt(
+    source_name: str,
+    prep: PrepareResult,
+    *,
+    page_start: int = 1,
+    image_count: int | None = None,
+) -> str:
     prompt = _TEMPLATE.format(source_name=source_name)
     if prep.text is not None:
         prompt += (
@@ -42,11 +48,17 @@ def build_prompt(source_name: str, prep: PrepareResult) -> str:
             "-----END SOURCE TEXT-----\n"
         )
     else:
+        count = len(prep.image_paths) if image_count is None else image_count
         prompt += (
-            f"\n{len(prep.image_paths)} page image(s) are attached to this message. "
+            f"\n{count} page image(s) are attached to this message. "
             "Read all of them, including any handwritten annotations, and base the notes "
             "on their full content.\n"
         )
+        if page_start > 1:
+            prompt += (
+                f"\nThese images start at page {page_start} of the source file. Write notes for "
+                "this part only, and do not refer to earlier pages you cannot see.\n"
+            )
     return prompt
 
 

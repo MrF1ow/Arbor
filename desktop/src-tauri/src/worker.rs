@@ -59,17 +59,30 @@ pub fn cancel_file_path() -> PathBuf {
 }
 
 #[cfg(feature = "desktop-runtime")]
+pub fn plan_file_path() -> PathBuf {
+    std::env::temp_dir().join("arbor-plan.json")
+}
+
+#[cfg(feature = "desktop-runtime")]
 pub fn spawn_update_stream(
     app: tauri::AppHandle,
     app_dir: PathBuf,
     root: String,
     model: String,
     cancel_file: PathBuf,
+    plan_file: PathBuf,
 ) {
     use tauri::Emitter;
 
     let cancel_str = cancel_file.to_string_lossy().to_string();
-    let sub_args = ["update", "--root", &root, "--model", &model, "--cancel-file", &cancel_str];
+    let plan_str = plan_file.to_string_lossy().to_string();
+    let sub_args = [
+        "update",
+        "--root", &root,
+        "--model", &model,
+        "--cancel-file", &cancel_str,
+        "--plan", &plan_str,
+    ];
     let argv = resolve_worker_argv(&|k| std::env::var(k).ok(), &default_python_dir(&app_dir), &sub_args);
 
     std::thread::spawn(move || {

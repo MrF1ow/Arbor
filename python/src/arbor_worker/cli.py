@@ -14,11 +14,15 @@ def build_parser() -> argparse.ArgumentParser:
     lm = sub.add_parser("list-models", help="List selectable models as JSON.")
     lm.add_argument("--root", default=None, help="Knowledge root to read .arbor/models.json from.")
 
+    pu = sub.add_parser("plan-update", help="List sources that would be processed, as JSON.")
+    pu.add_argument("--root", required=True, help="Path to the Knowledge git repo.")
+
     up = sub.add_parser("update", help="Process new/changed sources under a Knowledge root.")
     up.add_argument("--root", required=True, help="Path to the Knowledge git repo.")
     up.add_argument("--model", required=True, help="Model id passed to the provider.")
     up.add_argument("--provider", default="codex", choices=["codex", "fake"])
     up.add_argument("--cancel-file", default=None, help="If this file appears, stop at the next stage boundary.")
+    up.add_argument("--plan", default=None, help='JSON file with {"selections": [{"path", "start_page"}]}.')
 
     return parser
 
@@ -40,6 +44,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "list-models":
         from arbor_worker.commands import cmd_list_models
         return cmd_list_models(args)
+    if args.command == "plan-update":
+        from arbor_worker.commands import cmd_plan_update
+        return cmd_plan_update(args)
     if args.command == "update":
         from arbor_worker.commands import cmd_update
         return cmd_update(args)

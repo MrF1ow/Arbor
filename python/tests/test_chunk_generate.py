@@ -69,7 +69,7 @@ def test_happy_path_synthesizes(tmp_path: Path):
         chunk_size=2,
         concurrency=2,
         emitter=em,
-        lecture_dir="Bio/L1",
+        course_dir="Bio/L1",
         cancel_requested=lambda: False,
     )
     assert isinstance(res, ChunkedResult)
@@ -96,7 +96,7 @@ def test_chunk_failure_raises_and_preserves_ok(tmp_path: Path):
         chunked_generate(
             prov, source_name="source.pdf", image_paths=images, model_id="m",
             cwd=tmp_path, cache_dir=cache, chunk_size=2, concurrency=1,
-            emitter=em, lecture_dir="Bio/L1", cancel_requested=lambda: False,
+            emitter=em, course_dir="Bio/L1", cancel_requested=lambda: False,
         )
     types = [e["type"] for e in parse_lines(buf.getvalue())]
     assert "chunk_failed" in types
@@ -115,7 +115,7 @@ def test_resume_reuses_ok_chunks(tmp_path: Path):
         chunked_generate(
             prov1, source_name="source.pdf", image_paths=images, model_id="m",
             cwd=tmp_path, cache_dir=cache, chunk_size=2, concurrency=1,
-            emitter=em1, lecture_dir="Bio/L1", cancel_requested=lambda: False,
+            emitter=em1, course_dir="Bio/L1", cancel_requested=lambda: False,
         )
     assert len(prov1.calls) == 4  # 3 chunks + failed synthesis
     types1 = [e["type"] for e in parse_lines(buf1.getvalue())]
@@ -127,7 +127,7 @@ def test_resume_reuses_ok_chunks(tmp_path: Path):
     res = chunked_generate(
         prov2, source_name="source.pdf", image_paths=images, model_id="m",
         cwd=tmp_path, cache_dir=cache, chunk_size=2, concurrency=1,
-        emitter=em2, lecture_dir="Bio/L1", cancel_requested=lambda: False,
+        emitter=em2, course_dir="Bio/L1", cancel_requested=lambda: False,
     )
     assert res.markdown.startswith("# Lecture")
     assert len(prov2.calls) == 1  # synthesis only
@@ -146,7 +146,7 @@ def test_cancel_stops_new_chunks(tmp_path: Path):
         chunked_generate(
             prov, source_name="source.pdf", image_paths=images, model_id="m",
             cwd=tmp_path, cache_dir=cache, chunk_size=2, concurrency=1,
-            emitter=em, lecture_dir="Bio/L1", cancel_requested=lambda: True,
+            emitter=em, course_dir="Bio/L1", cancel_requested=lambda: True,
         )
     assert prov.calls == []
     assert "synthesis_started" not in [e["type"] for e in parse_lines(buf.getvalue())]
@@ -163,7 +163,7 @@ def test_cancel_before_synthesis(tmp_path: Path):
         chunked_generate(
             prov1, source_name="source.pdf", image_paths=images, model_id="m",
             cwd=tmp_path, cache_dir=cache, chunk_size=2, concurrency=1,
-            emitter=_emitter()[0], lecture_dir="Bio/L1", cancel_requested=lambda: False,
+            emitter=_emitter()[0], course_dir="Bio/L1", cancel_requested=lambda: False,
         )
 
     prov2 = SeqProvider()
@@ -172,7 +172,7 @@ def test_cancel_before_synthesis(tmp_path: Path):
         chunked_generate(
             prov2, source_name="source.pdf", image_paths=images, model_id="m",
             cwd=tmp_path, cache_dir=cache, chunk_size=2, concurrency=1,
-            emitter=em2, lecture_dir="Bio/L1", cancel_requested=lambda: True,
+            emitter=em2, course_dir="Bio/L1", cancel_requested=lambda: True,
         )
     assert prov2.calls == []
     types = [e["type"] for e in parse_lines(buf2.getvalue())]
@@ -190,7 +190,7 @@ def test_chunk_failure_preserves_ok_digest_with_concurrency(tmp_path: Path):
         chunked_generate(
             prov, source_name="source.pdf", image_paths=images, model_id="m",
             cwd=tmp_path, cache_dir=cache, chunk_size=2, concurrency=2,
-            emitter=em, lecture_dir="Bio/L1", cancel_requested=lambda: False,
+            emitter=em, course_dir="Bio/L1", cancel_requested=lambda: False,
         )
     assert (cache / "chunk-0001.md").is_file()
     types = [e["type"] for e in parse_lines(buf.getvalue())]

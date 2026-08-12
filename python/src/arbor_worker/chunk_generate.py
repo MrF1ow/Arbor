@@ -55,7 +55,7 @@ def chunked_generate(
     chunk_size: int,
     concurrency: int,
     emitter,
-    lecture_dir: str,
+    course_dir: str,
     cancel_requested,
 ) -> ChunkedResult:
     cache_dir = Path(cache_dir)
@@ -88,7 +88,7 @@ def chunked_generate(
                     break
                 plan = todo.popleft()
                 emitter.chunk_started(
-                    lecture_dir=lecture_dir, chunk_id=plan.chunk_id,
+                    course_dir=course_dir, chunk_id=plan.chunk_id,
                     page_start=plan.page_start, page_end=plan.page_end,
                     index=plan.index, total=plan.total,
                 )
@@ -111,7 +111,7 @@ def chunked_generate(
                     failed_error = str(e)
                     manifest.mark_failed(plan.chunk_id, failed_error)
                     emitter.chunk_failed(
-                        lecture_dir=lecture_dir, chunk_id=plan.chunk_id,
+                        course_dir=course_dir, chunk_id=plan.chunk_id,
                         page_start=plan.page_start, page_end=plan.page_end,
                         code=ChunkGenerateError.code, message=failed_error,
                     )
@@ -122,7 +122,7 @@ def chunked_generate(
                 )
                 manifest.mark_ok(plan.chunk_id, digest_name)
                 emitter.chunk_done(
-                    lecture_dir=lecture_dir, chunk_id=plan.chunk_id,
+                    course_dir=course_dir, chunk_id=plan.chunk_id,
                     page_start=plan.page_start, page_end=plan.page_end,
                     index=plan.index, total=plan.total,
                 )
@@ -134,7 +134,7 @@ def chunked_generate(
     if cancel_requested():
         raise ChunkGenerateError("Chunk generation incomplete (cancelled or stopped)")
 
-    emitter.synthesis_started(lecture_dir=lecture_dir, chunk_count=len(plans))
+    emitter.synthesis_started(course_dir=course_dir, chunk_count=len(plans))
     manifest.set_synthesis("pending")
     synth_prompt = build_synthesis_prompt(source_name, manifest.ordered_digests())
     try:
@@ -145,12 +145,12 @@ def chunked_generate(
     except Exception as e:
         manifest.set_synthesis("failed", str(e))
         emitter.synthesis_failed(
-            lecture_dir=lecture_dir, code=SynthesisError.code, message=str(e)
+            course_dir=course_dir, code=SynthesisError.code, message=str(e)
         )
         raise SynthesisError(f"Synthesis failed: {e}")
 
     manifest.set_synthesis("ok")
-    emitter.synthesis_done(lecture_dir=lecture_dir)
+    emitter.synthesis_done(course_dir=course_dir)
     return ChunkedResult(
         markdown=result.markdown,
         chunk_count=len(plans),

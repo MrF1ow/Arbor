@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from arbor_worker.provider.base import Model
@@ -23,6 +23,9 @@ class WorkerSettings:
     pdf_chunk_threshold_pages: int = 25
     pdf_chunk_size_pages: int = 25
     pdf_chunk_concurrency: int = 2
+    delete_sources_after_digest: bool = False
+    digests_dirname: str = "digests"
+    course_file_name: str = "course.md"
     docs_url: str = DOCS_URL
     models: list[Model] = field(default_factory=lambda: list(DEFAULT_MODELS))
 
@@ -37,3 +40,15 @@ def load_models(root: Path) -> list[Model]:
         return list(DEFAULT_MODELS)
     data = json.loads(cfg.read_text())
     return [Model(id=m["id"], label=m["label"]) for m in data["models"]]
+
+
+def load_settings(root: Path) -> WorkerSettings:
+    cfg = Path(root) / ".arbor" / "settings.json"
+    base = WorkerSettings()
+    if not cfg.is_file():
+        return base
+    data = json.loads(cfg.read_text())
+    return replace(
+        base,
+        delete_sources_after_digest=bool(data.get("delete_sources_after_digest", False)),
+    )
