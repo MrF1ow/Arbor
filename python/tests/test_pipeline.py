@@ -5,6 +5,7 @@ from pathlib import Path
 
 from arbor_worker.events import EventEmitter, parse_lines
 from arbor_worker.pipeline import run_update
+from arbor_worker.planning import build_plan
 from arbor_worker.provider.fake import FakeProvider
 from arbor_worker.settings import default_settings
 
@@ -190,3 +191,48 @@ def test_cancel_stops_before_next_source(git_repo: Path, make_pdf, tmp_path: Pat
 
     assert res.processed == 0
     assert any(e["type"] == "cancelled" for e in parse_lines(buf.getvalue()))
+
+
+def test_delete_sources_when_config_enabled(git_repo: Path, make_pdf):
+    course = git_repo / "Biology"
+    course.mkdir()
+    pdf = make_pdf(course / "mega.pdf", pages=1)
+    settings = dataclasses.replace(default_settings(), delete_sources_after_digest=True)
+
+    res = run_update(
+        git_repo, "m", FakeProvider(GOOD_MD), EventEmitter(io.StringIO()), settings
+    )
+
+    assert res.processed == 1 and res.failed == 0
+    assert not pdf.exists()
+    assert len(list((course / "digests").glob("*.md"))) == 1
+    assert (course / "course.md").is_file()
+
+
+def test_course_synthesis_failure_leaves_sources_pending(git_repo: Path, make_pdf):
+    course = git_repo / "Biology"
+    course.mkdir()
+    make_pdf(course / "mega.pdf", pages=1)
+
+    class SynthesisFailProvider(FakeProvider):
+        def run(self, request):
+            self.calls.append(request)
+            from arbor_worker.provider.base import ProviderResult
+
+            if "assembling the single study notebook" in request.prompt:
+                raise RuntimeError("synthesis exploded")
+            return ProviderResult(markdown=GOOD_MD)
+
+    em, buf = _emitter()
+    res = run_update(git_repo, "m", SynthesisFailProvider(GOOD_MD), em, default_settings())
+
+    assert res.processed == 1
+    assert len(list((course / "digests").glob("*.md"))) == 1
+    assert not (course / "arbor-course.json").exists()
+    assert not (course / "course.md").exists()
+    events = parse_lines(buf.getvalue())
+    assert any(e["type"] == "course_synthesis_failed" for e in events)
+    assert not any(e["type"] == "committed" for e in events)
+
+    plan = build_plan(git_repo, default_settings())
+    assert [p.path for p in plan.pending] == ["Biology/mega.pdf"]

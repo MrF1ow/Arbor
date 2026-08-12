@@ -1,6 +1,6 @@
 # arbor-worker
 
-Python worker for Arbor. Turns new/changed lecture sources (`.pdf`, `.pptx`) in a
+Python worker for Arbor. Turns new/changed course sources (`.pdf`, `.pptx`) in a
 git-tracked Knowledge library into structured markdown digests using the Codex CLI.
 
 ## Requirements

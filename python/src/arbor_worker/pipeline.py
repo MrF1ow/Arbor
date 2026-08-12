@@ -8,14 +8,9 @@ from arbor_worker.cache import CacheDir, ensure_gitignored
 from arbor_worker.chunk_generate import ChunkedResult, chunked_generate
 from arbor_worker.course_manifest import CourseManifest, DigestRecord
 from arbor_worker.course_synthesis import synthesize_course
-from arbor_worker.digest import build_prompt, validate_digest, DigestError
+from arbor_worker.digest import build_prompt, validate_digest
 from arbor_worker.digest_files import next_digest_path
-from arbor_worker.errors import (
-    ChunkGenerateError,
-    CourseSynthesisError,
-    PlanError,
-    SynthesisError,
-)
+from arbor_worker.errors import CourseSynthesisError, PlanError
 from arbor_worker.events import EventEmitter
 from arbor_worker.gitstate import GitStateError, commit_batch
 from arbor_worker.hashing import hash_file
@@ -246,7 +241,6 @@ def run_update(
             processed += 1
             new_digests.append(digest_rel)
             digested_sources.append(root / sel.path)
-            commit_paths.append(Path(course_rel) / digest_rel)
             emitter.source_done(course_dir=course_rel, source=sel.path, digest=digest_rel)
             outcomes.append(
                 SourceOutcome(course_rel, sel.path, True, digest_file=digest_rel)
@@ -255,10 +249,6 @@ def run_update(
         if not new_digests:
             emitter.course_done(course_dir=course_rel, digests=0)
             continue
-
-        manifest.save()
-        commit_paths.append(Path(course_rel) / CourseManifest.FILENAME)
-        done_courses.append(course_rel)
 
         emitter.course_synthesis_started(
             course_dir=course_rel, digest_count=len(manifest.digest_files())
@@ -277,6 +267,12 @@ def run_update(
             )
             emitter.course_done(course_dir=course_rel, digests=len(new_digests))
             continue
+
+        manifest.save()
+        for digest_rel in new_digests:
+            commit_paths.append(Path(course_rel) / digest_rel)
+        commit_paths.append(Path(course_rel) / CourseManifest.FILENAME)
+        done_courses.append(course_rel)
 
         course_file = course_abs / settings.course_file_name
         course_file.write_text(

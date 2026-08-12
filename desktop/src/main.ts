@@ -168,11 +168,18 @@ confirmBtn.addEventListener("click", async () => {
   reviewEl.hidden = true;
   updateBtn.disabled = true;
   cancelBtn.disabled = false;
-  await invoke("start_update", {
-    root: knowledgeRoot,
-    model: modelSel.value,
-    selections,
-  });
+  try {
+    await invoke("start_update", {
+      root: knowledgeRoot,
+      model: modelSel.value,
+      selections,
+    });
+  } catch (e) {
+    logLine(`Update failed to start: ${e}`);
+    reviewEl.hidden = false;
+    updateBtn.disabled = false;
+    cancelBtn.disabled = true;
+  }
 });
 
 cancelReviewBtn.addEventListener("click", () => {

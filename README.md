@@ -1,6 +1,6 @@
 # Arbor
 
-Local-first desktop app that turns lecture PDFs and PowerPoints into structured study digests using the [Codex CLI](https://developers.openai.com/codex/cli). Your Knowledge library is a normal git repo on disk — sources and generated notes stay together in history.
+Local-first desktop app that turns course PDFs and PowerPoints into structured study digests using the [Codex CLI](https://developers.openai.com/codex/cli). Your Knowledge library is a normal git repo on disk — sources and generated notes stay together in history.
 
 **V1 scope:** one window, one button (**Update Knowledge**), Codex CLI only (no API keys).
 
@@ -148,7 +148,7 @@ Knowledge/                          # git repo root
 3. **Choose model** — Dropdown lists models from `.arbor/models.json` (optional) or built-in defaults.
 4. **Update Knowledge** — review the detected files, optionally set a start page for each
    (blank = whole file), then Confirm. Progress streams per course and source.
-5. **Cancel** — Stops after the current lecture finishes its stage boundary.
+5. **Cancel** — Stops after the current source finishes its stage boundary.
 6. **Open folder** — Opens the Knowledge root in your file manager.
 
 ---
@@ -163,7 +163,7 @@ uv run arbor-worker list-models --root /path/to/Knowledge
 uv run arbor-worker update --root /path/to/Knowledge --model gpt-5.6-sol
 ```
 
-`update` prints JSONL events to stdout. Exit codes: `0` success, `1` some lectures failed, `3` Codex not authenticated.
+`update` prints JSONL events to stdout. Exit codes: `0` success, `1` some sources failed, `3` Codex not authenticated.
 
 Event schema and manual live-check steps: [`python/README.md`](python/README.md).
 
