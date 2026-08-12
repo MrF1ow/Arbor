@@ -75,7 +75,8 @@ def test_happy_path_synthesizes(tmp_path: Path):
     assert isinstance(res, ChunkedResult)
     assert res.chunk_count == 3 and res.chunk_size == 2
     assert res.page_ranges == ["1-2", "3-4", "5-5"]
-    assert res.markdown.startswith("# Lecture")
+    assert "<!-- arbor-pages:1-5 -->" in res.markdown
+    assert "# Lecture" in res.markdown
     # 3 chunk calls + 1 synthesis call
     assert len(prov.calls) == 4
     # synthesis call carried no images
@@ -129,7 +130,8 @@ def test_resume_reuses_ok_chunks(tmp_path: Path):
         cwd=tmp_path, cache_dir=cache, chunk_size=2, concurrency=1,
         emitter=em2, course_dir="Bio/L1", cancel_requested=lambda: False,
     )
-    assert res.markdown.startswith("# Lecture")
+    assert "<!-- arbor-pages:1-5 -->" in res.markdown
+    assert "# Lecture" in res.markdown
     assert len(prov2.calls) == 1  # synthesis only
     assert prov2.calls[0].image_paths == []
 

@@ -1,10 +1,20 @@
 from __future__ import annotations
 
+from arbor_worker.alignment import PageRange
+from arbor_worker.page_markers import parse_markers, wrap_range_body
 from arbor_worker.prepare import PrepareResult
 
 REQUIRED_SECTIONS = ["Overview", "Key Concepts", "Important Details", "Questions to Review"]
 
 _MIN_BODY_CHARS = 40
+
+_MARKER_GUIDANCE = """
+Wrap your entire output in HTML comment page markers for the source pages covered:
+<!-- arbor-pages:START-END -->
+(your markdown here)
+<!-- /arbor-pages:START-END -->
+Use the exact START and END page numbers for this window in both markers.
+"""
 
 
 class DigestError(Exception):
@@ -37,6 +47,7 @@ def build_prompt(
     prep: PrepareResult,
     *,
     page_start: int = 1,
+    page_end: int | None = None,
     image_count: int | None = None,
 ) -> str:
     prompt = _TEMPLATE.format(source_name=source_name)
@@ -47,18 +58,21 @@ def build_prompt(
             f"{prep.text}\n"
             "-----END SOURCE TEXT-----\n"
         )
+        end = page_end if page_end is not None else page_start
     else:
         count = len(prep.image_paths) if image_count is None else image_count
+        end = page_end if page_end is not None else page_start + count - 1
         prompt += (
             f"\n{count} page image(s) are attached to this message. "
             "Read all of them, including any handwritten annotations, and base the notes "
             "on their full content.\n"
         )
-        if page_start > 1:
+        if page_start > 1 or end != page_start + count - 1:
             prompt += (
-                f"\nThese images start at page {page_start} of the source file. Write notes for "
+                f"\nThese images cover pages {page_start}-{end} of the source file. Write notes for "
                 "this part only, and do not refer to earlier pages you cannot see.\n"
             )
+    prompt += _MARKER_GUIDANCE.replace("START", str(page_start)).replace("END", str(end))
     return prompt
 
 
@@ -69,6 +83,21 @@ def validate_digest(markdown: str) -> None:
     for section in REQUIRED_SECTIONS:
         if f"## {section}" not in markdown:
             raise DigestError(f"Digest missing required section: {section}")
+
+
+def finalize_marked_digest(markdown: str, page_range: PageRange) -> str:
+    validate_digest(markdown)
+    parsed = parse_markers(markdown)
+    if parsed.status == "ok":
+        if len(parsed.blocks) != 1:
+            raise DigestError("Digest must contain exactly one page marker block")
+        if parsed.blocks[0].page_range != page_range:
+            raise DigestError(
+                f"Digest markers {parsed.blocks[0].page_range.start}-"
+                f"{parsed.blocks[0].page_range.end} do not match {page_range.start}-{page_range.end}"
+            )
+        return markdown if markdown.endswith("\n") else markdown + "\n"
+    return wrap_range_body(page_range, markdown)
 
 
 _CHUNK_TEMPLATE = """You are creating structured study notes from PART of a graduate lecture.
@@ -111,6 +140,11 @@ Guidance:
 
 Source file: {source_name}
 
+Wrap the final combined digest in page markers for pages {page_start}-{page_end}:
+<!-- arbor-pages:{page_start}-{page_end} -->
+...
+<!-- /arbor-pages:{page_start}-{page_end} -->
+
 The part notes are below, in order, between markers.
 """
 
@@ -131,8 +165,19 @@ def build_chunk_prompt(
     )
 
 
-def build_synthesis_prompt(source_name: str, chunk_digests: list[str]) -> str:
-    prompt = _SYNTHESIS_TEMPLATE.format(source_name=source_name)
+def build_synthesis_prompt(
+    source_name: str,
+    chunk_digests: list[str],
+    *,
+    page_start: int = 1,
+    page_end: int | None = None,
+) -> str:
+    end = page_end if page_end is not None else page_start
+    prompt = _SYNTHESIS_TEMPLATE.format(
+        source_name=source_name,
+        page_start=page_start,
+        page_end=end,
+    )
     for i, digest in enumerate(chunk_digests, start=1):
         prompt += (
             f"\n-----BEGIN PART {i}-----\n"

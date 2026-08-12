@@ -136,12 +136,25 @@ def chunked_generate(
 
     emitter.synthesis_started(course_dir=course_dir, chunk_count=len(plans))
     manifest.set_synthesis("pending")
-    synth_prompt = build_synthesis_prompt(source_name, manifest.ordered_digests())
+    window_start = plans[0].page_start if plans else 1
+    window_end = plans[-1].page_end if plans else total_pages
+    synth_prompt = build_synthesis_prompt(
+        source_name,
+        manifest.ordered_digests(),
+        page_start=window_start,
+        page_end=window_end,
+    )
     try:
         result = provider.run(
             ProviderRequest(prompt=synth_prompt, model_id=model_id, cwd=cwd)
         )
-        validate_digest(result.markdown)
+        from arbor_worker.alignment import PageRange
+        from arbor_worker.digest import finalize_marked_digest
+
+        markdown = finalize_marked_digest(
+            result.markdown,
+            PageRange(window_start, window_end),
+        )
     except Exception as e:
         manifest.set_synthesis("failed", str(e))
         emitter.synthesis_failed(
@@ -152,7 +165,7 @@ def chunked_generate(
     manifest.set_synthesis("ok")
     emitter.synthesis_done(course_dir=course_dir)
     return ChunkedResult(
-        markdown=result.markdown,
+        markdown=markdown,
         chunk_count=len(plans),
         chunk_size=chunk_size,
         page_ranges=manifest.page_ranges(),
