@@ -3,6 +3,18 @@ from __future__ import annotations
 import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Literal
+
+FingerprintKind = Literal["pdf_image", "pptx_text", "pptx_image"]
+
+
+@dataclass(frozen=True)
+class SourceFingerprintState:
+    source_hash: str
+    page_count: int
+    fingerprint_kind: FingerprintKind
+    page_fingerprints: list[str]
+    updated_at: str
 
 
 @dataclass(frozen=True)
@@ -18,6 +30,7 @@ class DigestRecord:
     generate_mode: str
     chunk_count: int | None
     digested_at: str
+    page_markers_version: int | None = None
 
 
 class CourseManifest:
@@ -75,3 +88,23 @@ class CourseManifest:
             if path.is_file():
                 out.append((Path(rel).name, path.read_text()))
         return out
+
+    def sources(self) -> dict[str, SourceFingerprintState]:
+        raw = self.data.get("sources", {})
+        out: dict[str, SourceFingerprintState] = {}
+        for rel_path, entry in raw.items():
+            out[rel_path] = SourceFingerprintState(
+                source_hash=entry["source_hash"],
+                page_count=int(entry["page_count"]),
+                fingerprint_kind=entry["fingerprint_kind"],
+                page_fingerprints=list(entry["page_fingerprints"]),
+                updated_at=entry["updated_at"],
+            )
+        return out
+
+    def get_source(self, rel_path: str) -> SourceFingerprintState | None:
+        return self.sources().get(rel_path)
+
+    def set_source(self, rel_path: str, state: SourceFingerprintState) -> None:
+        self.data["version"] = 2
+        self.data.setdefault("sources", {})[rel_path] = asdict(state)
