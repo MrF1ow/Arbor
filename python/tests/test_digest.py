@@ -43,11 +43,28 @@ def test_validate_rejects_empty():
         validate_digest("   ")
 
 
-def test_build_prompt_mentions_window_start():
+def test_finalize_marked_digest_wraps_unmarked_body():
+    from arbor_worker.alignment import PageRange
+    from arbor_worker.digest import finalize_marked_digest
+    from arbor_worker.page_markers import parse_markers
+
+    md = (
+        "# Cell Biology\n"
+        "## Overview\nThe cell is the unit of life and this sentence is long enough.\n"
+        "## Key Concepts\n- organelles\n"
+        "## Important Details\n- mitochondria make ATP\n"
+        "## Questions to Review\n- what is ATP?\n"
+    )
+    marked = finalize_marked_digest(md, PageRange(2, 3))
+    parsed = parse_markers(marked)
+    assert parsed.status == "ok"
+    assert parsed.blocks[0].page_range == PageRange(2, 3)
+
+
+def test_build_prompt_includes_page_markers_guidance():
     prep = PrepareResult("pdf_images", image_paths=[Path("a.png"), Path("b.png")])
-    prompt = build_prompt("mega.pdf", prep, page_start=151, image_count=2)
-    assert "page 151" in prompt
-    assert "2 page image(s)" in prompt
+    prompt = build_prompt("mega.pdf", prep, page_start=2, page_end=3, image_count=2)
+    assert "arbor-pages:2-3" in prompt
 
 
 def test_build_prompt_without_window_is_unchanged():
@@ -68,9 +85,10 @@ def test_build_chunk_prompt_includes_page_range():
 def test_build_synthesis_prompt_orders_parts():
     from arbor_worker.digest import build_synthesis_prompt
 
-    p = build_synthesis_prompt("source.pdf", ["PART A body", "PART B body"])
+    p = build_synthesis_prompt("source.pdf", ["PART A body", "PART B body"], page_start=1, page_end=50)
     assert p.index("PART A body") < p.index("PART B body")
     assert "## Questions to Review" in p
+    assert "arbor-pages:1-50" in p
 
 
 def test_validate_chunk_digest():
@@ -89,8 +107,8 @@ def test_build_prompt_mentions_window_start():
 
     prep = PrepareResult("pdf_images", image_paths=[Path("a.png"), Path("b.png")])
     prompt = build_prompt("mega.pdf", prep, page_start=151, image_count=2)
-    assert "page 151" in prompt
-    assert "2 page image(s)" in prompt
+    assert "pages 151-152" in prompt
+    assert "arbor-pages:151-152" in prompt
 
 
 def test_build_prompt_without_window_is_unchanged():
