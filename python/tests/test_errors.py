@@ -19,3 +19,20 @@ def test_error_codes_and_messages():
 
     custom = ArborError("x", code="CUSTOM")
     assert custom.code == "CUSTOM"
+
+
+def test_new_error_codes():
+    from arbor_worker.errors import (
+        COURSE_SYNTHESIS_FAILED,
+        PLAN_INVALID,
+        SOURCE_PROBE_FAILED,
+        ArborError,
+        CourseSynthesisError,
+        PlanError,
+        ProbeError,
+    )
+
+    assert isinstance(ProbeError("x"), ArborError)
+    assert ProbeError("x").code == SOURCE_PROBE_FAILED
+    assert CourseSynthesisError("x").code == COURSE_SYNTHESIS_FAILED
+    assert PlanError("x").code == PLAN_INVALID

@@ -20,3 +20,20 @@ class ChunkGenerateError(ArborError):
 
 class SynthesisError(ArborError):
     code = SYNTHESIS_FAILED
+
+
+SOURCE_PROBE_FAILED = "SOURCE_PROBE_FAILED"
+COURSE_SYNTHESIS_FAILED = "COURSE_SYNTHESIS_FAILED"
+PLAN_INVALID = "PLAN_INVALID"
+
+
+class ProbeError(ArborError):
+    code = SOURCE_PROBE_FAILED
+
+
+class CourseSynthesisError(ArborError):
+    code = COURSE_SYNTHESIS_FAILED
+
+
+class PlanError(ArborError):
+    code = PLAN_INVALID

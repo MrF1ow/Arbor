@@ -36,3 +36,29 @@ def test_load_models_from_file(tmp_path: Path):
     )
     models = load_models(tmp_path)
     assert models == [Model(id="custom-1", label="Custom One")]
+
+
+def test_course_defaults():
+    from arbor_worker.settings import default_settings
+
+    s = default_settings()
+    assert s.delete_sources_after_digest is False
+    assert s.digests_dirname == "digests"
+    assert s.course_file_name == "course.md"
+
+
+def test_load_settings_missing_file_uses_defaults(tmp_path):
+    from arbor_worker.settings import load_settings
+
+    s = load_settings(tmp_path)
+    assert s.delete_sources_after_digest is False
+
+
+def test_load_settings_reads_delete_flag(tmp_path):
+    from arbor_worker.settings import load_settings
+
+    (tmp_path / ".arbor").mkdir()
+    (tmp_path / ".arbor" / "settings.json").write_text('{"delete_sources_after_digest": true}')
+    s = load_settings(tmp_path)
+    assert s.delete_sources_after_digest is True
+    assert s.digests_dirname == "digests"
