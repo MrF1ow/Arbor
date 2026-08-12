@@ -39,6 +39,21 @@
         <button id="cancel" disabled>Cancel</button>
       </section>
 
+      <section id="review" class="review" hidden>
+        <h2>Files to process</h2>
+        <table>
+          <thead>
+            <tr><th>File</th><th>Pages</th><th>Start from</th></tr>
+          </thead>
+          <tbody id="review-rows"></tbody>
+        </table>
+        <p class="guidance">Leave “Start from” empty to process the whole file.</p>
+        <div class="row actions">
+          <button id="confirm-update">Confirm</button>
+          <button id="cancel-review">Cancel</button>
+        </div>
+      </section>
+
       <pre id="log" class="log" aria-live="polite"></pre>
     </main>
     <script type="module" src="/src/main.ts"></script>

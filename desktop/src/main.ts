@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { AuthStatus, Model, Settings, WorkerEvent } from "./types";
+import type { AuthStatus, Model, PendingSource, Selection, Settings, UpdatePlan, WorkerEvent } from "./types";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -14,6 +14,10 @@ const docsLink = $("codex-docs") as HTMLAnchorElement;
 const updateBtn = $("update") as HTMLButtonElement;
 const cancelBtn = $("cancel") as HTMLButtonElement;
 const logEl = $("log") as HTMLPreElement;
+const reviewEl = $("review") as HTMLElement;
+const reviewRowsEl = $("review-rows") as HTMLTableSectionElement;
+const confirmBtn = $("confirm-update") as HTMLButtonElement;
+const cancelReviewBtn = $("cancel-review") as HTMLButtonElement;
 
 let knowledgeRoot: string | null = null;
 let authed = false;
@@ -25,6 +29,41 @@ function logLine(text: string) {
 
 function refreshUpdateEnabled() {
   updateBtn.disabled = !(authed && knowledgeRoot);
+}
+
+function renderReview(pending: PendingSource[]) {
+  reviewRowsEl.innerHTML = "";
+  for (const p of pending) {
+    const row = document.createElement("tr");
+
+    const file = document.createElement("td");
+    file.textContent = p.path;
+
+    const pages = document.createElement("td");
+    pages.textContent = String(p.page_count);
+
+    const startCell = document.createElement("td");
+    const input = document.createElement("input");
+    input.type = "number";
+    input.min = "1";
+    input.max = String(p.page_count);
+    input.placeholder = "all";
+    input.dataset.path = p.path;
+    if (p.suggested_start_page !== null) input.value = String(p.suggested_start_page);
+    startCell.appendChild(input);
+
+    row.append(file, pages, startCell);
+    reviewRowsEl.appendChild(row);
+  }
+  reviewEl.hidden = false;
+}
+
+function collectSelections(): Selection[] {
+  const inputs = Array.from(reviewRowsEl.querySelectorAll("input")) as HTMLInputElement[];
+  return inputs.map((input) => ({
+    path: input.dataset.path as string,
+    start_page: input.value.trim() === "" ? null : Number(input.value),
+  }));
 }
 
 async function loadSettings() {
@@ -111,9 +150,34 @@ updateBtn.addEventListener("click", async () => {
   await refreshAuth();
   if (!authed) return;
   logEl.textContent = "";
+  try {
+    const plan = await invoke<UpdatePlan>("plan_update", { root: knowledgeRoot });
+    if (plan.pending.length === 0) {
+      logLine("Nothing to process — everything is up to date.");
+      return;
+    }
+    renderReview(plan.pending);
+  } catch (e) {
+    logLine(`Could not plan update: ${e}`);
+  }
+});
+
+confirmBtn.addEventListener("click", async () => {
+  if (!knowledgeRoot || !modelSel.value) return;
+  const selections = collectSelections();
+  reviewEl.hidden = true;
   updateBtn.disabled = true;
   cancelBtn.disabled = false;
-  await invoke("start_update", { root: knowledgeRoot, model: modelSel.value });
+  await invoke("start_update", {
+    root: knowledgeRoot,
+    model: modelSel.value,
+    selections,
+  });
+});
+
+cancelReviewBtn.addEventListener("click", () => {
+  reviewEl.hidden = true;
+  logLine("Update cancelled before processing.");
 });
 
 cancelBtn.addEventListener("click", async () => {
@@ -129,8 +193,32 @@ function renderEvent(ev: WorkerEvent) {
     case "nothing_to_process":
       logLine("Nothing to process — everything is up to date.");
       break;
-    case "lecture_started":
-      logLine(`\n• ${ev.lecture_dir} (${ev.source})`);
+    case "course_started":
+      logLine(`\n■ ${ev.course_dir} (${ev.sources} source(s))`);
+      break;
+    case "source_started":
+      logLine(`  • ${ev.source} from page ${ev.start_page}`);
+      break;
+    case "source_done":
+      logLine(`    ✓ ${ev.digest}`);
+      break;
+    case "source_failed":
+      logLine(`    ✗ ${ev.source}: ${ev.message}`);
+      break;
+    case "source_deleted":
+      logLine(`    🗑 removed ${ev.source}`);
+      break;
+    case "course_synthesis_started":
+      logLine(`  Synthesizing course.md from ${ev.digest_count} digest(s)…`);
+      break;
+    case "course_synthesis_done":
+      logLine(`  ✓ course.md updated`);
+      break;
+    case "course_synthesis_failed":
+      logLine(`  ✗ course.md not updated: ${ev.message}`);
+      break;
+    case "course_done":
+      logLine(`  ${ev.course_dir}: ${ev.digests} new digest(s)`);
       break;
     case "stage":
       logLine(`   ${ev.stage}: ${ev.status}${ev.detail ? " — " + ev.detail : ""}`);
@@ -138,17 +226,11 @@ function renderEvent(ev: WorkerEvent) {
     case "warning":
       logLine(`   ⚠ ${ev.message}`);
       break;
-    case "lecture_done":
-      logLine(`   ✓ done`);
-      break;
-    case "lecture_failed":
-      logLine(`   ✗ failed at ${ev.stage}: ${ev.message}`);
-      break;
     case "cancelled":
       logLine("Cancelled.");
       break;
     case "committed":
-      logLine(`Committed ${ev.commit}: ${(ev.lectures ?? []).join(", ")}`);
+      logLine(`Committed ${ev.commit}: ${(ev.courses ?? []).join(", ")}`);
       break;
     case "run_done":
       logLine(`\nDone. processed=${ev.processed} failed=${ev.failed} skipped=${ev.skipped}`);
