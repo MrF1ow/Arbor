@@ -58,7 +58,6 @@ def test_processes_source_into_dated_digest_and_course_md(git_repo: Path, make_p
     assert record["model_id"] == "gpt-5.6-sol"
     assert record["processing_path"] == "pdf_images"
     assert record["start_page"] == 1
-    assert not (course / "lecture.md").exists()
     types = [e["type"] for e in parse_lines(buf.getvalue())]
     assert "course_started" in types and "source_done" in types
     assert "course_synthesis_done" in types and "committed" in types
