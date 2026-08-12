@@ -17,11 +17,13 @@ Arbor desktop (Tauri)  →  arbor-worker (Python)  →  Codex CLI
 1. Pick a **Knowledge** folder (git repo).
 2. Create one folder per course (`Biology/`, `Chemistry/`) and put sources anywhere inside.
 3. Click **Update Knowledge** and review the detected files.
-4. Optionally set a start page per file (blank processes the whole file), then Confirm.
-5. Each processed source writes `digests/<date>.md`; `course.md` is re-synthesized and the run is committed.
+4. Edit page ranges per file (e.g. `151-300` or `40-55, 120-122`; blank = whole file), then Confirm.
+5. Each confirmed range creates or patches `digests/<date>.md` (with page markers); `course.md` is re-synthesized and the run is committed.
 
 Reprocessing is driven by `arbor-course.json`: a source is picked up when it is new or its
-contents changed. Editing digests by hand never triggers reprocessing.
+whole-file hash changed. Per-page fingerprints in the manifest suggest dirty ranges for
+mega-decks; overlapping coverage is patched in place instead of stacking duplicate digests.
+Editing digests by hand never triggers reprocessing.
 
 ---
 
@@ -128,7 +130,7 @@ Knowledge/                          # git repo root
     digests/
       2026-08-12.md       # one digest per processed window
     course.md             # LLM rollup of all digests
-    arbor-course.json     # processed-state manifest (committed)
+    arbor-course.json     # processed-state manifest + per-page fingerprints (committed)
   _arbor_cache/           # worker cache (auto-created; gitignored)
   .arbor/
     settings.json         # delete_sources_after_digest, models
@@ -146,9 +148,10 @@ Knowledge/                          # git repo root
 1. **Codex auth** — Red badge means Update is disabled. Run `codex login`, then refocus the app.
 2. **Pick folder** — Select your Knowledge root.
 3. **Choose model** — Dropdown lists models from `.arbor/models.json` (optional) or built-in defaults.
-4. **Update Knowledge** — review the detected files, optionally set a start page for each
-   (blank = whole file), then Confirm. Progress streams per course and source.
-5. **Cancel** — Stops after the current source finishes its stage boundary.
+4. **Update Knowledge** — review detected files, edit page ranges per source
+   (`151-300`, `40-55, 120-122`; blank = whole file), then Confirm. Clean appends
+   pre-fill the new tail; ambiguous alignment shows a note to set ranges manually.
+5. **Cancel** — Stops after the current range finishes; completed work is kept.
 6. **Open folder** — Opens the Knowledge root in your file manager.
 
 ---
@@ -269,6 +272,7 @@ Set it to `true` to delete each source file after it is successfully digested.
 |---------|-------------|
 | Update button disabled | `codex login`, then `uv run arbor-worker check-auth` |
 | Nothing to process | Only **new or changed** `.pdf` / `.pptx` sources trigger work |
+| Wrong page window | Check `suggested_ranges` from `plan-update`; blank ranges ingest the whole file |
 | PPTX prepare failed | Export slides as PDF, or install LibreOffice for image fallback |
 | Desktop can't find worker | Set `ARBOR_REPO_DIR` to the Arbor repo root |
 | Wayland / NVIDIA crash | See [Linux graphics](#linux-graphics-wayland--nvidia) |
