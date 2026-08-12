@@ -8,9 +8,10 @@ from pathlib import Path
 from arbor_worker.auth import check_codex_auth
 from arbor_worker.events import EventEmitter
 from arbor_worker.pipeline import run_update
+from arbor_worker.planning import build_plan, plan_to_dict
 from arbor_worker.provider.codex import CodexCliProvider
 from arbor_worker.provider.fake import FakeProvider
-from arbor_worker.settings import default_settings, load_models
+from arbor_worker.settings import default_settings, load_models, load_settings
 
 _DEFAULT_FAKE_MD = (
     "# Lecture\n## Overview\nThis is a fake digest overview long enough to validate.\n"
@@ -37,9 +38,27 @@ def cmd_list_models(args) -> int:
     return 0
 
 
-def cmd_update(args) -> int:
-    settings = default_settings()
+def _load_selections(plan_path: str | None) -> dict[str, int | None]:
+    if not plan_path:
+        return {}
+    data = json.loads(Path(plan_path).read_text())
+    selections: dict[str, int | None] = {}
+    for item in data.get("selections", []):
+        start_page = item.get("start_page")
+        selections[item["path"]] = None if start_page is None else int(start_page)
+    return selections
+
+
+def cmd_plan_update(args) -> int:
     root = Path(args.root)
+    settings = load_settings(root)
+    print(json.dumps(plan_to_dict(build_plan(root, settings))))
+    return 0
+
+
+def cmd_update(args) -> int:
+    root = Path(args.root)
+    settings = load_settings(root)
     emitter = EventEmitter(sys.stdout)
 
     if args.provider == "codex":
@@ -53,7 +72,15 @@ def cmd_update(args) -> int:
 
     cancel_file = Path(args.cancel_file) if args.cancel_file else None
     try:
-        result = run_update(root, args.model, provider, emitter, settings, cancel_file=cancel_file)
+        result = run_update(
+            root,
+            args.model,
+            provider,
+            emitter,
+            settings,
+            selections=_load_selections(getattr(args, "plan", None)),
+            cancel_file=cancel_file,
+        )
     except Exception as e:  # surface unexpected failures as an error event
         emitter.error(message=str(e))
         emitter.run_done(processed=0, failed=0, skipped=0)
