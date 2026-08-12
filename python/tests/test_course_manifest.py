@@ -1,6 +1,11 @@
+import json
 from pathlib import Path
 
-from arbor_worker.course_manifest import CourseManifest, DigestRecord
+from arbor_worker.course_manifest import (
+    CourseManifest,
+    DigestRecord,
+    SourceFingerprintState,
+)
 
 
 def _record(**over) -> DigestRecord:
@@ -71,3 +76,40 @@ def test_read_digests_skips_missing_files(tmp_path: Path):
     m = CourseManifest.load(tmp_path)
     m.record(_record())
     assert m.read_digests() == []
+
+
+def test_v1_manifest_loads_with_empty_sources(tmp_path: Path):
+    (tmp_path / CourseManifest.FILENAME).write_text(
+        json.dumps({"version": 1, "records": []}) + "\n"
+    )
+    m = CourseManifest.load(tmp_path)
+    assert m.data["version"] == 1
+    assert m.sources() == {}
+    assert m.get_source("Bio/mega.pdf") is None
+
+
+def test_v2_source_fingerprint_round_trip(tmp_path: Path):
+    m = CourseManifest.load(tmp_path)
+    state = SourceFingerprintState(
+        source_hash="abc123",
+        page_count=3,
+        fingerprint_kind="pdf_image",
+        page_fingerprints=["fp1", "fp2", "fp3"],
+        updated_at="2026-08-12T00:00:00+00:00",
+    )
+    m.set_source("Bio/mega.pdf", state)
+    m.save()
+
+    again = CourseManifest.load(tmp_path)
+    assert again.data["version"] == 2
+    loaded = again.get_source("Bio/mega.pdf")
+    assert loaded == state
+    assert again.sources() == {"Bio/mega.pdf": state}
+
+
+def test_record_with_page_markers_version(tmp_path: Path):
+    m = CourseManifest.load(tmp_path)
+    m.record(_record(page_markers_version=1))
+    m.save()
+    again = CourseManifest.load(tmp_path)
+    assert again.records()[0]["page_markers_version"] == 1
