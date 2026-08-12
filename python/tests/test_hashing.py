@@ -16,3 +16,9 @@ def test_hash_changes_with_content(tmp_path: Path):
     h1 = hash_file(p)
     p.write_bytes(b"two")
     assert hash_file(p) != h1
+
+
+def test_hash_bytes_matches_hashlib():
+    from arbor_worker.hashing import hash_bytes
+
+    assert hash_bytes(b"hello arbor") == hashlib.sha256(b"hello arbor").hexdigest()

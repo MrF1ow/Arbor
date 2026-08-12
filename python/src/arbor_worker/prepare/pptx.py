@@ -9,17 +9,23 @@ from pptx import Presentation
 from arbor_worker.prepare import PrepareError
 
 
-def extract_pptx_text(source: Path) -> str:
+def extract_pptx_slide_texts(source: Path) -> list[str]:
     prs = Presentation(str(source))
-    chunks: list[str] = []
+    slides: list[str] = []
     for slide in prs.slides:
+        chunks: list[str] = []
         for shape in slide.shapes:
             if shape.has_text_frame:
                 for para in shape.text_frame.paragraphs:
                     line = "".join(run.text for run in para.runs)
                     if line.strip():
                         chunks.append(line)
-    return "\n".join(chunks)
+        slides.append("\n".join(chunks))
+    return slides
+
+
+def extract_pptx_text(source: Path) -> str:
+    return "\n".join(t for t in extract_pptx_slide_texts(source) if t.strip())
 
 
 def find_soffice(which=shutil.which) -> str | None:

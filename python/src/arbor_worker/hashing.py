@@ -10,3 +10,7 @@ def hash_file(path: Path, chunk_size: int = 1 << 20) -> str:
         for chunk in iter(lambda: fh.read(chunk_size), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def hash_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
