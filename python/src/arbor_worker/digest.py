@@ -187,6 +187,25 @@ def build_synthesis_prompt(
     return prompt
 
 
+def build_patch_prompt(source_name: str, page_range: PageRange, existing_body: str) -> str:
+    return f"""You are updating one section of structured study notes for a graduate lecture.
+
+Rewrite ONLY the section body for pages {page_range.start}-{page_range.end} of {source_name}.
+Output GitHub-flavored Markdown for this section with these sections:
+
+## Overview
+## Key Concepts
+## Important Details
+
+Do not include page marker comments. Output only the inner section markdown.
+
+Existing section body:
+-----BEGIN EXISTING-----
+{existing_body.strip()}
+-----END EXISTING-----
+"""
+
+
 def validate_chunk_digest(markdown: str) -> None:
     if len(markdown.strip()) < _MIN_BODY_CHARS:
         raise DigestError("Chunk digest is empty or too short")

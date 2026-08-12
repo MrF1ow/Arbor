@@ -68,14 +68,14 @@ def test_plan_update_lists_pending_sources(tmp_path):
     data = _json.loads(out)
     assert data["pending"][0]["path"] == "Biology/mega.pdf"
     assert data["pending"][0]["page_count"] == 3
-    assert data["pending"][0]["suggested_start_page"] is None
+    assert data["pending"][0]["suggested_ranges"] == []
 
 
-def test_update_with_plan_file_applies_start_page(tmp_path):
+def test_update_with_plan_file_applies_ranges(tmp_path):
     root = _knowledge_repo_with_pdf(tmp_path, pages=4)
     plan_file = tmp_path / "plan.json"
     plan_file.write_text(
-        _json.dumps({"selections": [{"path": "Biology/mega.pdf", "start_page": 3}]})
+        _json.dumps({"selections": [{"path": "Biology/mega.pdf", "ranges": [[3, 4]]}]})
     )
 
     code, out, _ = run(
@@ -90,6 +90,7 @@ def test_update_with_plan_file_applies_start_page(tmp_path):
     assert code == 0
     manifest = _json.loads((root / "Biology" / "arbor-course.json").read_text())
     assert manifest["records"][0]["start_page"] == 3
+    assert manifest["records"][0]["end_page"] == 4
     assert (root / "Biology" / "course.md").is_file()
 
 

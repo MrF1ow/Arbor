@@ -39,6 +39,18 @@ class EventEmitter:
     def source_started(self, **f):
         return self.emit("source_started", **f)
 
+    def range_started(self, **f):
+        return self.emit("range_started", **f)
+
+    def digest_created(self, **f):
+        return self.emit("digest_created", **f)
+
+    def digest_patched(self, **f):
+        return self.emit("digest_patched", **f)
+
+    def digest_regenerated(self, **f):
+        return self.emit("digest_regenerated", **f)
+
     def source_done(self, **f):
         return self.emit("source_done", **f)
 

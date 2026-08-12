@@ -25,12 +25,23 @@ class ChunkedResult:
     page_ranges: list[str]
 
 
-def _run_one_chunk(provider, plan: ChunkPlan, *, source_name, total_pages, model_id, cwd) -> str:
+def _run_one_chunk(
+    provider,
+    plan: ChunkPlan,
+    *,
+    source_name,
+    total_pages,
+    model_id,
+    cwd,
+    page_offset: int = 0,
+) -> str:
+    page_start = plan.page_start + page_offset
+    page_end = plan.page_end + page_offset
     prompt = build_chunk_prompt(
         source_name=source_name,
-        page_start=plan.page_start,
-        page_end=plan.page_end,
-        total_pages=total_pages,
+        page_start=page_start,
+        page_end=page_end,
+        total_pages=total_pages + page_offset,
         image_count=len(plan.image_paths),
     )
     request = ProviderRequest(
@@ -57,6 +68,7 @@ def chunked_generate(
     emitter,
     course_dir: str,
     cancel_requested,
+    page_offset: int = 0,
 ) -> ChunkedResult:
     cache_dir = Path(cache_dir)
     plans = plan_chunks(image_paths, chunk_size)
@@ -95,7 +107,7 @@ def chunked_generate(
                 fut = pool.submit(
                     _run_one_chunk, provider, plan,
                     source_name=source_name, total_pages=total_pages,
-                    model_id=model_id, cwd=cwd,
+                    model_id=model_id, cwd=cwd, page_offset=page_offset,
                 )
                 fut_plan[fut] = plan
 
@@ -136,8 +148,8 @@ def chunked_generate(
 
     emitter.synthesis_started(course_dir=course_dir, chunk_count=len(plans))
     manifest.set_synthesis("pending")
-    window_start = plans[0].page_start if plans else 1
-    window_end = plans[-1].page_end if plans else total_pages
+    window_start = (plans[0].page_start + page_offset) if plans else 1 + page_offset
+    window_end = (plans[-1].page_end + page_offset) if plans else total_pages + page_offset
     synth_prompt = build_synthesis_prompt(
         source_name,
         manifest.ordered_digests(),

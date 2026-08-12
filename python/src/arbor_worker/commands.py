@@ -38,14 +38,17 @@ def cmd_list_models(args) -> int:
     return 0
 
 
-def _load_selections(plan_path: str | None) -> dict[str, int | None]:
+def _load_selections(plan_path: str | None) -> dict[str, list[list[int]] | None]:
     if not plan_path:
         return {}
     data = json.loads(Path(plan_path).read_text())
-    selections: dict[str, int | None] = {}
+    selections: dict[str, list[list[int]] | None] = {}
     for item in data.get("selections", []):
-        start_page = item.get("start_page")
-        selections[item["path"]] = None if start_page is None else int(start_page)
+        ranges = item.get("ranges")
+        if ranges is None:
+            selections[item["path"]] = None
+        else:
+            selections[item["path"]] = [[int(s), int(e)] for s, e in ranges]
     return selections
 
 

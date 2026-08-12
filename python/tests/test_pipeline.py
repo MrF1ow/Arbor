@@ -52,7 +52,8 @@ def test_processes_source_into_dated_digest_and_course_md(git_repo: Path, make_p
     assert res.processed == 1 and res.failed == 0
     digests = sorted((course / "digests").glob("*.md"))
     assert len(digests) == 1
-    assert digests[0].read_text().startswith("# Lecture")
+    assert digests[0].read_text().count("arbor-pages") >= 2
+    assert "# Lecture" in digests[0].read_text()
     assert (course / "course.md").read_text().startswith("# Lecture")
     record = _manifest(course)["records"][0]
     assert record["source_path"] == "Biology/mega.pdf"
@@ -77,7 +78,7 @@ def test_second_run_is_idempotent(git_repo: Path, make_pdf):
     assert len(list((course / "digests").glob("*.md"))) == 1
 
 
-def test_start_page_limits_pages_sent_to_provider(git_repo: Path, make_pdf):
+def test_ranges_limit_pages_sent_to_provider(git_repo: Path, make_pdf):
     course = git_repo / "Biology"
     course.mkdir()
     make_pdf(course / "mega.pdf", pages=4)
@@ -89,14 +90,15 @@ def test_start_page_limits_pages_sent_to_provider(git_repo: Path, make_pdf):
         prov,
         EventEmitter(io.StringIO()),
         default_settings(),
-        selections={"Biology/mega.pdf": 3},
+        selections={"Biology/mega.pdf": [[3, 4]]},
     )
 
     assert res.processed == 1
     digest_call = prov.calls[0]
     assert len(digest_call.image_paths) == 2
-    assert "page 3" in digest_call.prompt
+    assert "arbor-pages:3-4" in digest_call.prompt
     assert _manifest(course)["records"][0]["start_page"] == 3
+    assert _manifest(course)["records"][0]["end_page"] == 4
 
 
 def test_grown_source_only_digests_the_tail(git_repo: Path, make_pdf):
@@ -113,7 +115,7 @@ def test_grown_source_only_digests_the_tail(git_repo: Path, make_pdf):
         prov,
         EventEmitter(io.StringIO()),
         default_settings(),
-        selections={"Biology/mega.pdf": 3},
+        selections={"Biology/mega.pdf": [[3, 5]]},
     )
 
     assert res.processed == 1
@@ -207,6 +209,24 @@ def test_delete_sources_when_config_enabled(git_repo: Path, make_pdf):
     assert not pdf.exists()
     assert len(list((course / "digests").glob("*.md"))) == 1
     assert (course / "course.md").is_file()
+
+
+def test_delete_sources_keeps_fingerprints(git_repo: Path, make_pdf):
+    course = git_repo / "Biology"
+    course.mkdir()
+    pdf = make_pdf(course / "mega.pdf", pages=1)
+    settings = dataclasses.replace(default_settings(), delete_sources_after_digest=True)
+
+    res = run_update(
+        git_repo, "m", FakeProvider(GOOD_MD), EventEmitter(io.StringIO()), settings
+    )
+
+    assert res.processed == 1
+    assert not pdf.exists()
+    manifest = _manifest(course)
+    assert manifest["version"] == 2
+    assert "Biology/mega.pdf" in manifest["sources"]
+    assert len(manifest["sources"]["Biology/mega.pdf"]["page_fingerprints"]) == 1
 
 
 def test_course_synthesis_failure_leaves_sources_pending(git_repo: Path, make_pdf):

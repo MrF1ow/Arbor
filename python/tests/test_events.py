@@ -53,7 +53,14 @@ def test_course_events():
     buf = io.StringIO()
     em = EventEmitter(buf)
     em.course_started(course_dir="Biology", sources=2)
-    em.source_started(course_dir="Biology", source="Biology/mega.pdf", start_page=151)
+    em.source_started(course_dir="Biology", source="Biology/mega.pdf")
+    em.range_started(course_dir="Biology", source="Biology/mega.pdf", ranges=[[151, 300]])
+    em.digest_created(
+        course_dir="Biology",
+        source="Biology/mega.pdf",
+        digest="digests/2026-08-12.md",
+        ranges=[[151, 300]],
+    )
     em.source_done(course_dir="Biology", source="Biology/mega.pdf", digest="digests/2026-08-12.md")
     em.source_failed(course_dir="Biology", source="Biology/bad.pdf", message="boom")
     em.source_deleted(course_dir="Biology", source="Biology/mega.pdf")
@@ -66,6 +73,8 @@ def test_course_events():
     assert types == [
         "course_started",
         "source_started",
+        "range_started",
+        "digest_created",
         "source_done",
         "source_failed",
         "source_deleted",
