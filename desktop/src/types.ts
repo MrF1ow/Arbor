@@ -14,12 +14,18 @@ export interface Settings {
   model_id: string | null;
 }
 
+export interface PageRange {
+  start: number;
+  end: number;
+}
+
 export interface PendingSource {
   path: string;
   course: string;
   source_type: string;
   page_count: number;
-  suggested_start_page: number | null;
+  suggested_ranges: [number, number][];
+  alignment_status: string;
   previously_digested: boolean;
 }
 
@@ -29,7 +35,7 @@ export interface UpdatePlan {
 
 export interface Selection {
   path: string;
-  start_page: number | null;
+  ranges: [number, number][] | null;
 }
 
 export interface WorkerEvent {
@@ -38,7 +44,7 @@ export interface WorkerEvent {
   model_id?: string;
   course_dir?: string;
   source?: string;
-  start_page?: number;
+  ranges?: [number, number][];
   digest?: string;
   digests?: number;
   digest_count?: number;
@@ -56,4 +62,5 @@ export interface WorkerEvent {
   reason?: string;
   docs_url?: string;
   code?: number;
+  action?: string;
 }

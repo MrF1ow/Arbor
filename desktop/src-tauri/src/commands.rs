@@ -41,7 +41,7 @@ pub fn plan_update(app: tauri::AppHandle, root: String) -> Result<serde_json::Va
 #[derive(serde::Deserialize, serde::Serialize, Clone)]
 pub struct Selection {
     pub path: String,
-    pub start_page: Option<u32>,
+    pub ranges: Option<Vec<[u32; 2]>>,
 }
 
 #[tauri::command]
