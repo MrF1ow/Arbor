@@ -94,7 +94,7 @@ pub fn spawn_update_stream(
     job_id: String,
 ) {
     use crate::jobs::{self, SharedCoordinator};
-    use tauri::Emitter;
+    use tauri::{Emitter, Manager};
 
     let knowledge_root = PathBuf::from(&root);
     let cancel_str = cancel_file.to_string_lossy().to_string();
