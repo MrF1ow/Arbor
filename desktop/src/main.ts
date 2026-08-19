@@ -98,28 +98,36 @@ async function loadModels(selected: string | null) {
   if (selected) modelSel.value = selected;
 }
 
+let refreshAuthInFlight: Promise<void> | null = null;
+
 async function refreshAuth() {
-  statusEl.textContent = "Checking Codex…";
-  statusEl.className = "badge";
-  docsLink.hidden = true;
-  try {
-    const a = await invoke<AuthStatus>("check_auth");
-    authed = a.authenticated;
-    if (a.authenticated) {
-      statusEl.textContent = "Codex ready";
-      statusEl.className = "badge ok";
-    } else {
-      statusEl.textContent = `Codex: ${a.reason}`;
+  if (refreshAuthInFlight) return refreshAuthInFlight;
+  refreshAuthInFlight = (async () => {
+    statusEl.textContent = "Checking Codex…";
+    statusEl.className = "badge";
+    docsLink.hidden = true;
+    try {
+      const a = await invoke<AuthStatus>("check_auth");
+      authed = a.authenticated;
+      if (a.authenticated) {
+        statusEl.textContent = "Codex ready";
+        statusEl.className = "badge ok";
+      } else {
+        statusEl.textContent = `Codex: ${a.reason}`;
+        statusEl.className = "badge bad";
+        docsLink.href = a.docs_url;
+        docsLink.hidden = false;
+      }
+    } catch (e) {
+      authed = false;
+      statusEl.textContent = `Codex check failed: ${e}`;
       statusEl.className = "badge bad";
-      docsLink.href = a.docs_url;
-      docsLink.hidden = false;
     }
-  } catch (e) {
-    authed = false;
-    statusEl.textContent = `Codex check failed: ${e}`;
-    statusEl.className = "badge bad";
-  }
-  refreshUpdateEnabled();
+    refreshUpdateEnabled();
+  })().finally(() => {
+    refreshAuthInFlight = null;
+  });
+  return refreshAuthInFlight;
 }
 
 chooseBtn.addEventListener("click", async () => {
