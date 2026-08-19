@@ -486,11 +486,15 @@ Each stage should be replaceable.
 
 # Version Roadmap
 
+Package releases (`0.1.0`, `0.2.0`, …) are in [`CHANGELOG.md`](CHANGELOG.md). They are not the same as the Version 1–5 product slots below. **0.2.0** is still Version 1.
+
 # Version 1
 
 Goal:
 
 Create the smallest useful application.
+
+**Current release:** 0.2.0 (`v0.2.0`).
 
 Features
 
@@ -498,19 +502,25 @@ Features
 * Manual "Update Knowledge" button
 * PDF support
 * PowerPoint support
-* AI summarization
-* Markdown generation
-* Metadata JSON
+* Course folders with dated digest markdown
+* `course.md` index (local copy for one digest; provider rollup for two or more)
+* Page-range review, per-page fingerprints, in-place digest patch
+* `arbor-pages` markers on lecture digests
+* Committed `arbor-course.json` (manifest version 2)
 * Local storage
 * Codex CLI support
-* Manual Git commit
-* Basic settings
+* Git commit per successful Update batch
+* Basic settings (`delete_sources_after_digest`, models)
 
 No scheduler.
 
 No background automation.
 
 No database.
+
+No in-app chat (that is Version 4).
+
+No standalone packaged app (see GitHub issue #4).
 
 ---
 

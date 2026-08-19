@@ -1,7 +1,9 @@
 # arbor-worker
 
-Python worker for Arbor. Turns new/changed course sources (`.pdf`, `.pptx`) in a
+Python worker for Arbor (package **0.2.0**). Turns new or changed course sources (`.pdf`, `.pptx`) in a
 git-tracked Knowledge library into structured markdown digests using the Codex CLI.
+
+`uv run arbor-worker --version` prints `0.2.0`.
 
 ## Requirements
 
@@ -11,6 +13,7 @@ git-tracked Knowledge library into structured markdown digests using the Codex C
 ## Commands
 
 ```bash
+uv run arbor-worker --version
 uv run arbor-worker check-auth
 uv run arbor-worker list-models
 uv run arbor-worker plan-update --root /path/to/Knowledge
@@ -48,9 +51,13 @@ Feed a subset back into `update` with a plan file:
 }
 ```
 
-`ranges` may be `null` or omitted to ingest the whole file. Each range is processed in order;
-cancel is cooperative at range boundaries. `update` without `--plan` processes every pending
-source as a single full-file range.
+`ranges` may be `null` or omitted to ingest the whole file. An empty list `[]` means
+do no work (the truncation case: file shrank, alignment is `changed`, suggestions are empty).
+Each range is processed in order. Cancel is cooperative at range and digest-action boundaries.
+`update` without `--plan` processes every pending source as a single full-file range.
+
+A confirmed PPTX range that is not the entire deck forces the image fallback path so the
+window is real pages, not whole-file extracted text. That path needs LibreOffice (`soffice`).
 
 All commands print JSON / JSONL to stdout.
 
@@ -129,7 +136,8 @@ New and regenerated digests wrap content in HTML comment markers:
 <!-- /arbor-pages:40-55 -->
 ```
 
-Overlapping updates **patch** the matching marker block in place. Missing or invalid
+Overlapping updates **patch** the matching marker block in place. The provider is asked
+for that owning span (and its page images), not only the overlap. Missing or invalid
 markers trigger a full regenerate of that digest file.
 
 Set `delete_sources_after_digest` in `<root>/.arbor/settings.json` to remove source

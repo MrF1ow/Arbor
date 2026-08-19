@@ -1,5 +1,7 @@
 # Course-Centric Knowledge & Incremental Ingest Implementation Plan
 
+> **Status (2026-08-19):** Course layout is live on `main` (PR #7). Start-page control was replaced by ranges in **0.2.0**. Do not re-implement from this plan.
+>
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make the course folder the unit of knowledge: detect new/changed sources per course, let the user pick a start page per file before any model call, write dated digests, and rebuild `course.md` with an LLM synthesis.

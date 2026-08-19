@@ -1,16 +1,18 @@
 # Open issue tracks
 
+> **Status (2026-08-19):** Landed on `main` in **0.2.0** ([PR #22](https://github.com/MrF1ow/Arbor/pull/22)). Runtime ingest writes `arbor-course.json` `version` 2 with fingerprints and `arbor-pages` markers. PATH and auth, digest prompt rules, and the single-digest `course.md` index are live. #4 (packaging) and #20 (chat) remain later. Do not re-run this program from the old Context paragraph.
+>
 > **Playbook:** poteto-mode multi-phase plan. Plan only. Do not implement from this document until the user starts execution.
 >
 > **Issues:** [#19](https://github.com/MrF1ow/Arbor/issues/19), [#3](https://github.com/MrF1ow/Arbor/issues/3), [#21](https://github.com/MrF1ow/Arbor/issues/21), [#6](https://github.com/MrF1ow/Arbor/issues/6). Later, not this program: [#4](https://github.com/MrF1ow/Arbor/issues/4), [#20](https://github.com/MrF1ow/Arbor/issues/20).
 
 **Goal:** Make GUI Codex auth reliable, lock digest formatting, and finish the incremental-knowledge path that the Aug 12 fingerprinting plan specified but did not wire into ingest.
 
-## Context
+## Context (when this plan was written)
 
-V1, large-PDF chunking, and course-centric ingest are on `main`. Fingerprinting PRs merged a spec, a nine-phase plan, and a `sources` storage API. Runtime ingest still writes `arbor-course.json` version 1 with no fingerprints and no page markers. `course.md` is always an LLM copy of whatever digests exist, so a first lecture duplicates `digests/YYYY-MM-DD.md`. Finder-launched Arbor misses `~/.local/bin/codex`. The digest prompt still allows LaTeX.
+V1, large-PDF chunking, and course-centric ingest were on `main`. Fingerprinting PRs had merged a spec, a nine-phase plan, and a `sources` storage API. Runtime ingest still wrote `arbor-course.json` version 1 with no fingerprints and no page markers. `course.md` was always an LLM copy of whatever digests existed, so a first lecture duplicated `digests/YYYY-MM-DD.md`. Finder-launched Arbor missed `~/.local/bin/codex`. The digest prompt still allowed LaTeX.
 
-That is the gap a real Behavioral Medicine run hit. Fix it before packaging or chat.
+That was the gap a real Behavioral Medicine run hit. The program below closed it before packaging or chat.
 
 ## Scope
 
@@ -76,7 +78,7 @@ Two owners may run at once in wave 1. One owner runs the fingerprinting stack. T
 
 **Lever for wave 2.** Each owner reads [2026-08-12-page-fingerprinting/overview.md](../2026-08-12-page-fingerprinting/overview.md) and one named phase file. No parallel design. The coordinator inspects `git diff` after every phase.
 
-Root and `python/README.md` already describe ranges and markers as live. Do not treat those docs as implementation status. `desktop/README.md` still matches start-page code.
+Root `README.md`, `python/README.md`, and `desktop/README.md` now match ranges, markers, and 0.2.0. This file stays as the original execution plan.
 
 ## Phases
 
@@ -119,6 +121,6 @@ Implementers must:
 | Desktop auth | `desktop/src/main.ts` (`refreshAuth`, `window` `focus`) |
 | Prompts | `python/src/arbor_worker/digest.py`, `python/tests/test_digest.py` |
 | Course rollup | `python/src/arbor_worker/course_synthesis.py`, `pipeline.py` (wave 2 only), `python/tests/test_course_synthesis.py` |
-| Manifest | `python/src/arbor_worker/course_manifest.py` (API exists; pipeline does not call `set_source`) |
+| Manifest | `python/src/arbor_worker/course_manifest.py` (pipeline calls `set_source` on 0.2.0) |
 | Fingerprinting plan | `docs/superpowers/plans/2026-08-12-page-fingerprinting/` |
 | Specs | `docs/superpowers/specs/2026-08-12-page-fingerprinting-design.md`, `docs/superpowers/specs/2026-08-12-course-centric-knowledge-design.md` |

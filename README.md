@@ -1,10 +1,12 @@
 # Arbor
 
-Local-first desktop app that turns course PDFs and PowerPoints into structured study digests using the [Codex CLI](https://developers.openai.com/codex/cli). Your Knowledge library is a normal git repo on disk — sources and generated notes stay together in history.
+Local-first desktop app that turns course PDFs and PowerPoints into structured study digests using the [Codex CLI](https://developers.openai.com/codex/cli). Your Knowledge library is a normal git repo on disk. Sources and generated notes stay together in history.
 
-**V1 scope:** one window, one button (**Update Knowledge**), Codex CLI only (no API keys).
+**Current release:** [0.2.0](CHANGELOG.md) (git tag `v0.2.0`). Worker, desktop, and Tauri all report this number (`arbor-worker --version`).
 
-For vision and long-term goals, see [`PROJECT.md`](PROJECT.md). For V1 design details, see [`docs/superpowers/specs/2026-08-02-arbor-v1-design.md`](docs/superpowers/specs/2026-08-02-arbor-v1-design.md).
+**Product milestone:** still [PROJECT.md](PROJECT.md) Version 1. One window, one **Update Knowledge** button, Codex CLI only (no API keys). 0.2.0 is ranged ingest, fingerprints, and in-place digest patch on that loop. It is not Version 2 (watchers, search, extra providers).
+
+For vision and later milestones, see [`PROJECT.md`](PROJECT.md). The original V1 design (`lecture.md` per lecture) is historical: [`docs/superpowers/specs/2026-08-02-arbor-v1-design.md`](docs/superpowers/specs/2026-08-02-arbor-v1-design.md). Living layout is course folders, dated `digests/`, and `arbor-course.json`.
 
 ---
 
@@ -17,7 +19,7 @@ Arbor desktop (Tauri)  →  arbor-worker (Python)  →  Codex CLI
 1. Pick a **Knowledge** folder (git repo).
 2. Create one folder per course (`Biology/`, `Chemistry/`) and put sources anywhere inside.
 3. Click **Update Knowledge** and review the detected files.
-4. Edit page ranges per file (e.g. `151-300` or `40-55, 120-122`; blank = whole file), then Confirm.
+4. Edit page ranges per file (for example `151-300` or `40-55, 120-122`), then Confirm. A blank box on a new file means the whole file. A blank box on a truncated file (`changed` with no suggested ranges) means skip.
 5. Each confirmed range creates or patches `digests/<date>.md` (with page markers). One digest writes a short local `course.md` index; two or more are rolled up with Codex. The run is committed.
 
 Reprocessing is driven by `arbor-course.json`: a source is picked up when it is new or its
@@ -67,7 +69,7 @@ sudo dnf install webkit2gtk4.1-devel libsoup3-devel gcc
 
 | Tool | When you need it |
 |------|------------------|
-| **LibreOffice** (`soffice`) | PPTX with very little extractable text — worker falls back to rendering slides via LibreOffice → PDF → images |
+| **LibreOffice** (`soffice`) | PPTX image fallback: thin text, or a confirmed range that is not the whole deck |
 | **X11 / XWayland** | Last resort if WebKit crashes on Wayland + NVIDIA (see [Linux graphics](#linux-graphics-wayland--nvidia) below) |
 
 ---
@@ -149,9 +151,10 @@ Knowledge/                          # git repo root
 2. **Pick folder** — Select your Knowledge root.
 3. **Choose model** — Dropdown lists models from `.arbor/models.json` (optional) or built-in defaults.
 4. **Update Knowledge** — review detected files, edit page ranges per source
-   (`151-300`, `40-55, 120-122`; blank = whole file), then Confirm. Clean appends
-   pre-fill the new tail; ambiguous alignment shows a note to set ranges manually.
-5. **Cancel** — Stops after the current range finishes; completed work is kept.
+   (`151-300`, `40-55, 120-122`), then Confirm. Clean appends pre-fill the new tail.
+   Ambiguous alignment shows a note; set ranges yourself. Blank on a new file is
+   the whole file. Blank on a truncated file does no work.
+5. **Cancel** — Stops after the current range or digest action finishes. Completed work is kept.
 6. **Open folder** — Opens the Knowledge root in your file manager.
 
 ---
@@ -161,9 +164,12 @@ Knowledge/                          # git repo root
 From `python/`:
 
 ```bash
+uv run arbor-worker --version
 uv run arbor-worker check-auth
 uv run arbor-worker list-models --root /path/to/Knowledge
+uv run arbor-worker plan-update --root /path/to/Knowledge
 uv run arbor-worker update --root /path/to/Knowledge --model gpt-5.6-sol
+uv run arbor-worker update --root /path/to/Knowledge --model gpt-5.6-sol --plan plan.json
 ```
 
 `update` prints JSONL events to stdout. Exit codes: `0` success, `1` some sources failed, `3` Codex not authenticated.
@@ -228,10 +234,11 @@ cd src-tauri && cargo build
 ```
 Arbor/
 ├── README.md           # this file
-├── PROJECT.md          # vision and principles
+├── CHANGELOG.md        # package releases (0.2.0, …)
+├── PROJECT.md          # vision and Version 1–5 roadmap
 ├── python/             # arbor-worker CLI and pipeline
 ├── desktop/            # Tauri v2 shell + UI
-└── docs/               # V1 design spec and implementation plans
+└── docs/               # design specs and historical implementation plans
 ```
 
 Component READMEs:
@@ -272,7 +279,7 @@ Set it to `true` to delete each source file after it is successfully digested.
 |---------|-------------|
 | Update button disabled | `codex login`, then `uv run arbor-worker check-auth` |
 | Nothing to process | Only **new or changed** `.pdf` / `.pptx` sources trigger work |
-| Wrong page window | Check `suggested_ranges` from `plan-update`; blank ranges ingest the whole file |
+| Wrong page window | Check `suggested_ranges` from `plan-update`. Blank is whole-file only for new sources, not truncation. |
 | PPTX prepare failed | Export slides as PDF, or install LibreOffice for image fallback |
 | Desktop can't find worker | Set `ARBOR_REPO_DIR` to the Arbor repo root |
 | Wayland / NVIDIA crash | See [Linux graphics](#linux-graphics-wayland--nvidia) |

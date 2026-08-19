@@ -1,7 +1,7 @@
 # Arbor: Page Fingerprinting & Surgical Digest Updates — Design
 
 **Date:** 2026-08-12  
-**Status:** Approved (design)  
+**Status:** Implemented on `main` in **0.2.0** ([PR #22](https://github.com/MrF1ow/Arbor/pull/22), tag `v0.2.0`).  
 **Category:** Incremental ingest refinement (see `PROJECT.md`, `docs/superpowers/specs/2026-08-12-course-centric-knowledge-design.md`, `docs/superpowers/specs/2026-08-06-large-pdf-chunked-generate-design.md`)
 
 ## Problem

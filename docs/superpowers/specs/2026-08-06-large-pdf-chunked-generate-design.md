@@ -1,7 +1,7 @@
 # Arbor: Large-PDF Chunked Generate — Design
 
 **Date:** 2026-08-06
-**Status:** Approved (design)
+**Status:** Implemented. Final artifacts are dated `digests/` plus `course.md`, not `lecture.md` / `metadata.json`.
 **Issue:** [#2 Process large PDFs in bounded concurrent chunks, then synthesize the lecture digest](https://github.com/MrF1ow/Arbor/issues/2)
 **Category:** Worker pipeline enhancement (see `PROJECT.md`, `docs/superpowers/specs/2026-08-02-arbor-v1-design.md`)
 

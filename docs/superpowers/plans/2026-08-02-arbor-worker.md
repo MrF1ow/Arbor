@@ -1,5 +1,7 @@
 # Arbor Worker Implementation Plan
 
+> **Status (2026-08-19):** Historical. Living worker is **0.2.0**. Processed state is `arbor-course.json`, not `lecture.md` beside the source.
+>
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build `arbor-worker`, a testable Python CLI that scans a git-tracked Knowledge library, turns new/changed PDF/PPTX lecture sources into structured markdown digests via the Codex CLI, and commits successes to git.

@@ -1,5 +1,7 @@
 # Page Fingerprinting Implementation Plan
 
+> **Status (2026-08-19):** Landed on `main` in **0.2.0** ([PR #22](https://github.com/MrF1ow/Arbor/pull/22)). Do not re-implement from this plan. Phase files stay as the original TDD recipes.
+>
 > **Playbook:** poteto-mode multi-phase plan (`references/plan.md`). Plan only. Do not implement from this document until the user starts execution.
 >
 > **Spec:** [../../specs/2026-08-12-page-fingerprinting-design.md](../../specs/2026-08-12-page-fingerprinting-design.md)

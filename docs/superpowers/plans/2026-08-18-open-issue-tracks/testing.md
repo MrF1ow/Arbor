@@ -1,5 +1,7 @@
 # Testing and close-out
 
+> **Status (2026-08-19):** Verification for the program that landed in **0.2.0**. #6 close-out still needs a GitHub comment if that issue is open.
+
 Back-link: [overview.md](overview.md)
 
 ## Goal
