@@ -17,3 +17,11 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .review th, .review td { text-align: left; padding: 0.3rem 0.4rem; border-bottom: 1px solid #eee; }
 .review input { width: 11rem; }
 .review .note { display: block; font-size: 0.8rem; opacity: 0.75; margin-top: 0.2rem; }
+.history { margin-top: 1rem; border: 1px solid #ccc; border-radius: 8px; padding: 0.8rem; }
+.history table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.history th, .history td { text-align: left; padding: 0.3rem 0.4rem; border-bottom: 1px solid #eee; }
+.history-log { margin-top: 0.6rem; max-height: 180px; overflow: auto; background: #111; color: #d7f5d7; padding: 0.6rem; border-radius: 8px; font-size: 0.78rem; white-space: pre-wrap; }
+.status-badge { text-transform: capitalize; font-size: 0.8rem; }
+.status-badge.succeeded { color: #1f9d55; }
+.status-badge.failed, .status-badge.cancelled { color: #c0392b; }
+.status-badge.running { color: #2980b9; }

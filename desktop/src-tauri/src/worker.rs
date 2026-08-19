@@ -91,9 +91,12 @@ pub fn spawn_update_stream(
     model: String,
     cancel_file: PathBuf,
     plan_file: PathBuf,
+    job_id: String,
 ) {
+    use crate::jobs::{self, SharedCoordinator};
     use tauri::Emitter;
 
+    let knowledge_root = PathBuf::from(&root);
     let cancel_str = cancel_file.to_string_lossy().to_string();
     let plan_str = plan_file.to_string_lossy().to_string();
     let sub_args = [
@@ -112,6 +115,14 @@ pub fn spawn_update_stream(
     );
 
     std::thread::spawn(move || {
+        let release = |app: &tauri::AppHandle, job_id: &str| {
+            if let Some(state) = app.try_state::<SharedCoordinator>() {
+                if let Ok(mut guard) = state.lock() {
+                    guard.finish(job_id);
+                }
+            }
+        };
+
         let mut child = match Command::new(&argv[0])
             .args(&argv[1..])
             .stdout(Stdio::piped())
@@ -120,26 +131,63 @@ pub fn spawn_update_stream(
         {
             Ok(c) => c,
             Err(e) => {
-                let _ = app.emit(
-                    "arbor://progress",
-                    serde_json::json!({ "line": format!("{{\"type\":\"error\",\"message\":\"failed to launch worker: {e}\"}}") }),
+                let line = format!("{{\"type\":\"error\",\"message\":\"failed to launch worker: {e}\"}}");
+                let _ = jobs::append_event(&knowledge_root, &job_id, &line);
+                let _ = jobs::finish_job(
+                    &knowledge_root,
+                    &job_id,
+                    jobs::JobStatus::Failed,
+                    -1,
+                    Some(format!("failed to launch worker: {e}")),
                 );
+                let _ = app.emit("arbor://progress", serde_json::json!({ "line": line }));
+                release(&app, &job_id);
                 return;
             }
         };
 
+        let mut last_line = String::new();
+        let mut terminal_status = None::<jobs::JobStatus>;
+        let mut terminal_summary = None::<String>;
         if let Some(stdout) = child.stdout.take() {
             let reader = BufReader::new(stdout);
             for line in reader.lines().map_while(Result::ok) {
+                last_line = line.clone();
+                if let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) {
+                    match value.get("type").and_then(|t| t.as_str()) {
+                        Some("cancelled") => terminal_status = Some(jobs::JobStatus::Cancelled),
+                        Some("auth_failed") => {
+                            terminal_status = Some(jobs::JobStatus::Failed);
+                            terminal_summary = value
+                                .get("reason")
+                                .and_then(|r| r.as_str())
+                                .map(str::to_string);
+                        }
+                        Some("error") => {
+                            terminal_status = Some(jobs::JobStatus::Failed);
+                            terminal_summary = value
+                                .get("message")
+                                .and_then(|m| m.as_str())
+                                .map(str::to_string);
+                        }
+                        _ => {}
+                    }
+                }
+                let _ = jobs::append_event(&knowledge_root, &job_id, &line);
                 let _ = app.emit("arbor://progress", serde_json::json!({ "line": line }));
             }
         }
 
         let code = child.wait().ok().and_then(|s| s.code()).unwrap_or(-1);
-        let _ = app.emit(
-            "arbor://progress",
-            serde_json::json!({ "line": format!("{{\"type\":\"worker_exit\",\"code\":{code}}}") }),
-        );
+        let exit_line = format!("{{\"type\":\"worker_exit\",\"code\":{code}}}");
+        let _ = jobs::append_event(&knowledge_root, &job_id, &exit_line);
+        let (status, summary) = terminal_status
+            .map(|s| (s, terminal_summary))
+            .unwrap_or_else(|| jobs::resolve_terminal_status(&last_line, code));
+        let _ = jobs::finish_job(&knowledge_root, &job_id, status, code, summary);
+        let _ = app.emit("arbor://progress", serde_json::json!({ "line": exit_line }));
+        let _ = app.emit("arbor://job-finished", serde_json::json!({ "job_id": job_id }));
+        release(&app, &job_id);
     });
 }
 

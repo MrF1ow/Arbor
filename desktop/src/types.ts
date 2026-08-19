@@ -35,6 +35,22 @@ export interface Selection {
   ranges: [number, number][] | null;
 }
 
+export interface JobSummary {
+  id: string;
+  status: string;
+  trigger_kind: string;
+  model_id: string | null;
+  started_at: string;
+  finished_at: string | null;
+  error_summary: string | null;
+  exit_code: number | null;
+}
+
+export interface JobEventRow {
+  line: string;
+  created_at: string;
+}
+
 export interface WorkerEvent {
   type: string;
   ts?: string;
