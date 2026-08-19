@@ -114,6 +114,36 @@ def test_grown_source_with_stored_prefix_suggests_clean_append(tmp_path: Path, m
     assert p.previously_digested is True
 
 
+def test_leftover_empty_fingerprints_suggest_uncovered_ranges(tmp_path: Path, make_pdf):
+    settings = _fast_settings()
+    (tmp_path / "Biology").mkdir()
+    pdf = make_pdf(tmp_path / "Biology" / "mega.pdf", pages=4)
+    source_hash = hash_file(pdf)
+    _record_for(tmp_path / "Biology", "Biology/mega.pdf", source_hash, 4)
+    m = CourseManifest.load(tmp_path / "Biology")
+    m.set_source(
+        "Biology/mega.pdf",
+        SourceFingerprintState(
+            source_hash=source_hash,
+            page_count=4,
+            fingerprint_kind="pdf_image",
+            page_fingerprints=["", "", "fp3", "fp4"],
+            updated_at="2026-08-12T00:00:00+00:00",
+        ),
+    )
+    m.save()
+
+    plan = build_plan(tmp_path, settings)
+    assert len(plan.pending) == 1
+    p = plan.pending[0]
+    assert p.suggested_ranges == [PageRange(1, 2)]
+    assert p.alignment_status == "changed"
+    assert p.previously_digested is True
+
+    selected = apply_selections(plan, {"Biology/mega.pdf": None})
+    assert selected[0].ranges == [PageRange(1, 2)]
+
+
 def test_truncated_changed_empty_ranges_are_not_full_ingest(tmp_path: Path, make_pdf):
     settings = _fast_settings()
     (tmp_path / "Biology").mkdir()

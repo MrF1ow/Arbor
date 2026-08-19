@@ -520,7 +520,7 @@ No database.
 
 No in-app chat (that is Version 4).
 
-No standalone packaged app (see GitHub issue #4).
+macOS `.dmg` from GitHub Actions (`macos-dmg`). The worker is a bundled sidecar. Codex CLI stays a separate install. See GitHub issue #4.
 
 ---
 

@@ -120,6 +120,29 @@ def test_confirmed_range_limits_pages_and_stores_window_end(git_repo: Path, make
     assert "<!-- arbor-pages:3-4 -->" in (course / record["digest_file"]).read_text()
 
 
+def test_partial_ingest_leaves_uncovered_pages_pending(git_repo: Path, make_pdf):
+    course = git_repo / "Biology"
+    course.mkdir()
+    make_pdf(course / "mega.pdf", pages=4)
+    run_update(
+        git_repo,
+        "m",
+        PromptMarkedFake(GOOD_MD),
+        EventEmitter(io.StringIO()),
+        _settings(),
+        selections={"Biology/mega.pdf": [PageRange(3, 4)]},
+    )
+
+    fps = _manifest(course)["sources"]["Biology/mega.pdf"]["page_fingerprints"]
+    assert fps[0] == "" and fps[1] == ""
+    assert fps[2] and fps[3]
+
+    plan = build_plan(git_repo, _settings())
+    assert len(plan.pending) == 1
+    assert plan.pending[0].suggested_ranges == [PageRange(1, 2)]
+    assert plan.pending[0].alignment_status == "changed"
+
+
 def test_grown_source_only_digests_the_tail(git_repo: Path, make_pdf):
     course = git_repo / "Biology"
     course.mkdir()
@@ -305,7 +328,7 @@ def test_delete_sources_keeps_fingerprints(git_repo: Path, make_pdf):
     assert manifest["sources"]["Biology/mega.pdf"]["page_fingerprints"]
 
 
-def test_course_synthesis_failure_leaves_sources_pending(git_repo: Path, make_pdf):
+def test_course_synthesis_failure_saves_records_and_toc(git_repo: Path, make_pdf):
     course = git_repo / "Biology"
     course.mkdir()
     make_pdf(course / "a.pdf", pages=1)
@@ -322,15 +345,21 @@ def test_course_synthesis_failure_leaves_sources_pending(git_repo: Path, make_pd
     res = run_update(git_repo, "m", SynthesisFailProvider(GOOD_MD), em, _settings())
 
     assert res.processed == 2
-    assert len(list((course / "digests").glob("*.md"))) == 2
-    assert not (course / "arbor-course.json").exists()
-    assert not (course / "course.md").exists()
+    digest_names = sorted(p.name for p in (course / "digests").glob("*.md"))
+    assert len(digest_names) == 2
+    assert (course / "arbor-course.json").is_file()
+    course_md = (course / "course.md").read_text()
+    assert course_md.startswith("# Biology")
+    assert "## Digests" in course_md
+    for name in digest_names:
+        assert f"[{name}](digests/{name})" in course_md
     events = parse_lines(buf.getvalue())
     assert any(e["type"] == "course_synthesis_failed" for e in events)
-    assert not any(e["type"] == "committed" for e in events)
+    assert not any(e["type"] == "course_synthesis_done" for e in events)
+    assert any(e["type"] == "committed" for e in events)
 
     plan = build_plan(git_repo, _settings())
-    assert {p.path for p in plan.pending} == {"Biology/a.pdf", "Biology/b.pdf"}
+    assert plan.pending == []
 
 
 def test_overlapping_update_patches_one_digest_with_owning_span_images(git_repo: Path, make_pdf):

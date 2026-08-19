@@ -71,7 +71,17 @@ class CourseManifest:
 
     def is_current(self, source_path: str, source_hash: str) -> bool:
         latest = self.latest_for(source_path)
-        return latest is not None and latest.get("source_hash") == source_hash
+        if latest is None or latest.get("source_hash") != source_hash:
+            return False
+        stored = self.get_source(source_path)
+        if stored is None:
+            return True
+        if stored.source_hash != source_hash:
+            return False
+        fps = list(stored.page_fingerprints)
+        if len(fps) < stored.page_count:
+            return False
+        return all(fps[i] for i in range(stored.page_count))
 
     def digest_files(self) -> list[str]:
         seen: list[str] = []

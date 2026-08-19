@@ -216,6 +216,8 @@ updateBtn.addEventListener("click", async () => {
 
 confirmBtn.addEventListener("click", async () => {
   if (!knowledgeRoot || !modelSel.value) return;
+  await refreshAuth();
+  if (!authed) return;
   let selections: Selection[];
   try {
     selections = collectSelections();
@@ -247,7 +249,7 @@ cancelReviewBtn.addEventListener("click", () => {
 
 cancelBtn.addEventListener("click", async () => {
   await invoke("cancel_update");
-  logLine("Cancel requested; stopping after the current stage…");
+  logLine("Cancel requested; stopping after the current range or action.");
 });
 
 function renderEvent(ev: WorkerEvent) {

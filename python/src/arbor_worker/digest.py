@@ -29,6 +29,8 @@ Formatting rules:
 - Do not add headings beyond the required sections.
 """
 
+SOURCE_RULES = _RULES
+
 _PAGE_MARKER_RULES = """
 Page markers:
 - Wrap the complete output in these exact HTML comments (this is the only HTML allowed):

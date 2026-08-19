@@ -8,7 +8,7 @@ from arbor_worker.alignment import PageRange
 from arbor_worker.cache import CacheDir, ensure_gitignored
 from arbor_worker.chunk_generate import chunked_generate
 from arbor_worker.course_manifest import CourseManifest, DigestRecord, SourceFingerprintState
-from arbor_worker.course_synthesis import build_course_index, synthesize_course
+from arbor_worker.course_synthesis import build_course_index, build_course_toc, synthesize_course
 from arbor_worker.digest import validate_digest
 from arbor_worker.digest_files import next_digest_path
 from arbor_worker.digest_update import apply_digest_action, classify_digest_actions
@@ -365,6 +365,7 @@ def run_update(
         emitter.course_synthesis_started(
             course_dir=course_rel, digest_count=len(manifest.digest_files())
         )
+        synthesis_ok = True
         try:
             digests = manifest.read_digests()
             if len(digests) < 2:
@@ -378,11 +379,11 @@ def run_update(
                     cwd=course_abs,
                 )
         except CourseSynthesisError as e:
+            synthesis_ok = False
             emitter.course_synthesis_failed(
                 course_dir=course_rel, code=CourseSynthesisError.code, message=str(e)
             )
-            emitter.course_done(course_dir=course_rel, digests=len(new_digests))
-            continue
+            course_markdown = build_course_toc(course_rel, manifest.read_digests())
 
         manifest.save()
         for digest_rel in new_digests:
@@ -395,7 +396,8 @@ def run_update(
             course_markdown if course_markdown.endswith("\n") else course_markdown + "\n"
         )
         commit_paths.append(Path(course_rel) / settings.course_file_name)
-        emitter.course_synthesis_done(course_dir=course_rel)
+        if synthesis_ok:
+            emitter.course_synthesis_done(course_dir=course_rel)
 
         if settings.delete_sources_after_digest:
             for src_abs in digested_sources:

@@ -61,6 +61,19 @@ pub fn start_update(
     model: String,
     selections: Vec<Selection>,
 ) -> Result<(), String> {
+    let auth = worker::run_worker_json(&repo_dir(&app), &["check-auth"])?;
+    let authenticated = auth
+        .get("authenticated")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    if !authenticated {
+        let reason = auth
+            .get("reason")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Codex CLI is not authenticated");
+        return Err(reason.to_string());
+    }
+
     let cancel = worker::cancel_file_path();
     let _ = std::fs::remove_file(&cancel); // clear stale cancel
 

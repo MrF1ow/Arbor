@@ -70,6 +70,7 @@ def build_plan(root: Path, settings: WorkerSettings) -> UpdatePlan:
             page_count,
             previous,
             settings,
+            source_hash,
         )
 
         pending.append(
@@ -146,9 +147,14 @@ def _suggest_ranges(
     page_count: int,
     previous: dict | None,
     settings: WorkerSettings,
+    source_hash: str,
 ) -> tuple[list[PageRange], AlignmentStatus]:
     stored = manifest.get_source(rel)
     if stored is not None and stored.page_fingerprints:
+        if stored.source_hash == source_hash:
+            uncovered = _uncovered_ranges(stored.page_fingerprints, page_count)
+            if uncovered:
+                return uncovered, "changed"
         current = fingerprint_source(abs_path, settings)
         result = align_fingerprints(stored.page_fingerprints, current.fingerprints)
         return result.suggested_ranges, result.status
@@ -156,6 +162,23 @@ def _suggest_ranges(
     if previous is not None and page_count > int(previous["page_count"]):
         return [PageRange(int(previous["page_count"]) + 1, page_count)], "clean_append"
     return [], "ambiguous"
+
+
+def _uncovered_ranges(fingerprints: list[str], page_count: int) -> list[PageRange]:
+    fps = list(fingerprints) + [""] * max(0, page_count - len(fingerprints))
+    pages = [i + 1 for i, fp in enumerate(fps[:page_count]) if not fp]
+    if not pages:
+        return []
+    ranges: list[PageRange] = []
+    start = prev = pages[0]
+    for page in pages[1:]:
+        if page == prev + 1:
+            prev = page
+            continue
+        ranges.append(PageRange(start, prev))
+        start = prev = page
+    ranges.append(PageRange(start, prev))
+    return ranges
 
 
 def _delete_only_changed(pending: PendingSource) -> bool:
@@ -170,6 +193,8 @@ def _effective_ranges(
         return list(requested)
     if _delete_only_changed(pending):
         return []
+    if pending.suggested_ranges:
+        return list(pending.suggested_ranges)
     if pending.page_count < 1:
         return []
     return [PageRange(1, pending.page_count)]

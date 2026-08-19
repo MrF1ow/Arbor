@@ -3,3 +3,7 @@ __pycache__/
 *.py[cod]
 *.so
 .pytest_cache/
+python/build/
+python/dist/
+python/*.spec
+
