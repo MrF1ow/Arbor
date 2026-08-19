@@ -1,8 +1,10 @@
 from pathlib import Path
 
+import pytest
+
 from arbor_worker.alignment import PageRange
 from arbor_worker.course_manifest import DigestRecord
-from arbor_worker.digest import validate_digest
+from arbor_worker.digest import DigestError, validate_digest
 from arbor_worker.digest_update import DigestAction, apply_digest_action, classify_digest_actions
 from arbor_worker.page_markers import parse_page_markers
 from arbor_worker.prepare import PrepareResult
@@ -61,6 +63,18 @@ def _coverage_digest() -> str:
 
 def _kinds(actions: list[DigestAction]) -> list[tuple[str, str | None, int, int]]:
     return [(a.kind, a.digest_file, a.page_range.start, a.page_range.end) for a in actions]
+
+
+def _apply_patch_4_5(provider: FakeProvider, original: str) -> str:
+    return apply_digest_action(
+        DigestAction("patch", PageRange(4, 5), digest_file="digests/2026-08-12.md"),
+        provider=provider,
+        model_id="fake-model",
+        source_name="mega.pdf",
+        prep=PrepareResult("pdf_images", image_paths=[Path("p4.png")]),
+        existing_markdown=original,
+        cwd=Path("."),
+    )
 
 
 def test_no_overlap_creates():
@@ -287,6 +301,28 @@ def test_patch_provider_output_with_markers_replaces_inner_only():
     assert updated.count("<!-- arbor-pages:4-5 -->") == 1
     assert "old notes for pages 4-5" not in updated
     assert _block(1, 3, "notes for pages 1-3") in updated
+
+
+def test_patch_malformed_provider_output_raises_instead_of_poisoning():
+    original = _coverage_digest()
+    unclosed = "<!-- arbor-pages:4-5 -->\npatched notes without a close\n"
+    mismatched = "<!-- arbor-pages:4-5 -->\npatched notes\n<!-- /arbor-pages:4-6 -->"
+    for poison in (unclosed, mismatched):
+        with pytest.raises(DigestError):
+            _apply_patch_4_5(FakeProvider(poison), original)
+        parsed = parse_page_markers(original)
+        assert parsed.status == "ok"
+        assert [span.body for span in parsed.spans] == [
+            "notes for pages 1-3",
+            "old notes for pages 4-5",
+            "notes for pages 6-10",
+        ]
+
+
+def test_patch_wrong_range_wrappers_raises():
+    original = _coverage_digest()
+    with pytest.raises(DigestError):
+        _apply_patch_4_5(FakeProvider(_block(1, 10, "full lecture dumped into 4-5")), original)
 
 
 def test_digest_action_is_discriminated_union():

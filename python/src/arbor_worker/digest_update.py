@@ -197,12 +197,16 @@ def _run_provider(
 
 def _extract_inner(markdown: str, block: PageRange) -> str:
     parsed = parse_page_markers(markdown)
-    if parsed.status == "ok" and parsed.spans:
+    if parsed.status != "ok":
+        raise DigestError("patch output has malformed arbor-pages markers")
+    if parsed.spans:
         wanted = _to_marker_range(block)
         for span in parsed.spans:
             if span.page_range == wanted:
                 return span.body
-        return parsed.spans[0].body
+        raise DigestError(
+            f"patch output markers do not match owning block {block.start}-{block.end}"
+        )
     return markdown.strip("\n")
 
 
