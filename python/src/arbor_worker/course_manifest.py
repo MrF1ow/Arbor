@@ -5,7 +5,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Literal
 
-FingerprintKind = Literal["pdf_image", "pptx_text", "pptx_image"]
+FingerprintKind = Literal["pdf_image", "pptx_text", "pptx_image", "docx_text"]
 
 
 @dataclass(frozen=True)

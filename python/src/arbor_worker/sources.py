@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-SUPPORTED_EXTS = {".pdf": "pdf", ".pptx": "pptx"}
+SUPPORTED_EXTS = {".pdf": "pdf", ".pptx": "pptx", ".docx": "docx"}
 
 
 def classify(rel_path: Path) -> str | None:

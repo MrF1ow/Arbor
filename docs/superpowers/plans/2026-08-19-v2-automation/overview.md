@@ -1,6 +1,6 @@
 # Arbor Version 2: automation and discoverability
 
-> **Playbook:** poteto-mode orchestrate + multi-phase plan. Wave 1 (job spine) is in flight.
+> **Playbook:** poteto-mode orchestrate + multi-phase plan. Waves 2–4 in PR #26. Wave 1 merged in #25.
 
 **Predicate:** every Update is a tracked single-flight job with persisted history; the knowledge library is searchable via SQLite FTS; folder watching can enqueue updates; Word and OCR extend prepare; desktop notifications fire on job completion. No scheduler, no multi-provider, no course browser redesign in this program.
 

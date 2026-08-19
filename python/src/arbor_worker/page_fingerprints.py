@@ -37,6 +37,13 @@ def fingerprint_source(
         return _fingerprint_pdf(source, settings)
     if source_type == "pptx":
         return _fingerprint_pptx(source, settings, runner=runner, which=which)
+    if source_type == "docx":
+        from arbor_worker.prepare.docx import extract_docx_text
+
+        text = extract_docx_text(source)
+        chunks = [c for c in text.split("\n\n") if c.strip()] or [text]
+        normalized = [_normalize_text(c) for c in chunks]
+        return PageFingerprintResult("docx_text", [_digest(c.encode()) for c in normalized])
     raise PrepareError(f"Unsupported source type: {source.suffix}")
 
 

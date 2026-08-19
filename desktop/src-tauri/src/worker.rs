@@ -184,11 +184,33 @@ pub fn spawn_update_stream(
         let (status, summary) = terminal_status
             .map(|s| (s, terminal_summary))
             .unwrap_or_else(|| jobs::resolve_terminal_status(&last_line, code));
-        let _ = jobs::finish_job(&knowledge_root, &job_id, status, code, summary);
+        let _ = jobs::finish_job(&knowledge_root, &job_id, status, code, summary.clone());
         let _ = app.emit("arbor://progress", serde_json::json!({ "line": exit_line }));
-        let _ = app.emit("arbor://job-finished", serde_json::json!({ "job_id": job_id }));
+        let _ = app.emit(
+            "arbor://job-finished",
+            serde_json::json!({ "job_id": job_id, "status": status.as_str(), "summary": summary }),
+        );
+        notify_terminal(&app, status, summary.as_deref());
         release(&app, &job_id);
     });
+}
+
+#[cfg(feature = "desktop-runtime")]
+fn notify_terminal(app: &tauri::AppHandle, status: crate::jobs::JobStatus, summary: Option<&str>) {
+    use tauri_plugin_notification::NotificationExt;
+    let title = match status {
+        crate::jobs::JobStatus::Succeeded => "Arbor update finished",
+        crate::jobs::JobStatus::Cancelled => "Arbor update cancelled",
+        crate::jobs::JobStatus::Failed => "Arbor update failed",
+        _ => "Arbor update",
+    };
+    let body = summary.unwrap_or(status.as_str());
+    let _ = app
+        .notification()
+        .builder()
+        .title(title)
+        .body(body)
+        .show();
 }
 
 #[cfg(test)]

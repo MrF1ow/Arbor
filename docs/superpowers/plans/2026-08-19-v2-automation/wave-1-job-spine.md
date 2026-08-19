@@ -1,6 +1,6 @@
 # Wave 1: Job spine
 
-**Status:** in progress (PR 1)
+**Status:** merged in #25
 
 ## Goal
 

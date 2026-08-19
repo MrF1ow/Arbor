@@ -4,7 +4,15 @@ Package version for the worker, desktop, and Tauri app. Product milestone is [PR
 
 ## Unreleased
 
-- Wave 1 job spine. SQLite at `<Knowledge>/.arbor/arbor.db`, single-flight updates, persisted JSONL events, minimal job history UI.
+### Wave 1 (merged in #25)
+
+- Job spine. SQLite at `<Knowledge>/.arbor/arbor.db`, single-flight updates, persisted JSONL events, job history UI.
+
+### Wave 2–4 (#26)
+
+- SQLite FTS5 search index with `arbor-worker reindex` and search box in the desktop UI.
+- Folder watching with debounced auto-plan, optional `auto_update` in `.arbor/settings.json`, desktop notifications on job completion.
+- Word (`.docx`) prepare path and optional Tesseract OCR fallback for low-text PDF pages.
 
 ## 1.0.0 — 2026-08-19
 

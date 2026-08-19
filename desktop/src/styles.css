@@ -17,6 +17,13 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .review th, .review td { text-align: left; padding: 0.3rem 0.4rem; border-bottom: 1px solid #eee; }
 .review input { width: 11rem; }
 .review .note { display: block; font-size: 0.8rem; opacity: 0.75; margin-top: 0.2rem; }
+.search-row { margin-top: 0.5rem; }
+.search-bar { display: flex; gap: 0.5rem; }
+.search-bar input { flex: 1; padding: 0.45rem 0.6rem; border-radius: 8px; }
+.search-results { list-style: none; padding: 0; margin: 0.5rem 0 0; }
+.search-results li { padding: 0.45rem 0; border-bottom: 1px solid #eee; font-size: 0.85rem; }
+.search-results .hit-title { font-weight: 600; }
+.search-results .hit-meta { opacity: 0.75; font-size: 0.78rem; }
 .history { margin-top: 1rem; border: 1px solid #ccc; border-radius: 8px; padding: 0.8rem; }
 .history table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 .history th, .history td { text-align: left; padding: 0.3rem 0.4rem; border-bottom: 1px solid #eee; }
