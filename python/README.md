@@ -1,9 +1,9 @@
 # arbor-worker
 
-Python worker for Arbor (package **0.2.0**). Turns new or changed course sources (`.pdf`, `.pptx`) in a
+Python worker for Arbor (package **1.0.0**). Turns new or changed course sources (`.pdf`, `.pptx`) in a
 git-tracked Knowledge library into structured markdown digests using the Codex CLI.
 
-`uv run arbor-worker --version` prints `0.2.0`.
+`uv run arbor-worker --version` prints `1.0.0`.
 
 ## Requirements
 
@@ -54,7 +54,8 @@ Feed a subset back into `update` with a plan file:
 `ranges` may be `null` or omitted to ingest the whole file. An empty list `[]` means
 do no work (the truncation case: file shrank, alignment is `changed`, suggestions are empty).
 Each range is processed in order. Cancel is cooperative at range and digest-action boundaries.
-`update` without `--plan` processes every pending source as a single full-file range.
+`update` without `--plan` uses each pending source's suggested ranges when those
+exist, otherwise the whole file. Truncation with empty suggestions still does no work.
 
 A confirmed PPTX range that is not the entire deck forces the image fallback path so the
 window is real pages, not whole-file extracted text. That path needs LibreOffice (`soffice`).
@@ -113,10 +114,14 @@ record to the committed `arbor-course.json`. A course with one digest gets a sho
 local `course.md` index (no Codex call). Two or more digests are rolled up with the
 provider.
 
-A source is pending when its whole-file hash changed since the last digest record.
-`plan-update` also compares per-page fingerprints stored in `arbor-course.json`
-(`version` 2 `sources` map) to suggest dirty page ranges. On a clean append, the
-review panel pre-fills the new tail (e.g. `151-300`).
+A source is pending when it is new, its whole-file hash changed, or a `sources`
+entry has empty fingerprint slots after a partial ingest. Manifests with no
+`sources` map still treat a hash match as current. `plan-update` compares
+per-page fingerprints in `arbor-course.json` (`version` 2 `sources`) to suggest
+dirty or leftover page ranges. On a clean append, the review panel pre-fills the
+new tail (e.g. `151-300`). A failed two-digest rollup still saves digest files,
+writes a link-only `course.md`, and commits so the next Update does not create
+duplicates.
 
 ### Manifest (`arbor-course.json`)
 

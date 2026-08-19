@@ -6,7 +6,15 @@ pub fn resolve_worker_argv(
     env: &dyn Fn(&str) -> Option<String>,
     default_python_dir: &str,
     sub_args: &[&str],
+    sidecar: Option<&Path>,
 ) -> Vec<String> {
+    if let Some(path) = sidecar {
+        if path.is_file() {
+            let mut argv = vec![path.to_string_lossy().into_owned()];
+            argv.extend(sub_args.iter().map(|s| s.to_string()));
+            return argv;
+        }
+    }
     if let Some(cmd) = env("ARBOR_WORKER_CMD") {
         let mut argv: Vec<String> = cmd.split_whitespace().map(|s| s.to_string()).collect();
         argv.extend(sub_args.iter().map(|s| s.to_string()));
@@ -24,6 +32,12 @@ pub fn resolve_worker_argv(
     argv
 }
 
+pub fn packaged_sidecar() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let candidate = exe.parent()?.join("arbor-worker");
+    candidate.is_file().then_some(candidate)
+}
+
 #[allow(dead_code)]
 pub fn default_python_dir(app_dir: &Path) -> String {
     // Dev assumption: the repo's `python/` dir sits next to `desktop/`.
@@ -34,7 +48,13 @@ pub fn default_python_dir(app_dir: &Path) -> String {
 pub fn run_worker_json(app_dir: &Path, sub_args: &[&str]) -> Result<serde_json::Value, String> {
     use std::process::Command;
 
-    let argv = resolve_worker_argv(&|k| std::env::var(k).ok(), &default_python_dir(app_dir), sub_args);
+    let sidecar = packaged_sidecar();
+    let argv = resolve_worker_argv(
+        &|k| std::env::var(k).ok(),
+        &default_python_dir(app_dir),
+        sub_args,
+        sidecar.as_deref(),
+    );
     let output = Command::new(&argv[0])
         .args(&argv[1..])
         .output()
@@ -83,7 +103,13 @@ pub fn spawn_update_stream(
         "--cancel-file", &cancel_str,
         "--plan", &plan_str,
     ];
-    let argv = resolve_worker_argv(&|k| std::env::var(k).ok(), &default_python_dir(&app_dir), &sub_args);
+    let sidecar = packaged_sidecar();
+    let argv = resolve_worker_argv(
+        &|k| std::env::var(k).ok(),
+        &default_python_dir(&app_dir),
+        &sub_args,
+        sidecar.as_deref(),
+    );
 
     std::thread::spawn(move || {
         let mut child = match Command::new(&argv[0])
@@ -127,7 +153,7 @@ mod tests {
 
     #[test]
     fn default_uses_uv_run() {
-        let argv = resolve_worker_argv(&no_env, "/repo/python", &["check-auth"]);
+        let argv = resolve_worker_argv(&no_env, "/repo/python", &["check-auth"], None);
         assert_eq!(
             argv,
             vec!["uv", "run", "--project", "/repo/python", "arbor-worker", "check-auth"]
@@ -143,7 +169,7 @@ mod tests {
                 None
             }
         };
-        let argv = resolve_worker_argv(&env, "/repo/python", &["update", "--root", "/k"]);
+        let argv = resolve_worker_argv(&env, "/repo/python", &["update", "--root", "/k"], None);
         assert_eq!(argv, vec!["arbor-worker", "update", "--root", "/k"]);
     }
 
@@ -156,7 +182,43 @@ mod tests {
                 None
             }
         };
-        let argv = resolve_worker_argv(&env, "/repo/python", &["list-models"]);
+        let argv = resolve_worker_argv(&env, "/repo/python", &["list-models"], None);
         assert_eq!(argv[3], "/custom/py");
+    }
+
+    #[test]
+    fn sidecar_path_used_when_file_exists() {
+        let path = std::env::temp_dir().join("arbor-worker-sidecar-test");
+        std::fs::write(&path, b"x").unwrap();
+        let argv = resolve_worker_argv(&no_env, "/repo/python", &["check-auth"], Some(&path));
+        assert_eq!(argv[0], path.to_string_lossy());
+        assert_eq!(argv[1], "check-auth");
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn sidecar_wins_over_env_override() {
+        let path = std::env::temp_dir().join("arbor-worker-sidecar-wins");
+        std::fs::write(&path, b"x").unwrap();
+        let env = |k: &str| {
+            if k == "ARBOR_WORKER_CMD" {
+                Some("arbor-worker".to_string())
+            } else {
+                None
+            }
+        };
+        let argv = resolve_worker_argv(&env, "/repo/python", &["check-auth"], Some(&path));
+        assert_eq!(argv[0], path.to_string_lossy());
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn missing_sidecar_falls_back_to_uv() {
+        let missing = PathBuf::from("/no/such/arbor-worker-sidecar");
+        let argv = resolve_worker_argv(&no_env, "/repo/python", &["check-auth"], Some(&missing));
+        assert_eq!(
+            argv,
+            vec!["uv", "run", "--project", "/repo/python", "arbor-worker", "check-auth"]
+        );
     }
 }

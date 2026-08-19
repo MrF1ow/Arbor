@@ -486,7 +486,7 @@ Each stage should be replaceable.
 
 # Version Roadmap
 
-Package releases (`0.1.0`, `0.2.0`, …) are in [`CHANGELOG.md`](CHANGELOG.md). They are not the same as the Version 1–5 product slots below. **0.2.0** is still Version 1.
+Package releases (`0.1.0`, `0.2.0`, `1.0.0`, …) are in [`CHANGELOG.md`](CHANGELOG.md). They are not the same as the Version 1–5 product slots below. **1.0.0** is still Version 1.
 
 # Version 1
 
@@ -494,7 +494,7 @@ Goal:
 
 Create the smallest useful application.
 
-**Current release:** 0.2.0 (`v0.2.0`).
+**Current release:** 1.0.0 (`v1.0.0`).
 
 Features
 
@@ -520,7 +520,7 @@ No database.
 
 No in-app chat (that is Version 4).
 
-No standalone packaged app (see GitHub issue #4).
+macOS `.dmg` from GitHub Actions (`macos-dmg`). The worker is a bundled sidecar. Codex CLI stays a separate install. See GitHub issue #4.
 
 ---
 

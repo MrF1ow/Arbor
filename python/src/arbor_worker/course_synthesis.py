@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from arbor_worker.digest import validate_course_markdown
+from arbor_worker.digest import SOURCE_RULES, validate_course_markdown
 from arbor_worker.errors import CourseSynthesisError
 from arbor_worker.provider.base import CliProvider, ProviderRequest
 
@@ -26,6 +26,7 @@ Guidance:
 - Important Details: specifics, definitions, formulas, and facts worth remembering.
 - Questions to Review: 5-10 self-test questions covering the whole course.
 
+""" + SOURCE_RULES + """
 Course: {course_name}
 
 The dated digests are below, in order, between markers.
@@ -51,6 +52,13 @@ def build_course_index(course_name: str, digests: list[tuple[str, str]]) -> str:
     overview = _overview_section(markdown)
     if overview:
         lines.extend(["", "## Overview", overview])
+    return "\n".join(lines) + "\n"
+
+
+def build_course_toc(course_name: str, digests: list[tuple[str, str]]) -> str:
+    lines = [f"# {course_name}", "", "## Digests"]
+    for label, _markdown in digests:
+        lines.append(f"- [{label}](digests/{label})")
     return "\n".join(lines) + "\n"
 
 

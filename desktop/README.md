@@ -1,6 +1,6 @@
 # Arbor Desktop
 
-Minimal Tauri v2 shell for Arbor (package **0.2.0**). Drives the `arbor-worker` CLI (see `../python`).
+Minimal Tauri v2 shell for Arbor (package **1.0.0**). Drives the `arbor-worker` CLI (see `../python`).
 
 ## Prerequisites
 
@@ -18,8 +18,13 @@ export ARBOR_REPO_DIR="$(pwd)"          # repo root containing python/
 cd desktop && npm install && npm run tauri dev
 ```
 
-`ARBOR_WORKER_CMD` (space-separated) fully overrides how the worker is launched;
-`ARBOR_PYTHON_DIR` overrides just the uv project dir.
+`ARBOR_WORKER_CMD` (space-separated) fully overrides how the worker is launched when no
+sidecar binary sits next to the app executable. `ARBOR_PYTHON_DIR` overrides just the uv
+project dir. A packaged Mac build launches `arbor-worker` from the Tauri sidecar instead of `uv`.
+
+The DMG is produced by `.github/workflows/macos-dmg.yml`. `scripts/bundle-worker.sh` builds
+the sidecar. `src-tauri/tauri.bundle.json` is a merge config used only for that build so
+`tauri dev` still uses `uv`.
 
 ## Linux graphics (Wayland / NVIDIA)
 
@@ -44,17 +49,18 @@ See [Tauri Linux graphics debugging](https://v2.tauri.app/develop/debug/linux-gr
 1. **Auth blocks work:** with Codex logged out, the badge is red, shows the reason and a
    "Set up Codex" link, and **Update Knowledge** stays disabled.
 2. **Auth passes:** `codex login`, refocus the window → badge turns green, button enables.
-3. **Pick folder:** choose an empty folder → log shows "Initialized git repository".
-4. **Review panel:** put a PDF at `Biology/mega.pdf`, click Update → the panel lists the file
+3. **Confirm re-checks auth:** open the review panel, log out of Codex, Confirm stays blocked.
+4. **Pick folder:** choose an empty folder → log shows "Initialized git repository".
+5. **Review panel:** put a PDF at `Biology/mega.pdf`, click Update → the panel lists the file
    with its page count and an empty Ranges box.
-5. **Full ingest:** Confirm with the box empty → `Biology/digests/<date>.md`, a short
+6. **Full ingest:** Confirm with the box empty → `Biology/digests/<date>.md`, a short
    `Biology/course.md` index, and `Biology/arbor-course.json` appear, and a `digest:` commit is made.
-6. **Idempotency:** click Update again with no changes → "Nothing to process".
-7. **Growth:** append pages to `mega.pdf`, click Update → the panel prefills the new tail
+7. **Idempotency:** click Update again with no changes → "Nothing to process".
+8. **Growth:** append pages to `mega.pdf`, click Update → the panel prefills the new tail
    range; Confirm writes a second dated digest and rewrites `course.md` with a Codex rollup.
-8. **Overlap patch:** change pages inside an already-digested window, confirm that overlap
+9. **Overlap patch:** change pages inside an already-digested window, confirm that overlap
    → still one digest file, markers kept, inner notes updated. Not a second lecture file.
-9. **Truncation:** shrink the PDF and leave Ranges blank when suggestions are empty → no work.
-10. **Cancel:** with two changed sources, click Cancel after the first → only completed digests are
+10. **Truncation:** shrink the PDF and leave Ranges blank when suggestions are empty → no work.
+11. **Cancel:** with two changed sources, click Cancel after the first → only completed digests are
    committed; log shows "Cancelled".
-11. **Open folder:** click Open → the Knowledge folder opens in the file manager.
+12. **Open folder:** click Open → the Knowledge folder opens in the file manager.

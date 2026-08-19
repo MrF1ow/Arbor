@@ -2,11 +2,19 @@
 
 Local-first desktop app that turns course PDFs and PowerPoints into structured study digests using the [Codex CLI](https://developers.openai.com/codex/cli). Your Knowledge library is a normal git repo on disk. Sources and generated notes stay together in history.
 
-**Current release:** [0.2.0](CHANGELOG.md) (git tag `v0.2.0`). Worker, desktop, and Tauri all report this number (`arbor-worker --version`).
+**Current release:** [1.0.0](CHANGELOG.md) (git tag `v1.0.0`). Worker, desktop, and Tauri all report this number (`arbor-worker --version`).
 
-**Product milestone:** still [PROJECT.md](PROJECT.md) Version 1. One window, one **Update Knowledge** button, Codex CLI only (no API keys). 0.2.0 is ranged ingest, fingerprints, and in-place digest patch on that loop. It is not Version 2 (watchers, search, extra providers).
+**Product milestone:** still [PROJECT.md](PROJECT.md) Version 1. One window, one **Update Knowledge** button, Codex CLI only (no API keys). 1.0.0 is the first downloadable Mac app on that loop. It is not Version 2 (watchers, search, extra providers).
 
 For vision and later milestones, see [`PROJECT.md`](PROJECT.md). The original V1 design (`lecture.md` per lecture) is historical: [`docs/superpowers/specs/2026-08-02-arbor-v1-design.md`](docs/superpowers/specs/2026-08-02-arbor-v1-design.md). Living layout is course folders, dated `digests/`, and `arbor-course.json`.
+
+## Download (macOS)
+
+Download the `.dmg` from the [latest GitHub Release](https://github.com/MrF1ow/Arbor/releases/latest). The `macos-dmg` workflow also uploads an `arbor-macos-dmg` artifact. That runner is usually Apple Silicon.
+
+Install the [Codex CLI](https://developers.openai.com/codex/cli) yourself and log in before the first Update. The app includes `arbor-worker`. It does not include Codex. Signing and notarization stay off until Apple secrets are added, so macOS Gatekeeper may require Open Anyway.
+
+Clone and run from source for Linux, or to develop.
 
 ---
 
@@ -22,9 +30,10 @@ Arbor desktop (Tauri)  →  arbor-worker (Python)  →  Codex CLI
 4. Edit page ranges per file (for example `151-300` or `40-55, 120-122`), then Confirm. A blank box on a new file means the whole file. A blank box on a truncated file (`changed` with no suggested ranges) means skip.
 5. Each confirmed range creates or patches `digests/<date>.md` (with page markers). One digest writes a short local `course.md` index; two or more are rolled up with Codex. The run is committed.
 
-Reprocessing is driven by `arbor-course.json`: a source is picked up when it is new or its
-whole-file hash changed. Per-page fingerprints in the manifest suggest dirty ranges for
-mega-decks; overlapping coverage is patched in place instead of stacking duplicate digests.
+Reprocessing is driven by `arbor-course.json`. A source is picked up when it is new, its
+whole-file hash changed, or some pages still have empty fingerprints after a partial ingest.
+Per-page fingerprints in the manifest suggest leftover or dirty ranges for mega-decks.
+Overlapping coverage is patched in place instead of stacking duplicate digests.
 Editing digests by hand never triggers reprocessing.
 
 ---
@@ -234,8 +243,9 @@ cd src-tauri && cargo build
 ```
 Arbor/
 ├── README.md           # this file
-├── CHANGELOG.md        # package releases (0.2.0, …)
+├── CHANGELOG.md        # package releases (1.0.0, …)
 ├── PROJECT.md          # vision and Version 1–5 roadmap
+├── scripts/            # sidecar bundle helper for the macOS DMG
 ├── python/             # arbor-worker CLI and pipeline
 ├── desktop/            # Tauri v2 shell + UI
 └── docs/               # design specs and historical implementation plans
@@ -278,10 +288,10 @@ Set it to `true` to delete each source file after it is successfully digested.
 | Problem | What to try |
 |---------|-------------|
 | Update button disabled | `codex login`, then `uv run arbor-worker check-auth` |
-| Nothing to process | Only **new or changed** `.pdf` / `.pptx` sources trigger work |
+| Nothing to process | Only new, changed, or leftover-page sources trigger work |
 | Wrong page window | Check `suggested_ranges` from `plan-update`. Blank is whole-file only for new sources, not truncation. |
 | PPTX prepare failed | Export slides as PDF, or install LibreOffice for image fallback |
-| Desktop can't find worker | Set `ARBOR_REPO_DIR` to the Arbor repo root |
+| Desktop can't find worker | Packaged app uses the bundled sidecar. From a clone, set `ARBOR_REPO_DIR` to the Arbor repo root |
 | Wayland / NVIDIA crash | See [Linux graphics](#linux-graphics-wayland--nvidia) |
 
 ---

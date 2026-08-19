@@ -5,6 +5,7 @@ import pytest
 from arbor_worker.course_synthesis import (
     build_course_index,
     build_course_prompt,
+    build_course_toc,
     synthesize_course,
 )
 from arbor_worker.errors import CourseSynthesisError
@@ -21,6 +22,12 @@ def test_prompt_includes_each_digest_in_order():
     assert prompt.index("2026-08-12.md") < prompt.index("2026-09-01.md")
     assert "first" in prompt and "second" in prompt
     assert "Course: Biology" in prompt
+
+
+def test_prompt_includes_source_rules():
+    prompt = build_course_prompt("Biology", [("2026-08-12.md", "first")])
+    assert "Source rules:" in prompt
+    assert "Do not use LaTeX" in prompt
 
 
 def test_synthesize_returns_markdown_and_sends_no_images(tmp_path: Path):
@@ -57,6 +64,15 @@ def test_no_digests_raises(tmp_path: Path):
             model_id="m",
             cwd=tmp_path,
         )
+
+
+def test_build_course_toc_lists_digest_links():
+    out = build_course_toc("Biology", [("2026-08-12.md", "one"), ("2026-09-01.md", "two")])
+    assert out.startswith("# Biology")
+    assert "## Digests" in out
+    assert "[2026-08-12.md](digests/2026-08-12.md)" in out
+    assert "[2026-09-01.md](digests/2026-09-01.md)" in out
+    assert "(none)" not in out
 
 
 def test_build_course_index_links_digest_and_copies_overview():

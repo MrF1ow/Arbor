@@ -88,6 +88,38 @@ def test_v1_manifest_loads_with_empty_sources(tmp_path: Path):
     assert m.get_source("Bio/mega.pdf") is None
 
 
+def test_incomplete_fingerprints_are_not_current(tmp_path: Path):
+    m = CourseManifest.load(tmp_path)
+    m.record(_record(page_count=4, start_page=3, end_page=4))
+    m.set_source(
+        "Bio/mega.pdf",
+        SourceFingerprintState(
+            source_hash="hash-1",
+            page_count=4,
+            fingerprint_kind="pdf_image",
+            page_fingerprints=["", "", "fp3", "fp4"],
+            updated_at="2026-08-12T00:00:00+00:00",
+        ),
+    )
+    assert m.is_current("Bio/mega.pdf", "hash-1") is False
+
+
+def test_complete_fingerprints_with_matching_hash_are_current(tmp_path: Path):
+    m = CourseManifest.load(tmp_path)
+    m.record(_record(page_count=3))
+    m.set_source(
+        "Bio/mega.pdf",
+        SourceFingerprintState(
+            source_hash="hash-1",
+            page_count=3,
+            fingerprint_kind="pdf_image",
+            page_fingerprints=["a", "b", "c"],
+            updated_at="2026-08-12T00:00:00+00:00",
+        ),
+    )
+    assert m.is_current("Bio/mega.pdf", "hash-1") is True
+
+
 def test_v2_source_fingerprint_round_trip(tmp_path: Path):
     m = CourseManifest.load(tmp_path)
     state = SourceFingerprintState(
