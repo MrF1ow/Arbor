@@ -18,7 +18,7 @@ Arbor desktop (Tauri)  →  arbor-worker (Python)  →  Codex CLI
 2. Create one folder per course (`Biology/`, `Chemistry/`) and put sources anywhere inside.
 3. Click **Update Knowledge** and review the detected files.
 4. Edit page ranges per file (e.g. `151-300` or `40-55, 120-122`; blank = whole file), then Confirm.
-5. Each confirmed range creates or patches `digests/<date>.md` (with page markers); `course.md` is re-synthesized and the run is committed.
+5. Each confirmed range creates or patches `digests/<date>.md` (with page markers). One digest writes a short local `course.md` index; two or more are rolled up with Codex. The run is committed.
 
 Reprocessing is driven by `arbor-course.json`: a source is picked up when it is new or its
 whole-file hash changed. Per-page fingerprints in the manifest suggest dirty ranges for
@@ -129,7 +129,7 @@ Knowledge/                          # git repo root
     readings/chapter.pdf
     digests/
       2026-08-12.md       # one digest per processed window
-    course.md             # LLM rollup of all digests
+    course.md             # local index if one digest; LLM rollup if two or more
     arbor-course.json     # processed-state manifest + per-page fingerprints (committed)
   _arbor_cache/           # worker cache (auto-created; gitignored)
   .arbor/

@@ -15,4 +15,5 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .review { margin-top: 1rem; border: 1px solid #ccc; border-radius: 8px; padding: 0.8rem; }
 .review table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 .review th, .review td { text-align: left; padding: 0.3rem 0.4rem; border-bottom: 1px solid #eee; }
-.review input { width: 6rem; }
+.review input { width: 11rem; }
+.review .note { display: block; font-size: 0.8rem; opacity: 0.75; margin-top: 0.2rem; }

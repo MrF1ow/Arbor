@@ -22,7 +22,7 @@ def build_parser() -> argparse.ArgumentParser:
     up.add_argument("--model", required=True, help="Model id passed to the provider.")
     up.add_argument("--provider", default="codex", choices=["codex", "fake"])
     up.add_argument("--cancel-file", default=None, help="If this file appears, stop at the next stage boundary.")
-    up.add_argument("--plan", default=None, help='JSON file with {"selections": [{"path", "start_page"}]}.')
+    up.add_argument("--plan", default=None, help='JSON file with {"selections": [{"path", "ranges"}]}.')
 
     return parser
 

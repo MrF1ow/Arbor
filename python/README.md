@@ -63,12 +63,8 @@ Every line is a JSON object with `type` and `ts` (ISO-8601 UTC). Types:
 | `run_started` | `root`, `model_id`, `provider` |
 | `nothing_to_process` | — |
 | `course_started` | `course_dir`, `sources` |
-| `source_started` | `course_dir`, `source` |
-| `range_started` | `course_dir`, `source`, `ranges` (`[[start, end], …]`) |
-| `digest_created` | `course_dir`, `source`, `digest`, `ranges` |
-| `digest_patched` | `course_dir`, `source`, `digest`, `ranges` |
-| `digest_regenerated` | `course_dir`, `source`, `digest`, `ranges` |
-| `source_done` | `course_dir`, `source` |
+| `source_started` | `course_dir`, `source`, `ranges` (`[[start, end], …]`) |
+| `source_done` | `course_dir`, `source`, `digest` |
 | `source_failed` | `course_dir`, `source`, `message` |
 | `source_deleted` | `course_dir`, `source` |
 | `course_synthesis_started` | `course_dir`, `digest_count` |
@@ -106,8 +102,9 @@ Exit codes for `update`: `0` all succeeded, `1` at least one source failed, `3` 
 
 Each immediate child directory of the Knowledge root is a **course**. Sources may
 sit anywhere under it. Successful runs write `digests/YYYY-MM-DD.md`, append a
-record to the committed `arbor-course.json`, and re-synthesize `course.md` from all
-digests.
+record to the committed `arbor-course.json`. A course with one digest gets a short
+local `course.md` index (no Codex call). Two or more digests are rolled up with the
+provider.
 
 A source is pending when its whole-file hash changed since the last digest record.
 `plan-update` also compares per-page fingerprints stored in `arbor-course.json`

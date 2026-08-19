@@ -5,6 +5,7 @@ import os
 import sys
 from pathlib import Path
 
+from arbor_worker.alignment import PageRange
 from arbor_worker.auth import check_codex_auth
 from arbor_worker.events import EventEmitter
 from arbor_worker.pipeline import run_update
@@ -38,15 +39,23 @@ def cmd_list_models(args) -> int:
     return 0
 
 
-def _load_selections(plan_path: str | None) -> dict[str, int | None]:
+def _load_selections(plan_path: str | None) -> dict[str, list[PageRange] | None]:
     if not plan_path:
         return {}
     data = json.loads(Path(plan_path).read_text())
-    selections: dict[str, int | None] = {}
+    selections: dict[str, list[PageRange] | None] = {}
     for item in data.get("selections", []):
-        start_page = item.get("start_page")
-        selections[item["path"]] = None if start_page is None else int(start_page)
+        if "ranges" not in item or item["ranges"] is None:
+            selections[item["path"]] = None
+            continue
+        selections[item["path"]] = [_parse_range(pair) for pair in item["ranges"]]
     return selections
+
+
+def _parse_range(raw) -> PageRange:
+    if not isinstance(raw, (list, tuple)) or len(raw) != 2:
+        raise ValueError(f"range must be [start, end], got {raw!r}")
+    return PageRange(int(raw[0]), int(raw[1]))
 
 
 def cmd_plan_update(args) -> int:

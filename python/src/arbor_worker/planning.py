@@ -3,10 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from arbor_worker.alignment import AlignmentStatus, PageRange, align_fingerprints
 from arbor_worker.course_manifest import CourseManifest
 from arbor_worker.courses import discover_sources
 from arbor_worker.errors import PlanError
 from arbor_worker.hashing import hash_file
+from arbor_worker.page_fingerprints import fingerprint_source
 from arbor_worker.probe import count_pages
 from arbor_worker.settings import WorkerSettings
 
@@ -17,7 +19,8 @@ class PendingSource:
     course: str
     source_type: str
     page_count: int
-    suggested_start_page: int | None
+    suggested_ranges: list[PageRange]
+    alignment_status: AlignmentStatus
     previously_digested: bool
 
 
@@ -32,7 +35,7 @@ class SelectedSource:
     course: str
     source_type: str
     page_count: int
-    start_page: int
+    ranges: list[PageRange]
 
 
 def build_plan(root: Path, settings: WorkerSettings) -> UpdatePlan:
@@ -60,9 +63,14 @@ def build_plan(root: Path, settings: WorkerSettings) -> UpdatePlan:
 
         page_count = count_pages(abs_path, src.source_type)
         previous = manifest.latest_for(rel)
-        suggested = None
-        if previous is not None and page_count > int(previous["page_count"]):
-            suggested = int(previous["page_count"]) + 1
+        suggested_ranges, alignment_status = _suggest_ranges(
+            manifest,
+            rel,
+            abs_path,
+            page_count,
+            previous,
+            settings,
+        )
 
         pending.append(
             PendingSource(
@@ -70,7 +78,8 @@ def build_plan(root: Path, settings: WorkerSettings) -> UpdatePlan:
                 course=course_rel,
                 source_type=src.source_type,
                 page_count=page_count,
-                suggested_start_page=suggested,
+                suggested_ranges=suggested_ranges,
+                alignment_status=alignment_status,
                 previously_digested=previous is not None,
             )
         )
@@ -79,6 +88,14 @@ def build_plan(root: Path, settings: WorkerSettings) -> UpdatePlan:
 
 
 def plan_to_dict(plan: UpdatePlan) -> dict:
+    """Serialize a plan for CLI/desktop JSON.
+
+    Each pending item includes ``suggested_ranges`` as ``[start, end]`` pairs
+    (1-based, inclusive) and ``alignment_status`` (``clean_append``,
+    ``changed``, ``ambiguous``, or ``identical``). Empty ``suggested_ranges``
+    with ``changed`` is truncation/delete-only — not a full-file ingest hint.
+    Blank/empty selection ranges still mean ingest-all except for that case.
+    """
     return {
         "pending": [
             {
@@ -86,7 +103,8 @@ def plan_to_dict(plan: UpdatePlan) -> dict:
                 "course": p.course,
                 "source_type": p.source_type,
                 "page_count": p.page_count,
-                "suggested_start_page": p.suggested_start_page,
+                "suggested_ranges": [[r.start, r.end] for r in p.suggested_ranges],
+                "alignment_status": p.alignment_status,
                 "previously_digested": p.previously_digested,
             }
             for p in plan.pending
@@ -96,7 +114,7 @@ def plan_to_dict(plan: UpdatePlan) -> dict:
 
 def apply_selections(
     plan: UpdatePlan,
-    selections: dict[str, int | None],
+    selections: dict[str, list[PageRange] | None],
 ) -> list[SelectedSource]:
     by_path = {p.path: p for p in plan.pending}
     unknown = sorted(set(selections) - set(by_path))
@@ -107,18 +125,59 @@ def apply_selections(
     out: list[SelectedSource] = []
     for p in chosen:
         requested = selections.get(p.path)
-        start_page = 1 if requested is None else int(requested)
-        if start_page < 1 or start_page > p.page_count:
-            raise PlanError(
-                f"{p.path}: start page {start_page} out of range 1-{p.page_count}"
-            )
+        ranges = _effective_ranges(p, requested)
+        _validate_ranges(p.path, ranges, p.page_count)
         out.append(
             SelectedSource(
                 path=p.path,
                 course=p.course,
                 source_type=p.source_type,
                 page_count=p.page_count,
-                start_page=start_page,
+                ranges=ranges,
             )
         )
     return out
+
+
+def _suggest_ranges(
+    manifest: CourseManifest,
+    rel: str,
+    abs_path: Path,
+    page_count: int,
+    previous: dict | None,
+    settings: WorkerSettings,
+) -> tuple[list[PageRange], AlignmentStatus]:
+    stored = manifest.get_source(rel)
+    if stored is not None and stored.page_fingerprints:
+        current = fingerprint_source(abs_path, settings)
+        result = align_fingerprints(stored.page_fingerprints, current.fingerprints)
+        return result.suggested_ranges, result.status
+
+    if previous is not None and page_count > int(previous["page_count"]):
+        return [PageRange(int(previous["page_count"]) + 1, page_count)], "clean_append"
+    return [], "ambiguous"
+
+
+def _delete_only_changed(pending: PendingSource) -> bool:
+    return pending.alignment_status == "changed" and not pending.suggested_ranges
+
+
+def _effective_ranges(
+    pending: PendingSource,
+    requested: list[PageRange] | None,
+) -> list[PageRange]:
+    if requested:
+        return list(requested)
+    if _delete_only_changed(pending):
+        return []
+    if pending.page_count < 1:
+        return []
+    return [PageRange(1, pending.page_count)]
+
+
+def _validate_ranges(path: str, ranges: list[PageRange], page_count: int) -> None:
+    for r in ranges:
+        if r.start < 1 or r.end > page_count or r.start > r.end:
+            raise PlanError(
+                f"{path}: range {r.start}-{r.end} out of range 1-{page_count}"
+            )

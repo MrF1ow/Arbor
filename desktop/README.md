@@ -46,12 +46,12 @@ See [Tauri Linux graphics debugging](https://v2.tauri.app/develop/debug/linux-gr
 2. **Auth passes:** `codex login`, refocus the window → badge turns green, button enables.
 3. **Pick folder:** choose an empty folder → log shows "Initialized git repository".
 4. **Review panel:** put a PDF at `Biology/mega.pdf`, click Update → the panel lists the file
-   with its page count and an empty "Start from" box.
-5. **Full ingest:** Confirm with the box empty → `Biology/digests/<date>.md`, `Biology/course.md`,
-   and `Biology/arbor-course.json` appear, and a `digest:` commit is made.
+   with its page count and an empty Ranges box.
+5. **Full ingest:** Confirm with the box empty → `Biology/digests/<date>.md`, a short
+   `Biology/course.md` index, and `Biology/arbor-course.json` appear, and a `digest:` commit is made.
 6. **Idempotency:** click Update again with no changes → "Nothing to process".
-7. **Growth:** append pages to `mega.pdf`, click Update → the panel prefills "Start from" with the
-   first new page; Confirm writes a second dated digest and rewrites `course.md`.
+7. **Growth:** append pages to `mega.pdf`, click Update → the panel prefills the new tail
+   range; Confirm writes a second dated digest and rewrites `course.md` with a Codex rollup.
 8. **Cancel:** with two changed sources, click Cancel after the first → only completed digests are
    committed; log shows "Cancelled".
 9. **Open folder:** click Open → the Knowledge folder opens in the file manager.

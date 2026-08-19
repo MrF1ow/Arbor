@@ -31,6 +31,42 @@ function refreshUpdateEnabled() {
   updateBtn.disabled = !(authed && knowledgeRoot);
 }
 
+function formatRanges(ranges: [number, number][]): string {
+  return ranges
+    .map(([start, end]) => (start === end ? String(start) : `${start}-${end}`))
+    .join(", ");
+}
+
+function parseRanges(raw: string, pageCount: number): [number, number][] | null {
+  const text = raw.trim();
+  if (text === "") return null;
+  const ranges: [number, number][] = [];
+  for (const part of text.split(",")) {
+    const bit = part.trim();
+    const match = bit.match(/^(\d+)(?:\s*-\s*(\d+))?$/);
+    if (!match) {
+      throw new Error(`Invalid range "${bit}". Use 3-5 or 8.`);
+    }
+    const start = Number(match[1]);
+    const end = match[2] === undefined ? start : Number(match[2]);
+    if (start < 1 || end > pageCount || start > end) {
+      throw new Error(`Range ${start}-${end} is outside 1-${pageCount}.`);
+    }
+    ranges.push([start, end]);
+  }
+  return ranges;
+}
+
+function alignmentNote(p: PendingSource): string | null {
+  if (p.alignment_status === "ambiguous") {
+    return "Alignment is uncertain. Set ranges or leave blank for the whole file.";
+  }
+  if (p.alignment_status === "changed" && p.suggested_ranges.length === 0) {
+    return "Pages were removed. Leave blank to skip, or set ranges to ingest.";
+  }
+  return null;
+}
+
 function renderReview(pending: PendingSource[]) {
   reviewRowsEl.innerHTML = "";
   for (const p of pending) {
@@ -42,17 +78,25 @@ function renderReview(pending: PendingSource[]) {
     const pages = document.createElement("td");
     pages.textContent = String(p.page_count);
 
-    const startCell = document.createElement("td");
+    const rangeCell = document.createElement("td");
     const input = document.createElement("input");
-    input.type = "number";
-    input.min = "1";
-    input.max = String(p.page_count);
+    input.type = "text";
     input.placeholder = "all";
     input.dataset.path = p.path;
-    if (p.suggested_start_page !== null) input.value = String(p.suggested_start_page);
-    startCell.appendChild(input);
+    input.dataset.pageCount = String(p.page_count);
+    if (p.suggested_ranges.length > 0) {
+      input.value = formatRanges(p.suggested_ranges);
+    }
+    rangeCell.appendChild(input);
+    const note = alignmentNote(p);
+    if (note) {
+      const hint = document.createElement("span");
+      hint.className = "note";
+      hint.textContent = note;
+      rangeCell.appendChild(hint);
+    }
 
-    row.append(file, pages, startCell);
+    row.append(file, pages, rangeCell);
     reviewRowsEl.appendChild(row);
   }
   reviewEl.hidden = false;
@@ -62,7 +106,7 @@ function collectSelections(): Selection[] {
   const inputs = Array.from(reviewRowsEl.querySelectorAll("input")) as HTMLInputElement[];
   return inputs.map((input) => ({
     path: input.dataset.path as string,
-    start_page: input.value.trim() === "" ? null : Number(input.value),
+    ranges: parseRanges(input.value, Number(input.dataset.pageCount)),
   }));
 }
 
@@ -98,28 +142,36 @@ async function loadModels(selected: string | null) {
   if (selected) modelSel.value = selected;
 }
 
+let refreshAuthInFlight: Promise<void> | null = null;
+
 async function refreshAuth() {
-  statusEl.textContent = "Checking Codex…";
-  statusEl.className = "badge";
-  docsLink.hidden = true;
-  try {
-    const a = await invoke<AuthStatus>("check_auth");
-    authed = a.authenticated;
-    if (a.authenticated) {
-      statusEl.textContent = "Codex ready";
-      statusEl.className = "badge ok";
-    } else {
-      statusEl.textContent = `Codex: ${a.reason}`;
+  if (refreshAuthInFlight) return refreshAuthInFlight;
+  refreshAuthInFlight = (async () => {
+    statusEl.textContent = "Checking Codex…";
+    statusEl.className = "badge";
+    docsLink.hidden = true;
+    try {
+      const a = await invoke<AuthStatus>("check_auth");
+      authed = a.authenticated;
+      if (a.authenticated) {
+        statusEl.textContent = "Codex ready";
+        statusEl.className = "badge ok";
+      } else {
+        statusEl.textContent = `Codex: ${a.reason}`;
+        statusEl.className = "badge bad";
+        docsLink.href = a.docs_url;
+        docsLink.hidden = false;
+      }
+    } catch (e) {
+      authed = false;
+      statusEl.textContent = `Codex check failed: ${e}`;
       statusEl.className = "badge bad";
-      docsLink.href = a.docs_url;
-      docsLink.hidden = false;
     }
-  } catch (e) {
-    authed = false;
-    statusEl.textContent = `Codex check failed: ${e}`;
-    statusEl.className = "badge bad";
-  }
-  refreshUpdateEnabled();
+    refreshUpdateEnabled();
+  })().finally(() => {
+    refreshAuthInFlight = null;
+  });
+  return refreshAuthInFlight;
 }
 
 chooseBtn.addEventListener("click", async () => {
@@ -164,7 +216,13 @@ updateBtn.addEventListener("click", async () => {
 
 confirmBtn.addEventListener("click", async () => {
   if (!knowledgeRoot || !modelSel.value) return;
-  const selections = collectSelections();
+  let selections: Selection[];
+  try {
+    selections = collectSelections();
+  } catch (e) {
+    logLine(`Could not read ranges: ${e}`);
+    return;
+  }
   reviewEl.hidden = true;
   updateBtn.disabled = true;
   cancelBtn.disabled = false;
@@ -204,7 +262,7 @@ function renderEvent(ev: WorkerEvent) {
       logLine(`\n■ ${ev.course_dir} (${ev.sources} source(s))`);
       break;
     case "source_started":
-      logLine(`  • ${ev.source} from page ${ev.start_page}`);
+      logLine(`  • ${ev.source} pages ${formatRanges(ev.ranges ?? []) || "all"}`);
       break;
     case "source_done":
       logLine(`    ✓ ${ev.digest}`);

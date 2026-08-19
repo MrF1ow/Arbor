@@ -14,6 +14,7 @@ from arbor_worker.digest import (
     validate_digest,
 )
 from arbor_worker.errors import ChunkGenerateError, SynthesisError
+from arbor_worker.page_markers import PageRange
 from arbor_worker.provider.base import CliProvider, ProviderRequest
 
 
@@ -57,9 +58,11 @@ def chunked_generate(
     emitter,
     course_dir: str,
     cancel_requested,
+    page_offset: int = 0,
+    total_pages: int | None = None,
 ) -> ChunkedResult:
     cache_dir = Path(cache_dir)
-    plans = plan_chunks(image_paths, chunk_size)
+    plans = plan_chunks(image_paths, chunk_size, page_offset=page_offset)
     plan_by_id = {p.chunk_id: p for p in plans}
     manifest = ChunkManifest.load_or_create(
         cache_dir,
@@ -68,7 +71,7 @@ def chunked_generate(
         page_count=len(image_paths),
         model_id=model_id,
     )
-    total_pages = len(image_paths)
+    total_pages = total_pages if total_pages is not None else page_offset + len(image_paths)
 
     todo = deque(plan_by_id[c["id"]] for c in manifest.pending_chunks())
     fut_plan: dict = {}
@@ -136,12 +139,18 @@ def chunked_generate(
 
     emitter.synthesis_started(course_dir=course_dir, chunk_count=len(plans))
     manifest.set_synthesis("pending")
-    synth_prompt = build_synthesis_prompt(source_name, manifest.ordered_digests())
+    window = PageRange(plans[0].page_start, plans[-1].page_end)
+    synth_prompt = build_synthesis_prompt(
+        source_name,
+        manifest.ordered_digests(),
+        page_start=window.start,
+        page_end=window.end,
+    )
     try:
         result = provider.run(
             ProviderRequest(prompt=synth_prompt, model_id=model_id, cwd=cwd)
         )
-        validate_digest(result.markdown)
+        validate_digest(result.markdown, page_range=window)
     except Exception as e:
         manifest.set_synthesis("failed", str(e))
         emitter.synthesis_failed(

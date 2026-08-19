@@ -9,12 +9,14 @@ from arbor_worker.prepare import prepare_source, PrepareError
 from arbor_worker.prepare.pptx import extract_pptx_text
 
 
-def _prep(source, source_type, tmp_path, **overrides):
+def _prep(source, source_type, tmp_path, *, force_images=False, **overrides):
     settings = default_settings()
     for k, v in overrides.items():
         object.__setattr__(settings, k, v)
     cache = CacheDir(tmp_path, settings.cache_dir_name)
-    return prepare_source(source, source_type, hash_file(source), cache, settings)
+    return prepare_source(
+        source, source_type, hash_file(source), cache, settings, force_images=force_images
+    )
 
 
 def test_extract_text_from_pptx(make_pptx, tmp_path: Path):
@@ -30,6 +32,18 @@ def test_pptx_text_path_when_enough_text(make_pptx, tmp_path: Path):
     assert res.processing_path == "pptx_text"
     assert res.text and "nervous system" in res.text
     assert res.image_paths == []
+
+
+def test_pptx_force_images_skips_text_path(make_pptx, tmp_path: Path):
+    body = "The nervous system coordinates body activities. " * 10
+    src = make_pptx(tmp_path / "s.pptx", [body])
+    try:
+        res = _prep(src, "pptx", tmp_path, force_images=True)
+    except PrepareError as e:
+        assert "libreoffice" in str(e).lower() or "soffice" in str(e).lower()
+        return
+    assert res.processing_path != "pptx_text"
+    assert res.text is None
 
 
 def test_pptx_thin_text_triggers_fallback_or_clear_error(make_pptx, tmp_path: Path):
