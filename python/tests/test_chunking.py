@@ -34,3 +34,10 @@ def test_plan_chunks_exact_multiple():
 def test_plan_chunks_rejects_bad_size():
     with pytest.raises(ValueError):
         plan_chunks(_imgs(10), 0)
+
+
+def test_plan_chunks_applies_absolute_page_offset():
+    plans = plan_chunks(_imgs(4), 2, page_offset=2)
+    assert (plans[0].page_start, plans[0].page_end) == (3, 4)
+    assert (plans[1].page_start, plans[1].page_end) == (5, 6)
+    assert [p.name for p in plans[0].image_paths] == ["page-00001.png", "page-00002.png"]

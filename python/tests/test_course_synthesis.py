@@ -2,7 +2,11 @@ from pathlib import Path
 
 import pytest
 
-from arbor_worker.course_synthesis import build_course_prompt, synthesize_course
+from arbor_worker.course_synthesis import (
+    build_course_index,
+    build_course_prompt,
+    synthesize_course,
+)
 from arbor_worker.errors import CourseSynthesisError
 from arbor_worker.provider.fake import FakeProvider
 
@@ -53,3 +57,40 @@ def test_no_digests_raises(tmp_path: Path):
             model_id="m",
             cwd=tmp_path,
         )
+
+
+def test_build_course_index_links_digest_and_copies_overview():
+    digest = (
+        "<!-- arbor-pages:1-2 -->\n"
+        "# Lecture\n"
+        "## Overview\nCells divide by mitosis in this long enough overview.\n"
+        "## Key Concepts\n- mitosis\n"
+        "## Important Details\n- DNA\n"
+        "## Questions to Review\n- what is mitosis?\n"
+        "<!-- /arbor-pages:1-2 -->\n"
+    )
+    out = build_course_index("Biology", [("2026-08-19.md", digest)])
+    assert out.startswith("# Biology")
+    assert "[2026-08-19.md](digests/2026-08-19.md)" in out
+    assert "## Overview" in out
+    assert "Cells divide by mitosis" in out
+    assert "mitosis" in out
+    assert "assembling the single study notebook" not in out
+
+
+def test_build_course_index_requires_one_digest():
+    with pytest.raises(CourseSynthesisError):
+        build_course_index("Biology", [])
+
+
+def test_synthesize_accepts_unmarked_course_markdown(tmp_path: Path):
+    prov = FakeProvider(GOOD_MD)
+    out = synthesize_course(
+        prov,
+        course_name="Biology",
+        digests=[("a.md", "first"), ("b.md", "second")],
+        model_id="m",
+        cwd=tmp_path,
+    )
+    assert out.startswith("# Biology")
+    assert "arbor-pages" not in out

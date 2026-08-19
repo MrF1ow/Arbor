@@ -115,7 +115,7 @@ def build_prompt(
     return prompt
 
 
-def validate_digest(markdown: str, *, page_range: PageRange | None = None) -> None:
+def _validate_structure(markdown: str) -> None:
     body = markdown.strip()
     if len(body) < _MIN_BODY_CHARS:
         raise DigestError("Digest is empty or too short")
@@ -125,6 +125,10 @@ def validate_digest(markdown: str, *, page_range: PageRange | None = None) -> No
     for token in _FORBIDDEN_LATEX:
         if token in markdown:
             raise DigestError("Digest contains non-portable LaTeX markup")
+
+
+def validate_digest(markdown: str, *, page_range: PageRange | None = None) -> None:
+    _validate_structure(markdown)
     parsed = parse_page_markers(markdown)
     if parsed.status == "malformed":
         raise DigestError(f"Digest has invalid arbor-pages markers: {parsed.reason}")
@@ -134,6 +138,10 @@ def validate_digest(markdown: str, *, page_range: PageRange | None = None) -> No
         raise DigestError(
             f"Digest arbor-pages markers do not cover {page_range.start}-{page_range.end}"
         )
+
+
+def validate_course_markdown(markdown: str) -> None:
+    _validate_structure(markdown)
 
 
 _CHUNK_TEMPLATE = """You are creating structured study notes from PART of a graduate lecture.

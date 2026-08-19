@@ -53,7 +53,7 @@ def test_course_events():
     buf = io.StringIO()
     em = EventEmitter(buf)
     em.course_started(course_dir="Biology", sources=2)
-    em.source_started(course_dir="Biology", source="Biology/mega.pdf", start_page=151)
+    em.source_started(course_dir="Biology", source="Biology/mega.pdf", ranges=[[151, 160]])
     em.source_done(course_dir="Biology", source="Biology/mega.pdf", digest="digests/2026-08-12.md")
     em.source_failed(course_dir="Biology", source="Biology/bad.pdf", message="boom")
     em.source_deleted(course_dir="Biology", source="Biology/mega.pdf")
@@ -62,7 +62,8 @@ def test_course_events():
     em.course_synthesis_failed(course_dir="Biology", code="COURSE_SYNTHESIS_FAILED", message="x")
     em.course_done(course_dir="Biology", digests=1)
 
-    types = [e["type"] for e in parse_lines(buf.getvalue())]
+    events = parse_lines(buf.getvalue())
+    types = [e["type"] for e in events]
     assert types == [
         "course_started",
         "source_started",
@@ -74,6 +75,7 @@ def test_course_events():
         "course_synthesis_failed",
         "course_done",
     ]
+    assert events[1]["ranges"] == [[151, 160]]
 
 
 def test_lecture_events_removed():

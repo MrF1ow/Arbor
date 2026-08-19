@@ -58,9 +58,11 @@ def chunked_generate(
     emitter,
     course_dir: str,
     cancel_requested,
+    page_offset: int = 0,
+    total_pages: int | None = None,
 ) -> ChunkedResult:
     cache_dir = Path(cache_dir)
-    plans = plan_chunks(image_paths, chunk_size)
+    plans = plan_chunks(image_paths, chunk_size, page_offset=page_offset)
     plan_by_id = {p.chunk_id: p for p in plans}
     manifest = ChunkManifest.load_or_create(
         cache_dir,
@@ -69,7 +71,7 @@ def chunked_generate(
         page_count=len(image_paths),
         model_id=model_id,
     )
-    total_pages = len(image_paths)
+    total_pages = total_pages if total_pages is not None else page_offset + len(image_paths)
 
     todo = deque(plan_by_id[c["id"]] for c in manifest.pending_chunks())
     fut_plan: dict = {}

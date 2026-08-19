@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from arbor_worker.digest import validate_digest
+from arbor_worker.digest import validate_course_markdown
 from arbor_worker.errors import CourseSynthesisError
 from arbor_worker.provider.base import CliProvider, ProviderRequest
 
@@ -43,6 +43,17 @@ def build_course_prompt(course_name: str, digests: list[tuple[str, str]]) -> str
     return prompt
 
 
+def build_course_index(course_name: str, digests: list[tuple[str, str]]) -> str:
+    if len(digests) != 1:
+        raise CourseSynthesisError(f"{course_name}: course index requires exactly one digest")
+    label, markdown = digests[0]
+    lines = [f"# {course_name}", "", f"See [{label}](digests/{label})."]
+    overview = _overview_section(markdown)
+    if overview:
+        lines.extend(["", "## Overview", overview])
+    return "\n".join(lines) + "\n"
+
+
 def synthesize_course(
     provider: CliProvider,
     *,
@@ -56,7 +67,23 @@ def synthesize_course(
     prompt = build_course_prompt(course_name, digests)
     try:
         result = provider.run(ProviderRequest(prompt=prompt, model_id=model_id, cwd=cwd))
-        validate_digest(result.markdown)
+        validate_course_markdown(result.markdown)
+    except CourseSynthesisError:
+        raise
     except Exception as e:
         raise CourseSynthesisError(f"{course_name}: course synthesis failed: {e}")
     return result.markdown
+
+
+def _overview_section(markdown: str) -> str:
+    capturing = False
+    lines: list[str] = []
+    for line in markdown.splitlines():
+        if line.startswith("## Overview"):
+            capturing = True
+            continue
+        if capturing and line.startswith("## "):
+            break
+        if capturing:
+            lines.append(line)
+    return "\n".join(lines).strip()

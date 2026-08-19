@@ -4,6 +4,8 @@ import re
 from dataclasses import dataclass
 from typing import Literal
 
+PAGE_MARKERS_VERSION = 1
+
 _MARKER_RE = re.compile(r"<!-- (/?)arbor-pages:(\d+)-(\d+) -->")
 
 

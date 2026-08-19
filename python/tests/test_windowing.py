@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from arbor_worker.windowing import clip_images
+from arbor_worker.windowing import clip_images, clip_window
 
 
 def _imgs(n: int) -> list[Path]:
@@ -26,3 +26,23 @@ def test_clip_rejects_zero_or_negative():
 def test_clip_rejects_window_past_last_page():
     with pytest.raises(ValueError):
         clip_images(_imgs(3), 4)
+
+
+def test_clip_window_inclusive_end():
+    clipped = clip_window(_imgs(5), 2, 4)
+    assert [p.name for p in clipped] == ["page-00002.png", "page-00003.png", "page-00004.png"]
+
+
+def test_clip_window_single_page():
+    clipped = clip_window(_imgs(5), 3, 3)
+    assert [p.name for p in clipped] == ["page-00003.png"]
+
+
+def test_clip_window_rejects_end_before_start():
+    with pytest.raises(ValueError):
+        clip_window(_imgs(5), 4, 2)
+
+
+def test_clip_window_rejects_end_past_last_page():
+    with pytest.raises(ValueError):
+        clip_window(_imgs(3), 2, 4)

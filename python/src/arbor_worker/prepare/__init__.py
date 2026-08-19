@@ -34,6 +34,7 @@ def prepare_source(
     on_warning=None,
     runner=None,
     which=None,
+    force_images: bool = False,
 ) -> "PrepareResult":
     import shutil as _shutil
     import subprocess as _subprocess
@@ -53,11 +54,11 @@ def prepare_source(
     # Resume from cache if artifacts still exist.
     if marker is not None:
         path = marker.get("processing_path")
-        if path == "pptx_text":
+        if path == "pptx_text" and not force_images:
             text = (out_dir / "extract.txt")
             if text.is_file():
                 return PrepareResult("pptx_text", text=text.read_text(), detail=marker)
-        else:
+        elif path != "pptx_text":
             images = sorted(out_dir.glob("page-*.png"))
             if images:
                 return PrepareResult(path, image_paths=images, detail=marker)
@@ -70,11 +71,12 @@ def prepare_source(
         return PrepareResult("pdf_images", image_paths=images, detail={"page_count": len(images)})
 
     if source_type == "pptx":
-        text = extract_pptx_text(source)
-        if _nonspace_len(text) >= settings.pptx_min_chars:
-            (out_dir / "extract.txt").write_text(text)
-            cache.write_marker(source_hash, {"processing_path": "pptx_text", "char_count": _nonspace_len(text)})
-            return PrepareResult("pptx_text", text=text, detail={"char_count": _nonspace_len(text)})
+        if not force_images:
+            text = extract_pptx_text(source)
+            if _nonspace_len(text) >= settings.pptx_min_chars:
+                (out_dir / "extract.txt").write_text(text)
+                cache.write_marker(source_hash, {"processing_path": "pptx_text", "char_count": _nonspace_len(text)})
+                return PrepareResult("pptx_text", text=text, detail={"char_count": _nonspace_len(text)})
         # Fallback: convert to PDF then render.
         pdf = convert_pptx_to_pdf(source, out_dir, runner=runner, which=which)
         images = render_pdf_to_images(pdf, out_dir, dpi=settings.pdf_render_dpi)

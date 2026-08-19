@@ -14,9 +14,16 @@ class ChunkPlan:
     image_paths: list[Path]
 
 
-def plan_chunks(image_paths: list[Path], chunk_size: int) -> list[ChunkPlan]:
+def plan_chunks(
+    image_paths: list[Path],
+    chunk_size: int,
+    *,
+    page_offset: int = 0,
+) -> list[ChunkPlan]:
     if chunk_size < 1:
         raise ValueError("chunk_size must be >= 1")
+    if page_offset < 0:
+        raise ValueError("page_offset must be >= 0")
     ordered = list(image_paths)
     n = len(ordered)
     total = (n + chunk_size - 1) // chunk_size
@@ -29,8 +36,8 @@ def plan_chunks(image_paths: list[Path], chunk_size: int) -> list[ChunkPlan]:
                 chunk_id=f"{i + 1:04d}",
                 index=i + 1,
                 total=total,
-                page_start=start + 1,
-                page_end=end,
+                page_start=start + 1 + page_offset,
+                page_end=end + page_offset,
                 image_paths=ordered[start:end],
             )
         )
