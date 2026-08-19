@@ -14,6 +14,7 @@ from arbor_worker.digest import (
     validate_digest,
 )
 from arbor_worker.errors import ChunkGenerateError, SynthesisError
+from arbor_worker.page_markers import PageRange
 from arbor_worker.provider.base import CliProvider, ProviderRequest
 
 
@@ -136,12 +137,18 @@ def chunked_generate(
 
     emitter.synthesis_started(course_dir=course_dir, chunk_count=len(plans))
     manifest.set_synthesis("pending")
-    synth_prompt = build_synthesis_prompt(source_name, manifest.ordered_digests())
+    window = PageRange(plans[0].page_start, plans[-1].page_end)
+    synth_prompt = build_synthesis_prompt(
+        source_name,
+        manifest.ordered_digests(),
+        page_start=window.start,
+        page_end=window.end,
+    )
     try:
         result = provider.run(
             ProviderRequest(prompt=synth_prompt, model_id=model_id, cwd=cwd)
         )
-        validate_digest(result.markdown)
+        validate_digest(result.markdown, page_range=window)
     except Exception as e:
         manifest.set_synthesis("failed", str(e))
         emitter.synthesis_failed(

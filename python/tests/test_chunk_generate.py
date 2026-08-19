@@ -4,13 +4,16 @@ from pathlib import Path
 import pytest
 
 from arbor_worker.chunk_generate import ChunkedResult, chunked_generate
+from arbor_worker.page_markers import PageRange, parse_page_markers
 from arbor_worker.errors import ChunkGenerateError, SynthesisError
 from arbor_worker.events import EventEmitter, parse_lines
 from arbor_worker.provider.base import Model, ProviderRequest, ProviderResult
 
 GOOD_MD = (
+    "<!-- arbor-pages:1-5 -->\n"
     "# Lecture\n## Overview\nThis overview is definitely long enough to pass.\n"
     "## Key Concepts\n- a\n## Important Details\n- b\n## Questions to Review\n- c?\n"
+    "<!-- /arbor-pages:1-5 -->\n"
 )
 
 
@@ -75,7 +78,8 @@ def test_happy_path_synthesizes(tmp_path: Path):
     assert isinstance(res, ChunkedResult)
     assert res.chunk_count == 3 and res.chunk_size == 2
     assert res.page_ranges == ["1-2", "3-4", "5-5"]
-    assert res.markdown.startswith("# Lecture")
+    assert res.markdown.startswith("<!-- arbor-pages:1-5 -->")
+    assert "# Lecture" in res.markdown
     # 3 chunk calls + 1 synthesis call
     assert len(prov.calls) == 4
     # synthesis call carried no images
@@ -129,7 +133,8 @@ def test_resume_reuses_ok_chunks(tmp_path: Path):
         cwd=tmp_path, cache_dir=cache, chunk_size=2, concurrency=1,
         emitter=em2, course_dir="Bio/L1", cancel_requested=lambda: False,
     )
-    assert res.markdown.startswith("# Lecture")
+    assert res.markdown.startswith("<!-- arbor-pages:1-5 -->")
+    assert "# Lecture" in res.markdown
     assert len(prov2.calls) == 1  # synthesis only
     assert prov2.calls[0].image_paths == []
 
@@ -196,3 +201,55 @@ def test_chunk_failure_preserves_ok_digest_with_concurrency(tmp_path: Path):
     types = [e["type"] for e in parse_lines(buf.getvalue())]
     assert "chunk_failed" in types
     assert "synthesis_started" not in types
+
+
+def test_synthesis_prompt_requires_markers_for_full_window(tmp_path: Path):
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    images = _imgs(tmp_path, 5)
+    prov = SeqProvider()
+    em, _buf = _emitter()
+
+    res = chunked_generate(
+        prov,
+        source_name="source.pdf",
+        image_paths=images,
+        model_id="m",
+        cwd=tmp_path,
+        cache_dir=cache,
+        chunk_size=2,
+        concurrency=1,
+        emitter=em,
+        course_dir="Bio/L1",
+        cancel_requested=lambda: False,
+    )
+    synth_prompt = prov.calls[-1].prompt
+    assert "<!-- arbor-pages:1-5 -->" in synth_prompt
+    assert "<!-- /arbor-pages:1-5 -->" in synth_prompt
+    parsed = parse_page_markers(res.markdown)
+    assert parsed.status == "ok"
+    assert [span.page_range for span in parsed.spans] == [PageRange(1, 5)]
+
+
+def test_chunk_prompt_requires_markers_for_first_window(tmp_path: Path):
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    images = _imgs(tmp_path, 5)
+    prov = SeqProvider()
+    chunked_generate(
+        prov,
+        source_name="source.pdf",
+        image_paths=images,
+        model_id="m",
+        cwd=tmp_path,
+        cache_dir=cache,
+        chunk_size=2,
+        concurrency=1,
+        emitter=_emitter()[0],
+        course_dir="Bio/L1",
+        cancel_requested=lambda: False,
+    )
+    first_prompt = prov.calls[0].prompt
+    assert "<!-- arbor-pages:1-2 -->" in first_prompt
+    assert "<!-- /arbor-pages:1-2 -->" in first_prompt
+

@@ -21,15 +21,27 @@ def test_prompt_image_mode_mentions_images():
     assert "Photosynthesis" not in prompt  # no text embedded in image mode
 
 
-def test_validate_accepts_complete_digest():
-    md = (
+def _complete_digest_body() -> str:
+    return (
         "# Cell Biology\n"
         "## Overview\nThe cell is the unit of life and this sentence is long enough.\n"
         "## Key Concepts\n- organelles\n"
         "## Important Details\n- mitochondria make ATP\n"
         "## Questions to Review\n- what is ATP?\n"
     )
-    validate_digest(md)  # no raise
+
+
+def _marked_digest(start: int, end: int, body: str | None = None) -> str:
+    inner = body if body is not None else _complete_digest_body().rstrip("\n")
+    return (
+        f"<!-- arbor-pages:{start}-{end} -->\n"
+        f"{inner}\n"
+        f"<!-- /arbor-pages:{start}-{end} -->\n"
+    )
+
+
+def test_validate_accepts_complete_digest():
+    validate_digest(_marked_digest(1, 1))  # no raise
 
 
 def test_validate_rejects_missing_section():
@@ -150,9 +162,74 @@ def test_build_synthesis_prompt_includes_source_and_formatting_rules():
     _assert_prompt_contains_rules(prompt)
 
 
+def test_build_prompt_requires_arbor_pages_wrappers_for_window():
+    prep = PrepareResult("pdf_images", image_paths=[Path("p2.png"), Path("p3.png")])
+    prompt = build_prompt("lecture.pdf", prep, page_start=2, image_count=2)
+    assert "<!-- arbor-pages:2-3 -->" in prompt
+    assert "<!-- /arbor-pages:2-3 -->" in prompt
+    _assert_prompt_contains_rules(prompt)
+
+
+def test_build_chunk_prompt_requires_arbor_pages_wrappers_for_window():
+    from arbor_worker.digest import build_chunk_prompt
+
+    prompt = build_chunk_prompt(
+        "source.pdf", page_start=2, page_end=3, total_pages=10, image_count=2
+    )
+    assert "<!-- arbor-pages:2-3 -->" in prompt
+    assert "<!-- /arbor-pages:2-3 -->" in prompt
+    _assert_prompt_contains_rules(prompt)
+
+
+def test_build_synthesis_prompt_requires_arbor_pages_wrappers_for_window():
+    from arbor_worker.digest import build_synthesis_prompt
+
+    prompt = build_synthesis_prompt(
+        "source.pdf", ["PART A body", "PART B body"], page_start=2, page_end=3
+    )
+    assert "<!-- arbor-pages:2-3 -->" in prompt
+    assert "<!-- /arbor-pages:2-3 -->" in prompt
+    _assert_prompt_contains_rules(prompt)
+
+
+def test_validate_digest_rejects_missing_markers():
+    with pytest.raises(DigestError, match="arbor-pages"):
+        validate_digest(_complete_digest_body())
+
+
+def test_validate_digest_rejects_malformed_markers():
+    md = (
+        "<!-- arbor-pages:2-3 -->\n"
+        + _complete_digest_body()
+        + "<!-- /arbor-pages:2-4 -->\n"
+    )
+    with pytest.raises(DigestError, match="arbor-pages"):
+        validate_digest(md)
+
+
+def test_fake_provider_pages_2_3_has_matching_markers():
+    from arbor_worker.page_markers import PageRange, parse_page_markers
+    from arbor_worker.provider.base import ProviderRequest
+    from arbor_worker.provider.fake import FakeProvider
+
+    markdown = _marked_digest(2, 3)
+    provider = FakeProvider(markdown)
+    prep = PrepareResult("pdf_images", image_paths=[Path("p2.png"), Path("p3.png")])
+    prompt = build_prompt("lecture.pdf", prep, page_start=2, image_count=2)
+    result = provider.run(
+        ProviderRequest(prompt=prompt, model_id="fake-model", cwd=Path("."))
+    )
+    validate_digest(result.markdown)
+    parsed = parse_page_markers(result.markdown)
+    assert parsed.status == "ok"
+    assert [span.page_range for span in parsed.spans] == [PageRange(2, 3)]
+    assert "<!-- arbor-pages:2-3 -->" in result.markdown
+    assert "<!-- /arbor-pages:2-3 -->" in result.markdown
+
+
 @pytest.mark.parametrize("latex", [r"\(", r"\[", r"\frac"])
 def test_validate_digest_rejects_latex(latex):
-    md = (
+    body = (
         "# Cell Biology\n"
         "## Overview\nThe cell is the unit of life and this sentence is long enough.\n"
         "## Key Concepts\n- organelles\n"
@@ -160,4 +237,4 @@ def test_validate_digest_rejects_latex(latex):
         "## Questions to Review\n- what is ATP?\n"
     )
     with pytest.raises(DigestError):
-        validate_digest(md)
+        validate_digest(_marked_digest(1, 1, body.rstrip("\n")))
