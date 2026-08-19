@@ -1,6 +1,6 @@
 # Wave 3: Watch, auto-update, notify
 
-**Status:** planned (blocked on Wave 1)
+**Status:** complete in #26
 
 ## Goal
 

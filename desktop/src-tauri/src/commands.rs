@@ -1,9 +1,11 @@
-use crate::jobs::{self, JobCoordinator, JobTrigger, SharedCoordinator};
+use crate::jobs::{self, JobTrigger, SharedCoordinator};
+use crate::search::{self, SearchHit};
 use crate::settings::{self, Settings};
+use crate::watch::WatchState;
 use crate::worker;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::Mutex;
+use std::sync::Arc;
 use tauri::Manager;
 
 fn repo_dir(app: &tauri::AppHandle) -> PathBuf {
@@ -52,6 +54,47 @@ pub fn get_settings(app: tauri::AppHandle) -> Settings {
 #[tauri::command]
 pub fn save_settings(app: tauri::AppHandle, settings: Settings) -> Result<(), String> {
     settings::save(&app, &settings)
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Clone, Default)]
+pub struct KnowledgeSettings {
+    #[serde(default)]
+    pub delete_sources_after_digest: bool,
+    #[serde(default)]
+    pub auto_update: bool,
+    #[serde(default = "default_true")]
+    pub watch_enabled: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+#[tauri::command]
+pub fn get_knowledge_settings(root: String) -> Result<KnowledgeSettings, String> {
+    let path = Path::new(&root).join(".arbor").join("settings.json");
+    if !path.is_file() {
+        return Ok(KnowledgeSettings::default());
+    }
+    let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    serde_json::from_str(&text).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn search_knowledge(root: String, query: String, limit: Option<u32>) -> Result<Vec<SearchHit>, String> {
+    search::search_documents(Path::new(&root), &query, limit.unwrap_or(25))
+}
+
+#[tauri::command]
+pub fn reindex_knowledge(app: tauri::AppHandle, root: String) -> Result<serde_json::Value, String> {
+    worker::run_worker_json(&repo_dir(&app), &["reindex", "--root", &root])
+}
+
+#[tauri::command]
+pub fn start_folder_watch(app: tauri::AppHandle, root: String) -> Result<(), String> {
+    let watch = app.state::<Arc<WatchState>>();
+    watch.start(app.clone(), PathBuf::from(root));
+    Ok(())
 }
 
 #[tauri::command]

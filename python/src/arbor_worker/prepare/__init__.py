@@ -39,6 +39,7 @@ def prepare_source(
     import shutil as _shutil
     import subprocess as _subprocess
 
+    from arbor_worker.prepare.docx import extract_docx_text
     from arbor_worker.prepare.pdf import render_pdf_to_images
     from arbor_worker.prepare.pptx import (
         convert_pptx_to_pdf,
@@ -58,6 +59,10 @@ def prepare_source(
             text = (out_dir / "extract.txt")
             if text.is_file():
                 return PrepareResult("pptx_text", text=text.read_text(), detail=marker)
+        elif path == "docx_text":
+            text = (out_dir / "extract.txt")
+            if text.is_file():
+                return PrepareResult("docx_text", text=text.read_text(), detail=marker)
         elif path != "pptx_text":
             images = sorted(out_dir.glob("page-*.png"))
             if images:
@@ -84,5 +89,13 @@ def prepare_source(
             on_warning(f"{source.name}: {len(images)} pages; this may use significant quota")
         cache.write_marker(source_hash, {"processing_path": "pptx_images_fallback", "page_count": len(images)})
         return PrepareResult("pptx_images_fallback", image_paths=images, detail={"page_count": len(images)})
+
+    if source_type == "docx":
+        text = extract_docx_text(source)
+        if not text.strip():
+            raise PrepareError(f"Word document has no extractable text: {source.name}")
+        (out_dir / "extract.txt").write_text(text)
+        cache.write_marker(source_hash, {"processing_path": "docx_text", "char_count": _nonspace_len(text)})
+        return PrepareResult("docx_text", text=text, detail={"char_count": _nonspace_len(text)})
 
     raise PrepareError(f"Unsupported source type: {source_type}")

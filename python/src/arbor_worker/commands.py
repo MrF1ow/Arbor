@@ -95,3 +95,11 @@ def cmd_update(args) -> int:
         emitter.run_done(processed=0, failed=0, skipped=0)
         return 1
     return 0 if result.failed == 0 else 1
+
+
+def cmd_reindex(args) -> int:
+    from arbor_worker.indexer import reindex_root
+
+    totals = reindex_root(Path(args.root))
+    print(json.dumps({"indexed_courses": totals, "documents": sum(totals.values())}))
+    return 0

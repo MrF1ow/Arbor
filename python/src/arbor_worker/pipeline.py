@@ -424,6 +424,10 @@ def run_update(
         try:
             commit = commit_batch(root, commit_paths, message)
             emitter.committed(commit=commit, courses=done_courses)
+            if done_courses:
+                from arbor_worker.indexer import index_courses
+
+                index_courses(root, done_courses)
         except GitStateError as e:
             emitter.error(message=str(e))
             emitter.run_done(processed=processed, failed=failed, skipped=skipped)

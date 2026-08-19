@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { AuthStatus, JobEventRow, JobSummary, Model, PendingSource, Selection, Settings, UpdatePlan, WorkerEvent } from "./types";
+import type { AuthStatus, JobEventRow, JobSummary, KnowledgeSettings, Model, PendingSource, SearchHit, Selection, Settings, UpdatePlan, WorkerEvent } from "./types";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -21,10 +21,14 @@ const cancelReviewBtn = $("cancel-review") as HTMLButtonElement;
 const historyEl = $("history") as HTMLElement;
 const historyRowsEl = $("history-rows") as HTMLTableSectionElement;
 const historyLogEl = $("history-log") as HTMLPreElement;
+const searchInput = $("search") as HTMLInputElement;
+const reindexBtn = $("reindex") as HTMLButtonElement;
+const searchResultsEl = $("search-results") as HTMLUListElement;
 
 let knowledgeRoot: string | null = null;
 let authed = false;
 let activeJobId: string | null = null;
+let searchTimer: number | null = null;
 
 function logLine(text: string) {
   logEl.textContent += text + "\n";
@@ -33,6 +37,111 @@ function logLine(text: string) {
 
 function refreshUpdateEnabled() {
   updateBtn.disabled = !(authed && knowledgeRoot);
+}
+
+function refreshFolderTools() {
+  const ready = Boolean(knowledgeRoot);
+  searchInput.disabled = !ready;
+  reindexBtn.disabled = !ready;
+  refreshUpdateEnabled();
+}
+
+async function activateKnowledgeRoot(picked: string) {
+  knowledgeRoot = picked;
+  rootPathEl.textContent = picked;
+  openBtn.disabled = false;
+  try {
+    const created = await invoke<boolean>("init_knowledge_repo", { path: picked });
+    if (created) logLine(`Initialized git repository in ${picked}`);
+  } catch (e) {
+    logLine(`Could not initialize git: ${e}`);
+  }
+  await invoke("start_folder_watch", { root: picked });
+  await loadModels(modelSel.value || null);
+  await persist();
+  await loadJobHistory();
+  refreshFolderTools();
+}
+
+async function runSearch(query: string) {
+  if (!knowledgeRoot || !query.trim()) {
+    searchResultsEl.innerHTML = "";
+    return;
+  }
+  const hits = await invoke<SearchHit[]>("search_knowledge", {
+    root: knowledgeRoot,
+    query,
+    limit: 20,
+  });
+  searchResultsEl.innerHTML = "";
+  for (const hit of hits) {
+    const li = document.createElement("li");
+    const title = document.createElement("div");
+    title.className = "hit-title";
+    title.textContent = hit.title;
+    const meta = document.createElement("div");
+    meta.className = "hit-meta";
+    meta.textContent = `${hit.course} · ${hit.path}${hit.page_range ? ` · p.${hit.page_range}` : ""}`;
+    const snippet = document.createElement("div");
+    snippet.textContent = hit.snippet;
+    li.append(title, meta, snippet);
+    li.addEventListener("click", () => {
+      if (knowledgeRoot) void invoke("open_folder", { path: `${knowledgeRoot}/${hit.course}` });
+    });
+    searchResultsEl.appendChild(li);
+  }
+}
+
+function selectionsFromPending(pending: PendingSource[]): Selection[] {
+  return pending.map((p) => ({
+    path: p.path,
+    ranges: p.suggested_ranges.length > 0 ? p.suggested_ranges : null,
+  }));
+}
+
+async function startUpdateWithSelections(selections: Selection[]) {
+  if (!knowledgeRoot || !modelSel.value) return;
+  reviewEl.hidden = true;
+  updateBtn.disabled = true;
+  cancelBtn.disabled = false;
+  try {
+    activeJobId = await invoke<string>("start_update", {
+      root: knowledgeRoot,
+      model: modelSel.value,
+      selections,
+    });
+    logLine(`Job ${activeJobId} started.`);
+  } catch (e) {
+    logLine(`Update failed to start: ${e}`);
+    reviewEl.hidden = false;
+    updateBtn.disabled = false;
+    cancelBtn.disabled = true;
+  }
+}
+
+async function handleWatchTriggered() {
+  if (!knowledgeRoot) return;
+  const ks = await invoke<KnowledgeSettings>("get_knowledge_settings", { root: knowledgeRoot });
+  if (!ks.watch_enabled) return;
+  try {
+    const plan = await invoke<UpdatePlan>("plan_update", { root: knowledgeRoot });
+    if (plan.pending.length === 0) return;
+    logLine(`Folder watch detected ${plan.pending.length} file(s) to process.`);
+    if (ks.auto_update) {
+      await refreshAuth();
+      if (!authed) {
+        renderReview(plan.pending);
+        logLine("Auto-update waiting for Codex auth. Review and Confirm when ready.");
+        return;
+      }
+      await startUpdateWithSelections(selectionsFromPending(plan.pending));
+      return;
+    }
+    renderReview(plan.pending);
+    logLine("Review the detected files and Confirm when ready.");
+  } catch (e) {
+    logLine(`Watch plan failed: ${e}`);
+  }
 }
 
 function formatRanges(ranges: [number, number][]): string {
@@ -162,7 +271,9 @@ async function loadSettings() {
     knowledgeRoot = s.knowledge_root;
     rootPathEl.textContent = s.knowledge_root;
     openBtn.disabled = false;
+    await invoke("start_folder_watch", { root: s.knowledge_root });
     await loadJobHistory();
+    refreshFolderTools();
   }
   await loadModels(s.model_id);
 }
@@ -224,19 +335,26 @@ async function refreshAuth() {
 chooseBtn.addEventListener("click", async () => {
   const picked = await open({ directory: true, multiple: false });
   if (typeof picked !== "string") return;
-  knowledgeRoot = picked;
-  rootPathEl.textContent = picked;
-  openBtn.disabled = false;
+  await activateKnowledgeRoot(picked);
+});
+
+searchInput.addEventListener("input", () => {
+  if (searchTimer !== null) window.clearTimeout(searchTimer);
+  const query = searchInput.value;
+  searchTimer = window.setTimeout(() => {
+    void runSearch(query);
+  }, 250);
+});
+
+reindexBtn.addEventListener("click", async () => {
+  if (!knowledgeRoot) return;
   try {
-    const created = await invoke<boolean>("init_knowledge_repo", { path: picked });
-    if (created) logLine(`Initialized git repository in ${picked}`);
+    const result = await invoke<{ documents: number }>("reindex_knowledge", { root: knowledgeRoot });
+    logLine(`Reindexed ${result.documents} document(s).`);
+    await runSearch(searchInput.value);
   } catch (e) {
-    logLine(`Could not initialize git: ${e}`);
+    logLine(`Reindex failed: ${e}`);
   }
-  await loadModels(modelSel.value || null);
-  await persist();
-  await loadJobHistory();
-  refreshUpdateEnabled();
 });
 
 openBtn.addEventListener("click", async () => {
@@ -273,22 +391,7 @@ confirmBtn.addEventListener("click", async () => {
     logLine(`Could not read ranges: ${e}`);
     return;
   }
-  reviewEl.hidden = true;
-  updateBtn.disabled = true;
-  cancelBtn.disabled = false;
-  try {
-    activeJobId = await invoke<string>("start_update", {
-      root: knowledgeRoot,
-      model: modelSel.value,
-      selections,
-    });
-    logLine(`Job ${activeJobId} started.`);
-  } catch (e) {
-    logLine(`Update failed to start: ${e}`);
-    reviewEl.hidden = false;
-    updateBtn.disabled = false;
-    cancelBtn.disabled = true;
-  }
+  await startUpdateWithSelections(selections);
 });
 
 cancelReviewBtn.addEventListener("click", () => {
@@ -347,6 +450,7 @@ function renderEvent(ev: WorkerEvent) {
       break;
     case "committed":
       logLine(`Committed ${ev.commit}: ${(ev.courses ?? []).join(", ")}`);
+      void runSearch(searchInput.value);
       break;
     case "run_done":
       logLine(`\nDone. processed=${ev.processed} failed=${ev.failed} skipped=${ev.skipped}`);
@@ -379,9 +483,16 @@ listen<{ job_id: string }>("arbor://job-finished", () => {
   void loadJobHistory();
 });
 
+listen<{ root: string }>("arbor://files-changed", (e) => {
+  if (knowledgeRoot && e.payload.root === knowledgeRoot) {
+    void handleWatchTriggered();
+  }
+});
+
 window.addEventListener("focus", refreshAuth);
 
 (async () => {
   await loadSettings();
   await refreshAuth();
+  refreshFolderTools();
 })();

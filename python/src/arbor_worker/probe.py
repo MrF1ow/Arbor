@@ -19,4 +19,8 @@ def count_pages(source: Path, source_type: str) -> int:
         from pptx import Presentation
 
         return len(Presentation(str(source)).slides)
+    if source_type == "docx":
+        from arbor_worker.prepare.docx import docx_page_count
+
+        return docx_page_count(source)
     raise ProbeError(f"Unsupported source type: {source_type}")

@@ -24,6 +24,8 @@ class WorkerSettings:
     pdf_chunk_size_pages: int = 25
     pdf_chunk_concurrency: int = 2
     delete_sources_after_digest: bool = False
+    auto_update: bool = False
+    watch_enabled: bool = True
     digests_dirname: str = "digests"
     course_file_name: str = "course.md"
     docs_url: str = DOCS_URL
@@ -51,4 +53,6 @@ def load_settings(root: Path) -> WorkerSettings:
     return replace(
         base,
         delete_sources_after_digest=bool(data.get("delete_sources_after_digest", False)),
+        auto_update=bool(data.get("auto_update", False)),
+        watch_enabled=bool(data.get("watch_enabled", True)),
     )

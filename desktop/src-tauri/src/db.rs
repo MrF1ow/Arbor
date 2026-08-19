@@ -41,6 +41,17 @@ fn init_schema(conn: &Connection) -> Result<(), String> {
         );
         CREATE INDEX IF NOT EXISTS idx_job_events_job_id ON job_events(job_id);
         CREATE INDEX IF NOT EXISTS idx_jobs_started_at ON jobs(started_at DESC);
+
+        CREATE VIRTUAL TABLE IF NOT EXISTS search_index USING fts5(
+            course,
+            path,
+            kind,
+            title,
+            body,
+            page_range,
+            source_path,
+            tokenize='porter unicode61'
+        );
         ",
     )
     .map_err(|e| e.to_string())?;

@@ -1,6 +1,6 @@
 # Wave 4: Word and OCR
 
-**Status:** planned (parallel after Wave 1)
+**Status:** complete in #26
 
 ## Goal
 

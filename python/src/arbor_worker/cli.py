@@ -24,6 +24,9 @@ def build_parser() -> argparse.ArgumentParser:
     up.add_argument("--cancel-file", default=None, help="If this file appears, stop at the next range or action boundary.")
     up.add_argument("--plan", default=None, help='JSON file with {"selections": [{"path", "ranges"}]}.')
 
+    ri = sub.add_parser("reindex", help="Rebuild the search index under a Knowledge root.")
+    ri.add_argument("--root", required=True, help="Path to the Knowledge git repo.")
+
     return parser
 
 
@@ -50,4 +53,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "update":
         from arbor_worker.commands import cmd_update
         return cmd_update(args)
+    if args.command == "reindex":
+        from arbor_worker.commands import cmd_reindex
+        return cmd_reindex(args)
     return 2

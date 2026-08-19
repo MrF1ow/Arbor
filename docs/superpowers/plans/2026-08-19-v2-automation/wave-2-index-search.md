@@ -1,6 +1,6 @@
 # Wave 2: Index and search
 
-**Status:** planned (blocked on Wave 1)
+**Status:** complete in #26
 
 ## Goal
 

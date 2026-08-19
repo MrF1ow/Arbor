@@ -35,6 +35,22 @@ export interface Selection {
   ranges: [number, number][] | null;
 }
 
+export interface KnowledgeSettings {
+  delete_sources_after_digest: boolean;
+  auto_update: boolean;
+  watch_enabled: boolean;
+}
+
+export interface SearchHit {
+  course: string;
+  path: string;
+  kind: string;
+  title: string;
+  snippet: string;
+  page_range: string | null;
+  source_path: string | null;
+}
+
 export interface JobSummary {
   id: string;
   status: string;
