@@ -1,7 +1,7 @@
 # Arbor: Course-Centric Knowledge & Incremental Ingest — Design
 
 **Date:** 2026-08-12  
-**Status:** Approved (design)  
+**Status:** Layout is live on `main` (PR #7). Start-page control was replaced by ranges in **0.2.0** (PR #22).  
 **Category:** Knowledge layout + worker/desktop Update flow (see `PROJECT.md`, `docs/superpowers/specs/2026-08-02-arbor-v1-design.md`, `docs/superpowers/specs/2026-08-06-large-pdf-chunked-generate-design.md`)
 
 > **Superseded in part:** incremental control moved from a single optional start page to

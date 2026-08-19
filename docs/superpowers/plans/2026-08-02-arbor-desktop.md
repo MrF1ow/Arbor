@@ -1,5 +1,7 @@
 # Arbor Desktop (Tauri) Implementation Plan
 
+> **Status (2026-08-19):** Historical shell plan. Living desktop is **0.2.0** with a ranges review panel, not a single start page.
+>
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >
 > **Depends on:** `docs/superpowers/plans/2026-08-02-arbor-worker.md` must be implemented first — this shell drives the `arbor-worker` CLI.

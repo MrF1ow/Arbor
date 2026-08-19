@@ -1,5 +1,7 @@
 # Large-PDF Chunked Generate Implementation Plan
 
+> **Status (2026-08-19):** Live. Synthesis writes a dated digest under `digests/`, not `lecture.md`.
+>
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Process large image-based lectures (PDF and PPTX image fallback) as fixed page-window chunks run with bounded concurrency, tracked and resumable in the cache, then synthesized into a single coherent `lecture.md`.

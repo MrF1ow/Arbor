@@ -1,10 +1,12 @@
 # Arbor V1 Design
 
 **Date:** 2026-08-02  
-**Status:** Draft for implementation planning  
+**Status:** Historical. Living product is package **0.2.0** (tag `v0.2.0`), still PROJECT.md Version 1.  
 **Product name:** Arbor  
 **Category:** Academic Knowledge System (see `PROJECT.md`)  
 **Source vision:** `PROJECT.md` (narrowed for V1)
+
+> Do not treat this file as the current layout. Course folders, dated `digests/`, `course.md`, and `arbor-course.json` replaced per-lecture `lecture.md` and `metadata.json`. See [`2026-08-12-course-centric-knowledge-design.md`](2026-08-12-course-centric-knowledge-design.md), [`2026-08-12-page-fingerprinting-design.md`](2026-08-12-page-fingerprinting-design.md), and the root [`README.md`](../../../README.md).
 
 ## Overview
 

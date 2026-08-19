@@ -1,6 +1,6 @@
 # Arbor Desktop
 
-Minimal Tauri v2 shell for Arbor. Drives the `arbor-worker` CLI (see `../python`).
+Minimal Tauri v2 shell for Arbor (package **0.2.0**). Drives the `arbor-worker` CLI (see `../python`).
 
 ## Prerequisites
 
@@ -52,6 +52,9 @@ See [Tauri Linux graphics debugging](https://v2.tauri.app/develop/debug/linux-gr
 6. **Idempotency:** click Update again with no changes → "Nothing to process".
 7. **Growth:** append pages to `mega.pdf`, click Update → the panel prefills the new tail
    range; Confirm writes a second dated digest and rewrites `course.md` with a Codex rollup.
-8. **Cancel:** with two changed sources, click Cancel after the first → only completed digests are
+8. **Overlap patch:** change pages inside an already-digested window, confirm that overlap
+   → still one digest file, markers kept, inner notes updated. Not a second lecture file.
+9. **Truncation:** shrink the PDF and leave Ranges blank when suggestions are empty → no work.
+10. **Cancel:** with two changed sources, click Cancel after the first → only completed digests are
    committed; log shows "Cancelled".
-9. **Open folder:** click Open → the Knowledge folder opens in the file manager.
+11. **Open folder:** click Open → the Knowledge folder opens in the file manager.
