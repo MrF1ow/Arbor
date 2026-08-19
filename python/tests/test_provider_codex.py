@@ -7,7 +7,7 @@ from arbor_worker.provider.codex import CodexCliProvider, ProviderError
 
 
 def test_build_argv_includes_flags_and_images(tmp_path: Path):
-    prov = CodexCliProvider(models=[Model("m", "M")])
+    prov = CodexCliProvider(models=[Model("m", "M")], which=lambda name: "/usr/bin/codex")
     req = ProviderRequest(
         prompt="p",
         model_id="gpt-x",
@@ -16,7 +16,7 @@ def test_build_argv_includes_flags_and_images(tmp_path: Path):
     )
     out = tmp_path / "out.md"
     argv = prov.build_argv(req, out)
-    assert argv[:3] == ["codex", "exec", "-m"]
+    assert argv[:3] == ["/usr/bin/codex", "exec", "-m"]
     assert "gpt-x" in argv
     assert argv.count("-i") == 2
     assert "--sandbox" in argv and "read-only" in argv
