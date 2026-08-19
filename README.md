@@ -4,7 +4,7 @@ Local-first desktop app that turns course PDFs and PowerPoints into structured s
 
 **Current release:** [1.0.0](CHANGELOG.md) (git tag `v1.0.0`). Worker, desktop, and Tauri all report this number (`arbor-worker --version`).
 
-**Product milestone:** still [PROJECT.md](PROJECT.md) Version 1. One window, one **Update Knowledge** button, Codex CLI only (no API keys). 1.0.0 is the first downloadable Mac app on that loop. It is not Version 2 (watchers, search, extra providers).
+**Product milestone:** still [PROJECT.md](PROJECT.md) Version 1 for the shipped loop. Version 2 automation work is in progress on [`docs/superpowers/plans/2026-08-19-v2-automation/overview.md`](docs/superpowers/plans/2026-08-19-v2-automation/overview.md).
 
 For vision and later milestones, see [`PROJECT.md`](PROJECT.md). The original V1 design (`lecture.md` per lecture) is historical: [`docs/superpowers/specs/2026-08-02-arbor-v1-design.md`](docs/superpowers/specs/2026-08-02-arbor-v1-design.md). Living layout is course folders, dated `digests/`, and `arbor-course.json`.
 

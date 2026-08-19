@@ -528,21 +528,27 @@ macOS `.dmg` from GitHub Actions (`macos-dmg`). The worker is a bundled sidecar.
 
 Goal:
 
-Automation.
+Automation and discoverability.
 
 New Features
 
 * Folder watching
 * Automatic updates
-* Scheduler
 * SQLite indexing
 * Search
 * OCR
 * Word documents
 * Better metadata
-* Multiple AI providers
 * Job history
 * Notifications
+
+Explicitly out of Version 2
+
+* Scheduler (folder watching covers the main use case)
+* Multiple AI providers (later milestone)
+* Course browser, markdown preview, and visual polish (Version 3 shell work, Version 4 tutor UI)
+
+Implementation program: [`docs/superpowers/plans/2026-08-19-v2-automation/overview.md`](docs/superpowers/plans/2026-08-19-v2-automation/overview.md).
 
 ---
 

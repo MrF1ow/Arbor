@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { AuthStatus, Model, PendingSource, Selection, Settings, UpdatePlan, WorkerEvent } from "./types";
+import type { AuthStatus, JobEventRow, JobSummary, Model, PendingSource, Selection, Settings, UpdatePlan, WorkerEvent } from "./types";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -18,9 +18,13 @@ const reviewEl = $("review") as HTMLElement;
 const reviewRowsEl = $("review-rows") as HTMLTableSectionElement;
 const confirmBtn = $("confirm-update") as HTMLButtonElement;
 const cancelReviewBtn = $("cancel-review") as HTMLButtonElement;
+const historyEl = $("history") as HTMLElement;
+const historyRowsEl = $("history-rows") as HTMLTableSectionElement;
+const historyLogEl = $("history-log") as HTMLPreElement;
 
 let knowledgeRoot: string | null = null;
 let authed = false;
+let activeJobId: string | null = null;
 
 function logLine(text: string) {
   logEl.textContent += text + "\n";
@@ -110,12 +114,55 @@ function collectSelections(): Selection[] {
   }));
 }
 
+async function loadJobHistory() {
+  if (!knowledgeRoot) {
+    historyEl.hidden = true;
+    return;
+  }
+  try {
+    await invoke("init_arbor_db", { root: knowledgeRoot });
+    const jobs = await invoke<JobSummary[]>("list_jobs", { root: knowledgeRoot, limit: 15 });
+    historyRowsEl.innerHTML = "";
+    for (const job of jobs) {
+      const row = document.createElement("tr");
+      const started = document.createElement("td");
+      started.textContent = job.started_at;
+      const status = document.createElement("td");
+      const badge = document.createElement("span");
+      badge.className = `status-badge ${job.status}`;
+      badge.textContent = job.error_summary ? `${job.status} (${job.error_summary})` : job.status;
+      status.appendChild(badge);
+      const model = document.createElement("td");
+      model.textContent = job.model_id ?? "—";
+      const actions = document.createElement("td");
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = "Log";
+      btn.addEventListener("click", () => void showJobLog(job.id));
+      actions.appendChild(btn);
+      row.append(started, status, model, actions);
+      historyRowsEl.appendChild(row);
+    }
+    historyEl.hidden = jobs.length === 0;
+  } catch (e) {
+    logLine(`Could not load job history: ${e}`);
+  }
+}
+
+async function showJobLog(jobId: string) {
+  if (!knowledgeRoot) return;
+  const events = await invoke<JobEventRow[]>("get_job_events", { root: knowledgeRoot, jobId });
+  historyLogEl.hidden = false;
+  historyLogEl.textContent = events.map((e) => e.line).join("\n");
+}
+
 async function loadSettings() {
   const s = await invoke<Settings>("get_settings");
   if (s.knowledge_root) {
     knowledgeRoot = s.knowledge_root;
     rootPathEl.textContent = s.knowledge_root;
     openBtn.disabled = false;
+    await loadJobHistory();
   }
   await loadModels(s.model_id);
 }
@@ -188,6 +235,7 @@ chooseBtn.addEventListener("click", async () => {
   }
   await loadModels(modelSel.value || null);
   await persist();
+  await loadJobHistory();
   refreshUpdateEnabled();
 });
 
@@ -229,11 +277,12 @@ confirmBtn.addEventListener("click", async () => {
   updateBtn.disabled = true;
   cancelBtn.disabled = false;
   try {
-    await invoke("start_update", {
+    activeJobId = await invoke<string>("start_update", {
       root: knowledgeRoot,
       model: modelSel.value,
       selections,
     });
+    logLine(`Job ${activeJobId} started.`);
   } catch (e) {
     logLine(`Update failed to start: ${e}`);
     reviewEl.hidden = false;
@@ -312,6 +361,8 @@ function renderEvent(ev: WorkerEvent) {
       updateBtn.disabled = false;
       cancelBtn.disabled = true;
       refreshUpdateEnabled();
+      void loadJobHistory();
+      activeJobId = null;
       break;
   }
 }
@@ -322,6 +373,10 @@ listen<{ line: string }>("arbor://progress", (e) => {
   } catch {
     logLine(e.payload.line);
   }
+});
+
+listen<{ job_id: string }>("arbor://job-finished", () => {
+  void loadJobHistory();
 });
 
 window.addEventListener("focus", refreshAuth);

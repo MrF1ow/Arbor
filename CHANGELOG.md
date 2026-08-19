@@ -1,6 +1,10 @@
 # Changelog
 
-Package version for the worker, desktop, and Tauri app. Product milestone stays [PROJECT.md](PROJECT.md) Version 1 until Version 2 work (watchers, search, extra providers) starts.
+Package version for the worker, desktop, and Tauri app. Product milestone is [PROJECT.md](PROJECT.md) Version 2 automation (see [V2 program plan](docs/superpowers/plans/2026-08-19-v2-automation/overview.md)).
+
+## Unreleased
+
+- Wave 1 job spine. SQLite at `<Knowledge>/.arbor/arbor.db`, single-flight updates, persisted JSONL events, minimal job history UI.
 
 ## 1.0.0 — 2026-08-19
 

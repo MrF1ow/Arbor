@@ -1,12 +1,12 @@
+use crate::jobs::{self, JobCoordinator, JobTrigger, SharedCoordinator};
 use crate::settings::{self, Settings};
 use crate::worker;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::Mutex;
 use tauri::Manager;
 
 fn repo_dir(app: &tauri::AppHandle) -> PathBuf {
-    // Dev: resolve the repo root as the current working directory's parent of `desktop`.
-    // ARBOR_PYTHON_DIR / ARBOR_WORKER_CMD override this entirely in resolve_worker_argv.
     std::env::var("ARBOR_REPO_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|_| {
@@ -55,12 +55,28 @@ pub fn save_settings(app: tauri::AppHandle, settings: Settings) -> Result<(), St
 }
 
 #[tauri::command]
+pub fn init_arbor_db(root: String) -> Result<(), String> {
+    jobs::ensure_db(Path::new(&root))
+}
+
+#[tauri::command]
+pub fn list_jobs(root: String, limit: Option<u32>) -> Result<Vec<jobs::JobSummary>, String> {
+    jobs::list_jobs(Path::new(&root), limit.unwrap_or(20))
+}
+
+#[tauri::command]
+pub fn get_job_events(root: String, job_id: String) -> Result<Vec<jobs::JobEventRow>, String> {
+    jobs::job_events(Path::new(&root), &job_id)
+}
+
+#[tauri::command]
 pub fn start_update(
     app: tauri::AppHandle,
+    coordinator: tauri::State<'_, SharedCoordinator>,
     root: String,
     model: String,
     selections: Vec<Selection>,
-) -> Result<(), String> {
+) -> Result<String, String> {
     let auth = worker::run_worker_json(&repo_dir(&app), &["check-auth"])?;
     let authenticated = auth
         .get("authenticated")
@@ -74,20 +90,42 @@ pub fn start_update(
         return Err(reason.to_string());
     }
 
+    let plan_json = serde_json::to_string(&serde_json::json!({ "selections": selections }))
+        .map_err(|e| e.to_string())?;
+    let knowledge_root = Path::new(&root);
+    let job_id = jobs::create_job(knowledge_root, JobTrigger::Manual, &model, &plan_json)?;
+
+    {
+        let mut guard = coordinator.lock().map_err(|e| e.to_string())?;
+        if let Err(e) = guard.try_begin(&job_id, &root) {
+            let _ = jobs::finish_job(
+                knowledge_root,
+                &job_id,
+                jobs::JobStatus::Failed,
+                -1,
+                Some(e.clone()),
+            );
+            return Err(e);
+        }
+    }
+
     let cancel = worker::cancel_file_path();
-    let _ = std::fs::remove_file(&cancel); // clear stale cancel
+    let _ = std::fs::remove_file(&cancel);
 
     let plan_path = worker::plan_file_path();
-    let body = serde_json::json!({ "selections": selections });
-    std::fs::write(
-        &plan_path,
-        serde_json::to_vec(&body).map_err(|e| e.to_string())?,
-    )
-    .map_err(|e| e.to_string())?;
+    std::fs::write(&plan_path, plan_json.as_bytes()).map_err(|e| e.to_string())?;
 
     let app_dir = repo_dir(&app);
-    worker::spawn_update_stream(app, app_dir, root, model, cancel, plan_path);
-    Ok(())
+    worker::spawn_update_stream(
+        app,
+        app_dir,
+        root.clone(),
+        model,
+        cancel,
+        plan_path,
+        job_id.clone(),
+    );
+    Ok(job_id)
 }
 
 #[tauri::command]
@@ -118,6 +156,7 @@ pub fn init_knowledge_repo(path: String) -> Result<bool, String> {
     if !root.is_dir() {
         return Err(format!("Not a folder: {path}"));
     }
+    jobs::ensure_db(root)?;
     if root.join(".git").exists() {
         return Ok(false);
     }
