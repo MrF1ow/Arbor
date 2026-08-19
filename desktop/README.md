@@ -1,6 +1,6 @@
 # Arbor Desktop
 
-Minimal Tauri v2 shell for Arbor (package **0.2.0**). Drives the `arbor-worker` CLI (see `../python`).
+Minimal Tauri v2 shell for Arbor (package **1.0.0**). Drives the `arbor-worker` CLI (see `../python`).
 
 ## Prerequisites
 

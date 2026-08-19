@@ -2,15 +2,15 @@
 
 Local-first desktop app that turns course PDFs and PowerPoints into structured study digests using the [Codex CLI](https://developers.openai.com/codex/cli). Your Knowledge library is a normal git repo on disk. Sources and generated notes stay together in history.
 
-**Current release:** [0.2.0](CHANGELOG.md) (git tag `v0.2.0`). Worker, desktop, and Tauri all report this number (`arbor-worker --version`).
+**Current release:** [1.0.0](CHANGELOG.md) (git tag `v1.0.0`). Worker, desktop, and Tauri all report this number (`arbor-worker --version`).
 
-**Product milestone:** still [PROJECT.md](PROJECT.md) Version 1. One window, one **Update Knowledge** button, Codex CLI only (no API keys). 0.2.0 is ranged ingest, fingerprints, and in-place digest patch on that loop. It is not Version 2 (watchers, search, extra providers).
+**Product milestone:** still [PROJECT.md](PROJECT.md) Version 1. One window, one **Update Knowledge** button, Codex CLI only (no API keys). 1.0.0 is the first downloadable Mac app on that loop. It is not Version 2 (watchers, search, extra providers).
 
 For vision and later milestones, see [`PROJECT.md`](PROJECT.md). The original V1 design (`lecture.md` per lecture) is historical: [`docs/superpowers/specs/2026-08-02-arbor-v1-design.md`](docs/superpowers/specs/2026-08-02-arbor-v1-design.md). Living layout is course folders, dated `digests/`, and `arbor-course.json`.
 
 ## Download (macOS)
 
-The `macos-dmg` GitHub Actions workflow builds a `.dmg` on `macos-latest`. That runner is usually Apple Silicon. Open the latest successful run on `main` and download the `arbor-macos-dmg` artifact.
+Download the `.dmg` from the [latest GitHub Release](https://github.com/MrF1ow/Arbor/releases/latest). The `macos-dmg` workflow also uploads an `arbor-macos-dmg` artifact. That runner is usually Apple Silicon.
 
 Install the [Codex CLI](https://developers.openai.com/codex/cli) yourself and log in before the first Update. The app includes `arbor-worker`. It does not include Codex. Signing and notarization stay off until Apple secrets are added, so macOS Gatekeeper may require Open Anyway.
 
@@ -243,7 +243,7 @@ cd src-tauri && cargo build
 ```
 Arbor/
 ├── README.md           # this file
-├── CHANGELOG.md        # package releases (0.2.0, …)
+├── CHANGELOG.md        # package releases (1.0.0, …)
 ├── PROJECT.md          # vision and Version 1–5 roadmap
 ├── scripts/            # sidecar bundle helper for the macOS DMG
 ├── python/             # arbor-worker CLI and pipeline

@@ -1,9 +1,9 @@
 # arbor-worker
 
-Python worker for Arbor (package **0.2.0**). Turns new or changed course sources (`.pdf`, `.pptx`) in a
+Python worker for Arbor (package **1.0.0**). Turns new or changed course sources (`.pdf`, `.pptx`) in a
 git-tracked Knowledge library into structured markdown digests using the Codex CLI.
 
-`uv run arbor-worker --version` prints `0.2.0`.
+`uv run arbor-worker --version` prints `1.0.0`.
 
 ## Requirements
 

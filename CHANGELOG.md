@@ -2,13 +2,17 @@
 
 Package version for the worker, desktop, and Tauri app. Product milestone stays [PROJECT.md](PROJECT.md) Version 1 until Version 2 work (watchers, search, extra providers) starts.
 
-## Unreleased
+## 1.0.0 — 2026-08-19
 
+Git tag: [`v1.0.0`](https://github.com/MrF1ow/Arbor/releases/tag/v1.0.0). Merge: [PR #24](https://github.com/MrF1ow/Arbor/pull/24).
+
+- First downloadable macOS `.dmg`. GitHub Actions `macos-dmg` bundles `arbor-worker` as a Tauri sidecar via PyInstaller. Codex CLI stays a separate install. Signing and notarization stay off.
 - Treat leftover pages as pending after a partial ingest. Empty fingerprint slots keep the source in the plan with those ranges suggested.
 - A failed two-digest course rollup still saves `arbor-course.json`, digest files, and a link-only `course.md`, then commits so the next Update does not duplicate work.
 - Course rollup prompts include the same source and formatting rules as lecture digests.
 - Confirm re-checks Codex auth. `start_update` also runs `check-auth` before spawning the worker.
-- macOS DMG workflow (`macos-dmg`) bundles `arbor-worker` as a Tauri sidecar via PyInstaller. Codex CLI stays a separate install. Package version stays 0.2.0 until a DMG artifact exists.
+
+Not in this release: notarized Mac builds, in-app chat (#20), PROJECT.md Version 2.
 
 ## 0.2.0 — 2026-08-19
 
