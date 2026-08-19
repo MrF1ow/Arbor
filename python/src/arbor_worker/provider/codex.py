@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from arbor_worker.auth import check_codex_auth
+from arbor_worker.auth import check_codex_auth, resolve_codex_command
 from arbor_worker.provider.base import Model, ProviderRequest, ProviderResult
 
 
@@ -28,7 +28,7 @@ class CodexCliProvider:
         return list(self._models)
 
     def build_argv(self, request: ProviderRequest, out_file: Path) -> list[str]:
-        argv = ["codex", "exec", "-m", request.model_id]
+        argv = [resolve_codex_command(self._which), "exec", "-m", request.model_id]
         for img in request.image_paths:
             argv += ["-i", str(img)]
         argv += [
