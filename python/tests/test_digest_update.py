@@ -65,13 +65,17 @@ def _kinds(actions: list[DigestAction]) -> list[tuple[str, str | None, int, int]
     return [(a.kind, a.digest_file, a.page_range.start, a.page_range.end) for a in actions]
 
 
+def _page_images(count: int) -> list[Path]:
+    return [Path(f"p{i}.png") for i in range(1, count + 1)]
+
+
 def _apply_patch_4_5(provider: FakeProvider, original: str) -> str:
     return apply_digest_action(
         DigestAction("patch", PageRange(4, 5), digest_file="digests/2026-08-12.md"),
         provider=provider,
         model_id="fake-model",
         source_name="mega.pdf",
-        prep=PrepareResult("pdf_images", image_paths=[Path("p4.png")]),
+        prep=PrepareResult("pdf_images", image_paths=_page_images(10)),
         existing_markdown=original,
         cwd=Path("."),
     )
@@ -195,7 +199,7 @@ def test_missing_digest_file_regenerates(tmp_path: Path):
 
 def test_create_apply_uses_marked_digest_generation():
     provider = FakeProvider(_marked(11, 20, "New coverage"))
-    prep = PrepareResult("pdf_images", image_paths=[Path("p11.png")])
+    prep = PrepareResult("pdf_images", image_paths=_page_images(20))
     action = DigestAction("create", PageRange(11, 20), digest_file=None)
     markdown = apply_digest_action(
         action,
@@ -217,7 +221,7 @@ def test_create_apply_uses_marked_digest_generation():
 
 def test_regenerate_apply_reuses_marked_digest_generation():
     provider = FakeProvider(_marked(1, 10, "Regenerated"))
-    prep = PrepareResult("pdf_images", image_paths=[Path("p1.png")])
+    prep = PrepareResult("pdf_images", image_paths=_page_images(10))
     action = DigestAction("regenerate", PageRange(1, 10), digest_file="digests/2026-08-12.md")
     markdown = apply_digest_action(
         action,
@@ -247,7 +251,7 @@ def test_patch_range_4_5_only_that_block_changes(tmp_path: Path):
     digest_path.write_text(original)
 
     provider = FakeProvider("patched notes for pages 4-5")
-    prep = PrepareResult("pdf_images", image_paths=[Path("p4.png"), Path("p5.png")])
+    prep = PrepareResult("pdf_images", image_paths=_page_images(10))
     action = DigestAction("patch", PageRange(4, 5), digest_file=digest_rel)
     updated = apply_digest_action(
         action,
@@ -287,7 +291,7 @@ def test_patch_range_4_5_only_that_block_changes(tmp_path: Path):
 def test_patch_provider_output_with_markers_replaces_inner_only():
     original = _coverage_digest()
     provider = FakeProvider(_block(4, 5, "model wrapped 4-5"))
-    prep = PrepareResult("pdf_images", image_paths=[Path("p4.png")])
+    prep = PrepareResult("pdf_images", image_paths=_page_images(10))
     updated = apply_digest_action(
         DigestAction("patch", PageRange(4, 5), digest_file="digests/2026-08-12.md"),
         provider=provider,
@@ -323,6 +327,29 @@ def test_patch_wrong_range_wrappers_raises():
     original = _coverage_digest()
     with pytest.raises(DigestError):
         _apply_patch_4_5(FakeProvider(_block(1, 10, "full lecture dumped into 4-5")), original)
+
+
+def test_patch_overlap_runs_provider_on_owning_span_images():
+    original = _marked(1, 4)
+    provider = FakeProvider(_marked(1, 4, "Patched span"))
+    updated = apply_digest_action(
+        DigestAction("patch", PageRange(2, 3), digest_file="digests/2026-08-12.md"),
+        provider=provider,
+        model_id="fake-model",
+        source_name="mega.pdf",
+        prep=PrepareResult("pdf_images", image_paths=_page_images(4)),
+        existing_markdown=original,
+        cwd=Path("."),
+    )
+    parsed = parse_page_markers(updated)
+    assert parsed.status == "ok"
+    assert [(s.page_range.start, s.page_range.end) for s in parsed.spans] == [(1, 4)]
+    assert "Patched span" in updated
+    assert len(provider.calls) == 1
+    req = provider.calls[0]
+    assert len(req.image_paths) == 4
+    assert "arbor-pages:1-4" in req.prompt
+    assert "arbor-pages:2-3" not in req.prompt
 
 
 def test_digest_action_is_discriminated_union():

@@ -9,6 +9,7 @@ from arbor_worker.pipeline import run_update
 from arbor_worker.planning import build_plan
 from arbor_worker.provider.fake import FakeProvider
 from arbor_worker.settings import default_settings
+from prompt_marked_fake import PromptMarkedFake
 
 GOOD_MD = (
     "# Lecture\n## Overview\nThis overview is definitely long enough to pass.\n"
@@ -50,7 +51,7 @@ def test_processes_source_into_dated_digest_and_course_index(git_repo: Path, mak
     course = git_repo / "Biology"
     course.mkdir()
     make_pdf(course / "mega.pdf", pages=1)
-    prov = FakeProvider(GOOD_MD)
+    prov = PromptMarkedFake(GOOD_MD)
     em, buf = _emitter()
 
     res = run_update(git_repo, "gpt-5.6-sol", prov, em, _settings())
@@ -85,7 +86,7 @@ def test_second_run_is_idempotent(git_repo: Path, make_pdf):
     course = git_repo / "Biology"
     course.mkdir()
     make_pdf(course / "mega.pdf", pages=1)
-    run_update(git_repo, "m", FakeProvider(GOOD_MD), EventEmitter(io.StringIO()), _settings())
+    run_update(git_repo, "m", PromptMarkedFake(GOOD_MD), EventEmitter(io.StringIO()), _settings())
 
     em, buf = _emitter()
     res = run_update(git_repo, "m", FakeProvider(GOOD_MD), em, _settings())
@@ -98,7 +99,7 @@ def test_confirmed_range_limits_pages_and_stores_window_end(git_repo: Path, make
     course = git_repo / "Biology"
     course.mkdir()
     make_pdf(course / "mega.pdf", pages=4)
-    prov = FakeProvider(GOOD_MD)
+    prov = PromptMarkedFake(GOOD_MD)
 
     res = run_update(
         git_repo,
@@ -123,10 +124,10 @@ def test_grown_source_only_digests_the_tail(git_repo: Path, make_pdf):
     course = git_repo / "Biology"
     course.mkdir()
     make_pdf(course / "mega.pdf", pages=2)
-    run_update(git_repo, "m", FakeProvider(GOOD_MD), EventEmitter(io.StringIO()), _settings())
+    run_update(git_repo, "m", PromptMarkedFake(GOOD_MD), EventEmitter(io.StringIO()), _settings())
 
     make_pdf(course / "mega.pdf", pages=5)
-    prov = FakeProvider(GOOD_MD)
+    prov = PromptMarkedFake(GOOD_MD)
     res = run_update(
         git_repo,
         "m",
@@ -150,10 +151,10 @@ def test_truncation_empty_ranges_do_no_work(git_repo: Path, make_pdf):
     course = git_repo / "Biology"
     course.mkdir()
     make_pdf(course / "mega.pdf", pages=5)
-    run_update(git_repo, "m", FakeProvider(GOOD_MD), EventEmitter(io.StringIO()), _settings())
+    run_update(git_repo, "m", PromptMarkedFake(GOOD_MD), EventEmitter(io.StringIO()), _settings())
     make_pdf(course / "mega.pdf", pages=4)
 
-    prov = FakeProvider(GOOD_MD)
+    prov = PromptMarkedFake(GOOD_MD)
     res = run_update(
         git_repo,
         "m",
@@ -172,7 +173,7 @@ def test_new_source_empty_ranges_mean_full_ingest(git_repo: Path, make_pdf):
     course = git_repo / "Biology"
     course.mkdir()
     make_pdf(course / "mega.pdf", pages=3)
-    prov = FakeProvider(GOOD_MD)
+    prov = PromptMarkedFake(GOOD_MD)
 
     res = run_update(
         git_repo,
@@ -196,7 +197,7 @@ def test_two_digests_call_provider_for_course_rollup(git_repo: Path, make_pdf):
     course.mkdir()
     make_pdf(course / "a.pdf", pages=1)
     make_pdf(course / "b.pdf", pages=1)
-    prov = FakeProvider(GOOD_MD)
+    prov = PromptMarkedFake(GOOD_MD)
 
     res = run_update(git_repo, "m", prov, EventEmitter(io.StringIO()), _settings())
 
@@ -228,7 +229,7 @@ def test_one_failure_keeps_other_digest(git_repo: Path, make_pdf):
     make_pdf(course / "good.pdf", pages=1)
     make_pdf(course / "bad.pdf", pages=1)
 
-    class FailSecond(FakeProvider):
+    class FailSecond(PromptMarkedFake):
         def run(self, request):
             if "bad.pdf" in request.prompt:
                 self.calls.append(request)
@@ -248,7 +249,7 @@ def test_large_window_uses_chunked_generate_with_absolute_pages(git_repo: Path, 
     course.mkdir()
     make_pdf(course / "mega.pdf", pages=5)
     em, buf = _emitter()
-    prov = FakeProvider(GOOD_MD)
+    prov = PromptMarkedFake(GOOD_MD)
 
     res = run_update(
         git_repo,
@@ -278,7 +279,7 @@ def test_cancel_stops_before_next_source(git_repo: Path, make_pdf, tmp_path: Pat
     em, buf = _emitter()
 
     res = run_update(
-        git_repo, "m", FakeProvider(GOOD_MD), em, _settings(), cancel_file=cancel
+        git_repo, "m", PromptMarkedFake(GOOD_MD), em, _settings(), cancel_file=cancel
     )
 
     assert res.processed == 0
@@ -292,7 +293,7 @@ def test_delete_sources_keeps_fingerprints(git_repo: Path, make_pdf):
     settings = dataclasses.replace(_settings(), delete_sources_after_digest=True)
 
     res = run_update(
-        git_repo, "m", FakeProvider(GOOD_MD), EventEmitter(io.StringIO()), settings
+        git_repo, "m", PromptMarkedFake(GOOD_MD), EventEmitter(io.StringIO()), settings
     )
 
     assert res.processed == 1 and res.failed == 0
@@ -310,7 +311,7 @@ def test_course_synthesis_failure_leaves_sources_pending(git_repo: Path, make_pd
     make_pdf(course / "a.pdf", pages=1)
     make_pdf(course / "b.pdf", pages=1)
 
-    class SynthesisFailProvider(FakeProvider):
+    class SynthesisFailProvider(PromptMarkedFake):
         def run(self, request):
             if "assembling the single study notebook" in request.prompt:
                 self.calls.append(request)
@@ -330,3 +331,42 @@ def test_course_synthesis_failure_leaves_sources_pending(git_repo: Path, make_pd
 
     plan = build_plan(git_repo, _settings())
     assert {p.path for p in plan.pending} == {"Biology/a.pdf", "Biology/b.pdf"}
+
+
+def test_overlapping_update_patches_one_digest_with_owning_span_images(git_repo: Path, make_pdf):
+    course = git_repo / "Biology"
+    course.mkdir()
+    make_pdf(course / "mega.pdf", pages=4)
+    run_update(
+        git_repo, "m", PromptMarkedFake(GOOD_MD), EventEmitter(io.StringIO()), _settings()
+    )
+    digests = list((course / "digests").glob("*.md"))
+    assert len(digests) == 1
+    assert "<!-- arbor-pages:1-4 -->" in digests[0].read_text()
+
+    make_pdf(course / "mega.pdf", pages=4, text="Changed")
+    prov = PromptMarkedFake(GOOD_MD)
+    em, buf = _emitter()
+    res = run_update(
+        git_repo,
+        "m",
+        prov,
+        em,
+        _settings(),
+        selections={"Biology/mega.pdf": [PageRange(2, 3)]},
+    )
+
+    assert res.processed == 1
+    assert len(list((course / "digests").glob("*.md"))) == 1
+    digest_text = next((course / "digests").glob("*.md")).read_text()
+    assert "<!-- arbor-pages:1-4 -->" in digest_text
+    events = parse_lines(buf.getvalue())
+    generate_starts = [
+        e for e in events
+        if e["type"] == "stage" and e.get("stage") == "generate" and e.get("status") == "start"
+    ]
+    assert any(e.get("action") == "patch" for e in generate_starts)
+    assert not any(e.get("action") in ("create", "regenerate") for e in generate_starts)
+    digest_call = next(c for c in prov.calls if c.image_paths)
+    assert "arbor-pages:1-4" in digest_call.prompt
+    assert len(digest_call.image_paths) == 4

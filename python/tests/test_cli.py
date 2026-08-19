@@ -61,6 +61,19 @@ def _knowledge_repo_with_pdf(tmp_path, pages=1, name="Biology/mega.pdf"):
     return root
 
 
+def _marked_fake_md(start: int, end: int) -> str:
+    body = (
+        "# Lecture\n## Overview\nThis is a fake digest overview long enough to validate.\n"
+        "## Key Concepts\n- concept\n## Important Details\n- detail\n"
+        "## Questions to Review\n- question?\n"
+    )
+    return (
+        f"<!-- arbor-pages:{start}-{end} -->\n"
+        f"{body.rstrip()}\n"
+        f"<!-- /arbor-pages:{start}-{end} -->\n"
+    )
+
+
 def test_plan_update_lists_pending_sources(tmp_path):
     root = _knowledge_repo_with_pdf(tmp_path, pages=3)
     code, out, _ = run(["plan-update", "--root", str(root)])
@@ -73,7 +86,8 @@ def test_plan_update_lists_pending_sources(tmp_path):
     assert "suggested_start_page" not in data["pending"][0]
 
 
-def test_update_with_plan_file_applies_ranges(tmp_path):
+def test_update_with_plan_file_applies_ranges(tmp_path, monkeypatch):
+    monkeypatch.setenv("ARBOR_FAKE_MD", _marked_fake_md(3, 4))
     root = _knowledge_repo_with_pdf(tmp_path, pages=4)
     plan_file = tmp_path / "plan.json"
     plan_file.write_text(
@@ -96,7 +110,8 @@ def test_update_with_plan_file_applies_ranges(tmp_path):
     assert (root / "Biology" / "course.md").is_file()
 
 
-def test_update_without_plan_processes_everything(tmp_path):
+def test_update_without_plan_processes_everything(tmp_path, monkeypatch):
+    monkeypatch.setenv("ARBOR_FAKE_MD", _marked_fake_md(1, 2))
     root = _knowledge_repo_with_pdf(tmp_path, pages=2)
     code, _, _ = run(
         ["update", "--root", str(root), "--model", "m", "--provider", "fake"]

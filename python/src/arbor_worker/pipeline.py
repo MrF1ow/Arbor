@@ -159,17 +159,17 @@ def _digest_one_source(
                 if digest_abs.is_file():
                     existing = digest_abs.read_text()
             try:
-                window_prep = _window_prep(prep, action.page_range)
-                use_chunking = (
-                    action.kind in ("create", "regenerate")
-                    and window_prep.text is None
-                    and len(window_prep.image_paths) > settings.pdf_chunk_threshold_pages
-                )
-                if use_chunking:
+                windowed = None
+                if action.kind in ("create", "regenerate") and prep.text is None:
+                    windowed = _window_prep(prep, action.page_range)
+                if (
+                    windowed is not None
+                    and len(windowed.image_paths) > settings.pdf_chunk_threshold_pages
+                ):
                     chunked = chunked_generate(
                         provider,
                         source_name=abs_source.name,
-                        image_paths=window_prep.image_paths,
+                        image_paths=windowed.image_paths,
                         model_id=model_id,
                         cwd=course_abs,
                         cache_dir=cache.for_hash(
@@ -198,7 +198,7 @@ def _digest_one_source(
                         provider=provider,
                         model_id=model_id,
                         source_name=abs_source.name,
-                        prep=window_prep,
+                        prep=prep,
                         existing_markdown=existing,
                         cwd=course_abs,
                     )

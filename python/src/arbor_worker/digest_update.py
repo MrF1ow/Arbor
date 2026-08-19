@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Literal, Mapping, Sequence
 
@@ -14,6 +14,7 @@ from arbor_worker.page_markers import (
 )
 from arbor_worker.prepare import PrepareResult
 from arbor_worker.provider.base import CliProvider, ProviderRequest
+from arbor_worker.windowing import clip_window
 
 DigestActionKind = Literal["create", "patch", "regenerate"]
 
@@ -179,9 +180,15 @@ def _run_provider(
     prep: PrepareResult,
     cwd: Path,
 ):
+    window_prep = prep
+    if prep.text is None and prep.image_paths:
+        window_prep = replace(
+            prep,
+            image_paths=clip_window(prep.image_paths, page_range.start, page_range.end),
+        )
     prompt = build_prompt(
         source_name,
-        prep,
+        window_prep,
         page_start=page_range.start,
         page_end=page_range.end,
     )
@@ -189,7 +196,7 @@ def _run_provider(
         ProviderRequest(
             prompt=prompt,
             model_id=model_id,
-            image_paths=[p.resolve() for p in prep.image_paths],
+            image_paths=[p.resolve() for p in window_prep.image_paths],
             cwd=cwd,
         )
     )
