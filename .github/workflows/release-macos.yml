@@ -1,19 +1,15 @@
-name: macos-dmg
-
-# PR and main pushes upload an arbor-macos-dmg artifact.
-# Pushing a v* tag runs release-macos.yml, which builds the same DMG and publishes a GitHub Release.
+name: release-macos
 
 on:
   push:
-    branches: [main]
-  pull_request:
-  workflow_dispatch:
+    tags:
+      - "v*"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  dmg:
+  release:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -50,8 +46,9 @@ jobs:
           APPLE_SIGNING_IDENTITY: "-"
         run: npx tauri build --bundles dmg --config src-tauri/tauri.bundle.json
 
-      - uses: actions/upload-artifact@v4
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
-          name: arbor-macos-dmg
-          path: desktop/src-tauri/target/release/bundle/dmg/*.dmg
-          if-no-files-found: error
+          files: desktop/src-tauri/target/release/bundle/dmg/*.dmg
+          generate_release_notes: true
+          fail_on_unmatched_files: true

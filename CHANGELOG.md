@@ -1,20 +1,26 @@
 # Changelog
 
-Package version for the worker, desktop, and Tauri app. Product milestone is [PROJECT.md](PROJECT.md) Version 2 automation (see [V2 program plan](docs/superpowers/plans/2026-08-19-v2-automation/overview.md)).
+Package version for the worker, desktop, and Tauri app. Product milestone is [PROJECT.md](PROJECT.md) Version 2 (see [V2 program plan](docs/superpowers/plans/2026-08-19-v2-automation/overview.md)).
 
 ## Unreleased
 
-- Folder watch stays on when `<Knowledge>/.arbor/settings.json` is missing. Desktop `KnowledgeSettings::default()` now matches the worker and Wave 3 spec (`watch_enabled: true`).
+## 2.0.0 — 2026-08-22
 
-### Wave 1 (merged in #25)
+Git tag: `v2.0.0`. Product milestone: [PROJECT.md](PROJECT.md) Version 2.
 
-- Job spine. SQLite at `<Knowledge>/.arbor/arbor.db`, single-flight updates, persisted JSONL events, job history UI.
+Version 1 loop is unchanged: pick a Knowledge folder, review page ranges, Codex writes digests, git commits. This release adds automation and findability on that same screen.
 
-### Wave 2–4 (#26)
+- Job spine. SQLite at `<Knowledge>/.arbor/arbor.db`, one update at a time, persisted JSONL events, Recent runs in the desktop UI. (#25)
+- SQLite FTS5 search over digests. `arbor-worker reindex --root` rebuilds the index. Search box in the app. (#26)
+- Folder watch via `notify`. Default is watch then review, not silent ingest. Missing `.arbor/settings.json` still leaves `watch_enabled` on. (#26, #32)
+- Optional `"auto_update": true` in `.arbor/settings.json` starts the job without Confirm. Those jobs record `trigger_kind` `watch`.
+- Desktop notification when a job succeeds, fails, or is cancelled.
+- Word (`.docx`) prepare path. Optional Tesseract OCR for low-text PDF pages.
+- macOS `.dmg` from GitHub Actions. `arbor-worker` is bundled. Codex CLI stays a separate install. Signing and notarization stay off.
 
-- SQLite FTS5 search index with `arbor-worker reindex` and search box in the desktop UI.
-- Folder watching with debounced auto-plan, optional `auto_update` in `.arbor/settings.json`, desktop notifications on job completion.
-- Word (`.docx`) prepare path and optional Tesseract OCR fallback for low-text PDF pages.
+Mac validation from source: full PDF ingest and commit, version-2 fingerprints, digest markers, course rollup, job history, search, reindex, and folder-watch review after shortening a PDF.
+
+Not in this release: notarized Mac builds, in-app chat, flashcards, a visual redesign. The UI is still the Version 1 single-column shell.
 
 ## 1.0.0 — 2026-08-19
 
