@@ -56,7 +56,7 @@ pub fn save_settings(app: tauri::AppHandle, settings: Settings) -> Result<(), St
     settings::save(&app, &settings)
 }
 
-#[derive(serde::Deserialize, serde::Serialize, Clone, Default)]
+#[derive(serde::Deserialize, serde::Serialize, Clone)]
 pub struct KnowledgeSettings {
     #[serde(default)]
     pub delete_sources_after_digest: bool,
@@ -64,6 +64,16 @@ pub struct KnowledgeSettings {
     pub auto_update: bool,
     #[serde(default = "default_true")]
     pub watch_enabled: bool,
+}
+
+impl Default for KnowledgeSettings {
+    fn default() -> Self {
+        Self {
+            delete_sources_after_digest: false,
+            auto_update: false,
+            watch_enabled: true,
+        }
+    }
 }
 
 fn default_true() -> bool {
@@ -78,6 +88,16 @@ pub fn get_knowledge_settings(root: String) -> Result<KnowledgeSettings, String>
     }
     let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
     serde_json::from_str(&text).map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::KnowledgeSettings;
+
+    #[test]
+    fn knowledge_settings_enable_watch_by_default() {
+        assert!(KnowledgeSettings::default().watch_enabled);
+    }
 }
 
 #[tauri::command]
