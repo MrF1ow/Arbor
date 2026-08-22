@@ -4,6 +4,8 @@ Package version for the worker, desktop, and Tauri app. Product milestone is [PR
 
 ## Unreleased
 
+- Folder watch stays on when `<Knowledge>/.arbor/settings.json` is missing. Desktop `KnowledgeSettings::default()` now matches the worker and Wave 3 spec (`watch_enabled: true`).
+
 ### Wave 1 (merged in #25)
 
 - Job spine. SQLite at `<Knowledge>/.arbor/arbor.db`, single-flight updates, persisted JSONL events, job history UI.

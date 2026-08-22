@@ -56,7 +56,7 @@ pub fn save_settings(app: tauri::AppHandle, settings: Settings) -> Result<(), St
     settings::save(&app, &settings)
 }
 
-#[derive(serde::Deserialize, serde::Serialize, Clone, Default)]
+#[derive(serde::Deserialize, serde::Serialize, Clone)]
 pub struct KnowledgeSettings {
     #[serde(default)]
     pub delete_sources_after_digest: bool,
@@ -64,6 +64,16 @@ pub struct KnowledgeSettings {
     pub auto_update: bool,
     #[serde(default = "default_true")]
     pub watch_enabled: bool,
+}
+
+impl Default for KnowledgeSettings {
+    fn default() -> Self {
+        Self {
+            delete_sources_after_digest: false,
+            auto_update: false,
+            watch_enabled: default_true(),
+        }
+    }
 }
 
 fn default_true() -> bool {
