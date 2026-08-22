@@ -80,6 +80,80 @@ pub fn get_knowledge_settings(root: String) -> Result<KnowledgeSettings, String>
     serde_json::from_str(&text).map_err(|e| e.to_string())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    fn temp_root(label: &str) -> PathBuf {
+        let root = std::env::temp_dir().join(format!(
+            "arbor-ks-{label}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        root
+    }
+
+    #[test]
+    fn knowledge_settings_enable_watch_by_default() {
+        let ks = KnowledgeSettings::default();
+        assert!(ks.watch_enabled);
+        assert!(!ks.auto_update);
+        assert!(!ks.delete_sources_after_digest);
+    }
+
+    #[test]
+    fn empty_json_matches_struct_default() {
+        let empty: KnowledgeSettings = serde_json::from_str("{}").unwrap();
+        let default = KnowledgeSettings::default();
+        assert_eq!(empty.watch_enabled, default.watch_enabled);
+        assert_eq!(empty.auto_update, default.auto_update);
+        assert_eq!(
+            empty.delete_sources_after_digest,
+            default.delete_sources_after_digest
+        );
+    }
+
+    #[test]
+    fn missing_settings_file_enables_watch() {
+        let root = temp_root("missing");
+        let ks = get_knowledge_settings(root.to_string_lossy().into_owned()).unwrap();
+        assert!(ks.watch_enabled);
+        assert!(!ks.auto_update);
+    }
+
+    #[test]
+    fn partial_settings_keep_watch_enabled() {
+        let root = temp_root("partial");
+        fs::create_dir_all(root.join(".arbor")).unwrap();
+        fs::write(
+            root.join(".arbor").join("settings.json"),
+            r#"{"auto_update": true}"#,
+        )
+        .unwrap();
+        let ks = get_knowledge_settings(root.to_string_lossy().into_owned()).unwrap();
+        assert!(ks.watch_enabled);
+        assert!(ks.auto_update);
+    }
+
+    #[test]
+    fn explicit_watch_disabled_is_honored() {
+        let root = temp_root("disabled");
+        fs::create_dir_all(root.join(".arbor")).unwrap();
+        fs::write(
+            root.join(".arbor").join("settings.json"),
+            r#"{"watch_enabled": false}"#,
+        )
+        .unwrap();
+        let ks = get_knowledge_settings(root.to_string_lossy().into_owned()).unwrap();
+        assert!(!ks.watch_enabled);
+    }
+}
+
 #[tauri::command]
 pub fn search_knowledge(root: String, query: String, limit: Option<u32>) -> Result<Vec<SearchHit>, String> {
     search::search_documents(Path::new(&root), &query, limit.unwrap_or(25))
