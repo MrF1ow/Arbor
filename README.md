@@ -144,7 +144,7 @@ Knowledge/                          # git repo root
     arbor-course.json     # processed-state manifest + per-page fingerprints (committed)
   _arbor_cache/           # worker cache (auto-created; gitignored)
   .arbor/
-    settings.json         # delete_sources_after_digest, models
+    settings.json         # delete_sources_after_digest, auto_update, watch_enabled
 ```
 
 **Format guidance (V1):**
@@ -273,13 +273,17 @@ Create `.arbor/models.json` in your Knowledge root:
 
 Model IDs must match what your Codex CLI accepts.
 
-`.arbor/settings.json` holds worker options:
+`.arbor/settings.json` holds worker options. Missing keys, and a missing file, use these defaults:
 
 ```json
-{ "delete_sources_after_digest": false }
+{
+  "delete_sources_after_digest": false,
+  "auto_update": false,
+  "watch_enabled": true
+}
 ```
 
-Set it to `true` to delete each source file after it is successfully digested.
+`watch_enabled` keeps folder watch on so a dropped file opens the review panel. `auto_update` is off unless you opt in. Set `delete_sources_after_digest` to `true` to delete each source file after it is successfully digested.
 
 ---
 

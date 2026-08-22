@@ -43,6 +43,8 @@ def test_course_defaults():
 
     s = default_settings()
     assert s.delete_sources_after_digest is False
+    assert s.auto_update is False
+    assert s.watch_enabled is True
     assert s.digests_dirname == "digests"
     assert s.course_file_name == "course.md"
 
@@ -52,6 +54,18 @@ def test_load_settings_missing_file_uses_defaults(tmp_path):
 
     s = load_settings(tmp_path)
     assert s.delete_sources_after_digest is False
+    assert s.auto_update is False
+    assert s.watch_enabled is True
+
+
+def test_load_settings_partial_json_keeps_watch_enabled(tmp_path):
+    from arbor_worker.settings import load_settings
+
+    (tmp_path / ".arbor").mkdir()
+    (tmp_path / ".arbor" / "settings.json").write_text('{"auto_update": true}')
+    s = load_settings(tmp_path)
+    assert s.auto_update is True
+    assert s.watch_enabled is True
 
 
 def test_load_settings_reads_delete_flag(tmp_path):

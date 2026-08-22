@@ -225,7 +225,7 @@ Codex stays a separate install. Gatekeeper may require **Open Anyway** for unsig
 | Update disabled | `codex login`, refocus app |
 | Worker not found in dev | `export ARBOR_REPO_DIR="$(pwd)"` from repo root before `tauri dev` |
 | No V2 UI | Old DMG; run from `main` with `tauri dev` |
-| Watch silent | Folder selected; wait 3s; check `watch_enabled` in `.arbor/settings.json` |
+| Watch silent | Folder selected; wait 3s. A missing settings file still watches. Set `"watch_enabled": false` to disable. |
 | No notifications | Enable in System Settings |
 | OCR skipped | `brew install tesseract` |
 
