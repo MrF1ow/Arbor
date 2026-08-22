@@ -49,6 +49,13 @@ impl JobTrigger {
             JobTrigger::Watch => "watch",
         }
     }
+
+    pub fn from_arg(value: Option<&str>) -> Self {
+        match value {
+            Some("watch") => JobTrigger::Watch,
+            _ => JobTrigger::Manual,
+        }
+    }
 }
 
 #[derive(Debug, serde::Serialize, Clone)]
@@ -307,5 +314,18 @@ mod tests {
     fn resolve_terminal_status_maps_cancelled() {
         let (status, _) = resolve_terminal_status(r#"{"type":"cancelled"}"#, 0);
         assert_eq!(status, JobStatus::Cancelled);
+    }
+
+    #[test]
+    fn watch_trigger_persists_kind() {
+        let root = temp_root("watch-trigger");
+        let id = create_job(&root, JobTrigger::Watch, "gpt-5.6-sol", r#"{"selections":[]}"#)
+            .unwrap();
+        let jobs = list_jobs(&root, 10).unwrap();
+        assert_eq!(jobs[0].id, id);
+        assert_eq!(jobs[0].trigger_kind, "watch");
+        assert_eq!(JobTrigger::from_arg(Some("watch")).as_str(), "watch");
+        assert_eq!(JobTrigger::from_arg(None).as_str(), "manual");
+        let _ = fs::remove_dir_all(&root);
     }
 }

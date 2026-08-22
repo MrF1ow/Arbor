@@ -99,7 +99,10 @@ function selectionsFromPending(pending: PendingSource[]): Selection[] {
   }));
 }
 
-async function startUpdateWithSelections(selections: Selection[]) {
+async function startUpdateWithSelections(
+  selections: Selection[],
+  trigger: "manual" | "watch" = "manual",
+) {
   if (!knowledgeRoot || !modelSel.value) return;
   reviewEl.hidden = true;
   updateBtn.disabled = true;
@@ -109,6 +112,7 @@ async function startUpdateWithSelections(selections: Selection[]) {
       root: knowledgeRoot,
       model: modelSel.value,
       selections,
+      trigger,
     });
     logLine(`Job ${activeJobId} started.`);
   } catch (e) {
@@ -134,7 +138,7 @@ async function handleWatchTriggered() {
         logLine("Auto-update waiting for Codex auth. Review and Confirm when ready.");
         return;
       }
-      await startUpdateWithSelections(selectionsFromPending(plan.pending));
+      await startUpdateWithSelections(selectionsFromPending(plan.pending), "watch");
       return;
     }
     renderReview(plan.pending);
