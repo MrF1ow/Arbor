@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from arbor_worker.course_manifest import CourseManifest
 from arbor_worker.schemas.study.concepts import ConceptEdge, ConceptGraph, ConceptNode
-from arbor_worker.skills.concepts import concept_id, merge_graphs
+from arbor_worker.skills.concepts import assigned_node_id, concept_id, merge_graphs
 
 
 class DiagramsGraph(BaseModel):
@@ -118,10 +118,9 @@ class DiagramsSkill:
         seen: set[str] = set()
         id_map: dict[str, str] = {}
         for node in graph.nodes:
+            figure = node.model_copy(update={"kind": "figure"})
+            node_id = assigned_node_id(figure)
             slug = concept_id(node.name)
-            if not slug:
-                raise ValueError(f"figure name produces empty id: {node.name}")
-            node_id = slug if slug.startswith("fig-") else f"fig-{slug}"
             if node.id:
                 id_map[node.id] = node_id
             id_map[slug] = node_id
@@ -129,7 +128,7 @@ class DiagramsSkill:
             if node_id in seen:
                 continue
             seen.add(node_id)
-            nodes.append(node.model_copy(update={"id": node_id, "kind": "figure"}))
+            nodes.append(figure.model_copy(update={"id": node_id}))
         edges: list[ConceptEdge] = []
         for edge in graph.edges:
             from_id = id_map.get(edge.from_, edge.from_)

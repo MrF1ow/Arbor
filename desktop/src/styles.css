@@ -724,11 +724,6 @@ html, body {
   color: var(--sage-deep);
 }
 
-.figure-chip {
-  border: 1px dashed var(--sage-muted);
-  background: var(--cream-elevated);
-}
-
 .citation-badge {
   display: inline-block;
   border-radius: 999px;
