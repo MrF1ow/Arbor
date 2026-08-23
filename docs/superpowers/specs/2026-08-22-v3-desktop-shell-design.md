@@ -148,10 +148,10 @@ Steps 1–4 shipped in package **`v2.1.0`**. Steps 5–7 target `v2.2.0`–`v2.5
 4. Settings place that writes `.arbor/settings.json`. **(v2.1.0)**
 5. Flashcards mode — wire tab to real deck UI and generation. **(v2.3.0)**
 6. Quiz mode — same pattern. **(v2.4.0)**
-7. Embeddings, concepts, knowledge graph — new modes or extensions on Notes, not layout changes. **(v2.5.0–v2.6.0; `v3.0.0` when all v3 features ship)**
+7. Embeddings, concepts, knowledge graph, diagrams, citations — new modes or extensions on Notes, not layout changes. **(`v2.5.0`–`v2.8.0`; `v3.0.0` when all v3 features ship)**
 
 Each step should still run the Mac V2 E2E ingest path. If a shell change breaks Confirm or watch, it is not done.
 
 ## Success
 
-A classmate who has never seen the repo can download 3.x, pick a folder, and believe this is a notes app that happens to ingest lectures. They should not see a log until they start an Update.
+A classmate who has never seen the repo can download a 2.x build, pick a folder, and believe this is a notes app that happens to ingest lectures. They should not see a log until they start an Update. `v3.0.0` is the tag when study, memory, and graph are all present.

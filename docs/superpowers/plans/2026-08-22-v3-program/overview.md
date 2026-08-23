@@ -1,202 +1,110 @@
 # Arbor Version 3 program
 
-> **Goal:** Ship the student-trustworthy shell, then knowledge enhancement (flashcards, quiz, search upgrades) on top of it — without breaking the v2 ingest loop.
+> **Goal:** Ship a study app a student would download, with local memory and a concept graph an AI can query, without breaking the v2 ingest loop.
 
-**Versioning:** See [PROJECT.md Version numbering](../../../PROJECT.md#version-numbering) and [`.cursor/rules/arbor-versioning.mdc`](../../../.cursor/rules/arbor-versioning.mdc). Version 3 work ships as `v2.x` until **`v3.0.0`** when the full milestone is done.
+**Versioning:** Product Version 3 is built as package **`v2.x`**. `v2.1.0` was the first step after Version 2. Later waves are `v2.2.0`, `v2.3.0`, … Tag **`v3.0.0` only when every required feature below is done.** Never publish `3.1.0` or `3.2.0` as package versions. See [PROJECT.md Version numbering](../../../../PROJECT.md#version-numbering) and [`.cursor/rules/arbor-versioning.mdc`](../../../../.cursor/rules/arbor-versioning.mdc).
 
 **Format contract:** [`docs/superpowers/specs/2026-08-22-v3-study-artifacts-format.md`](../../specs/2026-08-22-v3-study-artifacts-format.md)
+
+**Knowledge layer:** [`docs/superpowers/specs/2026-08-23-v3-knowledge-layer-design.md`](../../specs/2026-08-23-v3-knowledge-layer-design.md)
 
 **Shell design:** [`docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md`](../../specs/2026-08-22-v3-desktop-shell-design.md)
 
 ## Context
 
 - **2.0.0** shipped automation (jobs, FTS, watch, OCR, Word) on the v1 UI.
-- **2.1.0** shipped the desktop shell (Wave 0, tag `v2.1.0`). Version 3 is **in progress**.
-- **`v3.0.0` is reserved** for full Version 3 completion (all PROJECT.md v3 features).
-- **Flashcards / quiz / embeddings** are planned in Waves 1–5; no worker code yet.
+- **2.1.0** shipped the desktop shell (Wave 0). Version 3 is **in progress**.
+- **`v3.0.0` is reserved** for the full milestone. A shell plus placeholders is not a product someone keeps.
+- Flashcards, quiz, embeddings, graph, diagrams, and citations have **no worker code yet**.
 
 ## Scope
 
-### In Version 3
+Version 3 is the first Arbor a student would download **and** the substrate Version 4 (tutor) will query. That means a study loop, retrieval memory, a concept graph, and grounding. Deferring the graph or embeddings until chat exists would make the tutor reread the whole library on every turn.
 
-| Track | Deliverable |
-|-------|-------------|
-| **Shell** | Sage/cream UI, course browser, digest preview, jobs/settings places |
-| **Study framework** | Skill interface, `study/manifest.json`, generate jobs, validate/retry |
-| **Flashcards** | Skill + Flashcards mode UI + refresh |
-| **Quiz** | Skill + Quiz mode UI + refresh |
-| **Embeddings** | Local vector index + semantic search in existing search slot |
-| **Concepts** (stretch) | Extracted concept list per course, links between digests |
+### In Version 3 (required for `v3.0.0`)
+
+| Track | Deliverable | Wave |
+|-------|-------------|------|
+| **Shell** | Sage/cream UI, course browser, digest preview, jobs/settings | 0 (`v2.1.0`, shipped) |
+| **Study framework** | Skill protocol, `study/manifest.json`, `generate` jobs, validate/retry | 1 (`v2.2.0`) |
+| **Flashcards** | Skill + mode UI + refresh + local progress | 2 (`v2.3.0`) |
+| **Quiz** | Skill + mode UI + refresh | 3 (`v2.4.0`) |
+| **Memory** | Local vectors + semantic search in the existing search slot | 4 (`v2.5.0`) |
+| **Graph** | Concepts, cross-document edges, graph-lite UI | 5 (`v2.6.0`) |
+| **Diagrams** | Figure concepts merged into the graph | 6 (`v2.7.0`) |
+| **Citations** | Local verification that claims appear in cited digests | 7 (`v2.8.0`) |
 
 ### Out of Version 3
 
-- Chat / tutor (Version 4)
-- Multiple AI providers (later)
-- Scheduler
+- Chat / tutor (Version 4). v4 reads memory and graph. It does not create them.
+- Multiple AI providers
+- Scheduler (folder watch covers the ingest case)
 - Cloud sync (Version 5)
-- Diagram analysis, citation verification, full knowledge graph UI (`v2.6.0` stretch or post-`v3.0.0`)
+- Anki export, pretty graph canvas, remote vector DBs
 
-## Core architectural answers
+## Locked decisions
 
-### When are flashcards created?
+These are not spikes. Implementers follow them.
 
-**Post-ingestion**, by default. Optional auto-generate after a successful Update (settings toggle).
+**When are study artifacts created?** After ingest, as separate jobs. Digests stay the source of truth. Optional `auto_generate.<skill>` after a successful Update (default `false`).
 
-Digest generation does not change. Study skills read committed `digests/*.md`.
+**How does Codex return JSON?** One skill, one `provider.run`, one file. Prompt says JSON only. Pydantic parse + up to 2 retries (3 attempts). `ProviderResult.markdown` is the raw text payload. Skills call `json.loads` on it. `FakeProvider` already returns that field. Tests pass a JSON string as `markdown`. Do not add a second provider type.
 
-### How does Codex return structured data?
+**Retries.** New helper on the skill path (`skills/base.py`). The digest pipeline does **not** retry today (`pipeline.py` raises on `DigestError`). Do not pretend to copy a loop that does not exist. Leave digest behavior unchanged.
 
-Separate skill invocation per artifact. Prompt demands **JSON only**. Pydantic validation + up to 2 retries. Output via existing `codex exec -o` file read. See format spec.
+**Card / question ids.** Worker computes `id` as a short hash of normalized `front` (or quiz prompt) plus `source.digest`. Model-supplied ids are ignored. Progress in `.arbor/progress/` keys off that id. Unchanged cards keep progress across refresh.
 
-### How do we version?
+**Per-course vs per-digest.** One generate call per course, concatenating digests with headings. If combined text exceeds the skill’s character budget, split per digest, merge, and drop duplicate fronts.
 
-- `schema_version` in each JSON file
-- `skill_version` + source digest SHA-256 in `study/manifest.json`
-- Git history for committed study files
-- User progress in `.arbor/progress/` (local, not versioned)
+**Jobs.** Reuse `JobCoordinator` mutex. Add `JobTrigger::Study`. Plan JSON is `{ "course", "skill", "force" }`. Error copy becomes “A job is already running for {root}” (today it says “An update is already running”).
 
-### How does refresh work?
+**Git.** Successful generate commits `study/manifest.json` and the artifact file. Progress, vectors, and `arbor.db` stay local. Extend `ensure_gitignored` for `.arbor/progress/` and `.arbor/vectors.sqlite`.
 
-`Generate` / `Refresh from digests` → `arbor-worker generate --skill flashcards [--force]` → re-read all course digests → hash compare → Codex if stale or forced → validate → write → commit.
+**pydantic.** Not in `python/pyproject.toml` today. Wave 1 adds it.
 
 ## Throughput checkpoint
 
 ```
-Wave 0 (shell) ──must finish──▶ Wave 1 (study framework)
-                                        │
-                    ┌───────────────────┼───────────────────┐
-                    ▼                   ▼                   ▼
-              Wave 2 (flashcards)  Wave 3 (quiz)    Wave 4 (embeddings)
-                    │                   │
-                    └─────────┬─────────┘
-                              ▼
-                    Wave 5 (concepts / graph-lite)
+Wave 0 (shell) shipped
+        │
+        ▼
+Wave 1 (study framework) ──must finish──▶ Wave 2 (flashcards)
+        │                                 Wave 3 (quiz)
+        │                                 Wave 4 (memory)
+        │                                 Wave 5 (graph)
+        ▼
+Wave 5 (graph) ──must finish──▶ Wave 6 (diagrams)
+                                Wave 7 (citations)
+        │
+        ▼
+     v3.0.0
 ```
 
-Waves 2 and 3 can run in parallel after Wave 1. Wave 4 needs indexer design but not flashcards.
+Waves 2–5 can run in parallel after Wave 1. Waves 6 and 7 write into the graph, so they wait for Wave 5. Wave 4 does not need flashcards.
 
 ## Waves
 
-### Wave 0 — Shell (`v2.1.0`)
-
-**Status:** shipped on `main` (2026-08-22). Package **`v2.1.0`** — not `v3.0.0`.
-
-- [x] Window 1100×760, sage/cream tokens
-- [x] Sidebar: Library, Jobs, Settings (bottom)
-- [x] Course modes: Notes / Flashcards / Quiz tabs
-- [x] Notes: digest index + markdown preview
-- [x] Inspector: Update, review, log (collapsed default)
-- [x] Settings UI → `.arbor/settings.json`
-- [x] Search overlay → navigate to digest in Notes
-- [x] Dark mode (`prefers-color-scheme`)
-- [x] Tag `v2.1.0`, update README/CHANGELOG
-- [ ] Mac E2E ingest regression documented on `main`
-
-**Verify:** full PDF ingest, confirm, commit, search, watch review — on new UI.
-
----
-
-### Wave 1 — Study artifact framework (`3.1.0`)
-
-**Goal:** One pluggable skill path end-to-end with a noop or tiny fixture skill before flashcards.
-
-**Python**
-
-- `skills/base.py` — `StudySkill` protocol: `name`, `build_prompt`, `validate`, `run`
-- `skills/manifest.py` — load/save `study/manifest.json`, SHA-256 digest files, staleness check
-- `schemas/study/` — Pydantic models + JSON Schema files
-- `commands.py` — `generate` subcommand
-- `events.py` — `skill_*` event types
-- Tests: validate fixtures, stale skip, retry on bad JSON
-
-**Rust**
-
-- `start_study_job` command (parallel to `start_update`, same coordinator mutex)
-- Plan JSON: `{ "course", "skill", "force" }`
-
-**Desktop**
-
-- Replace Coming soon with empty state + **Generate** (disabled until framework lands; wire in Wave 2)
-- Job events in inspector log
-
-**Verify:** `arbor-worker generate --skill flashcards` against a fixture provider (`FakeProvider` returns valid JSON).
-
----
-
-### Wave 2 — Flashcards (`3.2.0`)
-
-**Python**
-
-- `skills/flashcards.py` — prompt from all course digests (or per-digest merge)
-- Write `study/flashcards.json` + update manifest
-- Git commit on success
-
-**Desktop**
-
-- Flashcards mode: card flip, next/prev, shuffle
-- **Refresh from digests** button
-- Stale badge from manifest
-- Source link → Notes + digest
-- Progress in `.arbor/progress/Biology.flashcards.json`
-
-**Settings**
-
-- `auto_generate.flashcards` (default `false`)
-
-**Verify:** generate deck from real Biology digests; refresh after digest edit marks stale then regenerates; progress survives refresh for unchanged card IDs.
-
----
-
-### Wave 3 — Quiz (`3.3.0`)
-
-Same framework as Wave 2.
-
-- `skills/quiz.py` → `study/quiz.json`
-- Quiz mode UI: MCQ flow, explanation after answer
-- Refresh + stale badge
-- `auto_generate.quiz` setting
-
-**Verify:** 10+ question pack from multi-digest course; failed validation retries; git commit.
-
----
-
-### Wave 4 — Embeddings + semantic search (`3.4.0`)
-
-**Python**
-
-- Chunk digests (by heading or fixed token windows)
-- Embed via provider (initially Codex or local model TBD — **spike required**)
-- Store in `.arbor/vectors.sqlite` (derived, reindex command)
-
-**Rust / desktop**
-
-- Search overlay: keyword (FTS) + semantic toggle
-- Same navigate-to-digest behavior
-
-**Out of digest path.** Post-ingest `arbor-worker embed --root` or auto after generate wave.
-
----
-
-### Wave 5 — Concepts (stretch, `3.5.0`)
-
-- `skills/concepts.py` → `study/concepts.json` (nodes + edges)
-- Notes mode: optional "related concepts" chips
-- Not a full graph visualisation yet — list + links first
-
----
+0. [mac-e2e](mac-e2e.md) — Mac ingest checklist on the new shell (open from Wave 0)
+1. [wave-1-study-framework](wave-1-study-framework.md) — skill protocol, `generate`, jobs, retries
+2. [wave-2-flashcards](wave-2-flashcards.md) — deck skill + UI
+3. [wave-3-quiz](wave-3-quiz.md) — quiz skill + UI
+4. [wave-4-memory](wave-4-memory.md) — embeddings + semantic search
+5. [wave-5-graph](wave-5-graph.md) — concepts, links, graph-lite
+6. [wave-6-diagrams](wave-6-diagrams.md) — figures into the graph
+7. [wave-7-citations](wave-7-citations.md) — local citation checks
 
 ## Release map
 
-Package tags during Version 3 work use **`v2.x`**. Tag **`v3.0.0` only when the full Version 3 milestone ships** (all features in PROJECT.md Version 3).
-
 | Tag | Wave | User-visible |
 |-----|------|----------------|
-| `v2.1.0` | 0 | Desktop shell — "looks like a notes app" |
-| `v2.2.0` | 1 | Study artifact framework |
+| `v2.1.0` | 0 | Desktop shell |
+| `v2.2.0` | 1 | Generate empty states, study jobs in the log |
 | `v2.3.0` | 2 | Flashcards work + refresh |
 | `v2.4.0` | 3 | Quiz works + refresh |
 | `v2.5.0` | 4 | Semantic search |
-| `v2.6.0` | 5 | Concepts (stretch) |
+| `v2.6.0` | 5 | Concepts + links in Notes |
+| `v2.7.0` | 6 | Figures appear as concepts |
+| `v2.8.0` | 7 | Citation badges |
 | **`v3.0.0`** | **all** | **Version 3 complete** |
 
 ## Verification (every wave)
@@ -205,10 +113,11 @@ Package tags during Version 3 work use **`v2.x`**. Tag **`v3.0.0` only when the 
 cd python && uv run pytest -q
 cd desktop/src-tauri && cargo test
 cd desktop && npm run build
-# Manual: pick Knowledge folder → Update → Confirm → commit → search → open Flashcards/Quiz
 ```
 
-Mac E2E ingest path from v2 must keep passing through Wave 0.
+Manual on Mac. Pick Knowledge folder → Update → Confirm → commit → search. Then exercise the wave’s mode (Generate / flip / quiz / semantic toggle / concept chip). v2 ingest must still pass.
+
+No `control-ui` skill is wired for this Tauri app. Runtime checks are pytest, cargo test, `npm run build`, and the Mac checklist in [mac-e2e.md](mac-e2e.md).
 
 ## Constraints (unchanged)
 
@@ -216,18 +125,23 @@ Mac E2E ingest path from v2 must keep passing through Wave 0.
 - SQLite / vectors / progress = derived or local
 - Codex CLI external
 - Rust orchestrates, Python thinks
-- One update job at a time; study generate jobs use same mutex
+- One job at a time
 
-## Open spikes (before Wave 4)
+## Open spike (Wave 4 only)
 
-1. **Embedding provider** — Codex vs local (Ollama) vs API; cost and offline behavior.
-2. **Card ID stability on refresh** — hash of normalized `front` vs model-assigned IDs.
-3. **Per-digest vs per-course generation** — v1: whole course in one call; split if token limits bite.
+**Embedding backend.** Local ONNX vs a small Python model vs whatever Codex can offer. Offline and private wins for a downloaded Mac app. Tests never wait on that choice (`FakeEmbedder`). First PR of Wave 4 picks the backend and records it in the knowledge-layer spec.
 
-## Documentation debt (this program)
+## Implementation guidance
+
+- Run the **how** skill on `python/src/arbor_worker/commands.py`, `desktop/src-tauri/src/commands.rs`, and `desktop/src-tauri/src/jobs.rs` before changing the job spine.
+- TDD. Red tests first, as in v2 waves.
+- `/deslop` before commit. **unslop** on any prose.
+- Cursor **babysit** after the PR opens.
+
+## Documentation debt
 
 - [x] CHANGELOG 2.1.0 notes (Wave 0, on `main`)
 - [x] README shell description (Wave 0, on `main`)
 - [x] `desktop/README.md` update (Wave 0, on `main`)
-- [ ] Wave detail docs (optional, like v2 `wave-*.md`) as each wave starts
-- [ ] Mac E2E checklist run recorded in this doc
+- [x] Wave detail docs (this folder)
+- [ ] Mac E2E checklist run recorded in [mac-e2e.md](mac-e2e.md)
