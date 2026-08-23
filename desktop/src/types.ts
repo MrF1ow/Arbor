@@ -1,7 +1,10 @@
 export type Mode = "notes" | "flashcards" | "quiz" | "graph";
 
+export type Appearance = "system" | "light" | "dark";
+
 export interface DigestInfo {
-  name: string;
+  title: string;
+  date: string;
   path: string;
 }
 
@@ -19,6 +22,7 @@ export interface AuthStatus {
 export interface Settings {
   knowledge_root: string | null;
   model_id: string | null;
+  appearance: Appearance;
 }
 
 export type AlignmentStatus = "clean_append" | "changed" | "ambiguous" | "identical";

@@ -1,12 +1,23 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum Appearance {
+    #[default]
+    System,
+    Light,
+    Dark,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct Settings {
     #[serde(default)]
     pub knowledge_root: Option<String>,
     #[serde(default)]
     pub model_id: Option<String>,
+    #[serde(default)]
+    pub appearance: Appearance,
 }
 
 pub fn to_json(s: &Settings) -> String {
@@ -54,6 +65,7 @@ mod tests {
         let s = Settings {
             knowledge_root: Some("/home/x/Knowledge".into()),
             model_id: Some("gpt-5.6-sol".into()),
+            appearance: Appearance::Dark,
         };
         let back = from_json(&to_json(&s));
         assert_eq!(s, back);
@@ -69,5 +81,6 @@ mod tests {
         let s = from_json("{}");
         assert!(s.knowledge_root.is_none());
         assert!(s.model_id.is_none());
+        assert_eq!(s.appearance, Appearance::System);
     }
 }

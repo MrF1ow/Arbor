@@ -1,0 +1,7 @@
+ts	phase	decision	why	evidence	result
+2026-08-23T22:55:00Z	frame	Four product gaps: add class/files, theme toggle, digest titles as H1 not filename, markdown scroll+parse on Mac	Mac use showed a filesystem-only library, OS-only dark mode, dated index rows, and a WKWebView reading pane that neither scrolls nor parses GFM	PROJECT.md v3 shell, desktop/src/markdown.ts, styles.css notes-layout	open
+2026-08-23T22:56:00Z	design	Keep dated digest filenames. Show H1 as title and filename as date. Copy sources into the course folder. Persist appearance on app Settings. Extend the custom markdown parser instead of adding a library.	Smallest change that matches how the Knowledge folder already works	python/src/arbor_worker/digest_files.py, courses.py discover_sources	chosen
+2026-08-23T23:09:19Z	verify	desktop node tests 33/33	markdown parse, theme resolver, and library chrome ids	desktop npm test	tests green
+2026-08-23T23:09:19Z	verify	cargo test --lib 36/36	create_course, import_sources, list_digests H1 title, appearance default	desktop/src-tauri cargo test --locked --lib	tests green
+2026-08-23T23:09:19Z	verify	python digest tests	eight-word title prompt in generate and synthesis	pytest tests/test_digest.py tests/test_digest_files.py	tests green
+2026-08-23T23:09:19Z	verify	frontend production build	tsc and vite	desktop npm run build	build ok

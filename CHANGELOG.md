@@ -6,6 +6,13 @@ Package version for the worker, desktop, and Tauri app. See [Version numbering](
 
 ## Unreleased
 
+Library UX (toward package `v2.2.0`).
+
+- Add a class from the Library sidebar. Add lecture PDF, PowerPoint, or Word files into the open class from the course header. Arbor copies them into the Knowledge folder so Update can see them.
+- Light and Dark button in the sidebar. The choice is stored with app settings and no longer depends only on the OS color scheme.
+- Digest index titles come from the lecture H1 (prompt: at most eight words). The dated filename stays on disk and shows as the date line.
+- Notes reading pane scrolls on WebKit (Mac). Digest markdown renders bold, italic, numbered lists, asterisk bullets, and nested lists.
+
 Closeout (Wave 8, issue #42, toward package `v2.2.0`). Design only on this docs PR. Implementation: [`docs/superpowers/plans/2026-08-22-v3-program/wave-8-closeout.md`](docs/superpowers/plans/2026-08-22-v3-program/wave-8-closeout.md).
 
 - Flashcard Again / Wrong / Mastered write `correct` / `wrong`. Flip and Next do not grade.
