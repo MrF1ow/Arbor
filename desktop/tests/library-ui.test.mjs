@@ -14,4 +14,6 @@ test("library chrome exposes add class, add files, and theme controls", async ()
   assert.match(css, /\.content-panel\.active\[data-panel="notes"\]/);
   assert.match(css, /\.reading-pane \{[\s\S]*min-height: 0;/);
   assert.match(css, /\.notes-layout \{[\s\S]*min-height: 0;/);
+  assert.match(css, /\.main-wrap \{[\s\S]*min-height: 0;/);
+  assert.match(css, /\.main \{[\s\S]*min-height: 0;/);
 });
