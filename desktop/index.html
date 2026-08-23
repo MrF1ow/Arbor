@@ -52,6 +52,7 @@
                 <button class="mode-tab active" data-mode="notes">Notes</button>
                 <button class="mode-tab" data-mode="flashcards">Flashcards</button>
                 <button class="mode-tab" data-mode="quiz">Quiz</button>
+                <button class="mode-tab" data-mode="graph">Graph</button>
               </div>
               <button class="search-btn" id="search-toggle" title="Search" aria-label="Search" disabled>⌕</button>
             </header>
@@ -88,6 +89,7 @@
                     <div id="digest-list"></div>
                   </nav>
                   <div class="reading-pane">
+                    <div id="notes-concept-chips" class="concept-chips" hidden></div>
                     <article id="reading-article"></article>
                   </div>
                 </div>
@@ -156,6 +158,35 @@
                     <button type="button" class="btn-secondary" id="quiz-prev">Previous</button>
                     <button type="button" class="btn-primary" id="quiz-submit">Submit</button>
                     <button type="button" class="btn-secondary" id="quiz-next">Next</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="content-panel" data-panel="graph">
+                <div class="coming-soon" id="concepts-empty">
+                  <div class="coming-soon-icon">◎</div>
+                  <h2>Graph</h2>
+                  <p id="concepts-copy">Concepts linked across your course digests.</p>
+                  <button type="button" class="btn-primary" id="generate-concepts">Generate</button>
+                </div>
+                <div class="concepts-view" id="concepts-graph" hidden>
+                  <div class="flashcards-toolbar">
+                    <div>
+                      <span id="concept-count"></span>
+                      <span class="stale-badge" id="concept-stale" hidden>Digests updated since last generation.</span>
+                    </div>
+                    <button type="button" class="btn-primary" id="refresh-concepts">Refresh from digests</button>
+                  </div>
+                  <div class="concepts-layout">
+                    <nav class="concept-list" id="concept-list"></nav>
+                    <div class="concept-detail">
+                      <h2 id="concept-name"></h2>
+                      <p id="concept-summary"></p>
+                      <div class="concept-section-label">Neighbors</div>
+                      <div id="concept-neighbors" class="concept-neighbors"></div>
+                      <div class="concept-section-label">Sources</div>
+                      <div id="concept-sources" class="concept-sources"></div>
+                    </div>
                   </div>
                 </div>
               </div>
