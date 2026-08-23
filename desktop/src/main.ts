@@ -354,7 +354,10 @@ async function loadDigestPreview(course: string, relativePath: string) {
       ? `<div class="page-chip">Pages ${pageChip}</div>${html}`
       : html;
   } catch (e) {
-    readingArticleEl.innerHTML = `<p class="reading-empty">Could not load file: ${e}</p>`;
+    const isCourseIndex = relativePath.endsWith("/course.md");
+    readingArticleEl.innerHTML = isCourseIndex
+      ? `<p class="reading-empty">No notes yet. Add lecture files, then Update knowledge.</p>`
+      : `<p class="reading-empty">Could not load file: ${e}</p>`;
   }
   await renderNotesConceptChips(course, relativePath);
 }
