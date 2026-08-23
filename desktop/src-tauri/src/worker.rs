@@ -121,6 +121,20 @@ pub fn generate_sub_args(
     sub_args
 }
 
+pub fn embed_sub_args(root: &str, force: bool) -> Vec<String> {
+    let mut args = vec![
+        "embed".to_string(),
+        "--root".to_string(),
+        root.to_string(),
+        "--provider".to_string(),
+        "hashed".to_string(),
+    ];
+    if force {
+        args.push("--force".to_string());
+    }
+    args
+}
+
 #[cfg(feature = "desktop-runtime")]
 pub fn spawn_update_stream(
     app: tauri::AppHandle,
@@ -160,6 +174,18 @@ pub fn spawn_generate_stream(
 ) {
     let sub_args = generate_sub_args(&root, &course, &skill, force, model);
     spawn_worker_stream(app, app_dir, root, sub_args, job_id, "generate");
+}
+
+#[cfg(feature = "desktop-runtime")]
+pub fn spawn_embed_stream(
+    app: tauri::AppHandle,
+    app_dir: PathBuf,
+    root: String,
+    force: bool,
+    job_id: String,
+) {
+    let sub_args = embed_sub_args(&root, force);
+    spawn_worker_stream(app, app_dir, root, sub_args, job_id, "embed");
 }
 
 #[cfg(feature = "desktop-runtime")]
@@ -257,12 +283,18 @@ fn spawn_worker_stream(
             .unwrap_or_else(|| jobs::resolve_terminal_status(&last_line, code));
         let _ = jobs::finish_job(&knowledge_root, &job_id, status, code, summary.clone());
         let _ = app.emit("arbor://progress", serde_json::json!({ "line": exit_line }));
+        release(&app, &job_id);
         let _ = app.emit(
             "arbor://job-finished",
-            serde_json::json!({ "job_id": job_id, "status": status.as_str(), "summary": summary }),
+            serde_json::json!({
+                "job_id": job_id,
+                "status": status.as_str(),
+                "summary": summary,
+                "operation": operation,
+                "root": root,
+            }),
         );
         notify_terminal(&app, operation, status, summary.as_deref());
-        release(&app, &job_id);
     });
 }
 
@@ -412,5 +444,28 @@ mod tests {
             Some("  ".into()),
         );
         assert!(args.ends_with(&["--provider".into(), "fake".into()]));
+    }
+
+    #[test]
+    fn embed_args_use_the_hashed_provider() {
+        assert_eq!(
+            embed_sub_args("/Knowledge", false),
+            vec!["embed", "--root", "/Knowledge", "--provider", "hashed",]
+        );
+    }
+
+    #[test]
+    fn forced_embed_args_include_force() {
+        assert_eq!(
+            embed_sub_args("/Knowledge", true),
+            vec![
+                "embed",
+                "--root",
+                "/Knowledge",
+                "--provider",
+                "hashed",
+                "--force",
+            ]
+        );
     }
 }

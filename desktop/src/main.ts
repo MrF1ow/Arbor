@@ -75,6 +75,7 @@ const jobsLogEl = $("jobs-log");
 const modelSel = $("model") as HTMLSelectElement;
 const toggleWatch = $("toggle-watch");
 const toggleAuto = $("toggle-auto");
+const toggleEmbed = $("toggle-embed");
 const toggleDelete = $("toggle-delete");
 const toggleAutoFlashcards = $("toggle-auto-flashcards");
 const reindexBtn = $("reindex") as HTMLButtonElement;
@@ -91,12 +92,14 @@ const inspectorStatusEl = $("inspector-status");
 const searchToggleBtn = $("search-toggle") as HTMLButtonElement;
 const searchOverlayEl = $("search-overlay");
 const searchInput = $("search-input") as HTMLInputElement;
+const searchSemanticInput = $<HTMLInputElement>("search-semantic");
 const searchResultsEl = $("search-results");
 
 let knowledgeRoot: string | null = null;
 let authed = false;
 let activeUpdateJobId: string | null = null;
 let studyJobRunning = false;
+let pendingAutoEmbed = false;
 let searchTimer: number | null = null;
 let currentPlace: Place = "welcome";
 let currentCourse: string | null = null;
@@ -390,7 +393,10 @@ async function runSearch(query: string) {
     searchResultsEl.innerHTML = '<div class="search-empty">Type to search digests</div>';
     return;
   }
-  const hits = await invoke<SearchHit[]>("search_knowledge", {
+  const command = searchSemanticInput.checked
+    ? "search_semantic"
+    : "search_knowledge";
+  const hits = await invoke<SearchHit[]>(command, {
     root: knowledgeRoot,
     query,
     limit: 20,
@@ -612,6 +618,7 @@ async function loadKnowledgeSettingsUi() {
     const ks = await invoke<KnowledgeSettings>("get_knowledge_settings", { root: knowledgeRoot });
     setToggle(toggleWatch, ks.watch_enabled);
     setToggle(toggleAuto, ks.auto_update);
+    setToggle(toggleEmbed, ks.auto_embed);
     setToggle(toggleDelete, ks.delete_sources_after_digest);
     setToggle(toggleAutoFlashcards, ks.auto_generate.flashcards);
   } catch {
@@ -731,6 +738,10 @@ searchInput.addEventListener("input", () => {
   searchTimer = window.setTimeout(() => void runSearch(query), 250);
 });
 
+searchSemanticInput.addEventListener("change", () => {
+  void runSearch(searchInput.value);
+});
+
 document.addEventListener("click", (e) => {
   if (!searchOverlayEl.contains(e.target as Node) && e.target !== searchToggleBtn) {
     searchOverlayEl.classList.remove("open");
@@ -752,6 +763,12 @@ toggleAuto.addEventListener("click", async () => {
   const on = toggleAuto.classList.contains("off");
   setToggle(toggleAuto, on);
   await saveKnowledgeSettings({ auto_update: on });
+});
+
+toggleEmbed.addEventListener("click", async () => {
+  const on = toggleEmbed.classList.contains("off");
+  setToggle(toggleEmbed, on);
+  await saveKnowledgeSettings({ auto_embed: on });
 });
 
 toggleDelete.addEventListener("click", async () => {
@@ -900,6 +917,18 @@ function renderEvent(ev: WorkerEvent) {
     case "course_done":
       logLine(`  ${ev.course_dir}: ${ev.digests} new digest(s)`);
       break;
+    case "embed_started":
+      logLine("Embedding digests…");
+      break;
+    case "embed_done":
+      logLine(
+        `Embedded ${ev.embedded ?? 0} digest(s) into ${ev.chunks ?? 0} chunk(s); skipped ${ev.skipped ?? 0}.`,
+      );
+      void runSearch(searchInput.value);
+      break;
+    case "embed_failed":
+      logLine(`Embedding failed: ${ev.message}`);
+      break;
     case "stage":
       logLine(`   ${ev.stage}: ${ev.status}${ev.detail ? " — " + ev.detail : ""}`);
       break;
@@ -945,6 +974,18 @@ listen<{ line: string }>("arbor://progress", (e) => {
   }
 });
 
+async function startEmbedJob(root: string) {
+  try {
+    const jobId = await invoke<string>("start_embed_job", {
+      root,
+      force: false,
+    });
+    logLine(`Embedding job ${jobId} started.`);
+  } catch (error) {
+    logLine(`Embedding failed to start: ${error}`);
+  }
+}
+
 async function handleJobFinished(finished: JobFinished) {
   const updateJobId = activeUpdateJobId;
   if (finished.job_id === activeUpdateJobId) activeUpdateJobId = null;
@@ -953,11 +994,21 @@ async function handleJobFinished(finished: JobFinished) {
   void loadJobHistory();
   if (currentCourse) void loadFlashcards(currentCourse);
 
-  if (!knowledgeRoot || !currentCourse || updateJobId === null) return;
+  if (finished.status !== "succeeded") {
+    if (finished.operation === "generate") pendingAutoEmbed = false;
+    return;
+  }
+  if (!knowledgeRoot || (finished.root && finished.root !== knowledgeRoot)) return;
+
   const settings = await invoke<KnowledgeSettings>("get_knowledge_settings", {
     root: knowledgeRoot,
   });
+  if (updateJobId !== null && finished.job_id === updateJobId) {
+    pendingAutoEmbed = settings.auto_embed;
+  }
+
   if (
+    currentCourse &&
     shouldAutoGenerateFlashcards(
       finished,
       updateJobId,
@@ -965,6 +1016,12 @@ async function handleJobFinished(finished: JobFinished) {
     )
   ) {
     await startFlashcardJob(false);
+    return;
+  }
+
+  if (pendingAutoEmbed) {
+    pendingAutoEmbed = false;
+    await startEmbedJob(knowledgeRoot);
   }
 }
 

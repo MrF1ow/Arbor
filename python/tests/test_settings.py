@@ -44,6 +44,7 @@ def test_course_defaults():
     s = default_settings()
     assert s.delete_sources_after_digest is False
     assert s.auto_update is False
+    assert s.auto_embed is False
     assert s.watch_enabled is True
     assert s.auto_generate.flashcards is False
     assert s.digests_dirname == "digests"
@@ -90,3 +91,12 @@ def test_load_settings_reads_nested_flashcard_auto_generate(tmp_path):
     s = load_settings(tmp_path)
 
     assert s.auto_generate.flashcards is True
+
+
+def test_load_settings_reads_auto_embed(tmp_path):
+    from arbor_worker.settings import load_settings
+
+    (tmp_path / ".arbor").mkdir()
+    (tmp_path / ".arbor" / "settings.json").write_text('{"auto_embed": true}')
+
+    assert load_settings(tmp_path).auto_embed is True

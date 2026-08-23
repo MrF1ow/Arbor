@@ -57,7 +57,13 @@
             </header>
 
             <div class="search-overlay" id="search-overlay">
-              <input id="search-input" type="search" placeholder="Search digests…" />
+              <div class="search-input-row">
+                <input id="search-input" type="search" placeholder="Search digests…" />
+                <label class="semantic-option">
+                  <input id="search-semantic" type="checkbox" />
+                  Semantic
+                </label>
+              </div>
               <div id="search-results" class="search-results"></div>
             </div>
 
@@ -148,6 +154,10 @@
                     <div class="setting-row">
                       <span>Auto-run after watch</span>
                       <button class="toggle off" id="toggle-auto" type="button" aria-label="Auto-run"></button>
+                    </div>
+                    <div class="setting-row">
+                      <span>Embed after Update</span>
+                      <button class="toggle off" id="toggle-embed" type="button" aria-label="Embed after Update"></button>
                     </div>
                     <div class="setting-row">
                       <span>Delete sources after digest</span>
