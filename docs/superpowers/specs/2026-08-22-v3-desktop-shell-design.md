@@ -2,7 +2,7 @@
 
 Date: 2026-08-22
 
-Status: shipped in **3.0.0** (2026-08-22). Supersedes the 2.0.0 single-column UI.
+Status: shipped in package **2.1.0** (2026-08-22). Part of Version 3 **in progress** — not a `v3.0.0` release.
 
 ## Problem
 

@@ -1,0 +1,30 @@
+---
+description: Arbor product milestones vs package version tags
+alwaysApply: true
+---
+
+# Arbor versioning
+
+**Product milestones** (Version 1, 2, 3 in `PROJECT.md`) describe eras of capability. **Package/git tags** (`v2.0.0`, `v2.1.0`, `v3.0.0`) track shipped releases.
+
+## Rules
+
+1. **`v2.0.0` = Version 2 complete** — automation and discoverability (jobs, FTS, watch, OCR, Word). The old single-column UI. Do not re-open v2 scope.
+
+2. **Version 3 is in progress until `v3.0.0`.** Work toward Version 3 ships as **`v2.1.0`, `v2.2.0`, …** — not as `v3.x` point releases.
+
+3. **`v3.0.0` is reserved for full Version 3 completion** — all features listed under Version 3 in `PROJECT.md` (shell, flashcards, quiz, concepts, diagrams, citations, cross-document linking, knowledge graph, embeddings, semantic search). Do not tag `v3.0.0` for the shell alone or for partial v3 delivery.
+
+4. **Version 4 starts at `v4.0.0`** when the tutor milestone is complete, with the same pattern (`v3.x` increments during v4 work if needed).
+
+5. **CHANGELOG and package versions stay aligned** across worker, desktop, and Tauri (`pyproject.toml`, `desktop/package.json`, `Cargo.toml`).
+
+## Current state (2026-08-22)
+
+| Tag | Product | Notes |
+|-----|---------|-------|
+| `v2.0.0` | Version 2 | Shipped |
+| `v2.1.0` | Version 3 (partial) | Desktop shell; v3 milestone not complete |
+| `v3.0.0` | Version 3 | **Not yet** — tag only when PROJECT.md v3 list is done |
+
+Program: `docs/superpowers/plans/2026-08-22-v3-program/overview.md`.
