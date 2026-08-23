@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from pathlib import Path
 
 
@@ -31,13 +32,18 @@ class CacheDir:
         self.marker_path(source_hash).write_text(json.dumps(data))
 
 
-def ensure_gitignored(root: Path, cache_dir_name: str) -> None:
+def ensure_gitignored(
+    root: Path,
+    cache_dir_name: str,
+    extra_entries: Iterable[str] = (),
+) -> None:
     gi = Path(root) / ".gitignore"
-    entry = f"{cache_dir_name}/"
     existing = gi.read_text().splitlines() if gi.is_file() else []
-    if entry in existing:
+    requested = dict.fromkeys([f"{cache_dir_name}/", *extra_entries])
+    missing = [entry for entry in requested if entry not in existing]
+    if not missing:
         return
     with open(gi, "a") as fh:
         if existing and existing[-1].strip() != "":
             fh.write("\n")
-        fh.write(entry + "\n")
+        fh.write("\n".join(missing) + "\n")

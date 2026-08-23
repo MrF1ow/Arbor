@@ -25,6 +25,7 @@ pub fn run() {
             commands::get_settings,
             commands::save_settings,
             commands::start_update,
+            commands::start_study_job,
             commands::cancel_update,
             commands::open_folder,
             commands::init_knowledge_repo,

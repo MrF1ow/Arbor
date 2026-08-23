@@ -23,10 +23,11 @@ impl JobStatus {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum JobTrigger {
     Manual,
     Watch,
+    Study,
 }
 
 impl JobTrigger {
@@ -34,12 +35,14 @@ impl JobTrigger {
         match self {
             JobTrigger::Manual => "manual",
             JobTrigger::Watch => "watch",
+            JobTrigger::Study => "study",
         }
     }
 
     pub fn from_arg(value: Option<&str>) -> Self {
         match value {
             Some("watch") => JobTrigger::Watch,
+            Some("study") => JobTrigger::Study,
             _ => JobTrigger::Manual,
         }
     }
@@ -74,7 +77,7 @@ impl JobCoordinator {
 
     pub fn try_begin(&mut self, job_id: &str, knowledge_root: &str) -> Result<(), String> {
         if let Some((_, root)) = &self.active {
-            return Err(format!("An update is already running for {root}"));
+            return Err(format!("A job is already running for {root}"));
         }
         self.active = Some((job_id.to_string(), knowledge_root.to_string()));
         Ok(())
@@ -288,7 +291,8 @@ mod tests {
     fn coordinator_rejects_second_run() {
         let mut coord = JobCoordinator::new();
         coord.try_begin("job-a", "/Knowledge").unwrap();
-        assert!(coord.try_begin("job-b", "/Knowledge").is_err());
+        let error = coord.try_begin("job-b", "/Knowledge").unwrap_err();
+        assert!(error.contains("A job is already running for"));
         coord.finish("job-a");
         coord.try_begin("job-b", "/Knowledge").unwrap();
     }
@@ -309,6 +313,23 @@ mod tests {
         assert_eq!(jobs[0].trigger_kind, "watch");
         assert_eq!(JobTrigger::from_arg(Some("watch")).as_str(), "watch");
         assert_eq!(JobTrigger::from_arg(None).as_str(), "manual");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn study_trigger_persists_kind() {
+        let root = temp_root("study-trigger");
+        let id = create_job(
+            &root,
+            JobTrigger::Study,
+            "fake",
+            r#"{"course":"Biology","skill":"flashcards","force":false}"#,
+        )
+        .unwrap();
+        let jobs = list_jobs(&root, 10).unwrap();
+        assert_eq!(jobs[0].id, id);
+        assert_eq!(jobs[0].trigger_kind, "study");
+        assert_eq!(JobTrigger::from_arg(Some("study")), JobTrigger::Study);
         let _ = fs::remove_dir_all(&root);
     }
 }

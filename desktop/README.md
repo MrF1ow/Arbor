@@ -63,5 +63,5 @@ See [Tauri Linux graphics debugging](https://v2.tauri.app/develop/debug/linux-gr
 10. **Folder watch:** drop a new PDF, wait ~3 seconds → review panel in the inspector.
 11. **Jobs place:** sidebar **Jobs** lists recent runs with expandable log.
 12. **Settings place:** toggles write `.arbor/settings.json`; reindex succeeds.
-13. **Modes:** Flashcards and Quiz tabs show Coming soon.
+13. **Modes:** Flashcards and Quiz tabs show an empty state with a disabled **Generate** button.
 14. **Cancel:** Cancel during a run stops after the current range; log shows "Cancelled".

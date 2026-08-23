@@ -23,7 +23,6 @@ class EventEmitter:
         self._stream.flush()
         return obj
 
-    # Convenience wrappers ------------------------------------------------
     def run_started(self, **f):
         return self.emit("run_started", **f)
 
@@ -47,6 +46,21 @@ class EventEmitter:
 
     def source_deleted(self, **f):
         return self.emit("source_deleted", **f)
+
+    def skill_started(self, **f):
+        return self.emit("skill_started", **f)
+
+    def skill_progress(self, **f):
+        return self.emit("skill_progress", **f)
+
+    def skill_done(self, **f):
+        return self.emit("skill_done", **f)
+
+    def skill_failed(self, **f):
+        return self.emit("skill_failed", **f)
+
+    def skill_stale_skipped(self, **f):
+        return self.emit("skill_stale_skipped", **f)
 
     def course_synthesis_started(self, **f):
         return self.emit("course_synthesis_started", **f)

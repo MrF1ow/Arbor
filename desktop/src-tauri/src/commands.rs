@@ -337,6 +337,57 @@ pub fn start_update(
 }
 
 #[tauri::command]
+pub fn start_study_job(
+    app: tauri::AppHandle,
+    coordinator: tauri::State<'_, SharedCoordinator>,
+    root: String,
+    course: String,
+    skill: String,
+    force: Option<bool>,
+) -> Result<String, String> {
+    let force = force.unwrap_or(false);
+    let plan_json = serde_json::to_string(&serde_json::json!({
+        "course": course,
+        "skill": skill,
+        "force": force,
+    }))
+    .map_err(|e| e.to_string())?;
+    let knowledge_root = Path::new(&root);
+    let job_id = jobs::create_job(
+        knowledge_root,
+        JobTrigger::Study,
+        "fake",
+        &plan_json,
+    )?;
+
+    {
+        let mut guard = coordinator.lock().map_err(|e| e.to_string())?;
+        if let Err(e) = guard.try_begin(&job_id, &root) {
+            let _ = jobs::finish_job(
+                knowledge_root,
+                &job_id,
+                jobs::JobStatus::Failed,
+                -1,
+                Some(e.clone()),
+            );
+            return Err(e);
+        }
+    }
+
+    let app_dir = repo_dir(&app);
+    worker::spawn_generate_stream(
+        app,
+        app_dir,
+        root,
+        course,
+        skill,
+        force,
+        job_id.clone(),
+    );
+    Ok(job_id)
+}
+
+#[tauri::command]
 pub fn cancel_update(_app: tauri::AppHandle) -> Result<(), String> {
     let cancel = worker::cancel_file_path();
     std::fs::write(&cancel, b"stop").map_err(|e| e.to_string())

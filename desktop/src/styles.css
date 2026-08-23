@@ -501,16 +501,8 @@ html, body {
   line-height: 1.5;
 }
 
-.coming-soon .badge {
+.coming-soon .btn-primary {
   margin-top: 20px;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--sage-deep);
-  background: var(--sage-tint);
-  padding: 6px 14px;
-  border-radius: 999px;
 }
 
 /* ── Place views ── */

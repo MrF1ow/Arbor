@@ -93,24 +93,67 @@ pub fn spawn_update_stream(
     plan_file: PathBuf,
     job_id: String,
 ) {
+    let cancel_str = cancel_file.to_string_lossy().into_owned();
+    let plan_str = plan_file.to_string_lossy().into_owned();
+    let sub_args = vec![
+        "update".to_string(),
+        "--root".to_string(),
+        root.clone(),
+        "--model".to_string(),
+        model,
+        "--cancel-file".to_string(),
+        cancel_str,
+        "--plan".to_string(),
+        plan_str,
+    ];
+    spawn_worker_stream(app, app_dir, root, sub_args, job_id, "update");
+}
+
+#[cfg(feature = "desktop-runtime")]
+pub fn spawn_generate_stream(
+    app: tauri::AppHandle,
+    app_dir: PathBuf,
+    root: String,
+    course: String,
+    skill: String,
+    force: bool,
+    job_id: String,
+) {
+    let mut sub_args = vec![
+        "generate".to_string(),
+        "--root".to_string(),
+        root.clone(),
+        "--course".to_string(),
+        course,
+        "--skill".to_string(),
+        skill,
+    ];
+    if force {
+        sub_args.push("--force".to_string());
+    }
+    sub_args.extend(["--provider".to_string(), "fake".to_string()]);
+    spawn_worker_stream(app, app_dir, root, sub_args, job_id, "generate");
+}
+
+#[cfg(feature = "desktop-runtime")]
+fn spawn_worker_stream(
+    app: tauri::AppHandle,
+    app_dir: PathBuf,
+    root: String,
+    sub_args: Vec<String>,
+    job_id: String,
+    operation: &'static str,
+) {
     use crate::jobs::{self, SharedCoordinator};
     use tauri::{Emitter, Manager};
 
     let knowledge_root = PathBuf::from(&root);
-    let cancel_str = cancel_file.to_string_lossy().to_string();
-    let plan_str = plan_file.to_string_lossy().to_string();
-    let sub_args = [
-        "update",
-        "--root", &root,
-        "--model", &model,
-        "--cancel-file", &cancel_str,
-        "--plan", &plan_str,
-    ];
+    let sub_arg_refs = sub_args.iter().map(String::as_str).collect::<Vec<_>>();
     let sidecar = packaged_sidecar();
     let argv = resolve_worker_argv(
         &|k| std::env::var(k).ok(),
         &default_python_dir(&app_dir),
-        &sub_args,
+        &sub_arg_refs,
         sidecar.as_deref(),
     );
 
@@ -190,19 +233,24 @@ pub fn spawn_update_stream(
             "arbor://job-finished",
             serde_json::json!({ "job_id": job_id, "status": status.as_str(), "summary": summary }),
         );
-        notify_terminal(&app, status, summary.as_deref());
+        notify_terminal(&app, operation, status, summary.as_deref());
         release(&app, &job_id);
     });
 }
 
 #[cfg(feature = "desktop-runtime")]
-fn notify_terminal(app: &tauri::AppHandle, status: crate::jobs::JobStatus, summary: Option<&str>) {
+fn notify_terminal(
+    app: &tauri::AppHandle,
+    operation: &str,
+    status: crate::jobs::JobStatus,
+    summary: Option<&str>,
+) {
     use tauri_plugin_notification::NotificationExt;
     let title = match status {
-        crate::jobs::JobStatus::Succeeded => "Arbor update finished",
-        crate::jobs::JobStatus::Cancelled => "Arbor update cancelled",
-        crate::jobs::JobStatus::Failed => "Arbor update failed",
-        _ => "Arbor update",
+        crate::jobs::JobStatus::Succeeded => format!("Arbor {operation} finished"),
+        crate::jobs::JobStatus::Cancelled => format!("Arbor {operation} cancelled"),
+        crate::jobs::JobStatus::Failed => format!("Arbor {operation} failed"),
+        _ => format!("Arbor {operation}"),
     };
     let body = summary.unwrap_or(status.as_str());
     let _ = app

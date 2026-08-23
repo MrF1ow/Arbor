@@ -18,6 +18,7 @@ uv run arbor-worker check-auth
 uv run arbor-worker list-models
 uv run arbor-worker plan-update --root /path/to/Knowledge
 uv run arbor-worker update --root /path/to/Knowledge --model <model-id> [--plan plan.json]
+uv run arbor-worker generate --root /path/to/Knowledge --course Biology --skill fixture [--force]
 uv run arbor-worker reindex --root /path/to/Knowledge
 ```
 
