@@ -79,6 +79,8 @@ pub struct KnowledgeSettings {
     pub delete_sources_after_digest: bool,
     #[serde(default)]
     pub auto_update: bool,
+    #[serde(default)]
+    pub auto_embed: bool,
     #[serde(default = "default_true")]
     pub watch_enabled: bool,
     #[serde(default)]
@@ -90,6 +92,7 @@ impl Default for KnowledgeSettings {
         Self {
             delete_sources_after_digest: false,
             auto_update: false,
+            auto_embed: false,
             watch_enabled: default_true(),
             auto_generate: AutoGenerate::default(),
         }
@@ -319,6 +322,7 @@ mod tests {
         let ks = KnowledgeSettings::default();
         assert!(ks.watch_enabled);
         assert!(!ks.auto_update);
+        assert!(!ks.auto_embed);
         assert!(!ks.delete_sources_after_digest);
         assert!(!ks.auto_generate.flashcards);
     }
@@ -329,6 +333,7 @@ mod tests {
         let default = KnowledgeSettings::default();
         assert_eq!(empty.watch_enabled, default.watch_enabled);
         assert_eq!(empty.auto_update, default.auto_update);
+        assert_eq!(empty.auto_embed, default.auto_embed);
         assert_eq!(
             empty.delete_sources_after_digest,
             default.delete_sources_after_digest
@@ -472,6 +477,21 @@ pub fn search_knowledge(
     limit: Option<u32>,
 ) -> Result<Vec<SearchHit>, String> {
     search::search_documents(Path::new(&root), &query, limit.unwrap_or(25))
+}
+
+#[tauri::command]
+pub fn search_semantic(
+    app: tauri::AppHandle,
+    root: String,
+    query: String,
+    limit: Option<u32>,
+) -> Result<Vec<SearchHit>, String> {
+    search::search_semantic_documents(
+        &repo_dir(&app),
+        Path::new(&root),
+        &query,
+        limit.unwrap_or(25),
+    )
 }
 
 #[tauri::command]
@@ -631,6 +651,40 @@ pub fn start_study_job(
         model,
         job_id.clone(),
     );
+    Ok(job_id)
+}
+
+#[tauri::command]
+pub fn start_embed_job(
+    app: tauri::AppHandle,
+    coordinator: tauri::State<'_, SharedCoordinator>,
+    root: String,
+    force: Option<bool>,
+) -> Result<String, String> {
+    let force = force.unwrap_or(false);
+    let plan_json = serde_json::to_string(&serde_json::json!({
+        "op": "embed",
+        "force": force,
+    }))
+    .map_err(|error| error.to_string())?;
+    let knowledge_root = Path::new(&root);
+    let job_id = jobs::create_job(knowledge_root, JobTrigger::Manual, "hashed", &plan_json)?;
+
+    {
+        let mut guard = coordinator.lock().map_err(|error| error.to_string())?;
+        if let Err(error) = guard.try_begin(&job_id, &root) {
+            let _ = jobs::finish_job(
+                knowledge_root,
+                &job_id,
+                jobs::JobStatus::Failed,
+                -1,
+                Some(error.clone()),
+            );
+            return Err(error);
+        }
+    }
+
+    worker::spawn_embed_stream(app.clone(), repo_dir(&app), root, force, job_id.clone());
     Ok(job_id)
 }
 

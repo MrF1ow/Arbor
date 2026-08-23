@@ -62,6 +62,15 @@ class EventEmitter:
     def skill_stale_skipped(self, **f):
         return self.emit("skill_stale_skipped", **f)
 
+    def embed_started(self, **f):
+        return self.emit("embed_started", **f)
+
+    def embed_done(self, **f):
+        return self.emit("embed_done", **f)
+
+    def embed_failed(self, **f):
+        return self.emit("embed_failed", **f)
+
     def course_synthesis_started(self, **f):
         return self.emit("course_synthesis_started", **f)
 

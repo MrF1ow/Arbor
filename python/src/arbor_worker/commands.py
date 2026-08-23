@@ -316,3 +316,54 @@ def cmd_reindex(args) -> int:
     totals = reindex_root(Path(args.root))
     print(json.dumps({"indexed_courses": totals, "documents": sum(totals.values())}))
     return 0
+
+
+def _load_embedder(provider: str):
+    from arbor_worker.embedder.fake import FakeEmbedder
+    from arbor_worker.embedder.hashed import HashedNgramEmbedder
+
+    return FakeEmbedder() if provider == "fake" else HashedNgramEmbedder()
+
+
+def cmd_embed(args) -> int:
+    from arbor_worker.embed import embed_root
+
+    root = Path(args.root)
+    emitter = EventEmitter(sys.stdout)
+    settings = load_settings(root)
+    embedder = _load_embedder(args.provider)
+    emitter.embed_started(
+        root=str(root),
+        force=args.force,
+        provider=args.provider,
+    )
+    try:
+        counts = embed_root(
+            root,
+            embedder,
+            force=args.force,
+            settings=settings,
+        )
+    except Exception as error:
+        emitter.embed_failed(message=str(error))
+        return 1
+    emitter.embed_done(
+        digests=counts.digests,
+        embedded=counts.embedded,
+        skipped=counts.skipped,
+        chunks=counts.chunks,
+    )
+    return 0
+
+
+def cmd_embed_search(args) -> int:
+    from arbor_worker.embed import search_chunks
+
+    hits = search_chunks(
+        Path(args.root),
+        args.query,
+        args.limit,
+        _load_embedder(args.provider),
+    )
+    print(json.dumps(hits))
+    return 0

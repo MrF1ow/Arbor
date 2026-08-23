@@ -870,16 +870,36 @@ html, body {
 
 .search-overlay.open { display: block; }
 
-.search-overlay input {
+.search-input-row {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--cream-border);
+}
+
+.search-input-row > input[type="search"] {
   width: 100%;
   padding: 12px 16px;
   border: none;
-  border-bottom: 1px solid var(--cream-border);
   background: transparent;
   font: inherit;
   font-size: 14px;
   color: var(--ink);
   outline: none;
+}
+
+.semantic-option {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 12px;
+  border-left: 1px solid var(--cream-border);
+  color: var(--ink-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.semantic-option input {
+  accent-color: var(--sage-accent);
 }
 
 .search-results { max-height: 280px; overflow: auto; }

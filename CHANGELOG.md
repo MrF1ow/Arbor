@@ -6,6 +6,12 @@ Package version for the worker, desktop, and Tauri app. See [Version numbering](
 
 ## Unreleased
 
+Memory and semantic search (Wave 4, toward package `v2.5.0`).
+
+- `arbor-worker embed` chunks digests by heading, builds local 256-dimension hashed n-gram vectors, and replaces stale rows in the gitignored `.arbor/vectors.sqlite` store.
+- `arbor-worker embed-search` runs brute-force cosine search and returns digest-shaped search hits without a network service.
+- The desktop search overlay keeps full-text search as the default and adds a Semantic toggle. An optional "Embed after Update" setting queues embedding through the existing job mutex.
+
 Flashcards (Wave 2, toward package `v2.3.0`).
 
 - `arbor-worker generate --skill flashcards` writes `study/flashcards.json`, assigns `fc_` ids from normalized front plus digest, and commits `study: {course} flashcards`. Concatenated digests over 100k characters split per digest, then merge and drop duplicate fronts. Unchanged digest hashes still emit `skill_stale_skipped`.

@@ -45,7 +45,7 @@ Worker `ensure_gitignored` must list `.arbor/progress/` and `.arbor/vectors.sqli
 
 ## Memory (embeddings)
 
-Chunk each digest by `##` heading, roughly 500 tokens, keep a pointer to `path` plus heading. Embed each chunk. Store `(course, path, heading, text, vector)`.
+Chunk each digest by `##` heading, roughly 500 tokens, keep a pointer to `path` plus heading. Embed each chunk. Store `(course, path, heading, text, digest_sha256, vector)`.
 
 Search overlay keeps FTS as the default. A Semantic toggle runs cosine over vectors and navigates the same way FTS does (course, Notes, digest).
 
@@ -53,7 +53,8 @@ Search overlay keeps FTS as the default. A Semantic toggle runs cosine over vect
 
 - `embed(texts: list[str]) -> list[list[float]]`
 - Tests use `FakeEmbedder` (stable hash to a unit-ish vector).
-- Production backend is chosen in Wave 4, first PR. Prefer a local model so a downloaded app works offline and does not send the library to a second API. Brute-force cosine is enough for v1. Course libraries are small.
+- Production uses a local hashed n-gram embedder from the Python standard library. It splits text on whitespace and punctuation, hashes 1-3 token grams into a 256-dimension signed bag, and L2-normalizes the result. It runs offline and sends no library text over the network.
+- Brute-force cosine is enough for v1. Course libraries are small.
 
 CLI: `arbor-worker embed --root <Knowledge>` and optional auto-run after a successful update. Out of the digest generate path.
 

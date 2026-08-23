@@ -30,6 +30,7 @@ class WorkerSettings:
     pdf_chunk_concurrency: int = 2
     delete_sources_after_digest: bool = False
     auto_update: bool = False
+    auto_embed: bool = False
     watch_enabled: bool = True
     auto_generate: AutoGenerate = field(default_factory=AutoGenerate)
     digests_dirname: str = "digests"
@@ -63,6 +64,7 @@ def load_settings(root: Path) -> WorkerSettings:
         base,
         delete_sources_after_digest=bool(data.get("delete_sources_after_digest", False)),
         auto_update=bool(data.get("auto_update", False)),
+        auto_embed=bool(data.get("auto_embed", False)),
         watch_enabled=bool(data.get("watch_enabled", True)),
         auto_generate=AutoGenerate(
             flashcards=bool(auto_generate.get("flashcards", False))

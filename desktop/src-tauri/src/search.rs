@@ -1,7 +1,7 @@
 use rusqlite::params;
 use std::path::Path;
 
-#[derive(Debug, serde::Serialize, Clone)]
+#[derive(Debug, serde::Deserialize, serde::Serialize, Clone)]
 pub struct SearchHit {
     pub course: String,
     pub path: String,
@@ -54,6 +54,35 @@ pub fn search_documents(
     rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
 }
 
+#[cfg(feature = "desktop-runtime")]
+pub fn search_semantic_documents(
+    app_dir: &Path,
+    knowledge_root: &Path,
+    query: &str,
+    limit: u32,
+) -> Result<Vec<SearchHit>, String> {
+    if query.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+    let root = knowledge_root.to_string_lossy().into_owned();
+    let limit = limit.to_string();
+    let value = crate::worker::run_worker_json(
+        app_dir,
+        &[
+            "embed-search",
+            "--root",
+            &root,
+            "--query",
+            query,
+            "--limit",
+            &limit,
+            "--provider",
+            "hashed",
+        ],
+    )?;
+    serde_json::from_value(value).map_err(|error| error.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -68,5 +97,18 @@ mod tests {
         let hits = search_documents(&root, "   ", 10).unwrap();
         assert!(hits.is_empty());
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn empty_semantic_query_returns_no_hits() {
+        let hits = search_semantic_documents(
+            Path::new("/missing/app"),
+            Path::new("/missing/knowledge"),
+            "   ",
+            10,
+        )
+        .unwrap();
+
+        assert!(hits.is_empty());
     }
 }

@@ -35,6 +35,17 @@ def build_parser() -> argparse.ArgumentParser:
     ri = sub.add_parser("reindex", help="Rebuild the search index under a Knowledge root.")
     ri.add_argument("--root", required=True, help="Path to the Knowledge git repo.")
 
+    embed = sub.add_parser("embed", help="Build the semantic search index.")
+    embed.add_argument("--root", required=True, help="Path to the Knowledge git repo.")
+    embed.add_argument("--force", action="store_true", help="Rebuild unchanged digests.")
+    embed.add_argument("--provider", default="hashed", choices=["hashed", "fake"])
+
+    search = sub.add_parser("embed-search", help="Search the semantic index.")
+    search.add_argument("--root", required=True, help="Path to the Knowledge git repo.")
+    search.add_argument("--query", required=True, help="Semantic search query.")
+    search.add_argument("--limit", type=int, default=25)
+    search.add_argument("--provider", default="hashed", choices=["hashed", "fake"])
+
     return parser
 
 
@@ -66,4 +77,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "reindex":
         from arbor_worker.commands import cmd_reindex
         return cmd_reindex(args)
+    if args.command == "embed":
+        from arbor_worker.commands import cmd_embed
+        return cmd_embed(args)
+    if args.command == "embed-search":
+        from arbor_worker.commands import cmd_embed_search
+        return cmd_embed_search(args)
     return 2
