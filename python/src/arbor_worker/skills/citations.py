@@ -118,8 +118,7 @@ def _check_concepts(course_dir: Path) -> list[CitationFailure]:
     graph = ConceptGraph.model_validate_json(path.read_text())
     failures: list[CitationFailure] = []
     for node in graph.nodes:
-        source = node.sources[0] if node.sources else None
-        if source is None:
+        if not node.sources:
             failures.append(
                 CitationFailure(
                     path="study/concepts.json",
@@ -128,14 +127,15 @@ def _check_concepts(course_dir: Path) -> list[CitationFailure]:
                 )
             )
             continue
-        failure = _check_source(
-            course_dir,
-            path="study/concepts.json",
-            item_id=node.id,
-            claim=node.summary,
-            digest=source.digest,
-            heading=source.heading,
-        )
-        if failure is not None:
-            failures.append(failure)
+        for source in node.sources:
+            failure = _check_source(
+                course_dir,
+                path="study/concepts.json",
+                item_id=node.id,
+                claim=node.summary,
+                digest=source.digest,
+                heading=source.heading,
+            )
+            if failure is not None:
+                failures.append(failure)
     return failures

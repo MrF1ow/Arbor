@@ -11,7 +11,7 @@ from arbor_worker.events import parse_lines
 from arbor_worker.provider.fake import FakeProvider
 from arbor_worker.skills import SKILLS
 from arbor_worker.skills.concepts import ConceptsSkill
-from arbor_worker.skills.diagrams import DiagramsSkill
+from arbor_worker.skills.diagrams import DiagramsSkill, cached_page_images, merge_figures
 
 
 def _source(digest: str = "digests/2026-08-15.md", heading: str | None = "Figures") -> dict:
@@ -34,13 +34,39 @@ def _node(name: str, *, kind: str | None = None, node_id: str | None = None) -> 
     return node
 
 
-def _graph(*nodes: dict) -> dict:
+def _edge(from_id: str, to_id: str, *, relation: str = "illustrates") -> dict:
+    return {
+        "from": from_id,
+        "to": to_id,
+        "relation": relation,
+        "sources": [_source()],
+    }
+
+
+def _graph(*nodes: dict, edges: list[dict] | None = None) -> dict:
     return {
         "schema_version": 1,
         "course": "Biology",
         "nodes": list(nodes),
-        "edges": [],
+        "edges": edges or [],
     }
+
+
+def _write_course_hashes(root: Path, course: str, *hashes: str) -> None:
+    course_dir = root / course
+    course_dir.mkdir(parents=True, exist_ok=True)
+    (course_dir / "arbor-course.json").write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "records": [
+                    {"source_path": f"sources/{source_hash}.pdf", "source_hash": source_hash}
+                    for source_hash in hashes
+                ],
+            }
+        )
+        + "\n"
+    )
 
 
 def _write_digest(root: Path) -> None:
@@ -138,8 +164,52 @@ def test_empty_figures_is_success_and_leaves_concepts(git_repo: Path, monkeypatc
     assert subject == "study: Biology diagrams"
 
 
+def test_cached_page_images_skips_other_courses(tmp_path: Path):
+    bio = tmp_path / "_arbor_cache" / "bio-hash" / "page-00001.png"
+    chem = tmp_path / "_arbor_cache" / "chem-hash" / "page-00001.png"
+    bio.parent.mkdir(parents=True)
+    chem.parent.mkdir(parents=True)
+    bio.write_bytes(b"bio")
+    chem.write_bytes(b"chem")
+    _write_course_hashes(tmp_path, "Biology", "bio-hash")
+    _write_course_hashes(tmp_path, "Chemistry", "chem-hash")
+
+    images = cached_page_images(tmp_path, "_arbor_cache", tmp_path / "Biology")
+
+    assert [path.resolve() for path in images] == [bio.resolve()]
+
+
+def test_validate_keeps_edges_linking_figures_to_topics():
+    graph = DiagramsSkill().validate(
+        _graph(
+            _node("Mitochondrion diagram", kind="figure"),
+            edges=[_edge("mitochondrion-diagram", "glycolysis")],
+        )
+    )
+
+    assert [(edge.from_, edge.to, edge.relation) for edge in graph.edges] == [
+        ("fig-mitochondrion-diagram", "glycolysis", "illustrates")
+    ]
+
+
+def test_merge_figures_keeps_link_to_existing_concept():
+    existing = ConceptsSkill().validate(_graph(_node("Glycolysis")))
+    figures = DiagramsSkill().validate(
+        _graph(
+            _node("Mitochondrion diagram", kind="figure"),
+            edges=[_edge("fig-mitochondrion-diagram", "glycolysis")],
+        )
+    )
+
+    merged = merge_figures(existing, figures)
+    pairs = {(edge.from_, edge.to) for edge in merged.edges}
+
+    assert ("fig-mitochondrion-diagram", "glycolysis") in pairs
+
+
 def test_generate_passes_prepare_cache_images(git_repo: Path, monkeypatch):
     _write_digest(git_repo)
+    _write_course_hashes(git_repo, "Biology", "src-hash")
     cache = git_repo / "_arbor_cache" / "src-hash"
     cache.mkdir(parents=True)
     image = cache / "page-00001.png"
@@ -172,7 +242,15 @@ def test_generate_passes_prepare_cache_images(git_repo: Path, monkeypatch):
 def test_concepts_refresh_keeps_figure_nodes(git_repo: Path, monkeypatch):
     _write_digest(git_repo)
     _seed_text_concepts(git_repo)
-    monkeypatch.setenv("ARBOR_FAKE_MD", _fake_figure())
+    monkeypatch.setenv(
+        "ARBOR_FAKE_MD",
+        json.dumps(
+            _graph(
+                _node("Mitochondrion diagram", kind="figure"),
+                edges=[_edge("fig-mitochondrion-diagram", "glycolysis")],
+            )
+        ),
+    )
     first_code, _ = _run_generate(git_repo)
     assert first_code == 0
     monkeypatch.setenv(
@@ -182,6 +260,11 @@ def test_concepts_refresh_keeps_figure_nodes(git_repo: Path, monkeypatch):
                 "schema_version": 1,
                 "course": "Biology",
                 "nodes": [
+                    {
+                        "name": "Glycolysis",
+                        "summary": "Cytoplasmic breakdown of glucose to pyruvate.",
+                        "sources": [_source("digests/2026-08-15.md", "Cells")],
+                    },
                     {
                         "name": "Pyruvate",
                         "summary": "Three-carbon product.",
@@ -200,3 +283,5 @@ def test_concepts_refresh_keeps_figure_nodes(git_repo: Path, monkeypatch):
     by_id = {node["id"]: node for node in artifact["nodes"]}
     assert "pyruvate" in by_id
     assert by_id["fig-mitochondrion-diagram"]["kind"] == "figure"
+    pairs = {(edge["from"], edge["to"]) for edge in artifact["edges"]}
+    assert ("fig-mitochondrion-diagram", "glycolysis") in pairs

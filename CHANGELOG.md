@@ -8,12 +8,12 @@ Package version for the worker, desktop, and Tauri app. See [Version numbering](
 
 Diagrams (Wave 6, toward package `v2.7.0`).
 
-- `arbor-worker generate --skill diagrams` reads prepare-cache page images, forces `kind: figure` nodes with `fig-` ids, and merges them into `study/concepts.json`. Empty figure results succeed and leave the graph file untouched. A later concepts refresh keeps figure nodes.
+- `arbor-worker generate --skill diagrams` reads prepare-cache page images for that course’s source hashes, forces `kind: figure` nodes with `fig-` ids, and merges them into `study/concepts.json` with edges to related topics. Empty figure results succeed and leave the graph file untouched. A later concepts refresh keeps figure nodes and those links.
 - Graph tab: Generate figures, dashed figure chips in Notes, figure rows in the concept list. Source chips still open Notes.
 
 Citations (Wave 7, toward package `v2.8.0`).
 
-- `arbor-worker generate --skill citations` walks flashcards, quiz, and concepts locally. Matching claims stay quiet. Invented claims and missing digests emit `citation_failed` and write `study/citations.json` without rewriting the study artifacts.
+- `arbor-worker generate --skill citations` walks flashcards, quiz, and every cited digest on a concept. Matching claims stay quiet. Invented claims and missing digests emit `citation_failed` and write `study/citations.json` without rewriting the study artifacts.
 - Jobs panel Check citations. Unverified badges on cards, quiz review, and concept rows. Clicking a source still opens the cited digest. The inspector logs `skill_*` and `citation_failed` with skill, path, id, and reason instead of a bare event type.
 
 Graph (Wave 5, toward package `v2.6.0`).

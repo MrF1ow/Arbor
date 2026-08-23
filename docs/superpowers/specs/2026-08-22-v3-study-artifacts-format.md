@@ -35,6 +35,7 @@ Biology/
     flashcards.json        # committed
     quiz.json              # committed
     concepts.json          # committed (Wave 5; schema in knowledge-layer spec)
+    citations.json         # committed report of citation_failed rows (Wave 7)
   arbor-course.json        # unchanged v2 (fingerprints + digest records)
   course.md
 ```

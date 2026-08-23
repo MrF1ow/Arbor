@@ -121,6 +121,121 @@ def test_missing_digest_fails_without_crash(git_repo: Path):
     assert failed[0]["reason"] == "missing digest"
 
 
+def test_generate_flags_bogus_quiz_question(git_repo: Path):
+    _write_digest(git_repo)
+    _write_json(
+        git_repo,
+        "quiz.json",
+        {
+            "schema_version": 1,
+            "course": "Biology",
+            "questions": [
+                {
+                    "id": "q_honest",
+                    "type": "multiple_choice",
+                    "prompt": "What do cells do?",
+                    "choices": ["Divide", "Fly", "Sing", "Rust"],
+                    "answer_index": 0,
+                    "explanation": "Cells divide.",
+                    "source": {
+                        "digest": "digests/2026-08-15.md",
+                        "heading": "Cells",
+                    },
+                },
+                {
+                    "id": "q_bogus",
+                    "type": "multiple_choice",
+                    "prompt": "What about unicorns?",
+                    "choices": ["Photosynthesis", "Divide", "Fly", "Sing"],
+                    "answer_index": 0,
+                    "explanation": "Unicorns photosynthesize.",
+                    "source": {
+                        "digest": "digests/2026-08-15.md",
+                        "heading": "Cells",
+                    },
+                },
+            ],
+        },
+    )
+    prior = (git_repo / "Biology" / "study" / "quiz.json").read_bytes()
+
+    code, events = _run_generate(git_repo)
+
+    assert code == 0
+    assert (git_repo / "Biology" / "study" / "quiz.json").read_bytes() == prior
+    failed = [event for event in events if event["type"] == "citation_failed"]
+    assert [event["id"] for event in failed] == ["q_bogus"]
+    assert failed[0]["path"] == "study/quiz.json"
+
+
+def test_missing_heading_fails_without_crash(git_repo: Path):
+    _write_digest(git_repo)
+    _write_json(
+        git_repo,
+        "flashcards.json",
+        {
+            "schema_version": 1,
+            "course": "Biology",
+            "cards": [
+                {
+                    "id": "fc_heading",
+                    "front": "What do cells do?",
+                    "back": "Cells divide.",
+                    "tags": [],
+                    "source": {
+                        "digest": "digests/2026-08-15.md",
+                        "heading": "Mitochondria",
+                    },
+                }
+            ],
+        },
+    )
+
+    code, events = _run_generate(git_repo)
+
+    assert code == 0
+    failed = [event for event in events if event["type"] == "citation_failed"]
+    assert failed[0]["id"] == "fc_heading"
+    assert failed[0]["reason"] == "missing heading"
+
+
+def test_concept_later_source_is_checked(git_repo: Path):
+    _write_digest(git_repo)
+    _write_json(
+        git_repo,
+        "concepts.json",
+        {
+            "schema_version": 1,
+            "course": "Biology",
+            "nodes": [
+                {
+                    "id": "glycolysis",
+                    "name": "Glycolysis",
+                    "summary": "Cells divide.",
+                    "sources": [
+                        {
+                            "digest": "digests/2026-08-15.md",
+                            "heading": "Cells",
+                        },
+                        {
+                            "digest": "digests/missing.md",
+                            "heading": "Later lecture",
+                        },
+                    ],
+                }
+            ],
+            "edges": [],
+        },
+    )
+
+    code, events = _run_generate(git_repo)
+
+    assert code == 0
+    failed = [event for event in events if event["type"] == "citation_failed"]
+    assert [event["id"] for event in failed] == ["glycolysis"]
+    assert failed[0]["reason"] == "missing digest"
+
+
 def test_validate_accepts_empty_failures():
     report = CitationsSkill().validate(
         {"schema_version": 1, "course": "Biology", "failures": []}

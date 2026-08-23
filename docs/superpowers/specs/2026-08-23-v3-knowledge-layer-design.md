@@ -113,7 +113,7 @@ If a page has no usable figure, skip it. Empty result is success, not failure.
 
 Every study artifact already carries `source.digest` and optional `source.heading` (see study format spec). Verification is local. Arbor does not fetch the web.
 
-Skill `citations` walks flashcards, quiz items, and concept nodes. For each claim it checks that the cited digest exists and that a normalized form of the claim (or a short quoted span) appears in that digest body. Failures emit `citation_failed` with path and id. Prior JSON stays in place. The UI shows a badge, not a silent rewrite.
+Skill `citations` walks flashcards, quiz items, and concept nodes. For each claim it checks every cited digest: the file exists and a normalized form of the claim (or a short quoted span) appears in that digest body. Failures emit `citation_failed` with path and id, and are also written to `study/citations.json` so the desktop can badge unverified items after restart without rewriting flashcards, quiz, or concepts. Prior study JSON stays in place. The UI shows a badge, not a silent rewrite.
 
 This is the trust layer a tutor needs before it quotes a card as fact.
 

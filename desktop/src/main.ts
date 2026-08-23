@@ -584,6 +584,10 @@ function renderConceptGraph() {
     const conceptFailed = failedIdsFor(citationsReport, "study/concepts.json");
     btn.textContent = node.kind === "figure" ? `Figure · ${node.name}` : node.name;
     if (conceptFailed.has(node.id)) btn.classList.add("unverified");
+    btn.addEventListener("click", () => {
+      selectedConceptId = node.id;
+      renderConceptGraph();
+    });
     conceptListEl.appendChild(btn);
   }
   conceptNameEl.textContent =

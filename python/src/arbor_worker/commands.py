@@ -186,7 +186,7 @@ def cmd_generate(args) -> int:
         else study_dir / f"{skill.name}.json"
     )
     image_paths = (
-        cached_page_images(root, settings.cache_dir_name)
+        cached_page_images(root, settings.cache_dir_name, course_dir)
         if isinstance(skill, DiagramsSkill)
         else []
     )
@@ -355,10 +355,13 @@ def cmd_generate(args) -> int:
                 ]
                 if figures:
                     figure_ids = {node.id for node in figures}
+                    known = {node.id for node in artifact.nodes} | figure_ids
                     figure_edges = [
                         edge
                         for edge in existing_graph.edges
-                        if edge.from_ in figure_ids and edge.to in figure_ids
+                        if (edge.from_ in figure_ids or edge.to in figure_ids)
+                        and edge.from_ in known
+                        and edge.to in known
                     ]
                     artifact = merge_graphs(
                         [
