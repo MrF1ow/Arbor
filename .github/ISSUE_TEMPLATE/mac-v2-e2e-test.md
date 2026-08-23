@@ -10,7 +10,7 @@ assignees: ''
 
 Manual end-to-end test plan for **Version 2** on a MacBook. Verify search, folder watch, job history, notifications, Word ingest, and optional OCR.
 
-**Important:** The [1.0.0 DMG release](https://github.com/MrF1ow/Arbor/releases/latest) predates V2. Run from **`main` in dev** (or a fresh DMG built from `main`) to test V2 features.
+**Important:** Use the **2.0.0** DMG (`v2.0.0`) or run from **`main` in dev**. The older [1.0.0 DMG](https://github.com/MrF1ow/Arbor/releases/tag/v1.0.0) is Version 1 only.
 
 Related: [V2 program plan](docs/superpowers/plans/2026-08-19-v2-automation/overview.md), [desktop manual checklist](desktop/README.md).
 
@@ -194,12 +194,13 @@ uv run arbor-worker reindex --root "$ROOT"
 
 ---
 
-## 6. Packaged Mac build (optional)
+## 6. Packaged Mac build
 
-To test the DMG path with V2 (not the old 1.0.0 release):
+To test the 2.0.0 DMG:
 
+- Download the `v2.0.0` GitHub Release, or
 - Build locally: `cd desktop && npm run tauri build`, or
-- Download latest **`macos-dmg`** artifact from a CI run on `main`
+- Download the **`arbor-macos-dmg`** artifact from a CI run on `main`
 
 Codex stays a separate install. Gatekeeper may require **Open Anyway** for unsigned builds.
 

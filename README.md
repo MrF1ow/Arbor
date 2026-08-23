@@ -1,20 +1,33 @@
 # Arbor
 
-Local-first desktop app that turns course PDFs and PowerPoints into structured study digests using the [Codex CLI](https://developers.openai.com/codex/cli). Your Knowledge library is a normal git repo on disk. Sources and generated notes stay together in history.
+Local-first desktop app that turns course PDFs, PowerPoints, and Word files into structured study digests using the [Codex CLI](https://developers.openai.com/codex/cli). Your Knowledge library is a normal git repo on disk. Sources and generated notes stay together in history.
 
-**Current release:** [1.0.0](CHANGELOG.md) (git tag `v1.0.0`). Worker, desktop, and Tauri all report this number (`arbor-worker --version`).
+**Current release:** [2.0.0](CHANGELOG.md) (git tag `v2.0.0`). Worker, desktop, and Tauri all report this number (`arbor-worker --version`). This is [PROJECT.md](PROJECT.md) Version 2.
 
-**Product milestone:** [PROJECT.md](PROJECT.md) Version 2. Automation (folder watch, search, job history) ships on `main`. See [V2 program plan](docs/superpowers/plans/2026-08-19-v2-automation/overview.md).
-
-For vision and later milestones, see [`PROJECT.md`](PROJECT.md). The original V1 design (`lecture.md` per lecture) is historical: [`docs/superpowers/specs/2026-08-02-arbor-v1-design.md`](docs/superpowers/specs/2026-08-02-arbor-v1-design.md). Living layout is course folders, dated `digests/`, and `arbor-course.json`.
+For later milestones, see [`PROJECT.md`](PROJECT.md). The original V1 design (`lecture.md` per lecture) is historical: [`docs/superpowers/specs/2026-08-02-arbor-v1-design.md`](docs/superpowers/specs/2026-08-02-arbor-v1-design.md). Living layout is course folders, dated `digests/`, and `arbor-course.json`.
 
 ## Download (macOS)
 
-Download the `.dmg` from the [latest GitHub Release](https://github.com/MrF1ow/Arbor/releases/latest). The `macos-dmg` workflow also uploads an `arbor-macos-dmg` artifact. That runner is usually Apple Silicon.
+Download the `.dmg` from the [latest GitHub Release](https://github.com/MrF1ow/Arbor/releases/latest). Apple Silicon runner. Pushing a `v*` tag builds the DMG and publishes that Release. Pushes to `main` still upload an `arbor-macos-dmg` artifact from `macos-dmg`.
 
 Install the [Codex CLI](https://developers.openai.com/codex/cli) yourself and log in before the first Update. The app includes `arbor-worker`. It does not include Codex. Signing and notarization stay off until Apple secrets are added, so macOS Gatekeeper may require Open Anyway.
 
 Clone and run from source for Linux, or to develop.
+
+## What's in 2.0.0
+
+| Area | What you can do |
+|------|-----------------|
+| Ingest | PDF, PPTX, and DOCX. Optional Tesseract OCR on scanned PDF pages. |
+| Review | Page ranges, leftover-page suggestions, in-place digest patch. |
+| Library | Course folders, dated `digests/`, `course.md`, `arbor-course.json` v2 fingerprints. |
+| Watch | Drop a file, wait ~3 seconds, review panel appears. No settings file required. |
+| Auto-run | Opt in with `"auto_update": true` in `.arbor/settings.json`. |
+| Search | Box in the app. `arbor-worker reindex --root` rebuilds FTS. |
+| Jobs | Recent runs with expandable logs. One update at a time. |
+| Notify | macOS notification when a job finishes. |
+
+The window is still the Version 1 single-column shell. Visual redesign is Version 3. Flashcards, quizzes, and chat are later milestones. Codex CLI is still a separate install.
 
 ---
 
@@ -44,7 +57,7 @@ Editing digests by hand never triggers reprocessing.
 
 | Requirement | Notes |
 |-------------|--------|
-| **macOS or Linux** | V1 targets these; Windows is untested |
+| **macOS or Linux** | Packaged DMG is macOS. Linux runs from source. Windows is untested |
 | **Git** | Knowledge library must be a git repo |
 | **Codex CLI** | Installed and logged in — [Codex CLI docs](https://developers.openai.com/codex/cli) |
 | **Python ≥ 3.11** | Worker runtime |
@@ -147,10 +160,11 @@ Knowledge/                          # git repo root
     settings.json         # delete_sources_after_digest, auto_update, watch_enabled
 ```
 
-**Format guidance (V1):**
+**Format guidance:**
 
 - **PDF** — best for annotated lectures (ink, handwriting).
 - **PPTX** — best for clean slide decks with real text on slides.
+- **DOCX** — Word notes and readings.
 
 ---
 
@@ -163,8 +177,11 @@ Knowledge/                          # git repo root
    (`151-300`, `40-55, 120-122`), then Confirm. Clean appends pre-fill the new tail.
    Ambiguous alignment shows a note; set ranges yourself. Blank on a new file is
    the whole file. Blank on a truncated file does no work.
-5. **Cancel** — Stops after the current range or digest action finishes. Completed work is kept.
-6. **Open folder** — Opens the Knowledge root in your file manager.
+5. **Folder watch** — With the app open, drop a PDF, PPTX, DOCX, or Markdown file into a course folder. After about 3 seconds the review panel appears. Confirm as usual. Silent auto-run needs `"auto_update": true`.
+6. **Search** — Type in **Search knowledge**. Reindex rebuilds the FTS index from markdown.
+7. **Recent runs** — Expand a row for that job's log.
+8. **Cancel** — Stops after the current range or digest action finishes. Completed work is kept.
+9. **Open folder** — Opens the Knowledge root in your file manager.
 
 ---
 
@@ -243,7 +260,7 @@ cd src-tauri && cargo build
 ```
 Arbor/
 ├── README.md           # this file
-├── CHANGELOG.md        # package releases (1.0.0, …)
+├── CHANGELOG.md        # package releases (2.0.0, …)
 ├── PROJECT.md          # vision and Version 1–5 roadmap
 ├── scripts/            # sidecar bundle helper for the macOS DMG
 ├── python/             # arbor-worker CLI and pipeline
@@ -296,6 +313,7 @@ Model IDs must match what your Codex CLI accepts.
 | Wrong page window | Check `suggested_ranges` from `plan-update`. Blank is whole-file only for new sources, not truncation. |
 | PPTX prepare failed | Export slides as PDF, or install LibreOffice for image fallback |
 | Desktop can't find worker | Packaged app uses the bundled sidecar. From a clone, set `ARBOR_REPO_DIR` to the Arbor repo root |
+| Watch stays silent | Folder selected; wait 3s. Missing settings.json still watches. Set `"watch_enabled": false` only to disable. |
 | Wayland / NVIDIA crash | See [Linux graphics](#linux-graphics-wayland--nvidia) |
 
 ---

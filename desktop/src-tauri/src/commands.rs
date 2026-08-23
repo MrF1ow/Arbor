@@ -203,6 +203,7 @@ pub fn start_update(
     root: String,
     model: String,
     selections: Vec<Selection>,
+    trigger: Option<String>,
 ) -> Result<String, String> {
     let auth = worker::run_worker_json(&repo_dir(&app), &["check-auth"])?;
     let authenticated = auth
@@ -220,7 +221,12 @@ pub fn start_update(
     let plan_json = serde_json::to_string(&serde_json::json!({ "selections": selections }))
         .map_err(|e| e.to_string())?;
     let knowledge_root = Path::new(&root);
-    let job_id = jobs::create_job(knowledge_root, JobTrigger::Manual, &model, &plan_json)?;
+    let job_id = jobs::create_job(
+        knowledge_root,
+        JobTrigger::from_arg(trigger.as_deref()),
+        &model,
+        &plan_json,
+    )?;
 
     {
         let mut guard = coordinator.lock().map_err(|e| e.to_string())?;

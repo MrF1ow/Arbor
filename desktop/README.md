@@ -1,6 +1,8 @@
 # Arbor Desktop
 
-Minimal Tauri v2 shell for Arbor (package **1.0.0**). Drives the `arbor-worker` CLI (see `../python`).
+Tauri v2 shell for Arbor (package **2.0.0**). Drives the `arbor-worker` CLI (see `../python`).
+
+The UI is still the Version 1 single-column layout. Search, folder watch, job history, and notifications sit on that screen. A professional shell is Version 3.
 
 ## Prerequisites
 
@@ -22,9 +24,10 @@ cd desktop && npm install && npm run tauri dev
 sidecar binary sits next to the app executable. `ARBOR_PYTHON_DIR` overrides just the uv
 project dir. A packaged Mac build launches `arbor-worker` from the Tauri sidecar instead of `uv`.
 
-The DMG is produced by `.github/workflows/macos-dmg.yml`. `scripts/bundle-worker.sh` builds
-the sidecar. `src-tauri/tauri.bundle.json` is a merge config used only for that build so
-`tauri dev` still uses `uv`.
+The DMG is produced by `.github/workflows/macos-dmg.yml` (artifact on `main`) and
+`.github/workflows/release-macos.yml` (GitHub Release on a `v*` tag).
+`scripts/bundle-worker.sh` builds the sidecar. `src-tauri/tauri.bundle.json` is a merge
+config used only for that build so `tauri dev` still uses `uv`.
 
 ## Linux graphics (Wayland / NVIDIA)
 
@@ -64,3 +67,6 @@ See [Tauri Linux graphics debugging](https://v2.tauri.app/develop/debug/linux-gr
 11. **Cancel:** with two changed sources, click Cancel after the first → only completed digests are
    committed; log shows "Cancelled".
 12. **Open folder:** click Open → the Knowledge folder opens in the file manager.
+13. **Search:** after a digest exists, type a word from it in Search knowledge → a hit opens the course folder.
+14. **Folder watch:** drop a new PDF into a course folder, wait ~3 seconds → review panel, no settings file required.
+15. **Job history:** Recent runs shows the last Update with an expandable log.
