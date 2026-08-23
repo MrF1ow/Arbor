@@ -1427,6 +1427,28 @@ function renderEvent(ev: WorkerEvent) {
     case "error":
       logLine(`Error: ${ev.message}`);
       break;
+    case "skill_started":
+      logLine(`Study ${ev.skill ?? "skill"} started`);
+      break;
+    case "skill_progress":
+      logLine(
+        `Study ${ev.skill ?? "skill"} retry ${ev.attempt ?? "?"}/${ev.attempts ?? "?"}${ev.message ? `: ${ev.message}` : ""}`,
+      );
+      break;
+    case "skill_done":
+      logLine(`Study ${ev.skill ?? "skill"} wrote ${ev.file ?? "artifact"}`);
+      break;
+    case "skill_failed":
+      logLine(`Study ${ev.skill ?? "skill"} failed${ev.message ? `: ${ev.message}` : ""}`);
+      break;
+    case "skill_stale_skipped":
+      logLine(`Study ${ev.skill ?? "skill"} unchanged`);
+      break;
+    case "citation_failed":
+      logLine(
+        `Citation failed ${ev.path ?? "artifact"} ${ev.id ?? ""}: ${ev.reason ?? ""}`,
+      );
+      break;
     case "worker_exit":
       updateBtn.disabled = false;
       cancelBtn.disabled = true;
@@ -1470,7 +1492,7 @@ async function handleJobFinished(finished: JobFinished) {
     void loadQuiz(currentCourse);
     void loadCitations(currentCourse);
     if (currentMode === "graph") void loadGraph(currentCourse);
-    if (currentMode === "notes") {
+    if (currentMode === "notes" || currentNotesPath) {
       void loadCourseContent(currentCourse, currentNotesPath ?? undefined);
     }
   }

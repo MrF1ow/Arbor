@@ -234,4 +234,11 @@ export interface WorkerEvent {
   root?: string;
   page_start?: number;
   page_end?: number;
+  skill?: string;
+  course?: string;
+  file?: string;
+  path?: string;
+  id?: string;
+  attempt?: number;
+  attempts?: number;
 }
