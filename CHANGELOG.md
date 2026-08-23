@@ -6,6 +6,12 @@ Package version for the worker, desktop, and Tauri app. See [Version numbering](
 
 ## Unreleased
 
+Study framework (Wave 1, toward package `v2.2.0`).
+
+- `arbor-worker generate --root --course --skill fixture` writes `study/fixture.json` and `study/manifest.json`, then commits `study: {course} fixture`. Unchanged digests emit `skill_stale_skipped`. Invalid JSON retries twice and leaves a prior artifact untouched.
+- `.gitignore` gains `.arbor/progress/` and `.arbor/vectors.sqlite` on generate.
+- Desktop `start_study_job` reuses the job mutex with copy "A job is already running for {root}". Flashcards and Quiz tabs show an empty state with Generate visible and disabled.
+
 ## 2.1.0 — 2026-08-22
 
 Git tag: `v2.1.0`. **Product:** Version 3 in progress (shell only). Not `v3.0.0` — that tag is reserved for full Version 3 completion.
