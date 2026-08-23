@@ -36,3 +36,5 @@ Same framework as flashcards. A student runs a multiple-choice quiz generated fr
 **Static.** pytest, cargo test, npm run build.
 
 **Runtime.** 10+ question pack from a multi-digest course. Wrong answer shows explanation. Git commit `study: Biology quiz`. Ingest still works.
+
+Previous/Next clearing `submitted` (and a second Submit counting again) is Wave 8 ([wave-8-closeout.md](wave-8-closeout.md)).

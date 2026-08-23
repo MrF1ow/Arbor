@@ -212,8 +212,8 @@ Events: `skill_started`, `skill_progress`, `skill_done`, `skill_failed`, `skill_
 | Mode | Data | UI |
 |------|------|-----|
 | **Notes** | `digests/*.md` | Existing preview |
-| **Flashcards** | `study/flashcards.json` | Deck view, flip, shuffle; header shows stale badge |
-| **Quiz** | `study/quiz.json` | One question at a time, immediate feedback |
+| **Flashcards** | `study/flashcards.json` | Deck view, flip, then Again / Wrong / Mastered. Header shows stale badge |
+| **Quiz** | `study/quiz.json` | One question at a time, immediate feedback. Previous/Next restore a submitted answer. Score each id once per session |
 
 **Empty state:** "No flashcards yet" + **Generate** button (not only Coming soon).
 
@@ -221,9 +221,9 @@ Events: `skill_started`, `skill_progress`, `skill_done`, `skill_failed`, `skill_
 
 **Stale badge:** Compare manifest `content_sha256` to live digest hashes. Copy: "Digests updated since last generation."
 
-Clicking a source citation in a card opens Notes mode scrolled to that digest (and heading if we add anchor IDs later).
+Clicking a source citation in a card opens Notes mode scrolled to that digest heading. `renderMarkdown` stamps `id` on `h2`/`h3`. A missing heading opens the digest at the top.
 
-Progress (again, wrong, mastered) stays in `.arbor/progress/` and does not git-commit.
+Progress (again, wrong, mastered) stays in `.arbor/progress/` and does not git-commit. Flip and Next do not grade. Again increments `seen`. Wrong increments `seen` and `wrong`. Mastered increments `seen` and `correct`.
 
 ## Git
 

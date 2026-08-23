@@ -6,7 +6,14 @@ Package version for the worker, desktop, and Tauri app. See [Version numbering](
 
 ## Unreleased
 
-Diagrams (Wave 6, toward package `v2.7.0`).
+Closeout (Wave 8, issue #42, toward package `v2.2.0`). Design only on this docs PR. Implementation: [`docs/superpowers/plans/2026-08-22-v3-program/wave-8-closeout.md`](docs/superpowers/plans/2026-08-22-v3-program/wave-8-closeout.md).
+
+- Flashcard Again / Wrong / Mastered write `correct` / `wrong`. Flip and Next do not grade.
+- Quiz Previous/Next restore a submitted answer. Each question id is scored once per session.
+- Source chips scroll to the cited heading.
+- Living docs and Mac E2E checklist match the study loop. Do not backfill tags `v2.3.0` through `v2.8.0`.
+
+Diagrams (Wave 6, on `main`).
 
 - `arbor-worker generate --skill diagrams` reads prepare-cache page images for that course’s source hashes, forces `kind: figure` nodes with `fig-` ids, and merges them into `study/concepts.json` with edges to related topics. Empty figure results succeed and leave the graph file untouched. A later concepts refresh keeps figure nodes and those links.
 - Graph tab: Generate figures, dashed figure chips in Notes, figure rows in the concept list. Source chips still open Notes.
