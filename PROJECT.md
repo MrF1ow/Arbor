@@ -576,30 +576,36 @@ A study app a student would download, with local memory and a concept graph an A
 
 The shell is the storefront. Flashcards and quiz are the study loop. Embeddings, concepts, cross-document links, and a graph-lite view are the memory a later tutor (Version 4) will use instead of rereading every digest. Diagram analysis and citation checks ground that memory in the notes the student already has.
 
-**Status:** In progress. **`v3.0.0` ships when every feature in "Required for v3.0.0" below is done.** None of those items are stretch. Incremental delivery uses `v2.1.0`, `v2.2.0`, … Package `v2.1.0` is the first step after Version 2.
+**Status:** In progress. **`v3.0.0` ships when every feature in "Required for v3.0.0" below is done.** None of those items are stretch. Incremental delivery uses `v2.1.0`, `v2.2.0`, … Package `v2.1.0` is the first step after Version 2. Waves 1 through 7 are on `main` untagged. Wave 8 is issue [#42](https://github.com/MrF1ow/Arbor/issues/42).
 
 **Shipped so far (`v2.1.0`):** desktop shell — [`docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md`](docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md).
 
-Implementation program: [`docs/superpowers/plans/2026-08-22-v3-program/overview.md`](docs/superpowers/plans/2026-08-22-v3-program/overview.md). Study artifact format: [`docs/superpowers/specs/2026-08-22-v3-study-artifacts-format.md`](docs/superpowers/specs/2026-08-22-v3-study-artifacts-format.md). Knowledge layer: [`docs/superpowers/specs/2026-08-23-v3-knowledge-layer-design.md`](docs/superpowers/specs/2026-08-23-v3-knowledge-layer-design.md).
+Implementation program: [`docs/superpowers/plans/2026-08-22-v3-program/overview.md`](docs/superpowers/plans/2026-08-22-v3-program/overview.md). Study artifact format: [`docs/superpowers/specs/2026-08-22-v3-study-artifacts-format.md`](docs/superpowers/specs/2026-08-22-v3-study-artifacts-format.md). Knowledge layer: [`docs/superpowers/specs/2026-08-23-v3-knowledge-layer-design.md`](docs/superpowers/specs/2026-08-23-v3-knowledge-layer-design.md). Closeout: [`docs/superpowers/specs/2026-08-23-v3-closeout-design.md`](docs/superpowers/specs/2026-08-23-v3-closeout-design.md).
 
 Shipped in v2.1.0 (shell only)
 
 * Professional desktop shell (sidebar, course mode tabs, digest preview, job inspector)
 * In-app settings (watch, auto-run, delete-after-digest, model)
 * Search overlay navigates to digest preview in Notes mode
-* Flashcards and Quiz tabs (Coming soon placeholders)
+* Flashcards and Quiz tabs (Coming soon placeholders at that tag)
 
-Required for `v3.0.0` (not yet shipped)
+On `main` (package still 2.1.0, PRs #36–#41)
 
-* Flashcards
-* Quiz generation
-* Concept extraction
-* Cross-document linking
-* Knowledge graph (list and neighbors, not a pretty canvas)
-* Embeddings
-* Semantic search
-* Diagram analysis (figures become graph nodes)
-* Citation verification (local, against cited digest text)
+* Study generate jobs, skill protocol, retries
+* Flashcards and quiz generate / refresh / review
+* Local hashed embeddings and semantic search
+* Concepts, cross-document links, graph-lite UI
+* Diagram figures merged into the graph
+* Local citation checks and Unverified badges
+
+Required for `v3.0.0` (Wave 8, issue #42)
+
+* Flashcard Again / Wrong / Mastered (progress `correct` / `wrong` actually written from the UI)
+* Quiz session answers that do not double-count on Previous/Next
+* Source chips scroll to the cited heading
+* Living docs match the app (README still describes Coming soon)
+* Mac E2E study-loop run recorded
+* Package `2.2.0`, then tag `v3.0.0` after that Mac run
 
 ---
 

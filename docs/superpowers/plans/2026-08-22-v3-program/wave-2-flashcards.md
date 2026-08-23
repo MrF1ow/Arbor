@@ -44,3 +44,5 @@ A student opens Biology → Flashcards, generates a deck from committed digests,
 
 - One Codex call per course. Split per digest only when the concatenated digest text exceeds the skill budget, then merge and drop duplicate fronts.
 - Model-supplied ids are ignored.
+
+Wave 2 only increments `seen` on flip/next. Again / Wrong / Mastered are Wave 8 ([wave-8-closeout.md](wave-8-closeout.md)).
