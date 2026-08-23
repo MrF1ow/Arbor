@@ -28,9 +28,4 @@ test("flashcard panel exposes generation, deck controls, and settings", async ()
     /id="generate-flashcards"[^>]*disabled/,
     "flashcard generation must not be permanently disabled",
   );
-  assert.match(
-    html,
-    /id="generate-quiz"[^>]*disabled/,
-    "quiz generation must remain disabled",
-  );
 });

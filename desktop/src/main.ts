@@ -14,6 +14,18 @@ import {
   shouldAutoGenerateFlashcards,
   shuffleCards,
 } from "./flashcards";
+import {
+  createReview as createQuizReview,
+  currentQuestion,
+  nextReview as nextQuizReview,
+  parseQuizPack,
+  parseQuizProgress,
+  previousReview as previousQuizReview,
+  quizJobArgs,
+  selectChoice,
+  shouldAutoGenerateQuiz,
+  submitChoice,
+} from "./quiz";
 import { renderMarkdown } from "./markdown";
 import type {
   AuthStatus,
@@ -26,6 +38,8 @@ import type {
   KnowledgeSettings,
   Model,
   PendingSource,
+  QuizProgress,
+  QuizReview,
   SearchHit,
   Selection,
   Settings,
@@ -70,6 +84,21 @@ const flashcardFlipBtn = $("flashcard-flip");
 const flashcardNextBtn = $("flashcard-next");
 const flashcardShuffleBtn = $("flashcard-shuffle");
 const quizCopyEl = $("quiz-copy");
+const quizEmptyEl = $("quiz-empty");
+const quizPackEl = $("quiz-pack");
+const generateQuizBtn = $("generate-quiz") as HTMLButtonElement;
+const refreshQuizBtn = $("refresh-quiz") as HTMLButtonElement;
+const quizStaleEl = $("quiz-stale");
+const quizCountEl = $("quiz-count");
+const quizPromptEl = $("quiz-prompt");
+const quizChoiceBtns = [0, 1, 2, 3].map(
+  (index) => $(`quiz-choice-${index}`) as HTMLButtonElement,
+);
+const quizSubmitBtn = $("quiz-submit") as HTMLButtonElement;
+const quizExplanationEl = $("quiz-explanation");
+const quizSourceBtn = $("quiz-source") as HTMLButtonElement;
+const quizPrevBtn = $("quiz-prev");
+const quizNextBtn = $("quiz-next");
 const jobsListEl = $("jobs-list");
 const jobsLogEl = $("jobs-log");
 const modelSel = $("model") as HTMLSelectElement;
@@ -78,6 +107,7 @@ const toggleAuto = $("toggle-auto");
 const toggleEmbed = $("toggle-embed");
 const toggleDelete = $("toggle-delete");
 const toggleAutoFlashcards = $("toggle-auto-flashcards");
+const toggleAutoQuiz = $("toggle-auto-quiz");
 const reindexBtn = $("reindex") as HTMLButtonElement;
 const updateBtn = $("update") as HTMLButtonElement;
 const cancelBtn = $("cancel") as HTMLButtonElement;
@@ -100,6 +130,7 @@ let authed = false;
 let activeUpdateJobId: string | null = null;
 let studyJobRunning = false;
 let pendingAutoEmbed = false;
+let pendingAutoQuiz = false;
 let searchTimer: number | null = null;
 let currentPlace: Place = "welcome";
 let currentCourse: string | null = null;
@@ -108,6 +139,9 @@ let courses: string[] = [];
 let flashcardReview: FlashcardReview | null = null;
 let flashcardProgress: FlashcardProgress = {};
 let flashcardCourse: string | null = null;
+let quizReview: QuizReview | null = null;
+let quizProgress: QuizProgress = {};
+let quizCourse: string | null = null;
 let progressWrite = Promise.resolve();
 
 function logLine(text: string) {
@@ -151,6 +185,7 @@ function setCourseView(course: string, mode: Mode = currentMode, notesPath?: str
   setNavActive("course", course);
   if (mode === "notes") void loadCourseContent(course, notesPath);
   if (mode === "flashcards") void loadFlashcards(course);
+  if (mode === "quiz") void loadQuiz(course);
   refreshStudyEnabled();
 }
 
@@ -191,6 +226,8 @@ function refreshStudyEnabled() {
   );
   generateFlashcardsBtn.disabled = !enabled;
   refreshFlashcardsBtn.disabled = !enabled;
+  generateQuizBtn.disabled = !enabled;
+  refreshQuizBtn.disabled = !enabled;
 }
 
 function refreshFolderTools() {
@@ -361,6 +398,104 @@ async function startFlashcardJob(force: boolean) {
     studyJobRunning = false;
     refreshStudyEnabled();
     logLine(`Flashcard generation failed to start: ${error}`);
+  }
+}
+
+function renderCurrentQuiz() {
+  if (!quizReview) return;
+  const question = currentQuestion(quizReview);
+  quizCountEl.textContent = `${quizReview.index + 1} of ${quizReview.questions.length}`;
+  quizPromptEl.textContent = question.prompt;
+  quizChoiceBtns.forEach((button, index) => {
+    button.textContent = question.choices[index];
+    button.classList.toggle("selected", quizReview?.selected === index);
+    button.classList.toggle(
+      "correct",
+      Boolean(quizReview?.submitted && index === question.answer_index),
+    );
+    button.classList.toggle(
+      "wrong",
+      Boolean(
+        quizReview?.submitted &&
+          quizReview.selected === index &&
+          index !== question.answer_index,
+      ),
+    );
+  });
+  quizExplanationEl.hidden = !quizReview.submitted;
+  quizExplanationEl.textContent = quizReview.submitted ? question.explanation : "";
+  quizSourceBtn.textContent = question.source.heading
+    ? `${question.source.digest} · ${question.source.heading}`
+    : question.source.digest;
+  quizSubmitBtn.disabled = quizReview.submitted || quizReview.selected === null;
+}
+
+async function loadQuiz(course: string) {
+  if (!knowledgeRoot) return;
+  const root = knowledgeRoot;
+  try {
+    const packValue = await invoke<unknown>("read_study_json", {
+      root,
+      course,
+      file: "quiz.json",
+    });
+    const pack = parseQuizPack(packValue);
+    if (pack.course !== course) throw new Error(`Pack course is ${pack.course}`);
+    const progressValue = await invoke<unknown>("read_quiz_progress", {
+      root,
+      course,
+    });
+    const stale = await invoke<boolean>("study_artifact_stale", {
+      root,
+      course,
+      skill: "quiz",
+    });
+    if (currentCourse !== course) return;
+    quizReview = createQuizReview(pack);
+    quizProgress = parseQuizProgress(progressValue);
+    quizCourse = course;
+    quizEmptyEl.hidden = true;
+    quizPackEl.hidden = false;
+    quizStaleEl.hidden = !stale;
+    renderCurrentQuiz();
+  } catch {
+    if (currentCourse !== course) return;
+    quizReview = null;
+    quizProgress = {};
+    quizCourse = course;
+    quizEmptyEl.hidden = false;
+    quizPackEl.hidden = true;
+    quizCopyEl.textContent = `No quiz yet for ${course}. Generate questions from your digests.`;
+  }
+  refreshStudyEnabled();
+}
+
+function persistQuizProgress() {
+  if (!knowledgeRoot || !quizCourse) return;
+  const root = knowledgeRoot;
+  const course = quizCourse;
+  const data = quizProgress;
+  progressWrite = progressWrite
+    .then(() => invoke<void>("write_quiz_progress", { root, course, data }))
+    .catch((error) => logLine(`Could not save quiz progress: ${error}`));
+}
+
+async function startQuizJob(force: boolean) {
+  if (!knowledgeRoot || !currentCourse || !modelSel.value) return;
+  await refreshAuth();
+  if (!authed) return;
+  studyJobRunning = true;
+  refreshStudyEnabled();
+  try {
+    const jobId = await invoke<string>(
+      "start_study_job",
+      quizJobArgs(knowledgeRoot, currentCourse, force, modelSel.value),
+    );
+    logLine(`Quiz job ${jobId} started.`);
+  } catch (error) {
+    studyJobRunning = false;
+    refreshStudyEnabled();
+    logLine(`Quiz generation failed to start: ${error}`);
   }
 }
 
@@ -621,15 +756,27 @@ async function loadKnowledgeSettingsUi() {
     setToggle(toggleEmbed, ks.auto_embed);
     setToggle(toggleDelete, ks.delete_sources_after_digest);
     setToggle(toggleAutoFlashcards, ks.auto_generate.flashcards);
+    setToggle(toggleAutoQuiz, ks.auto_generate.quiz);
   } catch {
     /* settings file may not exist yet */
   }
 }
 
-async function saveKnowledgeSettings(partial: Partial<KnowledgeSettings>) {
+async function saveKnowledgeSettings(
+  partial: Omit<Partial<KnowledgeSettings>, "auto_generate"> & {
+    auto_generate?: Partial<KnowledgeSettings["auto_generate"]>;
+  },
+) {
   if (!knowledgeRoot) return;
   const current = await invoke<KnowledgeSettings>("get_knowledge_settings", { root: knowledgeRoot });
-  const next = { ...current, ...partial };
+  const next: KnowledgeSettings = {
+    ...current,
+    ...partial,
+    auto_generate: {
+      ...current.auto_generate,
+      ...(partial.auto_generate ?? {}),
+    },
+  };
   await invoke("save_knowledge_settings", { root: knowledgeRoot, settings: next });
 }
 
@@ -783,6 +930,12 @@ toggleAutoFlashcards.addEventListener("click", async () => {
   await saveKnowledgeSettings({ auto_generate: { flashcards: on } });
 });
 
+toggleAutoQuiz.addEventListener("click", async () => {
+  const on = toggleAutoQuiz.classList.contains("off");
+  setToggle(toggleAutoQuiz, on);
+  await saveKnowledgeSettings({ auto_generate: { quiz: on } });
+});
+
 reindexBtn.addEventListener("click", async () => {
   if (!knowledgeRoot) return;
   try {
@@ -805,6 +958,14 @@ generateFlashcardsBtn.addEventListener("click", () => {
 
 refreshFlashcardsBtn.addEventListener("click", () => {
   void startFlashcardJob(true);
+});
+
+generateQuizBtn.addEventListener("click", () => {
+  void startQuizJob(false);
+});
+
+refreshQuizBtn.addEventListener("click", () => {
+  void startQuizJob(true);
 });
 
 flashcardFlipBtn.addEventListener("click", () => {
@@ -841,6 +1002,42 @@ flashcardSourceBtn.addEventListener("click", () => {
   if (!flashcardReview || !flashcardCourse) return;
   const path = `${flashcardCourse}/${currentCard(flashcardReview).source.digest}`;
   setCourseView(flashcardCourse, "notes", path);
+});
+
+quizChoiceBtns.forEach((button) => {
+  button.addEventListener("click", () => {
+    if (!quizReview) return;
+    const index = Number(button.dataset.index);
+    quizReview = selectChoice(quizReview, index);
+    renderCurrentQuiz();
+  });
+});
+
+quizSubmitBtn.addEventListener("click", () => {
+  if (!quizReview || quizReview.selected === null) return;
+  const result = submitChoice(quizReview, quizReview.selected, quizProgress);
+  quizReview = result.review;
+  quizProgress = result.progress;
+  persistQuizProgress();
+  renderCurrentQuiz();
+});
+
+quizNextBtn.addEventListener("click", () => {
+  if (!quizReview) return;
+  quizReview = nextQuizReview(quizReview);
+  renderCurrentQuiz();
+});
+
+quizPrevBtn.addEventListener("click", () => {
+  if (!quizReview) return;
+  quizReview = previousQuizReview(quizReview);
+  renderCurrentQuiz();
+});
+
+quizSourceBtn.addEventListener("click", () => {
+  if (!quizReview || !quizCourse) return;
+  const path = `${quizCourse}/${currentQuestion(quizReview).source.digest}`;
+  setCourseView(quizCourse, "notes", path);
 });
 
 updateBtn.addEventListener("click", async () => {
@@ -992,10 +1189,16 @@ async function handleJobFinished(finished: JobFinished) {
   studyJobRunning = false;
   refreshStudyEnabled();
   void loadJobHistory();
-  if (currentCourse) void loadFlashcards(currentCourse);
+  if (currentCourse) {
+    void loadFlashcards(currentCourse);
+    void loadQuiz(currentCourse);
+  }
 
   if (finished.status !== "succeeded") {
-    if (finished.operation === "generate") pendingAutoEmbed = false;
+    if (finished.operation === "generate") {
+      pendingAutoQuiz = false;
+      pendingAutoEmbed = false;
+    }
     return;
   }
   if (!knowledgeRoot || (finished.root && finished.root !== knowledgeRoot)) return;
@@ -1004,6 +1207,11 @@ async function handleJobFinished(finished: JobFinished) {
     root: knowledgeRoot,
   });
   if (updateJobId !== null && finished.job_id === updateJobId) {
+    pendingAutoQuiz = shouldAutoGenerateQuiz(
+      finished,
+      updateJobId,
+      settings.auto_generate.quiz,
+    );
     pendingAutoEmbed = settings.auto_embed;
   }
 
@@ -1016,6 +1224,12 @@ async function handleJobFinished(finished: JobFinished) {
     )
   ) {
     await startFlashcardJob(false);
+    return;
+  }
+
+  if (pendingAutoQuiz && currentCourse) {
+    pendingAutoQuiz = false;
+    await startQuizJob(false);
     return;
   }
 
