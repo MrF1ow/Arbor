@@ -2,7 +2,9 @@
 
 Local-first desktop app that turns course PDFs, PowerPoints, and Word files into structured study digests using the [Codex CLI](https://developers.openai.com/codex/cli). Your Knowledge library is a normal git repo on disk. Sources and generated notes stay together in history.
 
-**Current release:** [3.0.0](CHANGELOG.md) (git tag `v3.0.0`). Worker, desktop, and Tauri all report this number (`arbor-worker --version`). **3.0.0** ships the Version 3 desktop shell; ingest and automation are the Version 2 loop underneath.
+**Current release:** [2.1.0](CHANGELOG.md) (git tag `v2.1.0`). Worker, desktop, and Tauri all report this number (`arbor-worker --version`).
+
+**Version 2** (`v2.0.0`) shipped automation on the old UI. **Version 3** is in progress: `v2.1.0` adds the new desktop shell. **`v3.0.0` is reserved** for when the full Version 3 milestone in [`PROJECT.md`](PROJECT.md) ships (flashcards, quiz, embeddings, and the rest). See [Version numbering](PROJECT.md#version-numbering).
 
 For later milestones, see [`PROJECT.md`](PROJECT.md). The original V1 design (`lecture.md` per lecture) is historical: [`docs/superpowers/specs/2026-08-02-arbor-v1-design.md`](docs/superpowers/specs/2026-08-02-arbor-v1-design.md). Living layout is course folders, dated `digests/`, and `arbor-course.json`.
 
@@ -14,7 +16,7 @@ Install the [Codex CLI](https://developers.openai.com/codex/cli) yourself and lo
 
 Clone and run from source for Linux, or to develop.
 
-## What's in 3.0.0
+## What's in 2.1.0 (Version 3 shell, milestone in progress)
 
 | Area | What you can do |
 |------|-----------------|
@@ -29,7 +31,7 @@ Clone and run from source for Linux, or to develop.
 | Settings | Watch, auto-run, delete-after-digest, and model in the app. |
 | Notify | macOS notification when a job finishes. |
 
-Flashcards and Quiz tabs are placeholders (Coming soon). Generation is a later wave. Codex CLI is still a separate install.
+Flashcards and Quiz tabs are placeholders (Coming soon). **`v3.0.0` ships when the full Version 3 feature set is done**, not at shell-only. Codex CLI is still a separate install.
 
 ---
 

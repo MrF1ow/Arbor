@@ -486,7 +486,23 @@ Each stage should be replaceable.
 
 # Version Roadmap
 
-Package releases (`0.1.0`, `0.2.0`, `1.0.0`, `2.0.0`, …) are in [`CHANGELOG.md`](CHANGELOG.md). They now match the Version 1–5 product slots: **1.0.0** is Version 1, **2.0.0** is Version 2.
+Package releases (`0.1.0`, `0.2.0`, `1.0.0`, `2.0.0`, …) are in [`CHANGELOG.md`](CHANGELOG.md).
+
+## Version numbering
+
+**Product milestones** (Version 1–5 below) are capability eras. **Git tags** track what is shipped.
+
+| Tag | Product milestone | Meaning |
+|-----|-------------------|---------|
+| `v1.0.0` | Version 1 | Shipped |
+| `v2.0.0` | Version 2 | Shipped — automation on the v1 UI |
+| `v2.1.0`, `v2.2.0`, … | Version 3 **in progress** | Incremental releases toward Version 3 |
+| `v3.0.0` | Version 3 | **Reserved** — tag only when every Version 3 feature below ships |
+| `v4.0.0` | Version 4 | Tutor milestone (future) |
+
+Do not tag `v3.0.0` for the shell alone, a single wave, or partial delivery. The desktop shell shipped in **`v2.1.0`** as the first step of Version 3 work.
+
+Cursor rule: [`.cursor/rules/arbor-versioning.mdc`](.cursor/rules/arbor-versioning.mdc).
 
 # Version 1
 
@@ -494,7 +510,7 @@ Goal:
 
 Create the smallest useful application.
 
-**Release:** 1.0.0 (`v1.0.0`). Shipped. The current download is 2.0.0.
+**Release:** 2.0.0 (`v2.0.0`). Shipped. Extended by 2.1.0+ (Version 3 shell work).
 
 Features
 
@@ -530,7 +546,7 @@ Goal:
 
 Automation and discoverability.
 
-**Current release:** 2.0.0 (`v2.0.0`). Superseded by **3.0.0** for the desktop package; worker behavior unchanged.
+**Release:** 2.0.0 (`v2.0.0`). Shipped. Package **2.1.0** adds the Version 3 shell on top; Version 2 automation scope is unchanged.
 
 Shipped
 
@@ -542,11 +558,11 @@ Shipped
 * Job history in `.arbor/arbor.db`
 * Desktop notifications on job terminal states
 
-Explicitly out of Version 2
+Explicitly out of Version 2 (deferred to Version 3)
 
 * Scheduler (folder watching covers the main use case)
 * Multiple AI providers (later milestone)
-* Course browser, markdown preview, and visual polish (shipped in Version 3 shell, `v3.0.0`)
+* Course browser, markdown preview, and visual polish
 
 Implementation program: [`docs/superpowers/plans/2026-08-19-v2-automation/overview.md`](docs/superpowers/plans/2026-08-19-v2-automation/overview.md).
 
@@ -558,18 +574,20 @@ Goal:
 
 A shell a student would trust, then knowledge enhancement on that shell.
 
-**Current release (shell):** 3.0.0 (`v3.0.0`). The desktop shell shipped in 3.0.0. See [`docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md`](docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md).
+**Status:** In progress. **`v3.0.0` ships when every feature in "Required for v3.0.0" below is done.** Incremental delivery uses `v2.1.0`, `v2.2.0`, …
 
-Implementation program (Waves 1–5): [`docs/superpowers/plans/2026-08-22-v3-program/overview.md`](docs/superpowers/plans/2026-08-22-v3-program/overview.md). Study artifact format: [`docs/superpowers/specs/2026-08-22-v3-study-artifacts-format.md`](docs/superpowers/specs/2026-08-22-v3-study-artifacts-format.md).
+**Shipped so far (`v2.1.0`):** desktop shell — [`docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md`](docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md).
 
-Shipped in 3.0.0
+Implementation program: [`docs/superpowers/plans/2026-08-22-v3-program/overview.md`](docs/superpowers/plans/2026-08-22-v3-program/overview.md). Study artifact format: [`docs/superpowers/specs/2026-08-22-v3-study-artifacts-format.md`](docs/superpowers/specs/2026-08-22-v3-study-artifacts-format.md).
+
+Shipped in v2.1.0 (shell only)
 
 * Professional desktop shell (sidebar, course mode tabs, digest preview, job inspector)
 * In-app settings (watch, auto-run, delete-after-digest, model)
 * Search overlay navigates to digest preview in Notes mode
 * Flashcards and Quiz tabs (Coming soon placeholders)
 
-New Features (not yet shipped)
+Required for `v3.0.0` (not yet shipped)
 * Flashcards
 * Quiz generation
 * Concept extraction

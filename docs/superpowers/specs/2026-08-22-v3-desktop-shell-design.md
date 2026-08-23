@@ -2,7 +2,7 @@
 
 Date: 2026-08-22
 
-Status: shipped in **3.0.0** (2026-08-22). Supersedes the 2.0.0 single-column UI.
+Status: shipped in package **2.1.0** (2026-08-22). Part of Version 3 **in progress** — not a `v3.0.0` release.
 
 **Related:** Version 3 program [`../plans/2026-08-22-v3-program/overview.md`](../plans/2026-08-22-v3-program/overview.md). Study artifacts format (Waves 1–3) [`2026-08-22-v3-study-artifacts-format.md`](2026-08-22-v3-study-artifacts-format.md). Reference mockup [`../../mockups/v3-shell.html`](../../mockups/v3-shell.html).
 

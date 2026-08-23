@@ -2,7 +2,7 @@
 
 Date: 2026-08-22
 
-Status: design. Shell dependency met in **3.0.0**. See [`2026-08-22-v3-desktop-shell-design.md`](2026-08-22-v3-desktop-shell-design.md). Program: [`../plans/2026-08-22-v3-program/overview.md`](../plans/2026-08-22-v3-program/overview.md).
+Status: design. Shell shipped in package **v2.1.0** (Version 3 in progress). See [`2026-08-22-v3-desktop-shell-design.md`](2026-08-22-v3-desktop-shell-design.md). Program: [`../plans/2026-08-22-v3-program/overview.md`](../plans/2026-08-22-v3-program/overview.md).
 
 ## Problem
 

@@ -1,8 +1,8 @@
 # Arbor Desktop
 
-Tauri v2 shell for Arbor (package **3.0.0**). Drives the `arbor-worker` CLI (see `../python`).
+Tauri v2 shell for Arbor (package **2.1.0**). Drives the `arbor-worker` CLI (see `../python`).
 
-The UI is the Version 3 shell: sidebar library, course workspace with Notes / Flashcards / Quiz tabs, in-app digest preview, and a collapsed bottom inspector for Update and job logs. Flashcards and Quiz modes are placeholders until later waves.
+The UI is the Version 3 shell (first delivery in **v2.1.0**; full Version 3 completes at **v3.0.0**). Sidebar library, course workspace with Notes / Flashcards / Quiz tabs, in-app digest preview, and a collapsed bottom inspector for Update and job logs.
 
 Design spec: [`docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md`](../docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md). Reference mockup: [`docs/mockups/v3-shell.html`](../docs/mockups/v3-shell.html).
 

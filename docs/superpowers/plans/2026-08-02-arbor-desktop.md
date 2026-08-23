@@ -1,6 +1,6 @@
 # Arbor Desktop (Tauri) Implementation Plan
 
-> **Status (2026-08-22):** Historical shell plan. Superseded by [`docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md`](../../specs/2026-08-22-v3-desktop-shell-design.md) (shipped in desktop **3.0.0**).
+> **Status (2026-08-22):** Historical shell plan. Superseded by [`docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md`](../../specs/2026-08-22-v3-desktop-shell-design.md) (shipped in package **v2.1.0**, Version 3 in progress).
 >
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >

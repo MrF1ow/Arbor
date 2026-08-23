@@ -9,7 +9,8 @@
 ## Context
 
 - **2.0.0** shipped automation (jobs, FTS, watch, OCR, Word) on the v1 UI.
-- **3.0.0** shipped the desktop shell (see Wave 0 below). Tagged on `main`.
+- **2.1.0** shipped the desktop shell on `main` (Wave 0). Version 3 is **in progress**.
+- **`v3.0.0` is reserved** for full Version 3 completion (all PROJECT.md v3 features).
 - **Flashcards / quiz / embeddings** are planned in Waves 1–5; no worker code yet.
 
 ## Scope
@@ -74,9 +75,9 @@ Waves 2 and 3 can run in parallel after Wave 1. Wave 4 needs indexer design but 
 
 ## Waves
 
-### Wave 0 — Shell (`3.0.0`)
+### Wave 0 — Shell (`v2.1.0`)
 
-**Status:** shipped on `main` (2026-08-22). Tag `v3.0.0`.
+**Status:** shipped on `main` (2026-08-22). Package **`v2.1.0`** — not `v3.0.0`.
 
 - [x] Window 1100×760, sage/cream tokens
 - [x] Sidebar: Library, Jobs, Settings (bottom)
@@ -86,7 +87,7 @@ Waves 2 and 3 can run in parallel after Wave 1. Wave 4 needs indexer design but 
 - [x] Settings UI → `.arbor/settings.json`
 - [x] Search overlay → navigate to digest in Notes
 - [x] Dark mode (`prefers-color-scheme`)
-- [x] Tag `v3.0.0`, update README/CHANGELOG
+- [x] Tag `v2.1.0`, update README/CHANGELOG
 - [ ] Mac E2E ingest regression documented on `main`
 
 **Verify:** full PDF ingest, confirm, commit, search, watch review — on new UI.
@@ -184,14 +185,17 @@ Same framework as Wave 2.
 
 ## Release map
 
+Package tags during Version 3 work use **`v2.x`**. Tag **`v3.0.0` only when the full Version 3 milestone ships** (all features in PROJECT.md Version 3).
+
 | Tag | Wave | User-visible |
 |-----|------|----------------|
-| `v3.0.0` | 0 | "This looks like a notes app" |
-| `v3.1.0` | 1 | Infrastructure only (or hidden) |
-| `v3.2.0` | 2 | Flashcards work + refresh |
-| `v3.3.0` | 3 | Quiz works + refresh |
-| `v3.4.0` | 4 | Semantic search |
-| `v3.5.0` | 5 | Concepts (if ready) |
+| `v2.1.0` | 0 | Desktop shell — "looks like a notes app" |
+| `v2.2.0` | 1 | Study artifact framework |
+| `v2.3.0` | 2 | Flashcards work + refresh |
+| `v2.4.0` | 3 | Quiz works + refresh |
+| `v2.5.0` | 4 | Semantic search |
+| `v2.6.0` | 5 | Concepts (stretch) |
+| **`v3.0.0`** | **all** | **Version 3 complete** |
 
 ## Verification (every wave)
 
@@ -220,7 +224,7 @@ Mac E2E ingest path from v2 must keep passing through Wave 0.
 
 ## Documentation debt (this program)
 
-- [x] CHANGELOG 3.0.0 notes (Wave 0, on `main`)
+- [x] CHANGELOG 2.1.0 notes (Wave 0, on `main`)
 - [x] README shell description (Wave 0, on `main`)
 - [x] `desktop/README.md` update (Wave 0, on `main`)
 - [ ] Wave detail docs (optional, like v2 `wave-*.md`) as each wave starts
