@@ -45,6 +45,8 @@ pub fn run() {
             commands::read_study_json,
             commands::read_flashcard_progress,
             commands::write_flashcard_progress,
+            commands::read_quiz_progress,
+            commands::write_quiz_progress,
             commands::study_artifact_stale,
         ])
         .run(tauri::generate_context!())

@@ -47,6 +47,7 @@ export interface KnowledgeSettings {
   watch_enabled: boolean;
   auto_generate: {
     flashcards: boolean;
+    quiz: boolean;
   };
 }
 
@@ -82,6 +83,44 @@ export interface FlashcardProgressEntry {
 }
 
 export type FlashcardProgress = Record<string, FlashcardProgressEntry>;
+
+export interface QuizQuestion {
+  id: string;
+  type: "multiple_choice";
+  prompt: string;
+  choices: [string, string, string, string];
+  answer_index: number;
+  explanation: string;
+  source: CardSource;
+}
+
+export interface QuizPack {
+  schema_version: 1;
+  course: string;
+  questions: QuizQuestion[];
+}
+
+export type QuizReview =
+  | {
+      questions: QuizQuestion[];
+      index: number;
+      selected: number | null;
+      submitted: false;
+    }
+  | {
+      questions: QuizQuestion[];
+      index: number;
+      selected: number;
+      submitted: true;
+    };
+
+export interface QuizProgressEntry {
+  seen: number;
+  correct: number;
+  wrong: number;
+}
+
+export type QuizProgress = Record<string, QuizProgressEntry>;
 
 export interface SearchHit {
   course: string;

@@ -125,11 +125,38 @@
               </div>
 
               <div class="content-panel" data-panel="quiz">
-                <div class="coming-soon">
+                <div class="coming-soon" id="quiz-empty">
                   <div class="coming-soon-icon">?</div>
                   <h2>Quiz</h2>
                   <p id="quiz-copy">Practice questions pulled from your course material.</p>
-                  <button type="button" class="btn-primary" id="generate-quiz" disabled>Generate</button>
+                  <button type="button" class="btn-primary" id="generate-quiz">Generate</button>
+                </div>
+                <div class="quiz-view" id="quiz-pack" hidden>
+                  <div class="quiz-toolbar">
+                    <div>
+                      <span id="quiz-count"></span>
+                      <span class="stale-badge" id="quiz-stale" hidden>Digests updated since last generation.</span>
+                    </div>
+                    <button type="button" class="btn-primary" id="refresh-quiz">Refresh from digests</button>
+                  </div>
+                  <div class="quiz-card">
+                    <div class="quiz-prompt" id="quiz-prompt"></div>
+                    <div class="quiz-choices">
+                      <button type="button" class="quiz-choice" id="quiz-choice-0" data-index="0"></button>
+                      <button type="button" class="quiz-choice" id="quiz-choice-1" data-index="1"></button>
+                      <button type="button" class="quiz-choice" id="quiz-choice-2" data-index="2"></button>
+                      <button type="button" class="quiz-choice" id="quiz-choice-3" data-index="3"></button>
+                    </div>
+                    <p class="quiz-explanation" id="quiz-explanation" hidden></p>
+                    <div class="quiz-meta">
+                      <button type="button" class="source-chip" id="quiz-source"></button>
+                    </div>
+                  </div>
+                  <div class="quiz-controls">
+                    <button type="button" class="btn-secondary" id="quiz-prev">Previous</button>
+                    <button type="button" class="btn-primary" id="quiz-submit">Submit</button>
+                    <button type="button" class="btn-secondary" id="quiz-next">Next</button>
+                  </div>
                 </div>
               </div>
 
@@ -166,6 +193,10 @@
                     <div class="setting-row">
                       <span>Auto-generate flashcards after Update</span>
                       <button class="toggle off" id="toggle-auto-flashcards" type="button" aria-label="Auto-generate flashcards"></button>
+                    </div>
+                    <div class="setting-row">
+                      <span>Auto-generate quiz after Update</span>
+                      <button class="toggle off" id="toggle-auto-quiz" type="button" aria-label="Auto-generate quiz"></button>
                     </div>
                     <div class="setting-row">
                       <span>Model</span>

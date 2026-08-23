@@ -19,6 +19,7 @@ from arbor_worker.settings import default_settings, load_models, load_settings
 from arbor_worker.skills import SKILLS
 from arbor_worker.skills.base import run_skill
 from arbor_worker.skills.flashcards import FlashcardsSkill, digest_batches, merge_decks
+from arbor_worker.skills.quiz import QuizSkill, merge_packs
 from arbor_worker.skills.manifest import (
     ManifestArtifact,
     load_manifest,
@@ -163,7 +164,7 @@ def cmd_generate(args) -> int:
     digest_text = "\n\n".join(digest_sections)
     skill_inputs = (
         digest_batches(digest_sections)
-        if isinstance(skill, FlashcardsSkill)
+        if isinstance(skill, (FlashcardsSkill, QuizSkill))
         else [digest_text]
     )
 
@@ -252,11 +253,12 @@ def cmd_generate(args) -> int:
             )
             for skill_input in skill_inputs
         ]
-        artifact = (
-            merge_decks(artifacts)
-            if isinstance(skill, FlashcardsSkill)
-            else artifacts[0]
-        )
+        if isinstance(skill, FlashcardsSkill):
+            artifact = merge_decks(artifacts)
+        elif isinstance(skill, QuizSkill):
+            artifact = merge_packs(artifacts)
+        else:
+            artifact = artifacts[0]
     except Exception as error:
         emitter.skill_failed(
             course=args.course,

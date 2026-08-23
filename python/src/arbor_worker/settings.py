@@ -17,6 +17,7 @@ DEFAULT_MODELS = [
 @dataclass(frozen=True)
 class AutoGenerate:
     flashcards: bool = False
+    quiz: bool = False
 
 
 @dataclass(frozen=True)
@@ -67,6 +68,7 @@ def load_settings(root: Path) -> WorkerSettings:
         auto_embed=bool(data.get("auto_embed", False)),
         watch_enabled=bool(data.get("watch_enabled", True)),
         auto_generate=AutoGenerate(
-            flashcards=bool(auto_generate.get("flashcards", False))
+            flashcards=bool(auto_generate.get("flashcards", False)),
+            quiz=bool(auto_generate.get("quiz", False)),
         ),
     )

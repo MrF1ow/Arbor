@@ -65,11 +65,16 @@ pub fn save_settings(app: tauri::AppHandle, settings: Settings) -> Result<(), St
 pub struct AutoGenerate {
     #[serde(default)]
     pub flashcards: bool,
+    #[serde(default)]
+    pub quiz: bool,
 }
 
 impl Default for AutoGenerate {
     fn default() -> Self {
-        Self { flashcards: false }
+        Self {
+            flashcards: false,
+            quiz: false,
+        }
     }
 }
 
@@ -254,6 +259,49 @@ pub fn write_flashcard_progress(
     std::fs::rename(temp, path).map_err(|e| e.to_string())
 }
 
+fn quiz_progress_path(root: &str, course: &str) -> Result<PathBuf, String> {
+    validate_path_component(course, "course name")?;
+    Ok(Path::new(root)
+        .join(".arbor")
+        .join("progress")
+        .join(format!("{course}.quiz.json")))
+}
+
+#[tauri::command]
+pub fn read_quiz_progress(root: String, course: String) -> Result<serde_json::Value, String> {
+    let path = quiz_progress_path(&root, &course)?;
+    if !path.is_file() {
+        return Ok(serde_json::json!({}));
+    }
+    let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+    let value: serde_json::Value = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+    if !value.is_object() {
+        return Err("Quiz progress must be a JSON object".into());
+    }
+    Ok(value)
+}
+
+#[tauri::command]
+pub fn write_quiz_progress(
+    root: String,
+    course: String,
+    data: serde_json::Value,
+) -> Result<(), String> {
+    if !data.is_object() {
+        return Err("Quiz progress must be a JSON object".into());
+    }
+    let path = quiz_progress_path(&root, &course)?;
+    let parent = path
+        .parent()
+        .ok_or_else(|| "Invalid progress path".to_string())?;
+    std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    let mut bytes = serde_json::to_vec_pretty(&data).map_err(|e| e.to_string())?;
+    bytes.push(b'\n');
+    let temp = path.with_extension("json.tmp");
+    std::fs::write(&temp, bytes).map_err(|e| e.to_string())?;
+    std::fs::rename(temp, path).map_err(|e| e.to_string())
+}
+
 #[derive(serde::Deserialize)]
 struct StaleManifest {
     artifacts: HashMap<String, StaleArtifact>,
@@ -325,6 +373,7 @@ mod tests {
         assert!(!ks.auto_embed);
         assert!(!ks.delete_sources_after_digest);
         assert!(!ks.auto_generate.flashcards);
+        assert!(!ks.auto_generate.quiz);
     }
 
     #[test]
@@ -342,6 +391,7 @@ mod tests {
             empty.auto_generate.flashcards,
             default.auto_generate.flashcards
         );
+        assert_eq!(empty.auto_generate.quiz, default.auto_generate.quiz);
     }
 
     #[test]
@@ -349,6 +399,14 @@ mod tests {
         let settings: KnowledgeSettings =
             serde_json::from_str(r#"{"auto_generate":{"flashcards":true}}"#).unwrap();
         assert!(settings.auto_generate.flashcards);
+    }
+
+    #[test]
+    fn nested_auto_generate_quiz_is_loaded() {
+        let settings: KnowledgeSettings =
+            serde_json::from_str(r#"{"auto_generate":{"quiz":true}}"#).unwrap();
+        assert!(settings.auto_generate.quiz);
+        assert!(!settings.auto_generate.flashcards);
     }
 
     #[test]
@@ -433,6 +491,29 @@ mod tests {
             .join(".arbor")
             .join("progress")
             .join("Biology.flashcards.json")
+            .is_file());
+    }
+
+    #[test]
+    fn quiz_progress_defaults_empty_and_round_trips() {
+        let root = temp_root("quiz-progress");
+        let root_string = root.to_string_lossy().into_owned();
+        let empty = read_quiz_progress(root_string.clone(), "Biology".into()).unwrap();
+        assert_eq!(empty, serde_json::json!({}));
+
+        let progress = serde_json::json!({
+            "q_12345678": {"seen": 2, "correct": 1, "wrong": 0}
+        });
+        write_quiz_progress(root_string.clone(), "Biology".into(), progress.clone()).unwrap();
+
+        assert_eq!(
+            read_quiz_progress(root_string, "Biology".into()).unwrap(),
+            progress
+        );
+        assert!(root
+            .join(".arbor")
+            .join("progress")
+            .join("Biology.quiz.json")
             .is_file());
     }
 

@@ -6,6 +6,12 @@ Package version for the worker, desktop, and Tauri app. See [Version numbering](
 
 ## Unreleased
 
+Quiz (Wave 3, toward package `v2.4.0`).
+
+- `arbor-worker generate --skill quiz` writes `study/quiz.json`, assigns `q_` ids from normalized prompt plus digest, and commits `study: {course} quiz`. Concatenated digests over 100k characters split per digest, then merge and drop duplicate prompts. Unchanged digest hashes still emit `skill_stale_skipped`.
+- `.arbor/settings.json` reads `auto_generate.quiz` (default false). Desktop Generate / Refresh run Codex when a model is selected. Progress lives in `.arbor/progress/<course>.quiz.json` and keeps counts for stable ids.
+- Quiz tab: empty Generate, one question with four choices, Submit then explanation, next / prev, source chip to Notes, stale badge. After Update, optional auto-generate queues behind flashcards through the existing job mutex.
+
 Memory and semantic search (Wave 4, toward package `v2.5.0`).
 
 - `arbor-worker embed` chunks digests by heading, builds local 256-dimension hashed n-gram vectors, and replaces stale rows in the gitignored `.arbor/vectors.sqlite` store.
