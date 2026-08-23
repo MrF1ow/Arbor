@@ -500,7 +500,7 @@ Package releases (`0.1.0`, `0.2.0`, `1.0.0`, `2.0.0`, …) are in [`CHANGELOG.md
 | `v3.0.0` | Version 3 | **Reserved** — tag only when every Version 3 feature below ships |
 | `v4.0.0` | Version 4 | Tutor milestone (future) |
 
-Do not tag `v3.0.0` for the shell alone, a single wave, or partial delivery. The desktop shell shipped in **`v2.1.0`** as the first step of Version 3 work.
+Do not tag `v3.0.0` for the shell alone, a single wave, or partial delivery. The desktop shell shipped in **`v2.1.0`** as the first step of Version 3 work. Later steps are `v2.2.0`, `v2.3.0`, … Never publish `3.1.0` or `3.2.0` as package versions.
 
 Cursor rule: [`.cursor/rules/arbor-versioning.mdc`](.cursor/rules/arbor-versioning.mdc).
 
@@ -572,13 +572,15 @@ Implementation program: [`docs/superpowers/plans/2026-08-19-v2-automation/overvi
 
 Goal:
 
-A shell a student would trust, then knowledge enhancement on that shell.
+A study app a student would download, with local memory and a concept graph an AI can query.
 
-**Status:** In progress. **`v3.0.0` ships when every feature in "Required for v3.0.0" below is done.** Incremental delivery uses `v2.1.0`, `v2.2.0`, …
+The shell is the storefront. Flashcards and quiz are the study loop. Embeddings, concepts, cross-document links, and a graph-lite view are the memory a later tutor (Version 4) will use instead of rereading every digest. Diagram analysis and citation checks ground that memory in the notes the student already has.
+
+**Status:** In progress. **`v3.0.0` ships when every feature in "Required for v3.0.0" below is done.** None of those items are stretch. Incremental delivery uses `v2.1.0`, `v2.2.0`, … Package `v2.1.0` is the first step after Version 2.
 
 **Shipped so far (`v2.1.0`):** desktop shell — [`docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md`](docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md).
 
-Implementation program: [`docs/superpowers/plans/2026-08-22-v3-program/overview.md`](docs/superpowers/plans/2026-08-22-v3-program/overview.md). Study artifact format: [`docs/superpowers/specs/2026-08-22-v3-study-artifacts-format.md`](docs/superpowers/specs/2026-08-22-v3-study-artifacts-format.md).
+Implementation program: [`docs/superpowers/plans/2026-08-22-v3-program/overview.md`](docs/superpowers/plans/2026-08-22-v3-program/overview.md). Study artifact format: [`docs/superpowers/specs/2026-08-22-v3-study-artifacts-format.md`](docs/superpowers/specs/2026-08-22-v3-study-artifacts-format.md). Knowledge layer: [`docs/superpowers/specs/2026-08-23-v3-knowledge-layer-design.md`](docs/superpowers/specs/2026-08-23-v3-knowledge-layer-design.md).
 
 Shipped in v2.1.0 (shell only)
 
@@ -588,15 +590,16 @@ Shipped in v2.1.0 (shell only)
 * Flashcards and Quiz tabs (Coming soon placeholders)
 
 Required for `v3.0.0` (not yet shipped)
+
 * Flashcards
 * Quiz generation
 * Concept extraction
-* Diagram analysis
-* Citation verification
 * Cross-document linking
-* Knowledge graph
+* Knowledge graph (list and neighbors, not a pretty canvas)
 * Embeddings
 * Semantic search
+* Diagram analysis (figures become graph nodes)
+* Citation verification (local, against cited digest text)
 
 ---
 

@@ -34,6 +34,7 @@ Biology/
     manifest.json          # provenance + staleness (committed)
     flashcards.json        # committed
     quiz.json              # committed
+    concepts.json          # committed (Wave 5; schema in knowledge-layer spec)
   arbor-course.json        # unchanged v2 (fingerprints + digest records)
   course.md
 ```
@@ -229,15 +230,20 @@ Successful `generate` commits:
 
 ```
 study/manifest.json
-study/flashcards.json   # or quiz.json
+study/flashcards.json   # or quiz.json or concepts.json
 ```
 
 Message: `study: Biology flashcards` (or quiz).
 
+## Concepts file
+
+`study/concepts.json` uses the same skill job, manifest, and commit rules as flashcards. Node and edge shape lives in [`2026-08-23-v3-knowledge-layer-design.md`](2026-08-23-v3-knowledge-layer-design.md). This spec does not duplicate that schema.
+
 ## Out of scope (this spec)
 
-- Embeddings / vector index (separate spec; same manifest pattern)
-- Knowledge graph edges
+- Embeddings / vector index (knowledge-layer spec)
+- Diagram merge rules (knowledge-layer spec)
+- Citation verification (knowledge-layer spec)
 - In-prompt multi-artifact generation
 - Anki export (future exporter skill)
 

@@ -11,9 +11,9 @@ alwaysApply: true
 
 1. **`v2.0.0` = Version 2 complete** — automation and discoverability (jobs, FTS, watch, OCR, Word). The old single-column UI. Do not re-open v2 scope.
 
-2. **Version 3 is in progress until `v3.0.0`.** Work toward Version 3 ships as **`v2.1.0`, `v2.2.0`, …** — not as `v3.x` point releases.
+2. **Version 3 is in progress until `v3.0.0`.** Work toward Version 3 ships as **`v2.1.0`, `v2.2.0`, …** Package `v2.1.0` is the first step after Version 2. Do not publish `3.1.0`, `3.2.0`, or other `3.x` point releases. Those numbers are not used.
 
-3. **`v3.0.0` is reserved for full Version 3 completion** — all features listed under Version 3 in `PROJECT.md` (shell, flashcards, quiz, concepts, diagrams, citations, cross-document linking, knowledge graph, embeddings, semantic search). Do not tag `v3.0.0` for the shell alone or for partial v3 delivery.
+3. **`v3.0.0` is reserved for full Version 3 completion** — all features listed under Version 3 in `PROJECT.md` (shell, flashcards, quiz, concepts, diagrams, citations, cross-document linking, knowledge graph, embeddings, semantic search). Do not tag `v3.0.0` for the shell alone or for partial v3 delivery. Do not drop graph, embeddings, diagrams, or citations from that list to ship earlier.
 
 4. **Version 4 starts at `v4.0.0`** when the tutor milestone is complete, with the same pattern (`v3.x` increments during v4 work if needed).
 
