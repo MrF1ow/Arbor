@@ -17,6 +17,7 @@ const graph = {
       id: "glycolysis",
       name: "Glycolysis",
       summary: "Cytoplasmic breakdown of glucose to pyruvate.",
+      kind: "concept",
       sources: [
         { digest: "digests/2026-08-15.md", heading: "Glycolysis" },
         { digest: "digests/2026-08-16.md", heading: null },
@@ -26,12 +27,14 @@ const graph = {
       id: "pyruvate",
       name: "Pyruvate",
       summary: "Three-carbon product of glycolysis.",
+      kind: "concept",
       sources: [{ digest: "digests/2026-08-15.md", heading: "Glycolysis" }],
     },
     {
       id: "nadh",
       name: "NADH",
       summary: "Reduced electron carrier.",
+      kind: "concept",
       sources: [{ digest: "digests/2026-08-16.md", heading: "Energy" }],
     },
   ],
@@ -103,4 +106,46 @@ test("builds Codex study job arguments for concepts", async () => {
       model: "gpt-5.6-sol",
     },
   );
+});
+
+test("builds Codex study job arguments for diagrams", async () => {
+  const { diagramJobArgs } = await subject();
+
+  assert.deepEqual(
+    diagramJobArgs("/knowledge", "Biology", false, "gpt-5.6-sol"),
+    {
+      root: "/knowledge",
+      course: "Biology",
+      skill: "diagrams",
+      force: false,
+      model: "gpt-5.6-sol",
+    },
+  );
+});
+
+test("defaults missing kind to concept and keeps figure nodes distinct", async () => {
+  const { parseConceptGraph } = await subject();
+  const withFigure = {
+    ...graph,
+    nodes: [
+      {
+        id: "glycolysis",
+        name: "Glycolysis",
+        summary: "Cytoplasmic breakdown of glucose to pyruvate.",
+        sources: [{ digest: "digests/2026-08-15.md", heading: "Glycolysis" }],
+      },
+      {
+        id: "fig-mitochondrion-diagram",
+        name: "Mitochondrion diagram",
+        summary: "Labeled organelle.",
+        kind: "figure",
+        sources: [{ digest: "digests/2026-08-15.md", heading: "Figures" }],
+      },
+    ],
+    edges: [],
+  };
+
+  const parsed = parseConceptGraph(withFigure);
+  assert.equal(parsed.nodes[0].kind, "concept");
+  assert.equal(parsed.nodes[1].kind, "figure");
 });

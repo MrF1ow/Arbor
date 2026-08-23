@@ -114,6 +114,7 @@
                     <div class="flashcard-face" id="flashcard-face"></div>
                     <div class="flashcard-meta">
                       <button type="button" class="source-chip" id="flashcard-source"></button>
+                      <span class="citation-badge" id="flashcard-citation" hidden>Unverified</span>
                       <span id="flashcard-tags"></span>
                     </div>
                   </div>
@@ -152,6 +153,7 @@
                     <p class="quiz-explanation" id="quiz-explanation" hidden></p>
                     <div class="quiz-meta">
                       <button type="button" class="source-chip" id="quiz-source"></button>
+                      <span class="citation-badge" id="quiz-citation" hidden>Unverified</span>
                     </div>
                   </div>
                   <div class="quiz-controls">
@@ -167,7 +169,10 @@
                   <div class="coming-soon-icon">◎</div>
                   <h2>Graph</h2>
                   <p id="concepts-copy">Concepts linked across your course digests.</p>
-                  <button type="button" class="btn-primary" id="generate-concepts">Generate</button>
+                  <div class="empty-actions">
+                    <button type="button" class="btn-primary" id="generate-concepts">Generate</button>
+                    <button type="button" class="btn-secondary" id="generate-diagrams">Generate figures</button>
+                  </div>
                 </div>
                 <div class="concepts-view" id="concepts-graph" hidden>
                   <div class="flashcards-toolbar">
@@ -176,6 +181,7 @@
                       <span class="stale-badge" id="concept-stale" hidden>Digests updated since last generation.</span>
                     </div>
                     <button type="button" class="btn-primary" id="refresh-concepts">Refresh from digests</button>
+                    <button type="button" class="btn-secondary" id="refresh-diagrams">Generate figures</button>
                   </div>
                   <div class="concepts-layout">
                     <nav class="concept-list" id="concept-list"></nav>
@@ -247,6 +253,7 @@
             <div class="inspector-bar">
               <button class="btn-primary" id="update" disabled>Update knowledge</button>
               <button class="btn-secondary" id="cancel" disabled>Cancel</button>
+              <button class="btn-secondary" id="generate-citations" type="button" disabled>Check citations</button>
               <button class="inspector-expand" id="inspector-toggle" type="button">Show log ▴</button>
               <span class="inspector-status" id="inspector-status"></span>
             </div>

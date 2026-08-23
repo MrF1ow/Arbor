@@ -10,6 +10,8 @@ test("graph tab exists with generate controls after quiz", async () => {
   for (const id of [
     "concepts-empty",
     "generate-concepts",
+    "generate-diagrams",
+    "refresh-diagrams",
     "concepts-graph",
     "concept-stale",
     "refresh-concepts",

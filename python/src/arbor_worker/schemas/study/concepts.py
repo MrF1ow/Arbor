@@ -25,6 +25,7 @@ class ConceptNode(BaseModel):
     id: str = ""
     name: str
     summary: str
+    kind: Literal["concept", "figure"] = "concept"
     sources: list[ConceptSource] = Field(default_factory=list)
 
     @field_validator("name", "summary")

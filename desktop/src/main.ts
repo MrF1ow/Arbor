@@ -28,10 +28,16 @@ import {
 } from "./quiz";
 import {
   conceptJobArgs,
+  diagramJobArgs,
   neighbors,
   nodesForDigest,
   parseConceptGraph,
 } from "./concepts";
+import {
+  citationJobArgs,
+  failedIdsFor,
+  parseCitationsReport,
+} from "./citations";
 import { renderMarkdown } from "./markdown";
 import type {
   AuthStatus,
@@ -53,6 +59,7 @@ import type {
   Settings,
   UpdatePlan,
   WorkerEvent,
+  CitationsReport,
 } from "./types";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -85,6 +92,7 @@ const flashcardStaleEl = $("flashcard-stale");
 const flashcardCountEl = $("flashcard-count");
 const flashcardFaceEl = $("flashcard-face");
 const flashcardSourceBtn = $("flashcard-source") as HTMLButtonElement;
+const flashcardCitationEl = $("flashcard-citation");
 const flashcardTagsEl = $("flashcard-tags");
 const flashcardPrevBtn = $("flashcard-prev");
 const flashcardFlipBtn = $("flashcard-flip");
@@ -104,13 +112,16 @@ const quizChoiceBtns = [0, 1, 2, 3].map(
 const quizSubmitBtn = $("quiz-submit") as HTMLButtonElement;
 const quizExplanationEl = $("quiz-explanation");
 const quizSourceBtn = $("quiz-source") as HTMLButtonElement;
+const quizCitationEl = $("quiz-citation");
 const quizPrevBtn = $("quiz-prev");
 const quizNextBtn = $("quiz-next");
 const conceptsCopyEl = $("concepts-copy");
 const conceptsEmptyEl = $("concepts-empty");
 const conceptsGraphEl = $("concepts-graph");
 const generateConceptsBtn = $("generate-concepts") as HTMLButtonElement;
+const generateDiagramsBtn = $("generate-diagrams") as HTMLButtonElement;
 const refreshConceptsBtn = $("refresh-concepts") as HTMLButtonElement;
+const refreshDiagramsBtn = $("refresh-diagrams") as HTMLButtonElement;
 const conceptStaleEl = $("concept-stale");
 const conceptCountEl = $("concept-count");
 const conceptListEl = $("concept-list");
@@ -119,6 +130,7 @@ const conceptSummaryEl = $("concept-summary");
 const conceptNeighborsEl = $("concept-neighbors");
 const conceptSourcesEl = $("concept-sources");
 const notesConceptChipsEl = $("notes-concept-chips");
+const generateCitationsBtn = $("generate-citations") as HTMLButtonElement;
 const jobsListEl = $("jobs-list");
 const jobsLogEl = $("jobs-log");
 const modelSel = $("model") as HTMLSelectElement;
@@ -166,6 +178,7 @@ let progressWrite = Promise.resolve();
 let conceptGraph: ConceptGraph | null = null;
 let selectedConceptId: string | null = null;
 let currentNotesPath: string | null = null;
+let citationsReport: CitationsReport | null = null;
 
 function logLine(text: string) {
   logEl.textContent += text + "\n";
@@ -254,7 +267,10 @@ function refreshStudyEnabled() {
   generateQuizBtn.disabled = !enabled;
   refreshQuizBtn.disabled = !enabled;
   generateConceptsBtn.disabled = !enabled;
+  generateDiagramsBtn.disabled = !enabled;
   refreshConceptsBtn.disabled = !enabled;
+  refreshDiagramsBtn.disabled = !enabled;
+  generateCitationsBtn.disabled = !enabled;
 }
 
 function refreshFolderTools() {
@@ -350,11 +366,17 @@ function renderCurrentFlashcard() {
     ? `${card.source.digest} · ${card.source.heading}`
     : card.source.digest;
   flashcardTagsEl.textContent = card.tags.join(" · ");
+  const failed = failedIdsFor(citationsReport, "study/flashcards.json");
+  flashcardCitationEl.hidden = !failed.has(card.id);
+  flashcardCitationEl.title = citationsReport?.failures.find(
+    (failure) => failure.path === "study/flashcards.json" && failure.id === card.id,
+  )?.reason ?? "";
 }
 
 async function loadFlashcards(course: string) {
   if (!knowledgeRoot) return;
   const root = knowledgeRoot;
+  await loadCitations(course);
   try {
     const deckValue = await invoke<unknown>("read_study_json", {
       root,
@@ -457,11 +479,17 @@ function renderCurrentQuiz() {
     ? `${question.source.digest} · ${question.source.heading}`
     : question.source.digest;
   quizSubmitBtn.disabled = quizReview.submitted || quizReview.selected === null;
+  const failed = failedIdsFor(citationsReport, "study/quiz.json");
+  quizCitationEl.hidden = !failed.has(question.id);
+  quizCitationEl.title = citationsReport?.failures.find(
+    (failure) => failure.path === "study/quiz.json" && failure.id === question.id,
+  )?.reason ?? "";
 }
 
 async function loadQuiz(course: string) {
   if (!knowledgeRoot) return;
   const root = knowledgeRoot;
+  await loadCitations(course);
   try {
     const packValue = await invoke<unknown>("read_study_json", {
       root,
@@ -529,7 +557,7 @@ async function renderNotesConceptChips(course: string, relativePath: string) {
   for (const node of related) {
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = "source-chip";
+    btn.className = node.kind === "figure" ? "source-chip figure-chip" : "source-chip";
     btn.textContent = node.name;
     btn.addEventListener("click", () => {
       selectedConceptId = node.id;
@@ -550,16 +578,16 @@ function renderConceptGraph() {
   for (const node of conceptGraph.nodes) {
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = "concept-list-item";
+    btn.className =
+      node.kind === "figure" ? "concept-list-item figure" : "concept-list-item";
     btn.classList.toggle("active", node.id === selected.id);
-    btn.textContent = node.name;
-    btn.addEventListener("click", () => {
-      selectedConceptId = node.id;
-      renderConceptGraph();
-    });
+    const conceptFailed = failedIdsFor(citationsReport, "study/concepts.json");
+    btn.textContent = node.kind === "figure" ? `Figure · ${node.name}` : node.name;
+    if (conceptFailed.has(node.id)) btn.classList.add("unverified");
     conceptListEl.appendChild(btn);
   }
-  conceptNameEl.textContent = selected.name;
+  conceptNameEl.textContent =
+    selected.kind === "figure" ? `Figure · ${selected.name}` : selected.name;
   conceptSummaryEl.textContent = selected.summary;
   conceptNeighborsEl.innerHTML = "";
   for (const neighbor of neighbors(conceptGraph, selected.id)) {
@@ -590,8 +618,9 @@ function renderConceptGraph() {
 }
 
 async function loadGraph(course: string) {
-  if (!knowledgeRoot) return;
   const root = knowledgeRoot;
+  if (!root) return;
+  await loadCitations(course);
   try {
     const graph = await readConceptGraph(course);
     if (!graph) throw new Error("no concept graph");
@@ -668,6 +697,61 @@ async function startConceptJob(force: boolean) {
     studyJobRunning = false;
     refreshStudyEnabled();
     logLine(`Concept generation failed to start: ${error}`);
+  }
+}
+
+async function startDiagramJob(force: boolean) {
+  if (!knowledgeRoot || !currentCourse || !modelSel.value) return;
+  await refreshAuth();
+  if (!authed) return;
+  studyJobRunning = true;
+  refreshStudyEnabled();
+  try {
+    const jobId = await invoke<string>(
+      "start_study_job",
+      diagramJobArgs(knowledgeRoot, currentCourse, force, modelSel.value),
+    );
+    logLine(`Diagram job ${jobId} started.`);
+  } catch (error) {
+    studyJobRunning = false;
+    refreshStudyEnabled();
+    logLine(`Diagram generation failed to start: ${error}`);
+  }
+}
+
+async function loadCitations(course: string) {
+  if (!knowledgeRoot) {
+    citationsReport = null;
+    return;
+  }
+  try {
+    const value = await invoke<unknown>("read_study_json", {
+      root: knowledgeRoot,
+      course,
+      file: "citations.json",
+    });
+    citationsReport = parseCitationsReport(value);
+  } catch {
+    citationsReport = null;
+  }
+}
+
+async function startCitationJob(force: boolean) {
+  if (!knowledgeRoot || !currentCourse || !modelSel.value) return;
+  await refreshAuth();
+  if (!authed) return;
+  studyJobRunning = true;
+  refreshStudyEnabled();
+  try {
+    const jobId = await invoke<string>(
+      "start_study_job",
+      citationJobArgs(knowledgeRoot, currentCourse, force, modelSel.value),
+    );
+    logLine(`Citations job ${jobId} started.`);
+  } catch (error) {
+    studyJobRunning = false;
+    refreshStudyEnabled();
+    logLine(`Citation check failed to start: ${error}`);
   }
 }
 
@@ -1148,6 +1232,18 @@ refreshConceptsBtn.addEventListener("click", () => {
   void startConceptJob(true);
 });
 
+generateDiagramsBtn.addEventListener("click", () => {
+  void startDiagramJob(false);
+});
+
+refreshDiagramsBtn.addEventListener("click", () => {
+  void startDiagramJob(true);
+});
+
+generateCitationsBtn.addEventListener("click", () => {
+  void startCitationJob(true);
+});
+
 flashcardFlipBtn.addEventListener("click", () => {
   if (!flashcardReview) return;
   if (!flashcardReview.flipped) markCurrentFlashcardSeen();
@@ -1372,6 +1468,7 @@ async function handleJobFinished(finished: JobFinished) {
   if (currentCourse) {
     void loadFlashcards(currentCourse);
     void loadQuiz(currentCourse);
+    void loadCitations(currentCourse);
     if (currentMode === "graph") void loadGraph(currentCourse);
     if (currentMode === "notes") {
       void loadCourseContent(currentCourse, currentNotesPath ?? undefined);

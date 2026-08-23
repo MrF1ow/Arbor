@@ -10,6 +10,15 @@ def concept_id(name: str) -> str:
     return re.sub(r"[^a-z0-9-]", "", hyphenated)
 
 
+def assigned_node_id(node: ConceptNode) -> str:
+    slug = concept_id(node.name)
+    if not slug:
+        raise ValueError(f"concept name produces empty id: {node.name}")
+    if node.kind == "figure":
+        return slug if slug.startswith("fig-") else f"fig-{slug}"
+    return slug
+
+
 def merge_sources(
     existing: list[ConceptSource], incoming: list[ConceptSource]
 ) -> list[ConceptSource]:
@@ -60,18 +69,16 @@ class ConceptsSkill:
         merged_nodes: dict[str, ConceptNode] = {}
         id_map: dict[str, str] = {}
         for node in graph.nodes:
-            slug = concept_id(node.name)
-            if not slug:
-                raise ValueError(f"concept name produces empty id: {node.name}")
+            node_id = assigned_node_id(node)
             if node.id:
-                id_map[node.id] = slug
-            id_map[slug] = slug
-            assigned = node.model_copy(update={"id": slug})
-            existing = merged_nodes.get(slug)
+                id_map[node.id] = node_id
+            id_map[node_id] = node_id
+            assigned = node.model_copy(update={"id": node_id})
+            existing = merged_nodes.get(node_id)
             if existing is None:
-                merged_nodes[slug] = assigned
+                merged_nodes[node_id] = assigned
                 continue
-            merged_nodes[slug] = existing.model_copy(
+            merged_nodes[node_id] = existing.model_copy(
                 update={"sources": merge_sources(existing.sources, assigned.sources)}
             )
         known = set(merged_nodes)

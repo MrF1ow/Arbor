@@ -516,6 +516,19 @@ html, body {
   font-weight: 500;
 }
 
+.concept-list-item.figure {
+  border-left-style: dashed;
+  color: var(--sage-deep);
+}
+
+.concept-list-item.figure.active {
+  border-left-color: var(--sage-muted);
+}
+
+.concept-list-item.unverified {
+  color: var(--danger);
+}
+
 .concept-detail {
   border: 1px solid var(--cream-border);
   border-radius: 12px;
@@ -610,6 +623,18 @@ html, body {
   margin-top: 20px;
 }
 
+.empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 20px;
+}
+
+.empty-actions .btn-primary {
+  margin-top: 0;
+}
+
 .flashcards-view {
   min-height: 100%;
   padding: 32px 48px 48px;
@@ -691,6 +716,28 @@ html, body {
 
 .source-chip:hover {
   background: var(--sage-tint-strong);
+}
+
+.source-chip.figure-chip {
+  background: transparent;
+  border: 1px dashed var(--sage-accent);
+  color: var(--sage-deep);
+}
+
+.figure-chip {
+  border: 1px dashed var(--sage-muted);
+  background: var(--cream-elevated);
+}
+
+.citation-badge {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: color-mix(in srgb, var(--danger) 18%, var(--cream-elevated));
+  color: var(--danger);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 .flashcard-controls {

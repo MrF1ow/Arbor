@@ -133,6 +133,7 @@ export interface ConceptNode {
   id: string;
   name: string;
   summary: string;
+  kind: "concept" | "figure";
   sources: ConceptSource[];
 }
 
@@ -154,6 +155,18 @@ export interface ConceptNeighbor {
   id: string;
   name: string;
   relation: string;
+}
+
+export interface CitationFailure {
+  path: string;
+  id: string;
+  reason: string;
+}
+
+export interface CitationsReport {
+  schema_version: 1;
+  course: string;
+  failures: CitationFailure[];
 }
 export interface SearchHit {
   course: string;

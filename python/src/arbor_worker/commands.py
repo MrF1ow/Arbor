@@ -18,7 +18,10 @@ from arbor_worker.provider.fake import FakeProvider
 from arbor_worker.settings import default_settings, load_models, load_settings
 from arbor_worker.skills import SKILLS
 from arbor_worker.skills.base import run_skill
+from arbor_worker.skills.citations import CitationsSkill
 from arbor_worker.skills.concepts import ConceptsSkill, merge_graphs
+from arbor_worker.skills.diagrams import DiagramsSkill, cached_page_images, merge_figures
+from arbor_worker.schemas.study.concepts import ConceptGraph
 from arbor_worker.skills.flashcards import FlashcardsSkill, digest_batches, merge_decks
 from arbor_worker.skills.quiz import QuizSkill, merge_packs
 from arbor_worker.skills.manifest import (
@@ -170,8 +173,23 @@ def cmd_generate(args) -> int:
     )
 
     study_dir = course_dir / "study"
+    if isinstance(skill, CitationsSkill):
+        for name in ("flashcards.json", "quiz.json", "concepts.json"):
+            extra = study_dir / name
+            if extra.is_file():
+                source_hash.update(extra.read_bytes())
+        content_sha256 = source_hash.hexdigest()
     manifest_path = study_dir / "manifest.json"
-    artifact_path = study_dir / f"{skill.name}.json"
+    artifact_path = (
+        study_dir / "concepts.json"
+        if isinstance(skill, DiagramsSkill)
+        else study_dir / f"{skill.name}.json"
+    )
+    image_paths = (
+        cached_page_images(root, settings.cache_dir_name)
+        if isinstance(skill, DiagramsSkill)
+        else []
+    )
     try:
         manifest = load_manifest(manifest_path)
     except ValueError as error:
@@ -192,6 +210,65 @@ def cmd_generate(args) -> int:
             course=args.course,
             skill=skill.name,
             content_sha256=content_sha256,
+        )
+        return 0
+
+    if isinstance(skill, CitationsSkill):
+        emitter.skill_started(course=args.course, skill=skill.name)
+        try:
+            artifact = skill.verify(course_dir, args.course)
+        except Exception as error:
+            emitter.skill_failed(
+                course=args.course,
+                skill=skill.name,
+                message=str(error),
+            )
+            return 1
+        for failure in artifact.failures:
+            emitter.citation_failed(
+                path=failure.path,
+                id=failure.id,
+                reason=failure.reason,
+            )
+        study_dir.mkdir(parents=True, exist_ok=True)
+        artifact_path.write_text(
+            json.dumps(artifact.model_dump(mode="json"), indent=2) + "\n"
+        )
+        manifest.artifacts[skill.name] = ManifestArtifact(
+            file=artifact_path.name,
+            content_sha256=content_sha256,
+            generated_at=datetime.now(timezone.utc),
+        )
+        write_manifest(manifest_path, manifest)
+        ensure_gitignored(
+            root,
+            settings.cache_dir_name,
+            [".arbor/progress/", ".arbor/vectors.sqlite"],
+        )
+        artifact_rel = artifact_path.relative_to(root)
+        manifest_rel = manifest_path.relative_to(root)
+        try:
+            commit = commit_batch(
+                root,
+                [manifest_rel, artifact_rel],
+                f"study: {args.course} {skill.name}",
+            )
+        except GitStateError as error:
+            emitter.skill_failed(
+                course=args.course,
+                skill=skill.name,
+                message=str(error),
+            )
+            return 1
+        emitter.skill_done(
+            course=args.course,
+            skill=skill.name,
+            file=str(artifact_rel),
+        )
+        emitter.committed(
+            commit=commit,
+            courses=[args.course],
+            skill=skill.name,
         )
         return 0
 
@@ -242,12 +319,21 @@ def cmd_generate(args) -> int:
             run_skill(
                 provider,
                 ProviderRequest(
-                    prompt=skill.build_prompt(
-                        course=args.course,
-                        digest_text=skill_input,
+                    prompt=(
+                        skill.build_prompt(
+                            course=args.course,
+                            digest_text=skill_input,
+                            image_paths=image_paths,
+                        )
+                        if isinstance(skill, DiagramsSkill)
+                        else skill.build_prompt(
+                            course=args.course,
+                            digest_text=skill_input,
+                        )
                     ),
                     model_id=model_id,
                     cwd=root,
+                    image_paths=image_paths,
                 ),
                 skill,
                 on_retry=emit_retry,
@@ -260,6 +346,28 @@ def cmd_generate(args) -> int:
             artifact = merge_packs(artifacts)
         elif isinstance(skill, ConceptsSkill):
             artifact = merge_graphs(artifacts)
+            if artifact_path.is_file():
+                existing_graph = ConceptGraph.model_validate_json(
+                    artifact_path.read_text()
+                )
+                figures = [
+                    node for node in existing_graph.nodes if node.kind == "figure"
+                ]
+                if figures:
+                    figure_ids = {node.id for node in figures}
+                    figure_edges = [
+                        edge
+                        for edge in existing_graph.edges
+                        if edge.from_ in figure_ids and edge.to in figure_ids
+                    ]
+                    artifact = merge_graphs(
+                        [
+                            artifact,
+                            existing_graph.model_copy(
+                                update={"nodes": figures, "edges": figure_edges}
+                            ),
+                        ]
+                    )
         else:
             artifact = artifacts[0]
     except Exception as error:
@@ -271,14 +379,36 @@ def cmd_generate(args) -> int:
         return 1
 
     study_dir.mkdir(parents=True, exist_ok=True)
-    artifact_path.write_text(
-        json.dumps(artifact.model_dump(mode="json", by_alias=True), indent=2) + "\n"
-    )
-    manifest.artifacts[skill.name] = ManifestArtifact(
-        file=artifact_path.name,
-        content_sha256=content_sha256,
-        generated_at=datetime.now(timezone.utc),
-    )
+    written_rels: list[Path] = []
+    if isinstance(skill, DiagramsSkill):
+        concepts_path = study_dir / "concepts.json"
+        existing = None
+        if concepts_path.is_file():
+            existing = ConceptGraph.model_validate_json(concepts_path.read_text())
+        merged = merge_figures(existing, artifact)
+        if merged is not None and merged is not existing:
+            concepts_path.write_text(
+                json.dumps(merged.model_dump(mode="json", by_alias=True), indent=2)
+                + "\n"
+            )
+            written_rels.append(concepts_path.relative_to(root))
+        artifact_rel = concepts_path.relative_to(root)
+        manifest.artifacts[skill.name] = ManifestArtifact(
+            file="concepts.json",
+            content_sha256=content_sha256,
+            generated_at=datetime.now(timezone.utc),
+        )
+    else:
+        artifact_path.write_text(
+            json.dumps(artifact.model_dump(mode="json", by_alias=True), indent=2) + "\n"
+        )
+        artifact_rel = artifact_path.relative_to(root)
+        written_rels.append(artifact_rel)
+        manifest.artifacts[skill.name] = ManifestArtifact(
+            file=artifact_path.name,
+            content_sha256=content_sha256,
+            generated_at=datetime.now(timezone.utc),
+        )
     write_manifest(manifest_path, manifest)
     ensure_gitignored(
         root,
@@ -286,12 +416,11 @@ def cmd_generate(args) -> int:
         [".arbor/progress/", ".arbor/vectors.sqlite"],
     )
 
-    artifact_rel = artifact_path.relative_to(root)
     manifest_rel = manifest_path.relative_to(root)
     try:
         commit = commit_batch(
             root,
-            [manifest_rel, artifact_rel],
+            [manifest_rel, *written_rels],
             f"study: {args.course} {skill.name}",
         )
     except GitStateError as error:

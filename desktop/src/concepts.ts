@@ -32,6 +32,7 @@ function parseNode(value: unknown): ConceptNode {
     id: nonBlankString(value.id, "node.id"),
     name: nonBlankString(value.name, "node.name"),
     summary: nonBlankString(value.summary, "node.summary"),
+    kind: value.kind === "figure" ? "figure" : "concept",
     sources: value.sources.map(parseSource),
   };
 }
@@ -113,6 +114,21 @@ export function conceptJobArgs(
     root,
     course,
     skill: "concepts",
+    force,
+    model,
+  };
+}
+
+export function diagramJobArgs(
+  root: string,
+  course: string,
+  force: boolean,
+  model: string,
+) {
+  return {
+    root,
+    course,
+    skill: "diagrams",
     force,
     model,
   };
