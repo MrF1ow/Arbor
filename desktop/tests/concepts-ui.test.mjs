@@ -10,6 +10,8 @@ test("graph tab exists with generate controls after quiz", async () => {
   for (const id of [
     "concepts-empty",
     "generate-concepts",
+    "generate-diagrams",
+    "refresh-diagrams",
     "concepts-graph",
     "concept-stale",
     "refresh-concepts",
@@ -34,4 +36,18 @@ test("graph tab exists with generate controls after quiz", async () => {
   const quizIndex = html.indexOf('data-mode="quiz"');
   const graphIndex = html.indexOf('data-mode="graph"');
   assert.ok(quizIndex >= 0 && graphIndex > quizIndex, "Graph tab must follow Quiz");
+});
+
+test("concept list items select the clicked node", async () => {
+  const source = await readFile(new URL("../src/main.ts", import.meta.url), "utf8");
+  const start = source.indexOf("function renderConceptGraph");
+  const end = source.indexOf("\nasync function loadGraph", start);
+  const body = source.slice(start, end === -1 ? undefined : end);
+  const listLoop = body.slice(
+    body.indexOf("for (const node of conceptGraph.nodes)"),
+    body.indexOf("conceptNameEl.textContent"),
+  );
+
+  assert.match(listLoop, /addEventListener\("click"/);
+  assert.match(listLoop, /selectedConceptId = node\.id/);
 });

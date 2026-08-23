@@ -86,6 +86,7 @@ def test_skill_events():
     em.skill_done(course="Biology", skill="fixture")
     em.skill_failed(course="Biology", skill="fixture", message="bad json")
     em.skill_stale_skipped(course="Biology", skill="fixture")
+    em.citation_failed(path="study/flashcards.json", id="fc_bogus", reason="claim not in digest")
 
     assert [event["type"] for event in parse_lines(buf.getvalue())] == [
         "skill_started",
@@ -93,6 +94,7 @@ def test_skill_events():
         "skill_done",
         "skill_failed",
         "skill_stale_skipped",
+        "citation_failed",
     ]
 
 
