@@ -4,6 +4,7 @@ version = "2.1.0"
 description = "Arbor knowledge worker: turns lecture sources into structured digests via the Codex CLI."
 requires-python = ">=3.11"
 dependencies = [
+    "pydantic>=2",
     "pymupdf>=1.24",
     "python-pptx>=0.6.23",
     "python-docx>=1.1.0",
@@ -27,3 +28,4 @@ packages = ["src/arbor_worker"]
 [tool.pytest.ini_options]
 addopts = "-q"
 testpaths = ["tests"]
+pythonpath = ["tests"]

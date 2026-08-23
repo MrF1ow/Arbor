@@ -26,7 +26,7 @@ def test_subcommands_registered():
     choices = set()
     for a in actions:
         choices.update(a.choices.keys())
-    assert {"check-auth", "list-models", "update", "plan-update"}.issubset(choices)
+    assert {"check-auth", "list-models", "update", "plan-update", "generate"}.issubset(choices)
 
 
 def test_list_models_default(tmp_path):

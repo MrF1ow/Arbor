@@ -24,6 +24,14 @@ def build_parser() -> argparse.ArgumentParser:
     up.add_argument("--cancel-file", default=None, help="If this file appears, stop at the next range or action boundary.")
     up.add_argument("--plan", default=None, help='JSON file with {"selections": [{"path", "ranges"}]}.')
 
+    gen = sub.add_parser("generate", help="Generate study artifacts for a course.")
+    gen.add_argument("--root", required=True, help="Path to the Knowledge git repo.")
+    gen.add_argument("--course", required=True, help="Course directory name.")
+    gen.add_argument("--skill", required=True, help="Study skill to generate.")
+    gen.add_argument("--force", action="store_true", help="Regenerate a current artifact.")
+    gen.add_argument("--provider", default="codex", choices=["codex", "fake"])
+    gen.add_argument("--model", default=None, help="Model id passed to the provider.")
+
     ri = sub.add_parser("reindex", help="Rebuild the search index under a Knowledge root.")
     ri.add_argument("--root", required=True, help="Path to the Knowledge git repo.")
 
@@ -40,7 +48,6 @@ def main(argv: list[str] | None = None) -> int:
     if args.command is None:
         parser.print_help()
         return 2
-    # Handlers wired in later tasks.
     if args.command == "check-auth":
         from arbor_worker.commands import cmd_check_auth
         return cmd_check_auth(args)
@@ -53,6 +60,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "update":
         from arbor_worker.commands import cmd_update
         return cmd_update(args)
+    if args.command == "generate":
+        from arbor_worker.commands import cmd_generate
+        return cmd_generate(args)
     if args.command == "reindex":
         from arbor_worker.commands import cmd_reindex
         return cmd_reindex(args)

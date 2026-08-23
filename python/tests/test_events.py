@@ -78,6 +78,24 @@ def test_course_events():
     assert events[1]["ranges"] == [[151, 160]]
 
 
+def test_skill_events():
+    buf = io.StringIO()
+    em = EventEmitter(buf)
+    em.skill_started(course="Biology", skill="fixture")
+    em.skill_progress(course="Biology", skill="fixture", attempt=2)
+    em.skill_done(course="Biology", skill="fixture")
+    em.skill_failed(course="Biology", skill="fixture", message="bad json")
+    em.skill_stale_skipped(course="Biology", skill="fixture")
+
+    assert [event["type"] for event in parse_lines(buf.getvalue())] == [
+        "skill_started",
+        "skill_progress",
+        "skill_done",
+        "skill_failed",
+        "skill_stale_skipped",
+    ]
+
+
 def test_lecture_events_removed():
     assert not hasattr(EventEmitter, "lecture_started")
     assert not hasattr(EventEmitter, "lecture_done")
