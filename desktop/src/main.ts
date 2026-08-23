@@ -740,6 +740,9 @@ function renderEvent(ev: WorkerEvent) {
       void loadJobHistory();
       activeJobId = null;
       break;
+    default:
+      logLine(ev.message ? `${ev.type}: ${ev.message}` : ev.type);
+      break;
   }
 }
 
