@@ -18,6 +18,7 @@ from arbor_worker.provider.fake import FakeProvider
 from arbor_worker.settings import default_settings, load_models, load_settings
 from arbor_worker.skills import SKILLS
 from arbor_worker.skills.base import run_skill
+from arbor_worker.skills.concepts import ConceptsSkill, merge_graphs
 from arbor_worker.skills.flashcards import FlashcardsSkill, digest_batches, merge_decks
 from arbor_worker.skills.quiz import QuizSkill, merge_packs
 from arbor_worker.skills.manifest import (
@@ -164,7 +165,7 @@ def cmd_generate(args) -> int:
     digest_text = "\n\n".join(digest_sections)
     skill_inputs = (
         digest_batches(digest_sections)
-        if isinstance(skill, (FlashcardsSkill, QuizSkill))
+        if isinstance(skill, (FlashcardsSkill, QuizSkill, ConceptsSkill))
         else [digest_text]
     )
 
@@ -257,6 +258,8 @@ def cmd_generate(args) -> int:
             artifact = merge_decks(artifacts)
         elif isinstance(skill, QuizSkill):
             artifact = merge_packs(artifacts)
+        elif isinstance(skill, ConceptsSkill):
+            artifact = merge_graphs(artifacts)
         else:
             artifact = artifacts[0]
     except Exception as error:
@@ -269,7 +272,7 @@ def cmd_generate(args) -> int:
 
     study_dir.mkdir(parents=True, exist_ok=True)
     artifact_path.write_text(
-        json.dumps(artifact.model_dump(mode="json"), indent=2) + "\n"
+        json.dumps(artifact.model_dump(mode="json", by_alias=True), indent=2) + "\n"
     )
     manifest.artifacts[skill.name] = ManifestArtifact(
         file=artifact_path.name,

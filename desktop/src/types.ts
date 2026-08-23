@@ -1,3 +1,5 @@
+export type Mode = "notes" | "flashcards" | "quiz" | "graph";
+
 export interface DigestInfo {
   name: string;
   path: string;
@@ -122,6 +124,37 @@ export interface QuizProgressEntry {
 
 export type QuizProgress = Record<string, QuizProgressEntry>;
 
+export interface ConceptSource {
+  digest: string;
+  heading: string | null;
+}
+
+export interface ConceptNode {
+  id: string;
+  name: string;
+  summary: string;
+  sources: ConceptSource[];
+}
+
+export interface ConceptEdge {
+  from: string;
+  to: string;
+  relation: string;
+  sources: ConceptSource[];
+}
+
+export interface ConceptGraph {
+  schema_version: 1;
+  course: string;
+  nodes: ConceptNode[];
+  edges: ConceptEdge[];
+}
+
+export interface ConceptNeighbor {
+  id: string;
+  name: string;
+  relation: string;
+}
 export interface SearchHit {
   course: string;
   path: string;

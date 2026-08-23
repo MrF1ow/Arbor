@@ -6,6 +6,11 @@ Package version for the worker, desktop, and Tauri app. See [Version numbering](
 
 ## Unreleased
 
+Graph (Wave 5, toward package `v2.6.0`).
+
+- `arbor-worker generate --skill concepts` writes `study/concepts.json` with slug node ids, merges duplicate names by source, and commits `study: {course} concepts`. Concatenated digests over 100k characters split per digest, then merge graphs. Unchanged digest hashes still emit `skill_stale_skipped`.
+- Graph tab: empty Generate, concept list with neighbors and source chips to Notes, stale badge and Refresh from digests. Notes shows related concept chips for the open digest.
+
 Quiz (Wave 3, toward package `v2.4.0`).
 
 - `arbor-worker generate --skill quiz` writes `study/quiz.json`, assigns `q_` ids from normalized prompt plus digest, and commits `study: {course} quiz`. Concatenated digests over 100k characters split per digest, then merge and drop duplicate prompts. Unchanged digest hashes still emit `skill_stale_skipped`.

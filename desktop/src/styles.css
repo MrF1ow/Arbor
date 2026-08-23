@@ -464,6 +464,111 @@ html, body {
   margin-bottom: 16px;
 }
 
+.concept-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: 640px;
+  margin: 0 auto 16px;
+}
+
+.concepts-view {
+  min-height: 100%;
+  padding: 32px 48px 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.concepts-layout {
+  width: min(860px, 100%);
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 24px;
+  min-height: 360px;
+}
+
+.concept-list {
+  border: 1px solid var(--cream-border);
+  border-radius: 12px;
+  background: var(--cream-elevated);
+  overflow: auto;
+}
+
+.concept-list-item {
+  display: block;
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  background: none;
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  border-left: 3px solid transparent;
+  color: var(--ink);
+}
+
+.concept-list-item:hover { background: var(--sage-tint); }
+.concept-list-item.active {
+  background: var(--sage-tint);
+  border-left-color: var(--sage-accent);
+  font-weight: 500;
+}
+
+.concept-detail {
+  border: 1px solid var(--cream-border);
+  border-radius: 12px;
+  background: var(--cream-elevated);
+  padding: 24px;
+}
+
+.concept-detail h2 {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin-bottom: 8px;
+}
+
+.concept-detail p {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink-muted);
+  margin-bottom: 20px;
+}
+
+.concept-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+  margin: 8px 0;
+}
+
+.concept-neighbors,
+.concept-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.concept-neighbor {
+  border: none;
+  border-radius: 999px;
+  padding: 5px 10px;
+  background: var(--sage-tint);
+  color: var(--sage-deep);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.concept-neighbor:hover {
+  background: var(--sage-tint-strong);
+}
+
 /* ── Coming soon ── */
 .coming-soon {
   height: 100%;

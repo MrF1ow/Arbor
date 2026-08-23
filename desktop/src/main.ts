@@ -26,9 +26,16 @@ import {
   shouldAutoGenerateQuiz,
   submitChoice,
 } from "./quiz";
+import {
+  conceptJobArgs,
+  neighbors,
+  nodesForDigest,
+  parseConceptGraph,
+} from "./concepts";
 import { renderMarkdown } from "./markdown";
 import type {
   AuthStatus,
+  ConceptGraph,
   DigestInfo,
   FlashcardProgress,
   FlashcardReview,
@@ -36,6 +43,7 @@ import type {
   JobFinished,
   JobSummary,
   KnowledgeSettings,
+  Mode,
   Model,
   PendingSource,
   QuizProgress,
@@ -50,7 +58,6 @@ import type {
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 type Place = "welcome" | "course" | "jobs" | "settings";
-type Mode = "notes" | "flashcards" | "quiz";
 
 const courseListEl = $("course-list");
 const folderHintEl = $("folder-hint");
@@ -99,6 +106,19 @@ const quizExplanationEl = $("quiz-explanation");
 const quizSourceBtn = $("quiz-source") as HTMLButtonElement;
 const quizPrevBtn = $("quiz-prev");
 const quizNextBtn = $("quiz-next");
+const conceptsCopyEl = $("concepts-copy");
+const conceptsEmptyEl = $("concepts-empty");
+const conceptsGraphEl = $("concepts-graph");
+const generateConceptsBtn = $("generate-concepts") as HTMLButtonElement;
+const refreshConceptsBtn = $("refresh-concepts") as HTMLButtonElement;
+const conceptStaleEl = $("concept-stale");
+const conceptCountEl = $("concept-count");
+const conceptListEl = $("concept-list");
+const conceptNameEl = $("concept-name");
+const conceptSummaryEl = $("concept-summary");
+const conceptNeighborsEl = $("concept-neighbors");
+const conceptSourcesEl = $("concept-sources");
+const notesConceptChipsEl = $("notes-concept-chips");
 const jobsListEl = $("jobs-list");
 const jobsLogEl = $("jobs-log");
 const modelSel = $("model") as HTMLSelectElement;
@@ -143,6 +163,9 @@ let quizReview: QuizReview | null = null;
 let quizProgress: QuizProgress = {};
 let quizCourse: string | null = null;
 let progressWrite = Promise.resolve();
+let conceptGraph: ConceptGraph | null = null;
+let selectedConceptId: string | null = null;
+let currentNotesPath: string | null = null;
 
 function logLine(text: string) {
   logEl.textContent += text + "\n";
@@ -178,6 +201,7 @@ function setCourseView(course: string, mode: Mode = currentMode, notesPath?: str
   inspectorEl.hidden = false;
   flashcardsCopyEl.textContent = `Study decks generated from your ${course} digests. Flip cards, track progress, and shuffle for review.`;
   quizCopyEl.textContent = `Practice questions pulled from your ${course} material. Test yourself before the exam.`;
+  conceptsCopyEl.textContent = `Concepts linked across your ${course} digests.`;
   modeTabsEl.querySelectorAll(".mode-tab").forEach((t) => {
     t.classList.toggle("active", (t as HTMLElement).dataset.mode === mode);
   });
@@ -186,6 +210,7 @@ function setCourseView(course: string, mode: Mode = currentMode, notesPath?: str
   if (mode === "notes") void loadCourseContent(course, notesPath);
   if (mode === "flashcards") void loadFlashcards(course);
   if (mode === "quiz") void loadQuiz(course);
+  if (mode === "graph") void loadGraph(course);
   refreshStudyEnabled();
 }
 
@@ -228,6 +253,8 @@ function refreshStudyEnabled() {
   refreshFlashcardsBtn.disabled = !enabled;
   generateQuizBtn.disabled = !enabled;
   refreshQuizBtn.disabled = !enabled;
+  generateConceptsBtn.disabled = !enabled;
+  refreshConceptsBtn.disabled = !enabled;
 }
 
 function refreshFolderTools() {
@@ -271,6 +298,7 @@ async function renderCourseList() {
 
 async function loadDigestPreview(course: string, relativePath: string) {
   if (!knowledgeRoot) return;
+  currentNotesPath = relativePath;
   courseIndexLink.classList.toggle("active", relativePath === `${course}/course.md`);
   digestListEl.querySelectorAll(".digest-link").forEach((el) => {
     el.classList.toggle("active", (el as HTMLElement).dataset.path === relativePath);
@@ -284,6 +312,7 @@ async function loadDigestPreview(course: string, relativePath: string) {
   } catch (e) {
     readingArticleEl.innerHTML = `<p class="reading-empty">Could not load file: ${e}</p>`;
   }
+  await renderNotesConceptChips(course, relativePath);
 }
 
 async function loadCourseContent(course: string, initialPath?: string) {
@@ -470,6 +499,130 @@ async function loadQuiz(course: string) {
   refreshStudyEnabled();
 }
 
+async function readConceptGraph(course: string): Promise<ConceptGraph | null> {
+  if (!knowledgeRoot) return null;
+  try {
+    const value = await invoke<unknown>("read_study_json", {
+      root: knowledgeRoot,
+      course,
+      file: "concepts.json",
+    });
+    return parseConceptGraph(value);
+  } catch {
+    return null;
+  }
+}
+
+async function renderNotesConceptChips(course: string, relativePath: string) {
+  notesConceptChipsEl.innerHTML = "";
+  const graph = await readConceptGraph(course);
+  if (!graph) {
+    notesConceptChipsEl.hidden = true;
+    return;
+  }
+  const related = nodesForDigest(graph, relativePath);
+  if (related.length === 0) {
+    notesConceptChipsEl.hidden = true;
+    return;
+  }
+  notesConceptChipsEl.hidden = false;
+  for (const node of related) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "source-chip";
+    btn.textContent = node.name;
+    btn.addEventListener("click", () => {
+      selectedConceptId = node.id;
+      setCourseView(course, "graph");
+    });
+    notesConceptChipsEl.appendChild(btn);
+  }
+}
+
+function renderConceptGraph() {
+  if (!conceptGraph || !selectedConceptId) return;
+  const selected =
+    conceptGraph.nodes.find((node) => node.id === selectedConceptId) ??
+    conceptGraph.nodes[0];
+  selectedConceptId = selected.id;
+  conceptCountEl.textContent = `${conceptGraph.nodes.length} concepts`;
+  conceptListEl.innerHTML = "";
+  for (const node of conceptGraph.nodes) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "concept-list-item";
+    btn.classList.toggle("active", node.id === selected.id);
+    btn.textContent = node.name;
+    btn.addEventListener("click", () => {
+      selectedConceptId = node.id;
+      renderConceptGraph();
+    });
+    conceptListEl.appendChild(btn);
+  }
+  conceptNameEl.textContent = selected.name;
+  conceptSummaryEl.textContent = selected.summary;
+  conceptNeighborsEl.innerHTML = "";
+  for (const neighbor of neighbors(conceptGraph, selected.id)) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "concept-neighbor";
+    btn.textContent = `${neighbor.name} · ${neighbor.relation}`;
+    btn.addEventListener("click", () => {
+      selectedConceptId = neighbor.id;
+      renderConceptGraph();
+    });
+    conceptNeighborsEl.appendChild(btn);
+  }
+  conceptSourcesEl.innerHTML = "";
+  for (const source of selected.sources) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "source-chip";
+    btn.textContent = source.heading
+      ? `${source.digest} · ${source.heading}`
+      : source.digest;
+    btn.addEventListener("click", () => {
+      if (!currentCourse) return;
+      setCourseView(currentCourse, "notes", `${currentCourse}/${source.digest}`);
+    });
+    conceptSourcesEl.appendChild(btn);
+  }
+}
+
+async function loadGraph(course: string) {
+  if (!knowledgeRoot) return;
+  const root = knowledgeRoot;
+  try {
+    const graph = await readConceptGraph(course);
+    if (!graph) throw new Error("no concept graph");
+    if (graph.course !== course) throw new Error(`Graph course is ${graph.course}`);
+    const stale = await invoke<boolean>("study_artifact_stale", {
+      root,
+      course,
+      skill: "concepts",
+    });
+    if (currentCourse !== course) return;
+    conceptGraph = graph;
+    if (
+      !selectedConceptId ||
+      !graph.nodes.some((node) => node.id === selectedConceptId)
+    ) {
+      selectedConceptId = graph.nodes[0].id;
+    }
+    conceptsEmptyEl.hidden = true;
+    conceptsGraphEl.hidden = false;
+    conceptStaleEl.hidden = !stale;
+    renderConceptGraph();
+  } catch {
+    if (currentCourse !== course) return;
+    conceptGraph = null;
+    conceptsEmptyEl.hidden = false;
+    conceptsGraphEl.hidden = true;
+    conceptsCopyEl.textContent = `No concept graph yet for ${course}. Generate concepts from your digests.`;
+  }
+  refreshStudyEnabled();
+}
+
 function persistQuizProgress() {
   if (!knowledgeRoot || !quizCourse) return;
   const root = knowledgeRoot;
@@ -496,6 +649,25 @@ async function startQuizJob(force: boolean) {
     studyJobRunning = false;
     refreshStudyEnabled();
     logLine(`Quiz generation failed to start: ${error}`);
+  }
+}
+
+async function startConceptJob(force: boolean) {
+  if (!knowledgeRoot || !currentCourse || !modelSel.value) return;
+  await refreshAuth();
+  if (!authed) return;
+  studyJobRunning = true;
+  refreshStudyEnabled();
+  try {
+    const jobId = await invoke<string>(
+      "start_study_job",
+      conceptJobArgs(knowledgeRoot, currentCourse, force, modelSel.value),
+    );
+    logLine(`Concept job ${jobId} started.`);
+  } catch (error) {
+    studyJobRunning = false;
+    refreshStudyEnabled();
+    logLine(`Concept generation failed to start: ${error}`);
   }
 }
 
@@ -968,6 +1140,14 @@ refreshQuizBtn.addEventListener("click", () => {
   void startQuizJob(true);
 });
 
+generateConceptsBtn.addEventListener("click", () => {
+  void startConceptJob(false);
+});
+
+refreshConceptsBtn.addEventListener("click", () => {
+  void startConceptJob(true);
+});
+
 flashcardFlipBtn.addEventListener("click", () => {
   if (!flashcardReview) return;
   if (!flashcardReview.flipped) markCurrentFlashcardSeen();
@@ -1192,6 +1372,10 @@ async function handleJobFinished(finished: JobFinished) {
   if (currentCourse) {
     void loadFlashcards(currentCourse);
     void loadQuiz(currentCourse);
+    if (currentMode === "graph") void loadGraph(currentCourse);
+    if (currentMode === "notes") {
+      void loadCourseContent(currentCourse, currentNotesPath ?? undefined);
+    }
   }
 
   if (finished.status !== "succeeded") {
