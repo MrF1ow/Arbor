@@ -18,6 +18,7 @@ from arbor_worker.provider.fake import FakeProvider
 from arbor_worker.settings import default_settings, load_models, load_settings
 from arbor_worker.skills import SKILLS
 from arbor_worker.skills.base import run_skill
+from arbor_worker.skills.flashcards import FlashcardsSkill, digest_batches, merge_decks
 from arbor_worker.skills.manifest import (
     ManifestArtifact,
     load_manifest,
@@ -160,6 +161,11 @@ def cmd_generate(args) -> int:
         return 1
     content_sha256 = source_hash.hexdigest()
     digest_text = "\n\n".join(digest_sections)
+    skill_inputs = (
+        digest_batches(digest_sections)
+        if isinstance(skill, FlashcardsSkill)
+        else [digest_text]
+    )
 
     study_dir = course_dir / "study"
     manifest_path = study_dir / "manifest.json"
@@ -219,14 +225,6 @@ def cmd_generate(args) -> int:
         model_id = args.model or "fake-model"
 
     emitter.skill_started(course=args.course, skill=skill.name)
-    request = ProviderRequest(
-        prompt=skill.build_prompt(
-            course=args.course,
-            digest_text=digest_text,
-        ),
-        model_id=model_id,
-        cwd=root,
-    )
 
     def emit_retry(attempt: int, error: Exception) -> None:
         emitter.skill_progress(
@@ -238,11 +236,26 @@ def cmd_generate(args) -> int:
         )
 
     try:
-        artifact = run_skill(
-            provider,
-            request,
-            skill,
-            on_retry=emit_retry,
+        artifacts = [
+            run_skill(
+                provider,
+                ProviderRequest(
+                    prompt=skill.build_prompt(
+                        course=args.course,
+                        digest_text=skill_input,
+                    ),
+                    model_id=model_id,
+                    cwd=root,
+                ),
+                skill,
+                on_retry=emit_retry,
+            )
+            for skill_input in skill_inputs
+        ]
+        artifact = (
+            merge_decks(artifacts)
+            if isinstance(skill, FlashcardsSkill)
+            else artifacts[0]
         )
     except Exception as error:
         emitter.skill_failed(

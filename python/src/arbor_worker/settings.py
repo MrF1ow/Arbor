@@ -15,6 +15,11 @@ DEFAULT_MODELS = [
 
 
 @dataclass(frozen=True)
+class AutoGenerate:
+    flashcards: bool = False
+
+
+@dataclass(frozen=True)
 class WorkerSettings:
     cache_dir_name: str = "_arbor_cache"
     pptx_min_chars: int = 200
@@ -26,6 +31,7 @@ class WorkerSettings:
     delete_sources_after_digest: bool = False
     auto_update: bool = False
     watch_enabled: bool = True
+    auto_generate: AutoGenerate = field(default_factory=AutoGenerate)
     digests_dirname: str = "digests"
     course_file_name: str = "course.md"
     docs_url: str = DOCS_URL
@@ -50,9 +56,15 @@ def load_settings(root: Path) -> WorkerSettings:
     if not cfg.is_file():
         return base
     data = json.loads(cfg.read_text())
+    auto_generate = data.get("auto_generate", {})
+    if not isinstance(auto_generate, dict):
+        auto_generate = {}
     return replace(
         base,
         delete_sources_after_digest=bool(data.get("delete_sources_after_digest", False)),
         auto_update=bool(data.get("auto_update", False)),
         watch_enabled=bool(data.get("watch_enabled", True)),
+        auto_generate=AutoGenerate(
+            flashcards=bool(auto_generate.get("flashcards", False))
+        ),
     )

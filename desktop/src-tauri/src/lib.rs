@@ -1,11 +1,11 @@
-pub mod linux_graphics;
+mod commands;
 mod db;
 mod jobs;
+pub mod linux_graphics;
 mod search;
 mod settings;
 mod watch;
 mod worker;
-mod commands;
 
 use jobs::JobCoordinator;
 use std::sync::{Arc, Mutex};
@@ -40,6 +40,10 @@ pub fn run() {
             commands::list_courses,
             commands::list_digests,
             commands::read_markdown,
+            commands::read_study_json,
+            commands::read_flashcard_progress,
+            commands::write_flashcard_progress,
+            commands::study_artifact_stale,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Arbor");

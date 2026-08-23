@@ -1,11 +1,27 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
+import {
+  createReview,
+  currentCard,
+  flashcardJobArgs,
+  flipReview,
+  incrementSeen,
+  nextReview,
+  parseFlashcardDeck,
+  parseFlashcardProgress,
+  previousReview,
+  shouldAutoGenerateFlashcards,
+  shuffleCards,
+} from "./flashcards";
 import { renderMarkdown } from "./markdown";
 import type {
   AuthStatus,
   DigestInfo,
+  FlashcardProgress,
+  FlashcardReview,
   JobEventRow,
+  JobFinished,
   JobSummary,
   KnowledgeSettings,
   Model,
@@ -40,6 +56,19 @@ const digestListEl = $("digest-list");
 const courseIndexLink = $("course-index-link");
 const readingArticleEl = $("reading-article");
 const flashcardsCopyEl = $("flashcards-copy");
+const flashcardsEmptyEl = $("flashcards-empty");
+const flashcardsDeckEl = $("flashcards-deck");
+const generateFlashcardsBtn = $("generate-flashcards") as HTMLButtonElement;
+const refreshFlashcardsBtn = $("refresh-flashcards") as HTMLButtonElement;
+const flashcardStaleEl = $("flashcard-stale");
+const flashcardCountEl = $("flashcard-count");
+const flashcardFaceEl = $("flashcard-face");
+const flashcardSourceBtn = $("flashcard-source") as HTMLButtonElement;
+const flashcardTagsEl = $("flashcard-tags");
+const flashcardPrevBtn = $("flashcard-prev");
+const flashcardFlipBtn = $("flashcard-flip");
+const flashcardNextBtn = $("flashcard-next");
+const flashcardShuffleBtn = $("flashcard-shuffle");
 const quizCopyEl = $("quiz-copy");
 const jobsListEl = $("jobs-list");
 const jobsLogEl = $("jobs-log");
@@ -47,6 +76,7 @@ const modelSel = $("model") as HTMLSelectElement;
 const toggleWatch = $("toggle-watch");
 const toggleAuto = $("toggle-auto");
 const toggleDelete = $("toggle-delete");
+const toggleAutoFlashcards = $("toggle-auto-flashcards");
 const reindexBtn = $("reindex") as HTMLButtonElement;
 const updateBtn = $("update") as HTMLButtonElement;
 const cancelBtn = $("cancel") as HTMLButtonElement;
@@ -65,12 +95,17 @@ const searchResultsEl = $("search-results");
 
 let knowledgeRoot: string | null = null;
 let authed = false;
-let activeJobId: string | null = null;
+let activeUpdateJobId: string | null = null;
+let studyJobRunning = false;
 let searchTimer: number | null = null;
 let currentPlace: Place = "welcome";
 let currentCourse: string | null = null;
 let currentMode: Mode = "notes";
 let courses: string[] = [];
+let flashcardReview: FlashcardReview | null = null;
+let flashcardProgress: FlashcardProgress = {};
+let flashcardCourse: string | null = null;
+let progressWrite = Promise.resolve();
 
 function logLine(text: string) {
   logEl.textContent += text + "\n";
@@ -97,7 +132,7 @@ function setNavActive(place: Place, course?: string) {
   navSettings.classList.toggle("active", place === "settings");
 }
 
-function setCourseView(course: string, mode: Mode = currentMode) {
+function setCourseView(course: string, mode: Mode = currentMode, notesPath?: string) {
   currentPlace = "course";
   currentCourse = course;
   currentMode = mode;
@@ -111,7 +146,9 @@ function setCourseView(course: string, mode: Mode = currentMode) {
   });
   showPanel(mode);
   setNavActive("course", course);
-  void loadCourseContent(course);
+  if (mode === "notes") void loadCourseContent(course, notesPath);
+  if (mode === "flashcards") void loadFlashcards(course);
+  refreshStudyEnabled();
 }
 
 function setPlaceView(place: Place) {
@@ -141,11 +178,24 @@ function refreshUpdateEnabled() {
   updateBtn.disabled = !(authed && knowledgeRoot && currentPlace === "course");
 }
 
+function refreshStudyEnabled() {
+  const enabled = Boolean(
+    authed &&
+      knowledgeRoot &&
+      currentCourse &&
+      modelSel.value &&
+      !studyJobRunning,
+  );
+  generateFlashcardsBtn.disabled = !enabled;
+  refreshFlashcardsBtn.disabled = !enabled;
+}
+
 function refreshFolderTools() {
   const ready = Boolean(knowledgeRoot);
   searchToggleBtn.disabled = !ready;
   reindexBtn.disabled = !ready;
   refreshUpdateEnabled();
+  refreshStudyEnabled();
 }
 
 function shortenPath(path: string): string {
@@ -196,7 +246,7 @@ async function loadDigestPreview(course: string, relativePath: string) {
   }
 }
 
-async function loadCourseContent(course: string) {
+async function loadCourseContent(course: string, initialPath?: string) {
   if (!knowledgeRoot) return;
   digestListEl.innerHTML = "";
   const courseMdPath = `${course}/course.md`;
@@ -213,10 +263,101 @@ async function loadCourseContent(course: string) {
       btn.addEventListener("click", () => void loadDigestPreview(course, d.path));
       digestListEl.appendChild(btn);
     }
-    const first = digests.length > 0 ? digests[0].path : courseMdPath;
+    const first = initialPath ?? (digests.length > 0 ? digests[0].path : courseMdPath);
     await loadDigestPreview(course, first);
   } catch {
     await loadDigestPreview(course, courseMdPath);
+  }
+}
+
+function renderCurrentFlashcard() {
+  if (!flashcardReview) return;
+  const card = currentCard(flashcardReview);
+  flashcardCountEl.textContent = `${flashcardReview.index + 1} of ${flashcardReview.cards.length}`;
+  flashcardFaceEl.textContent = flashcardReview.flipped ? card.back : card.front;
+  flashcardFaceEl.classList.toggle("flipped", flashcardReview.flipped);
+  flashcardFlipBtn.textContent = flashcardReview.flipped ? "Show front" : "Flip";
+  flashcardSourceBtn.textContent = card.source.heading
+    ? `${card.source.digest} · ${card.source.heading}`
+    : card.source.digest;
+  flashcardTagsEl.textContent = card.tags.join(" · ");
+}
+
+async function loadFlashcards(course: string) {
+  if (!knowledgeRoot) return;
+  const root = knowledgeRoot;
+  try {
+    const deckValue = await invoke<unknown>("read_study_json", {
+      root,
+      course,
+      file: "flashcards.json",
+    });
+    const deck = parseFlashcardDeck(deckValue);
+    if (deck.course !== course) throw new Error(`Deck course is ${deck.course}`);
+    const progressValue = await invoke<unknown>("read_flashcard_progress", {
+      root,
+      course,
+    });
+    const stale = await invoke<boolean>("study_artifact_stale", {
+      root,
+      course,
+      skill: "flashcards",
+    });
+    if (currentCourse !== course) return;
+    flashcardReview = createReview(deck);
+    flashcardProgress = parseFlashcardProgress(progressValue);
+    flashcardCourse = course;
+    flashcardsEmptyEl.hidden = true;
+    flashcardsDeckEl.hidden = false;
+    flashcardStaleEl.hidden = !stale;
+    renderCurrentFlashcard();
+  } catch {
+    if (currentCourse !== course) return;
+    flashcardReview = null;
+    flashcardProgress = {};
+    flashcardCourse = course;
+    flashcardsEmptyEl.hidden = false;
+    flashcardsDeckEl.hidden = true;
+    flashcardsCopyEl.textContent = `No flashcards yet for ${course}. Generate a deck from your digests.`;
+  }
+  refreshStudyEnabled();
+}
+
+function persistFlashcardProgress() {
+  if (!knowledgeRoot || !flashcardCourse) return;
+  const root = knowledgeRoot;
+  const course = flashcardCourse;
+  const data = flashcardProgress;
+  progressWrite = progressWrite
+    .then(() => invoke<void>("write_flashcard_progress", { root, course, data }))
+    .catch((error) => logLine(`Could not save flashcard progress: ${error}`));
+}
+
+function markCurrentFlashcardSeen() {
+  if (!flashcardReview) return;
+  flashcardProgress = incrementSeen(
+    flashcardProgress,
+    currentCard(flashcardReview).id,
+  );
+  persistFlashcardProgress();
+}
+
+async function startFlashcardJob(force: boolean) {
+  if (!knowledgeRoot || !currentCourse || !modelSel.value) return;
+  await refreshAuth();
+  if (!authed) return;
+  studyJobRunning = true;
+  refreshStudyEnabled();
+  try {
+    const jobId = await invoke<string>(
+      "start_study_job",
+      flashcardJobArgs(knowledgeRoot, currentCourse, force, modelSel.value),
+    );
+    logLine(`Flashcard job ${jobId} started.`);
+  } catch (error) {
+    studyJobRunning = false;
+    refreshStudyEnabled();
+    logLine(`Flashcard generation failed to start: ${error}`);
   }
 }
 
@@ -266,8 +407,7 @@ async function runSearch(query: string) {
     btn.addEventListener("click", () => {
       searchOverlayEl.classList.remove("open");
       const rel = hit.path.includes("/") ? hit.path : `${hit.course}/${hit.path}`;
-      setCourseView(hit.course, "notes");
-      void loadDigestPreview(hit.course, rel);
+      setCourseView(hit.course, "notes", rel);
     });
     searchResultsEl.appendChild(btn);
   }
@@ -290,13 +430,13 @@ async function startUpdateWithSelections(
   cancelBtn.disabled = false;
   openInspector();
   try {
-    activeJobId = await invoke<string>("start_update", {
+    activeUpdateJobId = await invoke<string>("start_update", {
       root: knowledgeRoot,
       model: modelSel.value,
       selections,
       trigger,
     });
-    logLine(`Job ${activeJobId} started.`);
+    logLine(`Job ${activeUpdateJobId} started.`);
   } catch (e) {
     logLine(`Update failed to start: ${e}`);
     reviewEl.hidden = false;
@@ -473,6 +613,7 @@ async function loadKnowledgeSettingsUi() {
     setToggle(toggleWatch, ks.watch_enabled);
     setToggle(toggleAuto, ks.auto_update);
     setToggle(toggleDelete, ks.delete_sources_after_digest);
+    setToggle(toggleAutoFlashcards, ks.auto_generate.flashcards);
   } catch {
     /* settings file may not exist yet */
   }
@@ -550,6 +691,7 @@ async function refreshAuth() {
       codexStatusEl.className = "auth-badge bad";
     }
     refreshUpdateEnabled();
+    refreshStudyEnabled();
   })().finally(() => {
     refreshAuthInFlight = null;
   });
@@ -572,10 +714,7 @@ navSettings.addEventListener("click", () => setPlaceView("settings"));
 modeTabsEl.addEventListener("click", (e) => {
   const tab = (e.target as HTMLElement).closest(".mode-tab") as HTMLElement | null;
   if (!tab || !currentCourse) return;
-  currentMode = tab.dataset.mode as Mode;
-  modeTabsEl.querySelectorAll(".mode-tab").forEach((t) => t.classList.remove("active"));
-  tab.classList.add("active");
-  showPanel(currentMode);
+  setCourseView(currentCourse, tab.dataset.mode as Mode);
 });
 
 searchToggleBtn.addEventListener("click", () => {
@@ -621,6 +760,12 @@ toggleDelete.addEventListener("click", async () => {
   await saveKnowledgeSettings({ delete_sources_after_digest: on });
 });
 
+toggleAutoFlashcards.addEventListener("click", async () => {
+  const on = toggleAutoFlashcards.classList.contains("off");
+  setToggle(toggleAutoFlashcards, on);
+  await saveKnowledgeSettings({ auto_generate: { flashcards: on } });
+});
+
 reindexBtn.addEventListener("click", async () => {
   if (!knowledgeRoot) return;
   try {
@@ -632,7 +777,54 @@ reindexBtn.addEventListener("click", async () => {
   }
 });
 
-modelSel.addEventListener("change", persist);
+modelSel.addEventListener("change", () => {
+  refreshStudyEnabled();
+  void persist();
+});
+
+generateFlashcardsBtn.addEventListener("click", () => {
+  void startFlashcardJob(false);
+});
+
+refreshFlashcardsBtn.addEventListener("click", () => {
+  void startFlashcardJob(true);
+});
+
+flashcardFlipBtn.addEventListener("click", () => {
+  if (!flashcardReview) return;
+  if (!flashcardReview.flipped) markCurrentFlashcardSeen();
+  flashcardReview = flipReview(flashcardReview);
+  renderCurrentFlashcard();
+});
+
+flashcardNextBtn.addEventListener("click", () => {
+  if (!flashcardReview) return;
+  markCurrentFlashcardSeen();
+  flashcardReview = nextReview(flashcardReview);
+  renderCurrentFlashcard();
+});
+
+flashcardPrevBtn.addEventListener("click", () => {
+  if (!flashcardReview) return;
+  flashcardReview = previousReview(flashcardReview);
+  renderCurrentFlashcard();
+});
+
+flashcardShuffleBtn.addEventListener("click", () => {
+  if (!flashcardReview) return;
+  flashcardReview = {
+    cards: shuffleCards(flashcardReview.cards),
+    index: 0,
+    flipped: false,
+  };
+  renderCurrentFlashcard();
+});
+
+flashcardSourceBtn.addEventListener("click", () => {
+  if (!flashcardReview || !flashcardCourse) return;
+  const path = `${flashcardCourse}/${currentCard(flashcardReview).source.digest}`;
+  setCourseView(flashcardCourse, "notes", path);
+});
 
 updateBtn.addEventListener("click", async () => {
   if (!knowledgeRoot || !modelSel.value) return;
@@ -738,7 +930,6 @@ function renderEvent(ev: WorkerEvent) {
       cancelBtn.disabled = true;
       refreshUpdateEnabled();
       void loadJobHistory();
-      activeJobId = null;
       break;
     default:
       logLine(ev.message ? `${ev.type}: ${ev.message}` : ev.type);
@@ -754,8 +945,31 @@ listen<{ line: string }>("arbor://progress", (e) => {
   }
 });
 
-listen<{ job_id: string }>("arbor://job-finished", () => {
+async function handleJobFinished(finished: JobFinished) {
+  const updateJobId = activeUpdateJobId;
+  if (finished.job_id === activeUpdateJobId) activeUpdateJobId = null;
+  studyJobRunning = false;
+  refreshStudyEnabled();
   void loadJobHistory();
+  if (currentCourse) void loadFlashcards(currentCourse);
+
+  if (!knowledgeRoot || !currentCourse || updateJobId === null) return;
+  const settings = await invoke<KnowledgeSettings>("get_knowledge_settings", {
+    root: knowledgeRoot,
+  });
+  if (
+    shouldAutoGenerateFlashcards(
+      finished,
+      updateJobId,
+      settings.auto_generate.flashcards,
+    )
+  ) {
+    await startFlashcardJob(false);
+  }
+}
+
+listen<JobFinished>("arbor://job-finished", (event) => {
+  void handleJobFinished(event.payload);
 });
 
 listen<{ root: string }>("arbor://files-changed", (e) => {
