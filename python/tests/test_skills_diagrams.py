@@ -207,6 +207,28 @@ def test_merge_figures_keeps_link_to_existing_concept():
     assert ("fig-mitochondrion-diagram", "glycolysis") in pairs
 
 
+def test_generate_reruns_when_cache_image_changes(git_repo: Path, monkeypatch):
+    _write_digest(git_repo)
+    _write_course_hashes(git_repo, "Biology", "src-hash")
+    cache = git_repo / "_arbor_cache" / "src-hash"
+    cache.mkdir(parents=True)
+    image = cache / "page-00001.png"
+    image.write_bytes(b"png-one")
+    monkeypatch.setenv("ARBOR_FAKE_MD", _fake_figure())
+
+    first_code, first_events = _run_generate(git_repo)
+    assert first_code == 0
+    assert "skill_done" in [event["type"] for event in first_events]
+
+    image.write_bytes(b"png-two")
+    second_code, second_events = _run_generate(git_repo)
+
+    assert second_code == 0
+    types = [event["type"] for event in second_events]
+    assert "skill_stale_skipped" not in types
+    assert "skill_done" in types
+
+
 def test_generate_passes_prepare_cache_images(git_repo: Path, monkeypatch):
     _write_digest(git_repo)
     _write_course_hashes(git_repo, "Biology", "src-hash")

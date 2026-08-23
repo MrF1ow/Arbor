@@ -190,6 +190,13 @@ def cmd_generate(args) -> int:
         if isinstance(skill, DiagramsSkill)
         else []
     )
+    if isinstance(skill, DiagramsSkill):
+        for path in image_paths:
+            stat = path.stat()
+            source_hash.update(str(path.resolve()).encode())
+            source_hash.update(stat.st_mtime_ns.to_bytes(8, "little"))
+            source_hash.update(stat.st_size.to_bytes(8, "little"))
+        content_sha256 = source_hash.hexdigest()
     try:
         manifest = load_manifest(manifest_path)
     except ValueError as error:

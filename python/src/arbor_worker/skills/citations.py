@@ -13,8 +13,9 @@ def normalize_claim(text: str) -> str:
 
 
 def digest_body(course_dir: Path, digest: str) -> str | None:
-    path = course_dir / digest
-    if not path.is_file():
+    course_root = course_dir.resolve()
+    path = (course_dir / digest).resolve()
+    if not path.is_relative_to(course_root) or not path.is_file():
         return None
     return path.read_text()
 
@@ -118,6 +119,8 @@ def _check_concepts(course_dir: Path) -> list[CitationFailure]:
     graph = ConceptGraph.model_validate_json(path.read_text())
     failures: list[CitationFailure] = []
     for node in graph.nodes:
+        if node.kind == "figure":
+            continue
         if not node.sources:
             failures.append(
                 CitationFailure(

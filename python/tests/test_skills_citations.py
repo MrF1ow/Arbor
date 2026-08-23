@@ -199,6 +199,72 @@ def test_missing_heading_fails_without_crash(git_repo: Path):
     assert failed[0]["reason"] == "missing heading"
 
 
+def test_figure_nodes_are_not_citation_checked(git_repo: Path):
+    _write_digest(git_repo)
+    _write_json(
+        git_repo,
+        "concepts.json",
+        {
+            "schema_version": 1,
+            "course": "Biology",
+            "nodes": [
+                {
+                    "id": "fig-mitochondrion-diagram",
+                    "name": "Mitochondrion diagram",
+                    "summary": "Labeled organelle on slide 4.",
+                    "kind": "figure",
+                    "sources": [
+                        {
+                            "digest": "digests/2026-08-15.md",
+                            "heading": "Cells",
+                        }
+                    ],
+                }
+            ],
+            "edges": [],
+        },
+    )
+
+    code, events = _run_generate(git_repo)
+
+    assert code == 0
+    assert [event["type"] for event in events if event["type"] == "citation_failed"] == []
+    report = json.loads((git_repo / "Biology" / "study" / "citations.json").read_text())
+    assert report["failures"] == []
+
+
+def test_digest_path_outside_course_is_missing(git_repo: Path):
+    _write_digest(git_repo)
+    (git_repo / "secret.md").write_text("Cells divide.\n")
+    _write_json(
+        git_repo,
+        "flashcards.json",
+        {
+            "schema_version": 1,
+            "course": "Biology",
+            "cards": [
+                {
+                    "id": "fc_escape",
+                    "front": "What do cells do?",
+                    "back": "Cells divide.",
+                    "tags": [],
+                    "source": {
+                        "digest": "../secret.md",
+                        "heading": "Cells",
+                    },
+                }
+            ],
+        },
+    )
+
+    code, events = _run_generate(git_repo)
+
+    assert code == 0
+    failed = [event for event in events if event["type"] == "citation_failed"]
+    assert failed[0]["id"] == "fc_escape"
+    assert failed[0]["reason"] == "missing digest"
+
+
 def test_concept_later_source_is_checked(git_repo: Path):
     _write_digest(git_repo)
     _write_json(
