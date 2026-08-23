@@ -83,6 +83,44 @@ pub fn plan_file_path() -> PathBuf {
     std::env::temp_dir().join("arbor-plan.json")
 }
 
+pub fn normalize_study_model(model: Option<String>) -> Option<String> {
+    model
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+pub fn generate_sub_args(
+    root: &str,
+    course: &str,
+    skill: &str,
+    force: bool,
+    model: Option<String>,
+) -> Vec<String> {
+    let mut sub_args = vec![
+        "generate".to_string(),
+        "--root".to_string(),
+        root.to_string(),
+        "--course".to_string(),
+        course.to_string(),
+        "--skill".to_string(),
+        skill.to_string(),
+    ];
+    if force {
+        sub_args.push("--force".to_string());
+    }
+    if let Some(model) = normalize_study_model(model) {
+        sub_args.extend([
+            "--provider".to_string(),
+            "codex".to_string(),
+            "--model".to_string(),
+            model,
+        ]);
+    } else {
+        sub_args.extend(["--provider".to_string(), "fake".to_string()]);
+    }
+    sub_args
+}
+
 #[cfg(feature = "desktop-runtime")]
 pub fn spawn_update_stream(
     app: tauri::AppHandle,
@@ -117,21 +155,10 @@ pub fn spawn_generate_stream(
     course: String,
     skill: String,
     force: bool,
+    model: Option<String>,
     job_id: String,
 ) {
-    let mut sub_args = vec![
-        "generate".to_string(),
-        "--root".to_string(),
-        root.clone(),
-        "--course".to_string(),
-        course,
-        "--skill".to_string(),
-        skill,
-    ];
-    if force {
-        sub_args.push("--force".to_string());
-    }
-    sub_args.extend(["--provider".to_string(), "fake".to_string()]);
+    let sub_args = generate_sub_args(&root, &course, &skill, force, model);
     spawn_worker_stream(app, app_dir, root, sub_args, job_id, "generate");
 }
 
@@ -174,7 +201,8 @@ fn spawn_worker_stream(
         {
             Ok(c) => c,
             Err(e) => {
-                let line = format!("{{\"type\":\"error\",\"message\":\"failed to launch worker: {e}\"}}");
+                let line =
+                    format!("{{\"type\":\"error\",\"message\":\"failed to launch worker: {e}\"}}");
                 let _ = jobs::append_event(&knowledge_root, &job_id, &line);
                 let _ = jobs::finish_job(
                     &knowledge_root,
@@ -253,12 +281,7 @@ fn notify_terminal(
         _ => format!("Arbor {operation}"),
     };
     let body = summary.unwrap_or(status.as_str());
-    let _ = app
-        .notification()
-        .builder()
-        .title(title)
-        .body(body)
-        .show();
+    let _ = app.notification().builder().title(title).body(body).show();
 }
 
 #[cfg(test)]
@@ -274,7 +297,14 @@ mod tests {
         let argv = resolve_worker_argv(&no_env, "/repo/python", &["check-auth"], None);
         assert_eq!(
             argv,
-            vec!["uv", "run", "--project", "/repo/python", "arbor-worker", "check-auth"]
+            vec![
+                "uv",
+                "run",
+                "--project",
+                "/repo/python",
+                "arbor-worker",
+                "check-auth"
+            ]
         );
     }
 
@@ -336,7 +366,51 @@ mod tests {
         let argv = resolve_worker_argv(&no_env, "/repo/python", &["check-auth"], Some(&missing));
         assert_eq!(
             argv,
-            vec!["uv", "run", "--project", "/repo/python", "arbor-worker", "check-auth"]
+            vec![
+                "uv",
+                "run",
+                "--project",
+                "/repo/python",
+                "arbor-worker",
+                "check-auth"
+            ]
         );
+    }
+
+    #[test]
+    fn generate_args_use_fake_without_a_model() {
+        let args = generate_sub_args("/knowledge", "Biology", "flashcards", false, None);
+        assert!(args.ends_with(&["--provider".into(), "fake".into()]));
+        assert!(!args.contains(&"--model".to_string()));
+    }
+
+    #[test]
+    fn generate_args_use_codex_and_model_when_selected() {
+        let args = generate_sub_args(
+            "/knowledge",
+            "Biology",
+            "flashcards",
+            true,
+            Some("gpt-5.6-sol".into()),
+        );
+        assert!(args.contains(&"--force".to_string()));
+        assert!(args.ends_with(&[
+            "--provider".into(),
+            "codex".into(),
+            "--model".into(),
+            "gpt-5.6-sol".into(),
+        ]));
+    }
+
+    #[test]
+    fn generate_args_treat_an_empty_model_as_fake() {
+        let args = generate_sub_args(
+            "/knowledge",
+            "Biology",
+            "flashcards",
+            false,
+            Some("  ".into()),
+        );
+        assert!(args.ends_with(&["--provider".into(), "fake".into()]));
     }
 }

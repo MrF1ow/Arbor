@@ -6,11 +6,17 @@ Package version for the worker, desktop, and Tauri app. See [Version numbering](
 
 ## Unreleased
 
+Flashcards (Wave 2, toward package `v2.3.0`).
+
+- `arbor-worker generate --skill flashcards` writes `study/flashcards.json`, assigns `fc_` ids from normalized front plus digest, and commits `study: {course} flashcards`. Concatenated digests over 100k characters split per digest, then merge and drop duplicate fronts. Unchanged digest hashes still emit `skill_stale_skipped`.
+- `.arbor/settings.json` reads `auto_generate.flashcards` (default false). Desktop Generate / Refresh run Codex when a model is selected. Progress lives in `.arbor/progress/<course>.flashcards.json` and keeps counts for stable ids.
+- Flashcards tab: empty Generate, flip / next / prev / shuffle, source chip to Notes, stale badge. Quiz Generate stays disabled.
+
 Study framework (Wave 1, toward package `v2.2.0`).
 
 - `arbor-worker generate --root --course --skill fixture` writes `study/fixture.json` and `study/manifest.json`, then commits `study: {course} fixture`. Unchanged digests emit `skill_stale_skipped`. Invalid JSON retries twice and leaves a prior artifact untouched.
 - `.gitignore` gains `.arbor/progress/` and `.arbor/vectors.sqlite` on generate.
-- Desktop `start_study_job` reuses the job mutex with copy "A job is already running for {root}". Flashcards and Quiz tabs show an empty state with Generate visible and disabled.
+- Desktop `start_study_job` reuses the job mutex with copy "A job is already running for {root}". Quiz generation remains disabled.
 
 ## 2.1.0 — 2026-08-22
 

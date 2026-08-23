@@ -44,7 +44,43 @@ export interface KnowledgeSettings {
   delete_sources_after_digest: boolean;
   auto_update: boolean;
   watch_enabled: boolean;
+  auto_generate: {
+    flashcards: boolean;
+  };
 }
+
+export interface CardSource {
+  digest: string;
+  heading: string | null;
+}
+
+export interface Flashcard {
+  id: string;
+  front: string;
+  back: string;
+  tags: string[];
+  source: CardSource;
+}
+
+export interface FlashcardDeck {
+  schema_version: 1;
+  course: string;
+  cards: Flashcard[];
+}
+
+export interface FlashcardReview {
+  cards: Flashcard[];
+  index: number;
+  flipped: boolean;
+}
+
+export interface FlashcardProgressEntry {
+  seen: number;
+  correct: number;
+  wrong: number;
+}
+
+export type FlashcardProgress = Record<string, FlashcardProgressEntry>;
 
 export interface SearchHit {
   course: string;
@@ -70,6 +106,12 @@ export interface JobSummary {
 export interface JobEventRow {
   line: string;
   created_at: string;
+}
+
+export interface JobFinished {
+  job_id: string;
+  status: string;
+  summary: string | null;
 }
 
 export interface WorkerEvent {

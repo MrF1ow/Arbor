@@ -88,11 +88,33 @@
               </div>
 
               <div class="content-panel" data-panel="flashcards">
-                <div class="coming-soon">
+                <div class="coming-soon" id="flashcards-empty">
                   <div class="coming-soon-icon">▭</div>
                   <h2>Flashcards</h2>
                   <p id="flashcards-copy">Study decks generated from your course digests.</p>
-                  <button type="button" class="btn-primary" id="generate-flashcards" disabled>Generate</button>
+                  <button type="button" class="btn-primary" id="generate-flashcards">Generate</button>
+                </div>
+                <div class="flashcards-view" id="flashcards-deck" hidden>
+                  <div class="flashcards-toolbar">
+                    <div>
+                      <span id="flashcard-count"></span>
+                      <span class="stale-badge" id="flashcard-stale" hidden>Digests updated since last generation.</span>
+                    </div>
+                    <button type="button" class="btn-primary" id="refresh-flashcards">Refresh from digests</button>
+                  </div>
+                  <div class="flashcard">
+                    <div class="flashcard-face" id="flashcard-face"></div>
+                    <div class="flashcard-meta">
+                      <button type="button" class="source-chip" id="flashcard-source"></button>
+                      <span id="flashcard-tags"></span>
+                    </div>
+                  </div>
+                  <div class="flashcard-controls">
+                    <button type="button" class="btn-secondary" id="flashcard-prev">Previous</button>
+                    <button type="button" class="btn-primary" id="flashcard-flip">Flip</button>
+                    <button type="button" class="btn-secondary" id="flashcard-next">Next</button>
+                    <button type="button" class="btn-secondary" id="flashcard-shuffle">Shuffle</button>
+                  </div>
                 </div>
               </div>
 
@@ -130,6 +152,10 @@
                     <div class="setting-row">
                       <span>Delete sources after digest</span>
                       <button class="toggle off" id="toggle-delete" type="button" aria-label="Delete sources"></button>
+                    </div>
+                    <div class="setting-row">
+                      <span>Auto-generate flashcards after Update</span>
+                      <button class="toggle off" id="toggle-auto-flashcards" type="button" aria-label="Auto-generate flashcards"></button>
                     </div>
                     <div class="setting-row">
                       <span>Model</span>
