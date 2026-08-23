@@ -1,8 +1,26 @@
 # Changelog
 
-Package version for the worker, desktop, and Tauri app. Product milestone is [PROJECT.md](PROJECT.md) Version 2 (see [V2 program plan](docs/superpowers/plans/2026-08-19-v2-automation/overview.md)).
+Package version for the worker, desktop, and Tauri app. Product milestone is [PROJECT.md](PROJECT.md) Version 3 (shell in 3.0.0; see [V3 shell spec](docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md)).
 
 ## Unreleased
+
+## 3.0.0 — 2026-08-22
+
+Git tag: `v3.0.0`. Product milestone: [PROJECT.md](PROJECT.md) Version 3 (shell).
+
+Version 2 ingest, automation, and search are unchanged. This release replaces the single-column debug UI with a student-facing desktop shell.
+
+- Desktop shell: sage and cream palette, 1100×760 window (min 900×640), sidebar with course library, Jobs and Settings at the bottom.
+- Course workspace: Notes / Flashcards / Quiz mode tabs. Notes mode browses `course.md` and digest previews in-app (serif reading pane, page-marker chips).
+- Flashcards and Quiz tabs show a Coming soon empty state until Wave 2–3.
+- Bottom inspector (collapsed by default): Update knowledge, review table, and job log. No always-visible terminal on the home screen.
+- In-app Settings: watch folder, auto-run, delete-after-digest, model picker, and reindex. Writes `.arbor/settings.json`.
+- Search overlay in the course header. Hits open Notes and navigate to the matching digest.
+- New Tauri commands: `list_courses`, `list_digests`, `read_markdown`, `save_knowledge_settings`.
+- Dark mode follows `prefers-color-scheme` with the same hierarchy as light.
+- Reference mockup: `docs/mockups/v3-shell.html`.
+
+Not in this release: flashcard or quiz generation, embeddings, semantic search, chat.
 
 ## 2.0.0 — 2026-08-22
 

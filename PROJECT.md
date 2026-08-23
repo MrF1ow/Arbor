@@ -530,7 +530,7 @@ Goal:
 
 Automation and discoverability.
 
-**Current release:** 2.0.0 (`v2.0.0`).
+**Current release:** 2.0.0 (`v2.0.0`). Superseded by **3.0.0** for the desktop package; worker behavior unchanged.
 
 Shipped
 
@@ -546,9 +546,9 @@ Explicitly out of Version 2
 
 * Scheduler (folder watching covers the main use case)
 * Multiple AI providers (later milestone)
-* Course browser, markdown preview, and visual polish (Version 3 shell)
+* Course browser, markdown preview, and visual polish (shipped in Version 3 shell, `v3.0.0`)
 
-Implementation program: [`docs/superpowers/plans/2026-08-19-v2-automation/overview.md`](docs/superpowers/plans/2026-08-19-v2-automation/overview.md). Shell design for Version 3: [`docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md`](docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md).
+Implementation program: [`docs/superpowers/plans/2026-08-19-v2-automation/overview.md`](docs/superpowers/plans/2026-08-19-v2-automation/overview.md).
 
 ---
 
@@ -558,11 +558,16 @@ Goal:
 
 A shell a student would trust, then knowledge enhancement on that shell.
 
-The 2.0.0 UI is a single 720×640 column. It works. It does not look like a product. Version 3 starts with a desktop shell (sidebar, preview, calm type) described in [`docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md`](docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md). Flashcards and the rest of this list land as views inside that shell, not as more stacked panels on the Version 1 layout.
+**Current release (shell):** 3.0.0 (`v3.0.0`). The desktop shell shipped in 3.0.0. See [`docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md`](docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md).
 
-New Features
+Shipped in 3.0.0
 
-* Professional desktop shell (course list, digest preview, job drawer)
+* Professional desktop shell (sidebar, course mode tabs, digest preview, job inspector)
+* In-app settings (watch, auto-run, delete-after-digest, model)
+* Search overlay navigates to digest preview in Notes mode
+* Flashcards and Quiz tabs (Coming soon placeholders)
+
+New Features (not yet shipped)
 * Flashcards
 * Quiz generation
 * Concept extraction

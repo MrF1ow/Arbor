@@ -34,7 +34,11 @@ pub fn run() {
             commands::search_knowledge,
             commands::reindex_knowledge,
             commands::get_knowledge_settings,
+            commands::save_knowledge_settings,
             commands::start_folder_watch,
+            commands::list_courses,
+            commands::list_digests,
+            commands::read_markdown,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Arbor");

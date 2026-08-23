@@ -1,8 +1,10 @@
 # Arbor Desktop
 
-Tauri v2 shell for Arbor (package **2.0.0**). Drives the `arbor-worker` CLI (see `../python`).
+Tauri v2 shell for Arbor (package **3.0.0**). Drives the `arbor-worker` CLI (see `../python`).
 
-The UI is still the Version 1 single-column layout. Search, folder watch, job history, and notifications sit on that screen. A professional shell is Version 3.
+The UI is the Version 3 shell: sidebar library, course workspace with Notes / Flashcards / Quiz tabs, in-app digest preview, and a collapsed bottom inspector for Update and job logs. Flashcards and Quiz modes are placeholders until later waves.
+
+Design spec: [`docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md`](../docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md). Reference mockup: [`docs/mockups/v3-shell.html`](../docs/mockups/v3-shell.html).
 
 ## Prerequisites
 
@@ -49,24 +51,17 @@ See [Tauri Linux graphics debugging](https://v2.tauri.app/develop/debug/linux-gr
 
 ## Manual test checklist (real Codex)
 
-1. **Auth blocks work:** with Codex logged out, the badge is red, shows the reason and a
-   "Set up Codex" link, and **Update Knowledge** stays disabled.
-2. **Auth passes:** `codex login`, refocus the window → badge turns green, button enables.
-3. **Confirm re-checks auth:** open the review panel, log out of Codex, Confirm stays blocked.
-4. **Pick folder:** choose an empty folder → log shows "Initialized git repository".
-5. **Review panel:** put a PDF at `Biology/mega.pdf`, click Update → the panel lists the file
-   with its page count and an empty Ranges box.
-6. **Full ingest:** Confirm with the box empty → `Biology/digests/<date>.md`, a short
-   `Biology/course.md` index, and `Biology/arbor-course.json` appear, and a `digest:` commit is made.
-7. **Idempotency:** click Update again with no changes → "Nothing to process".
-8. **Growth:** append pages to `mega.pdf`, click Update → the panel prefills the new tail
-   range; Confirm writes a second dated digest and rewrites `course.md` with a Codex rollup.
-9. **Overlap patch:** change pages inside an already-digested window, confirm that overlap
-   → still one digest file, markers kept, inner notes updated. Not a second lecture file.
-10. **Truncation:** shrink the PDF and leave Ranges blank when suggestions are empty → no work.
-11. **Cancel:** with two changed sources, click Cancel after the first → only completed digests are
-   committed; log shows "Cancelled".
-12. **Open folder:** click Open → the Knowledge folder opens in the file manager.
-13. **Search:** after a digest exists, type a word from it in Search knowledge → a hit opens the course folder.
-14. **Folder watch:** drop a new PDF into a course folder, wait ~3 seconds → review panel, no settings file required.
-15. **Job history:** Recent runs shows the last Update with an expandable log.
+1. **Welcome:** launch with no saved folder → welcome screen; Choose Knowledge folder works.
+2. **Auth blocks work:** with Codex logged out, sidebar badge is red and **Update knowledge** stays disabled.
+3. **Auth passes:** `codex login`, refocus the window → badge turns green, button enables.
+4. **Library:** course folders appear in the sidebar; selecting one opens Notes with digest index.
+5. **Preview:** click a digest → markdown renders in the reading pane; page-marker chip shows when present.
+6. **Review panel:** put a PDF at `Biology/mega.pdf`, click **Update knowledge** in the inspector → review table appears.
+7. **Full ingest:** Confirm with ranges empty → digest, `course.md`, `arbor-course.json`, and `digest:` commit.
+8. **Idempotency:** Update again with no changes → "Nothing to process" in the inspector log.
+9. **Search:** ⌕ in the course header → hit opens Notes on the matching digest.
+10. **Folder watch:** drop a new PDF, wait ~3 seconds → review panel in the inspector.
+11. **Jobs place:** sidebar **Jobs** lists recent runs with expandable log.
+12. **Settings place:** toggles write `.arbor/settings.json`; reindex succeeds.
+13. **Modes:** Flashcards and Quiz tabs show Coming soon.
+14. **Cancel:** Cancel during a run stops after the current range; log shows "Cancelled".

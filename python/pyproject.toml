@@ -1,6 +1,6 @@
 [project]
 name = "arbor-worker"
-version = "2.0.0"
+version = "3.0.0"
 description = "Arbor knowledge worker: turns lecture sources into structured digests via the Codex CLI."
 requires-python = ">=3.11"
 dependencies = [

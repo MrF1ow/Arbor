@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Arbor v3 — Shell mockup</title>
+  <style>
+    /*
+      Sage & cream palette (v3 mockup)
+      ─────────────────────────────────
+      --cream-bg       #FAF6EF   main reading surface
+      --cream-sidebar  #F3EDE3   sidebar wash
+      --cream-border   #E4DDD1   hairlines
+      --sage-accent    #5C7A61   primary actions, active states
+      --sage-deep      #3D5243   pressed / strong accent
+      --sage-muted     #8FA88F   chips, secondary labels
+      --sage-tint      #E8EFE9   selected row, tab hover
+      --ink            #2A3028   body text
+      --ink-muted      #6B7368   secondary text
+    */
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --cream-bg: #FAF6EF;
+      --cream-sidebar: #F3EDE3;
+      --cream-elevated: #FDFBF7;
+      --cream-border: #E4DDD1;
+      --sage-accent: #5C7A61;
+      --sage-deep: #3D5243;
+      --sage-muted: #8FA88F;
+      --sage-tint: #E8EFE9;
+      --sage-tint-strong: #D4E2D6;
+      --ink: #2A3028;
+      --ink-muted: #6B7368;
+      --ink-faint: #9A9F96;
+      --radius: 8px;
+      --sidebar-w: 220px;
+      --inspector-h: 52px;
+      --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+      --font-read: ui-serif, "New York", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+      --shadow-sm: 0 1px 2px rgba(42, 48, 40, 0.06);
+      --shadow-md: 0 4px 20px rgba(42, 48, 40, 0.08);
+    }
+
+    html, body {
+      height: 100%;
+      font-family: var(--font-ui);
+      color: var(--ink);
+      background: #D8D2C8;
+    }
+
+    /* faux desktop window */
+    .window {
+      width: 1100px;
+      height: 760px;
+      margin: 2rem auto;
+      background: var(--cream-bg);
+      border-radius: 12px;
+      box-shadow: 0 24px 80px rgba(42, 48, 40, 0.18), 0 0 0 1px rgba(42, 48, 40, 0.08);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .titlebar {
+      height: 38px;
+      background: var(--cream-sidebar);
+      border-bottom: 1px solid var(--cream-border);
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      flex-shrink: 0;
+      -webkit-app-region: drag;
+      user-select: none;
+    }
+
+    .traffic { display: flex; gap: 7px; }
+    .traffic span {
+      width: 12px; height: 12px; border-radius: 50%;
+      display: block;
+    }
+    .traffic .close { background: #FF5F57; }
+    .traffic .min { background: #FEBC2E; }
+    .traffic .max { background: #28C840; }
+
+    .titlebar-title {
+      flex: 1;
+      text-align: center;
+      font-size: 13px;
+      color: var(--ink-muted);
+      font-weight: 500;
+    }
+
+    .shell {
+      flex: 1;
+      display: flex;
+      min-height: 0;
+    }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      width: var(--sidebar-w);
+      background: var(--cream-sidebar);
+      border-right: 1px solid var(--cream-border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+
+    .brand {
+      padding: 18px 16px 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand-mark {
+      width: 28px;
+      height: 28px;
+      border-radius: 7px;
+      background: var(--sage-accent);
+      display: grid;
+      place-items: center;
+      color: var(--cream-elevated);
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-name {
+      font-size: 17px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      color: var(--ink);
+    }
+
+    .nav-section {
+      padding: 4px 10px;
+    }
+
+    .nav-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--ink-faint);
+      padding: 8px 8px 4px;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      padding: 7px 10px;
+      border: none;
+      background: none;
+      border-radius: 6px;
+      font: inherit;
+      font-size: 14px;
+      color: var(--ink);
+      cursor: pointer;
+      text-align: left;
+      transition: background 0.12s;
+    }
+
+    .nav-item:hover { background: var(--sage-tint); }
+    .nav-item.active {
+      background: var(--sage-tint-strong);
+      color: var(--sage-deep);
+      font-weight: 500;
+    }
+
+    .nav-item .icon {
+      width: 18px;
+      text-align: center;
+      opacity: 0.65;
+      font-size: 13px;
+    }
+
+    .nav-item.active .icon { opacity: 1; }
+
+    .nav-divider {
+      height: 1px;
+      background: var(--cream-border);
+      margin: 8px 16px;
+    }
+
+    .sidebar-footer {
+      margin-top: auto;
+      padding: 12px 16px 16px;
+      border-top: 1px solid var(--cream-border);
+    }
+
+    .auth-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--sage-deep);
+      background: var(--sage-tint);
+      padding: 4px 10px;
+      border-radius: 999px;
+    }
+
+    .auth-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--sage-accent);
+    }
+
+    .folder-hint {
+      margin-top: 8px;
+      font-size: 11px;
+      color: var(--ink-faint);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* ── Main ── */
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      background: var(--cream-bg);
+    }
+
+    .course-header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 14px 24px;
+      border-bottom: 1px solid var(--cream-border);
+      background: var(--cream-elevated);
+      flex-shrink: 0;
+    }
+
+    .course-title {
+      font-size: 20px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      color: var(--ink);
+      margin-right: auto;
+    }
+
+    .mode-tabs {
+      display: flex;
+      gap: 2px;
+      background: var(--cream-sidebar);
+      padding: 3px;
+      border-radius: var(--radius);
+      border: 1px solid var(--cream-border);
+    }
+
+    .mode-tab {
+      padding: 6px 14px;
+      border: none;
+      background: none;
+      border-radius: 6px;
+      font: inherit;
+      font-size: 13px;
+      color: var(--ink-muted);
+      cursor: pointer;
+      transition: all 0.12s;
+    }
+
+    .mode-tab:hover { color: var(--ink); }
+    .mode-tab.active {
+      background: var(--cream-elevated);
+      color: var(--sage-deep);
+      font-weight: 500;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .search-btn {
+      width: 34px;
+      height: 34px;
+      border: 1px solid var(--cream-border);
+      border-radius: var(--radius);
+      background: var(--cream-elevated);
+      color: var(--ink-muted);
+      cursor: pointer;
+      display: grid;
+      place-items: center;
+      font-size: 15px;
+      transition: all 0.12s;
+    }
+
+    .search-btn:hover {
+      border-color: var(--sage-muted);
+      color: var(--sage-deep);
+    }
+
+    .content {
+      flex: 1;
+      overflow: auto;
+      min-height: 0;
+    }
+
+    .content-panel { display: none; height: 100%; }
+    .content-panel.active { display: block; }
+
+    /* ── Notes mode ── */
+    .notes-layout {
+      display: flex;
+      height: 100%;
+    }
+
+    .digest-index {
+      width: 240px;
+      border-right: 1px solid var(--cream-border);
+      background: var(--cream-elevated);
+      overflow: auto;
+      flex-shrink: 0;
+    }
+
+    .digest-index-header {
+      padding: 16px 16px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--ink-faint);
+    }
+
+    .digest-link {
+      display: block;
+      width: 100%;
+      padding: 10px 16px;
+      border: none;
+      background: none;
+      text-align: left;
+      font: inherit;
+      cursor: pointer;
+      border-left: 3px solid transparent;
+      transition: all 0.12s;
+    }
+
+    .digest-link:hover { background: var(--sage-tint); }
+    .digest-link.active {
+      background: var(--sage-tint);
+      border-left-color: var(--sage-accent);
+    }
+
+    .digest-link .name {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--ink);
+      display: block;
+    }
+
+    .digest-link .date {
+      font-size: 11px;
+      color: var(--ink-faint);
+      margin-top: 2px;
+    }
+
+    .reading-pane {
+      flex: 1;
+      overflow: auto;
+      padding: 32px 48px 48px;
+    }
+
+    .reading-pane article {
+      max-width: 640px;
+      margin: 0 auto;
+      font-family: var(--font-read);
+      font-size: 16px;
+      line-height: 1.7;
+      color: var(--ink);
+    }
+
+    .reading-pane h1 {
+      font-size: 28px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      margin-bottom: 8px;
+      line-height: 1.25;
+    }
+
+    .reading-pane .meta {
+      font-family: var(--font-ui);
+      font-size: 12px;
+      color: var(--ink-faint);
+      margin-bottom: 24px;
+    }
+
+    .page-chip {
+      display: inline-flex;
+      align-items: center;
+      font-family: var(--font-ui);
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--sage-deep);
+      background: var(--sage-tint);
+      padding: 3px 8px;
+      border-radius: 999px;
+      margin-bottom: 16px;
+    }
+
+    .reading-pane h2 {
+      font-size: 20px;
+      font-weight: 600;
+      margin: 28px 0 10px;
+      color: var(--sage-deep);
+    }
+
+    .reading-pane p { margin-bottom: 14px; }
+
+    .reading-pane ul {
+      margin: 0 0 14px 1.2em;
+    }
+
+    .reading-pane li { margin-bottom: 6px; }
+
+    /* ── Coming soon ── */
+    .coming-soon {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 48px;
+      color: var(--ink-muted);
+    }
+
+    .coming-soon-icon {
+      width: 64px;
+      height: 64px;
+      border-radius: 16px;
+      background: var(--sage-tint);
+      display: grid;
+      place-items: center;
+      font-size: 28px;
+      margin-bottom: 20px;
+    }
+
+    .coming-soon h2 {
+      font-size: 22px;
+      font-weight: 600;
+      color: var(--ink);
+      margin-bottom: 8px;
+      letter-spacing: -0.02em;
+    }
+
+    .coming-soon p {
+      font-size: 14px;
+      max-width: 320px;
+      line-height: 1.5;
+    }
+
+    .coming-soon .badge {
+      margin-top: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--sage-deep);
+      background: var(--sage-tint);
+      padding: 6px 14px;
+      border-radius: 999px;
+    }
+
+    /* ── Jobs / Settings placeholders ── */
+    .place-view {
+      padding: 48px;
+      max-width: 520px;
+    }
+
+    .place-view h2 {
+      font-size: 22px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      letter-spacing: -0.02em;
+    }
+
+    .place-view p {
+      font-size: 14px;
+      color: var(--ink-muted);
+      line-height: 1.5;
+      margin-bottom: 20px;
+    }
+
+    .settings-group {
+      background: var(--cream-elevated);
+      border: 1px solid var(--cream-border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .setting-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--cream-border);
+      font-size: 14px;
+    }
+
+    .setting-row:last-child { border-bottom: none; }
+
+    .toggle {
+      width: 40px;
+      height: 22px;
+      border-radius: 999px;
+      background: var(--sage-accent);
+      position: relative;
+      flex-shrink: 0;
+    }
+
+    .toggle::after {
+      content: "";
+      position: absolute;
+      top: 2px; right: 2px;
+      width: 18px; height: 18px;
+      border-radius: 50%;
+      background: white;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .toggle.off {
+      background: var(--cream-border);
+    }
+
+    .toggle.off::after {
+      right: auto;
+      left: 2px;
+    }
+
+    /* ── Bottom inspector ── */
+    .inspector {
+      border-top: 1px solid var(--cream-border);
+      background: var(--cream-elevated);
+      flex-shrink: 0;
+    }
+
+    .inspector-bar {
+      height: var(--inspector-h);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 20px;
+    }
+
+    .btn-primary {
+      background: var(--sage-accent);
+      color: var(--cream-elevated);
+      border: none;
+      padding: 8px 16px;
+      border-radius: var(--radius);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.12s;
+    }
+
+    .btn-primary:hover { background: var(--sage-deep); }
+
+    .inspector-status {
+      margin-left: auto;
+      font-size: 13px;
+      color: var(--ink-muted);
+    }
+
+    .inspector-status .ok { color: var(--sage-accent); font-weight: 500; }
+
+    .inspector-expand {
+      border: none;
+      background: none;
+      color: var(--ink-faint);
+      cursor: pointer;
+      font-size: 12px;
+      padding: 4px 8px;
+      border-radius: 4px;
+    }
+
+    .inspector-expand:hover { background: var(--sage-tint); color: var(--ink); }
+
+    .inspector-body {
+      display: none;
+      border-top: 1px solid var(--cream-border);
+      padding: 16px 20px;
+      max-height: 200px;
+      overflow: auto;
+    }
+
+    .inspector-body.open { display: block; }
+
+    .inspector-log {
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 11.5px;
+      line-height: 1.5;
+      color: var(--ink-muted);
+      background: var(--cream-sidebar);
+      padding: 12px;
+      border-radius: var(--radius);
+      white-space: pre-wrap;
+    }
+
+    /* ── Search overlay ── */
+    .search-overlay {
+      display: none;
+      position: absolute;
+      top: 52px;
+      right: 24px;
+      width: 360px;
+      background: var(--cream-elevated);
+      border: 1px solid var(--cream-border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-md);
+      z-index: 10;
+      overflow: hidden;
+    }
+
+    .search-overlay.open { display: block; }
+
+    .search-overlay input {
+      width: 100%;
+      padding: 12px 16px;
+      border: none;
+      border-bottom: 1px solid var(--cream-border);
+      background: transparent;
+      font: inherit;
+      font-size: 14px;
+      color: var(--ink);
+      outline: none;
+    }
+
+    .search-hit {
+      display: block;
+      width: 100%;
+      padding: 10px 16px;
+      border: none;
+      background: none;
+      text-align: left;
+      font: inherit;
+      cursor: pointer;
+      border-bottom: 1px solid var(--cream-border);
+    }
+
+    .search-hit:hover { background: var(--sage-tint); }
+    .search-hit .title { font-size: 13px; font-weight: 500; }
+    .search-hit .sub { font-size: 11px; color: var(--ink-faint); margin-top: 2px; }
+
+    .main-wrap { position: relative; flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+    /* mockup label */
+    .mockup-banner {
+      text-align: center;
+      padding: 12px;
+      font-size: 12px;
+      color: var(--ink-muted);
+    }
+
+    .mockup-banner code {
+      background: rgba(0,0,0,0.06);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+    }
+  </style>
+</head>
+<body>
+
+  <p class="mockup-banner">
+    Arbor v3 shell mockup — sage &amp; cream. Open this file in a browser.
+    <code>docs/mockups/v3-shell.html</code>
+  </p>
+
+  <div class="window">
+    <div class="titlebar">
+      <div class="traffic">
+        <span class="close"></span>
+        <span class="min"></span>
+        <span class="max"></span>
+      </div>
+      <div class="titlebar-title">Arbor</div>
+      <div style="width: 52px"></div>
+    </div>
+
+    <div class="shell">
+      <!-- Sidebar -->
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">A</div>
+          <span class="brand-name">Arbor</span>
+        </div>
+
+        <div class="nav-section">
+          <div class="nav-label">Library</div>
+          <button class="nav-item active" data-place="course" data-course="Biology">
+            <span class="icon">◈</span> Biology
+          </button>
+          <button class="nav-item" data-place="course" data-course="Chemistry">
+            <span class="icon">◈</span> Chemistry
+          </button>
+          <button class="nav-item" data-place="course" data-course="Anatomy">
+            <span class="icon">◈</span> Anatomy
+          </button>
+        </div>
+
+        <div class="nav-divider"></div>
+
+        <div class="nav-section">
+          <button class="nav-item" data-place="jobs">
+            <span class="icon">◎</span> Jobs
+          </button>
+          <button class="nav-item" data-place="settings">
+            <span class="icon">⚙</span> Settings
+          </button>
+        </div>
+
+        <div class="sidebar-footer">
+          <span class="auth-badge"><span class="auth-dot"></span> Codex connected</span>
+          <div class="folder-hint">~/Knowledge</div>
+        </div>
+      </aside>
+
+      <!-- Main area -->
+      <div class="main-wrap">
+        <div class="main" id="main-area">
+          <header class="course-header" id="course-header">
+            <h1 class="course-title" id="course-title">Biology</h1>
+            <div class="mode-tabs" id="mode-tabs">
+              <button class="mode-tab active" data-mode="notes">Notes</button>
+              <button class="mode-tab" data-mode="flashcards">Flashcards</button>
+              <button class="mode-tab" data-mode="quiz">Quiz</button>
+            </div>
+            <button class="search-btn" id="search-toggle" title="Search" aria-label="Search">⌕</button>
+          </header>
+
+          <div class="search-overlay" id="search-overlay">
+            <input type="search" placeholder="Search digests…" value="mitochondria" />
+            <button class="search-hit">
+              <div class="title">Cellular Respiration</div>
+              <div class="sub">Biology · 2026-08-15.md · page 12</div>
+            </button>
+            <button class="search-hit">
+              <div class="title">ATP and Energy Transfer</div>
+              <div class="sub">Biology · 2026-08-08.md · page 4</div>
+            </button>
+          </div>
+
+          <div class="content">
+            <!-- Notes -->
+            <div class="content-panel active" data-panel="notes">
+              <div class="notes-layout">
+                <nav class="digest-index">
+                  <div class="digest-index-header">Digests</div>
+                  <button class="digest-link active">
+                    <span class="name">Cellular Respiration</span>
+                    <span class="date">Aug 15, 2026</span>
+                  </button>
+                  <button class="digest-link">
+                    <span class="name">Photosynthesis</span>
+                    <span class="date">Aug 8, 2026</span>
+                  </button>
+                  <button class="digest-link">
+                    <span class="name">Cell Structure</span>
+                    <span class="date">Aug 1, 2026</span>
+                  </button>
+                </nav>
+                <div class="reading-pane">
+                  <article>
+                    <h1>Cellular Respiration</h1>
+                    <div class="meta">Biology · digest from Lecture 04.pdf · Aug 15, 2026</div>
+                    <div class="page-chip">Pages 45–78</div>
+                    <h2>Overview</h2>
+                    <p>Cellular respiration is the process by which cells break down glucose to produce ATP — the molecule that powers nearly every cellular function. It occurs in three main stages: glycolysis, the citric acid cycle, and oxidative phosphorylation.</p>
+                    <h2>Glycolysis</h2>
+                    <p>Glycolysis takes place in the cytoplasm and does not require oxygen. One glucose molecule (6 carbons) is split into two pyruvate molecules (3 carbons each), yielding a net gain of 2 ATP and 2 NADH.</p>
+                    <ul>
+                      <li>Occurs in the cytoplasm</li>
+                      <li>Does not require oxygen (anaerobic)</li>
+                      <li>Net yield: 2 ATP, 2 NADH per glucose</li>
+                    </ul>
+                    <h2>The Citric Acid Cycle</h2>
+                    <p>Pyruvate enters the mitochondria and is converted to acetyl-CoA before entering the Krebs cycle. Each turn of the cycle produces 1 ATP, 3 NADH, and 1 FADH₂.</p>
+                  </article>
+                </div>
+              </div>
+            </div>
+
+            <!-- Flashcards -->
+            <div class="content-panel" data-panel="flashcards">
+              <div class="coming-soon">
+                <div class="coming-soon-icon">▭</div>
+                <h2>Flashcards</h2>
+                <p>Study decks generated from your Biology digests. Flip cards, track progress, and shuffle for review.</p>
+                <span class="badge">Coming soon</span>
+              </div>
+            </div>
+
+            <!-- Quiz -->
+            <div class="content-panel" data-panel="quiz">
+              <div class="coming-soon">
+                <div class="coming-soon-icon">?</div>
+                <h2>Quiz</h2>
+                <p>Practice questions pulled from your course material. Test yourself before the exam.</p>
+                <span class="badge">Coming soon</span>
+              </div>
+            </div>
+
+            <!-- Jobs (sidebar place) -->
+            <div class="content-panel" data-panel="jobs">
+              <div class="place-view">
+                <h2>Recent runs</h2>
+                <p>Job history from your Knowledge folder. Expand a run to see the full log.</p>
+                <div class="settings-group">
+                  <div class="setting-row">
+                    <span>Aug 15, 3:41 PM</span>
+                    <span style="color: var(--sage-accent); font-weight: 500;">Succeeded</span>
+                  </div>
+                  <div class="setting-row">
+                    <span>Aug 8, 11:02 AM</span>
+                    <span style="color: var(--sage-accent); font-weight: 500;">Succeeded</span>
+                  </div>
+                  <div class="setting-row">
+                    <span>Aug 1, 9:18 PM</span>
+                    <span style="color: #B85C4A; font-weight: 500;">Failed</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Settings (sidebar place) -->
+            <div class="content-panel" data-panel="settings">
+              <div class="place-view">
+                <h2>Settings</h2>
+                <p>Knowledge folder behavior and model selection.</p>
+                <div class="settings-group">
+                  <div class="setting-row">
+                    <span>Watch folder for new files</span>
+                    <div class="toggle"></div>
+                  </div>
+                  <div class="setting-row">
+                    <span>Auto-run after watch</span>
+                    <div class="toggle off"></div>
+                  </div>
+                  <div class="setting-row">
+                    <span>Delete sources after digest</span>
+                    <div class="toggle off"></div>
+                  </div>
+                  <div class="setting-row">
+                    <span>Model</span>
+                    <span style="color: var(--ink-muted);">o4-mini</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Inspector (only on course view) -->
+        <footer class="inspector" id="inspector">
+          <div class="inspector-bar">
+            <button class="btn-primary">Update knowledge</button>
+            <button class="inspector-expand" id="inspector-toggle">Show log ▴</button>
+            <span class="inspector-status">Last job: <span class="ok">succeeded</span> · 3:41 PM</span>
+          </div>
+          <div class="inspector-body" id="inspector-body">
+            <pre class="inspector-log">Planning update for Biology…
+  Lecture 04.pdf — pages 45-78 suggested
+  Lecture 05.pdf — new file, full document
+Ready. Click Confirm to start.
+
+── job a3f8c2 ──
+prepare: Lecture 04.pdf
+digest: writing Cellular Respiration
+git: committed 2 files</pre>
+          </div>
+        </footer>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const courseHeader = document.getElementById("course-header");
+    const courseTitle = document.getElementById("course-title");
+    const modeTabs = document.getElementById("mode-tabs");
+    const inspector = document.getElementById("inspector");
+    const panels = document.querySelectorAll(".content-panel");
+    const navItems = document.querySelectorAll(".nav-item[data-place]");
+
+    let currentPlace = "course";
+    let currentMode = "notes";
+
+    function showPanel(name) {
+      panels.forEach((p) => p.classList.toggle("active", p.dataset.panel === name));
+    }
+
+    function setCourseView(course, mode) {
+      currentPlace = "course";
+      currentMode = mode || currentMode;
+      courseTitle.textContent = course;
+      courseHeader.hidden = false;
+      inspector.hidden = false;
+      modeTabs.querySelectorAll(".mode-tab").forEach((t) => {
+        t.classList.toggle("active", t.dataset.mode === currentMode);
+      });
+      showPanel(currentMode);
+      navItems.forEach((n) => {
+        n.classList.toggle("active", n.dataset.place === "course" && n.dataset.course === course);
+      });
+    }
+
+    function setPlaceView(place) {
+      currentPlace = place;
+      courseHeader.hidden = true;
+      inspector.hidden = true;
+      showPanel(place);
+      navItems.forEach((n) => n.classList.toggle("active", n.dataset.place === place));
+    }
+
+    modeTabs.addEventListener("click", (e) => {
+      const tab = e.target.closest(".mode-tab");
+      if (!tab) return;
+      currentMode = tab.dataset.mode;
+      modeTabs.querySelectorAll(".mode-tab").forEach((t) => t.classList.remove("active"));
+      tab.classList.add("active");
+      showPanel(currentMode);
+    });
+
+    navItems.forEach((item) => {
+      item.addEventListener("click", () => {
+        const place = item.dataset.place;
+        if (place === "course") {
+          setCourseView(item.dataset.course, "notes");
+        } else {
+          setPlaceView(place);
+        }
+      });
+    });
+
+    document.getElementById("search-toggle").addEventListener("click", () => {
+      document.getElementById("search-overlay").classList.toggle("open");
+    });
+
+    document.getElementById("inspector-toggle").addEventListener("click", () => {
+      const body = document.getElementById("inspector-body");
+      const btn = document.getElementById("inspector-toggle");
+      const open = body.classList.toggle("open");
+      btn.textContent = open ? "Hide log ▾" : "Show log ▴";
+    });
+
+    document.querySelectorAll(".digest-link").forEach((link) => {
+      link.addEventListener("click", () => {
+        document.querySelectorAll(".digest-link").forEach((l) => l.classList.remove("active"));
+        link.classList.add("active");
+      });
+    });
+  </script>
+</body>
+</html>

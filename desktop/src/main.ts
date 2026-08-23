@@ -1,55 +1,229 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { AuthStatus, JobEventRow, JobSummary, KnowledgeSettings, Model, PendingSource, SearchHit, Selection, Settings, UpdatePlan, WorkerEvent } from "./types";
+import { renderMarkdown } from "./markdown";
+import type {
+  AuthStatus,
+  DigestInfo,
+  JobEventRow,
+  JobSummary,
+  KnowledgeSettings,
+  Model,
+  PendingSource,
+  SearchHit,
+  Selection,
+  Settings,
+  UpdatePlan,
+  WorkerEvent,
+} from "./types";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
-const rootPathEl = $("root-path") as HTMLSpanElement;
-const chooseBtn = $("choose-folder") as HTMLButtonElement;
-const openBtn = $("open-folder") as HTMLButtonElement;
-const modelSel = $("model") as HTMLSelectElement;
-const statusEl = $("codex-status") as HTMLSpanElement;
+type Place = "welcome" | "course" | "jobs" | "settings";
+type Mode = "notes" | "flashcards" | "quiz";
+
+const courseListEl = $("course-list");
+const folderHintEl = $("folder-hint");
+const chooseBtn = $("choose-folder");
+const welcomeChooseBtn = $("welcome-choose");
+const courseHeaderEl = $("course-header");
+const courseTitleEl = $("course-title");
+const modeTabsEl = $("mode-tabs");
+const inspectorEl = $("inspector");
+const panels = document.querySelectorAll(".content-panel");
+const navJobs = $("nav-jobs");
+const navSettings = $("nav-settings");
+const codexStatusEl = $("codex-status");
+const codexLabelEl = $("codex-label");
 const docsLink = $("codex-docs") as HTMLAnchorElement;
+const digestListEl = $("digest-list");
+const courseIndexLink = $("course-index-link");
+const readingArticleEl = $("reading-article");
+const flashcardsCopyEl = $("flashcards-copy");
+const quizCopyEl = $("quiz-copy");
+const jobsListEl = $("jobs-list");
+const jobsLogEl = $("jobs-log");
+const modelSel = $("model") as HTMLSelectElement;
+const toggleWatch = $("toggle-watch");
+const toggleAuto = $("toggle-auto");
+const toggleDelete = $("toggle-delete");
+const reindexBtn = $("reindex") as HTMLButtonElement;
 const updateBtn = $("update") as HTMLButtonElement;
 const cancelBtn = $("cancel") as HTMLButtonElement;
-const logEl = $("log") as HTMLPreElement;
-const reviewEl = $("review") as HTMLElement;
+const logEl = $("log");
+const reviewEl = $("review");
 const reviewRowsEl = $("review-rows") as HTMLTableSectionElement;
-const confirmBtn = $("confirm-update") as HTMLButtonElement;
-const cancelReviewBtn = $("cancel-review") as HTMLButtonElement;
-const historyEl = $("history") as HTMLElement;
-const historyRowsEl = $("history-rows") as HTMLTableSectionElement;
-const historyLogEl = $("history-log") as HTMLPreElement;
-const searchInput = $("search") as HTMLInputElement;
-const reindexBtn = $("reindex") as HTMLButtonElement;
-const searchResultsEl = $("search-results") as HTMLUListElement;
+const confirmBtn = $("confirm-update");
+const cancelReviewBtn = $("cancel-review");
+const inspectorBodyEl = $("inspector-body");
+const inspectorToggleBtn = $("inspector-toggle");
+const inspectorStatusEl = $("inspector-status");
+const searchToggleBtn = $("search-toggle") as HTMLButtonElement;
+const searchOverlayEl = $("search-overlay");
+const searchInput = $("search-input") as HTMLInputElement;
+const searchResultsEl = $("search-results");
 
 let knowledgeRoot: string | null = null;
 let authed = false;
 let activeJobId: string | null = null;
 let searchTimer: number | null = null;
+let currentPlace: Place = "welcome";
+let currentCourse: string | null = null;
+let currentMode: Mode = "notes";
+let courses: string[] = [];
 
 function logLine(text: string) {
   logEl.textContent += text + "\n";
   logEl.scrollTop = logEl.scrollHeight;
+  openInspector();
+}
+
+function openInspector() {
+  if (!inspectorBodyEl.classList.contains("open")) {
+    inspectorBodyEl.classList.add("open");
+    inspectorToggleBtn.textContent = "Hide log ▾";
+  }
+}
+
+function showPanel(name: string) {
+  panels.forEach((p) => p.classList.toggle("active", (p as HTMLElement).dataset.panel === name));
+}
+
+function setNavActive(place: Place, course?: string) {
+  courseListEl.querySelectorAll(".nav-item").forEach((btn) => {
+    btn.classList.toggle("active", place === "course" && btn.getAttribute("data-course") === course);
+  });
+  navJobs.classList.toggle("active", place === "jobs");
+  navSettings.classList.toggle("active", place === "settings");
+}
+
+function setCourseView(course: string, mode: Mode = currentMode) {
+  currentPlace = "course";
+  currentCourse = course;
+  currentMode = mode;
+  courseTitleEl.textContent = course;
+  courseHeaderEl.hidden = false;
+  inspectorEl.hidden = false;
+  flashcardsCopyEl.textContent = `Study decks generated from your ${course} digests. Flip cards, track progress, and shuffle for review.`;
+  quizCopyEl.textContent = `Practice questions pulled from your ${course} material. Test yourself before the exam.`;
+  modeTabsEl.querySelectorAll(".mode-tab").forEach((t) => {
+    t.classList.toggle("active", (t as HTMLElement).dataset.mode === mode);
+  });
+  showPanel(mode);
+  setNavActive("course", course);
+  void loadCourseContent(course);
+}
+
+function setPlaceView(place: Place) {
+  currentPlace = place;
+  courseHeaderEl.hidden = place !== "course";
+  inspectorEl.hidden = place !== "course";
+  if (place === "welcome") {
+    showPanel("welcome");
+    setNavActive("welcome");
+    return;
+  }
+  if (place === "jobs") {
+    showPanel("jobs");
+    setNavActive("jobs");
+    void loadJobHistory();
+    return;
+  }
+  if (place === "settings") {
+    showPanel("settings");
+    setNavActive("settings");
+    void loadKnowledgeSettingsUi();
+    return;
+  }
 }
 
 function refreshUpdateEnabled() {
-  updateBtn.disabled = !(authed && knowledgeRoot);
+  updateBtn.disabled = !(authed && knowledgeRoot && currentPlace === "course");
 }
 
 function refreshFolderTools() {
   const ready = Boolean(knowledgeRoot);
-  searchInput.disabled = !ready;
+  searchToggleBtn.disabled = !ready;
   reindexBtn.disabled = !ready;
   refreshUpdateEnabled();
 }
 
+function shortenPath(path: string): string {
+  const home = path.replace(/^\/home\/[^/]+/, "~");
+  return home.length > 36 ? "…" + home.slice(-34) : home;
+}
+
+async function renderCourseList() {
+  courseListEl.innerHTML = "";
+  if (!knowledgeRoot) {
+    courseListEl.innerHTML = '<p class="nav-empty">No courses yet</p>';
+    return;
+  }
+  try {
+    courses = await invoke<string[]>("list_courses", { root: knowledgeRoot });
+  } catch {
+    courses = [];
+  }
+  if (courses.length === 0) {
+    courseListEl.innerHTML = '<p class="nav-empty">No course folders</p>';
+    return;
+  }
+  for (const course of courses) {
+    const btn = document.createElement("button");
+    btn.className = "nav-item";
+    btn.dataset.place = "course";
+    btn.dataset.course = course;
+    btn.innerHTML = `<span class="icon">◈</span> ${course}`;
+    btn.addEventListener("click", () => setCourseView(course, "notes"));
+    courseListEl.appendChild(btn);
+  }
+}
+
+async function loadDigestPreview(course: string, relativePath: string) {
+  if (!knowledgeRoot) return;
+  courseIndexLink.classList.toggle("active", relativePath === `${course}/course.md`);
+  digestListEl.querySelectorAll(".digest-link").forEach((el) => {
+    el.classList.toggle("active", (el as HTMLElement).dataset.path === relativePath);
+  });
+  try {
+    const raw = await invoke<string>("read_markdown", { root: knowledgeRoot, relativePath });
+    const { html, pageChip } = renderMarkdown(raw);
+    readingArticleEl.innerHTML = pageChip
+      ? `<div class="page-chip">Pages ${pageChip}</div>${html}`
+      : html;
+  } catch (e) {
+    readingArticleEl.innerHTML = `<p class="reading-empty">Could not load file: ${e}</p>`;
+  }
+}
+
+async function loadCourseContent(course: string) {
+  if (!knowledgeRoot) return;
+  digestListEl.innerHTML = "";
+  const courseMdPath = `${course}/course.md`;
+  courseIndexLink.dataset.path = courseMdPath;
+  courseIndexLink.onclick = () => void loadDigestPreview(course, courseMdPath);
+
+  try {
+    const digests = await invoke<DigestInfo[]>("list_digests", { root: knowledgeRoot, course });
+    for (const d of digests) {
+      const btn = document.createElement("button");
+      btn.className = "digest-link";
+      btn.dataset.path = d.path;
+      btn.innerHTML = `<span class="name">${d.name}</span><span class="date">${d.name}</span>`;
+      btn.addEventListener("click", () => void loadDigestPreview(course, d.path));
+      digestListEl.appendChild(btn);
+    }
+    const first = digests.length > 0 ? digests[0].path : courseMdPath;
+    await loadDigestPreview(course, first);
+  } catch {
+    await loadDigestPreview(course, courseMdPath);
+  }
+}
+
 async function activateKnowledgeRoot(picked: string) {
   knowledgeRoot = picked;
-  rootPathEl.textContent = picked;
-  openBtn.disabled = false;
+  folderHintEl.textContent = shortenPath(picked);
+  chooseBtn.textContent = "Change folder…";
   try {
     const created = await invoke<boolean>("init_knowledge_repo", { path: picked });
     if (created) logLine(`Initialized git repository in ${picked}`);
@@ -59,13 +233,20 @@ async function activateKnowledgeRoot(picked: string) {
   await invoke("start_folder_watch", { root: picked });
   await loadModels(modelSel.value || null);
   await persist();
+  await renderCourseList();
   await loadJobHistory();
   refreshFolderTools();
+  if (courses.length > 0) {
+    setCourseView(courses[0], "notes");
+  } else {
+    setPlaceView("welcome");
+    readingArticleEl.innerHTML = '<p class="reading-empty">Add course folders to your Knowledge directory.</p>';
+  }
 }
 
 async function runSearch(query: string) {
   if (!knowledgeRoot || !query.trim()) {
-    searchResultsEl.innerHTML = "";
+    searchResultsEl.innerHTML = '<div class="search-empty">Type to search digests</div>';
     return;
   }
   const hits = await invoke<SearchHit[]>("search_knowledge", {
@@ -74,21 +255,21 @@ async function runSearch(query: string) {
     limit: 20,
   });
   searchResultsEl.innerHTML = "";
+  if (hits.length === 0) {
+    searchResultsEl.innerHTML = '<div class="search-empty">No results</div>';
+    return;
+  }
   for (const hit of hits) {
-    const li = document.createElement("li");
-    const title = document.createElement("div");
-    title.className = "hit-title";
-    title.textContent = hit.title;
-    const meta = document.createElement("div");
-    meta.className = "hit-meta";
-    meta.textContent = `${hit.course} · ${hit.path}${hit.page_range ? ` · p.${hit.page_range}` : ""}`;
-    const snippet = document.createElement("div");
-    snippet.textContent = hit.snippet;
-    li.append(title, meta, snippet);
-    li.addEventListener("click", () => {
-      if (knowledgeRoot) void invoke("open_folder", { path: `${knowledgeRoot}/${hit.course}` });
+    const btn = document.createElement("button");
+    btn.className = "search-hit";
+    btn.innerHTML = `<div class="title">${hit.title}</div><div class="sub">${hit.course} · ${hit.path}${hit.page_range ? ` · p.${hit.page_range}` : ""}</div><div class="snippet">${hit.snippet}</div>`;
+    btn.addEventListener("click", () => {
+      searchOverlayEl.classList.remove("open");
+      const rel = hit.path.includes("/") ? hit.path : `${hit.course}/${hit.path}`;
+      setCourseView(hit.course, "notes");
+      void loadDigestPreview(hit.course, rel);
     });
-    searchResultsEl.appendChild(li);
+    searchResultsEl.appendChild(btn);
   }
 }
 
@@ -107,6 +288,7 @@ async function startUpdateWithSelections(
   reviewEl.hidden = true;
   updateBtn.disabled = true;
   cancelBtn.disabled = false;
+  openInspector();
   try {
     activeJobId = await invoke<string>("start_update", {
       root: knowledgeRoot,
@@ -120,6 +302,7 @@ async function startUpdateWithSelections(
     reviewEl.hidden = false;
     updateBtn.disabled = false;
     cancelBtn.disabled = true;
+    refreshUpdateEnabled();
   }
 }
 
@@ -131,6 +314,7 @@ async function handleWatchTriggered() {
     const plan = await invoke<UpdatePlan>("plan_update", { root: knowledgeRoot });
     if (plan.pending.length === 0) return;
     logLine(`Folder watch detected ${plan.pending.length} file(s) to process.`);
+    openInspector();
     if (ks.auto_update) {
       await refreshAuth();
       if (!authed) {
@@ -161,9 +345,7 @@ function parseRanges(raw: string, pageCount: number): [number, number][] | null 
   for (const part of text.split(",")) {
     const bit = part.trim();
     const match = bit.match(/^(\d+)(?:\s*-\s*(\d+))?$/);
-    if (!match) {
-      throw new Error(`Invalid range "${bit}". Use 3-5 or 8.`);
-    }
+    if (!match) throw new Error(`Invalid range "${bit}". Use 3-5 or 8.`);
     const start = Number(match[1]);
     const end = match[2] === undefined ? start : Number(match[2]);
     if (start < 1 || end > pageCount || start > end) {
@@ -188,22 +370,17 @@ function renderReview(pending: PendingSource[]) {
   reviewRowsEl.innerHTML = "";
   for (const p of pending) {
     const row = document.createElement("tr");
-
     const file = document.createElement("td");
     file.textContent = p.path;
-
     const pages = document.createElement("td");
     pages.textContent = String(p.page_count);
-
     const rangeCell = document.createElement("td");
     const input = document.createElement("input");
     input.type = "text";
     input.placeholder = "all";
     input.dataset.path = p.path;
     input.dataset.pageCount = String(p.page_count);
-    if (p.suggested_ranges.length > 0) {
-      input.value = formatRanges(p.suggested_ranges);
-    }
+    if (p.suggested_ranges.length > 0) input.value = formatRanges(p.suggested_ranges);
     rangeCell.appendChild(input);
     const note = alignmentNote(p);
     if (note) {
@@ -212,11 +389,11 @@ function renderReview(pending: PendingSource[]) {
       hint.textContent = note;
       rangeCell.appendChild(hint);
     }
-
     row.append(file, pages, rangeCell);
     reviewRowsEl.appendChild(row);
   }
   reviewEl.hidden = false;
+  openInspector();
 }
 
 function collectSelections(): Selection[] {
@@ -227,67 +404,110 @@ function collectSelections(): Selection[] {
   }));
 }
 
+function statusClass(status: string): string {
+  if (status === "succeeded") return "status-ok";
+  if (status === "running") return "status-running";
+  return "status-bad";
+}
+
+function updateInspectorStatus(job?: JobSummary) {
+  if (!job) {
+    inspectorStatusEl.textContent = "";
+    return;
+  }
+  const time = job.finished_at ?? job.started_at;
+  const label = job.status === "succeeded" ? "succeeded" : job.status;
+  inspectorStatusEl.innerHTML = `Last job: <span class="ok">${label}</span> · ${time}`;
+}
+
 async function loadJobHistory() {
+  jobsListEl.innerHTML = "";
+  jobsLogEl.hidden = true;
   if (!knowledgeRoot) {
-    historyEl.hidden = true;
+    jobsListEl.innerHTML = '<div class="setting-row"><span>No Knowledge folder selected</span></div>';
     return;
   }
   try {
     await invoke("init_arbor_db", { root: knowledgeRoot });
     const jobs = await invoke<JobSummary[]>("list_jobs", { root: knowledgeRoot, limit: 15 });
-    historyRowsEl.innerHTML = "";
+    if (jobs.length === 0) {
+      jobsListEl.innerHTML = '<div class="setting-row"><span>No runs yet</span></div>';
+      return;
+    }
+    updateInspectorStatus(jobs[0]);
     for (const job of jobs) {
-      const row = document.createElement("tr");
-      const started = document.createElement("td");
-      started.textContent = job.started_at;
-      const status = document.createElement("td");
-      const badge = document.createElement("span");
-      badge.className = `status-badge ${job.status}`;
-      badge.textContent = job.error_summary ? `${job.status} (${job.error_summary})` : job.status;
-      status.appendChild(badge);
-      const model = document.createElement("td");
-      model.textContent = job.model_id ?? "—";
-      const actions = document.createElement("td");
+      const row = document.createElement("div");
+      row.className = "setting-row job-row";
+      const label = document.createElement("span");
+      label.textContent = job.started_at;
+      const status = document.createElement("span");
+      status.className = statusClass(job.status);
+      status.textContent = job.error_summary ? `${job.status} (${job.error_summary})` : job.status;
       const btn = document.createElement("button");
       btn.type = "button";
       btn.textContent = "Log";
       btn.addEventListener("click", () => void showJobLog(job.id));
-      actions.appendChild(btn);
-      row.append(started, status, model, actions);
-      historyRowsEl.appendChild(row);
+      row.append(label, status, btn);
+      jobsListEl.appendChild(row);
     }
-    historyEl.hidden = jobs.length === 0;
   } catch (e) {
-    logLine(`Could not load job history: ${e}`);
+    jobsListEl.innerHTML = `<div class="setting-row"><span>Could not load jobs: ${e}</span></div>`;
   }
 }
 
 async function showJobLog(jobId: string) {
   if (!knowledgeRoot) return;
   const events = await invoke<JobEventRow[]>("get_job_events", { root: knowledgeRoot, jobId });
-  historyLogEl.hidden = false;
-  historyLogEl.textContent = events.map((e) => e.line).join("\n");
+  jobsLogEl.hidden = false;
+  jobsLogEl.textContent = events.map((e) => e.line).join("\n");
+}
+
+function setToggle(el: HTMLElement, on: boolean) {
+  el.classList.toggle("off", !on);
+}
+
+async function loadKnowledgeSettingsUi() {
+  if (!knowledgeRoot) return;
+  try {
+    const ks = await invoke<KnowledgeSettings>("get_knowledge_settings", { root: knowledgeRoot });
+    setToggle(toggleWatch, ks.watch_enabled);
+    setToggle(toggleAuto, ks.auto_update);
+    setToggle(toggleDelete, ks.delete_sources_after_digest);
+  } catch {
+    /* settings file may not exist yet */
+  }
+}
+
+async function saveKnowledgeSettings(partial: Partial<KnowledgeSettings>) {
+  if (!knowledgeRoot) return;
+  const current = await invoke<KnowledgeSettings>("get_knowledge_settings", { root: knowledgeRoot });
+  const next = { ...current, ...partial };
+  await invoke("save_knowledge_settings", { root: knowledgeRoot, settings: next });
 }
 
 async function loadSettings() {
   const s = await invoke<Settings>("get_settings");
   if (s.knowledge_root) {
     knowledgeRoot = s.knowledge_root;
-    rootPathEl.textContent = s.knowledge_root;
-    openBtn.disabled = false;
+    folderHintEl.textContent = shortenPath(s.knowledge_root);
+    chooseBtn.textContent = "Change folder…";
     await invoke("start_folder_watch", { root: s.knowledge_root });
+    await renderCourseList();
     await loadJobHistory();
+    if (courses.length > 0) {
+      setCourseView(courses[0], "notes");
+    }
     refreshFolderTools();
+  } else {
+    setPlaceView("welcome");
   }
   await loadModels(s.model_id);
 }
 
 async function persist() {
-  const settings: Settings = {
-    knowledge_root: knowledgeRoot,
-    model_id: modelSel.value || null,
-  };
-  await invoke("save_settings", { settings });
+  await invoke("save_settings", {
+    settings: { knowledge_root: knowledgeRoot, model_id: modelSel.value || null } satisfies Settings,
+  });
 }
 
 async function loadModels(selected: string | null) {
@@ -309,25 +529,25 @@ let refreshAuthInFlight: Promise<void> | null = null;
 async function refreshAuth() {
   if (refreshAuthInFlight) return refreshAuthInFlight;
   refreshAuthInFlight = (async () => {
-    statusEl.textContent = "Checking Codex…";
-    statusEl.className = "badge";
+    codexLabelEl.textContent = "Checking Codex…";
+    codexStatusEl.className = "auth-badge";
     docsLink.hidden = true;
     try {
       const a = await invoke<AuthStatus>("check_auth");
       authed = a.authenticated;
       if (a.authenticated) {
-        statusEl.textContent = "Codex ready";
-        statusEl.className = "badge ok";
+        codexLabelEl.textContent = "Codex connected";
+        codexStatusEl.className = "auth-badge";
       } else {
-        statusEl.textContent = `Codex: ${a.reason}`;
-        statusEl.className = "badge bad";
+        codexLabelEl.textContent = a.reason;
+        codexStatusEl.className = "auth-badge bad";
         docsLink.href = a.docs_url;
         docsLink.hidden = false;
       }
     } catch (e) {
       authed = false;
-      statusEl.textContent = `Codex check failed: ${e}`;
-      statusEl.className = "badge bad";
+      codexLabelEl.textContent = `Check failed`;
+      codexStatusEl.className = "auth-badge bad";
     }
     refreshUpdateEnabled();
   })().finally(() => {
@@ -336,18 +556,69 @@ async function refreshAuth() {
   return refreshAuthInFlight;
 }
 
-chooseBtn.addEventListener("click", async () => {
+async function pickFolder() {
   const picked = await open({ directory: true, multiple: false });
   if (typeof picked !== "string") return;
   await activateKnowledgeRoot(picked);
+  await persist();
+}
+
+chooseBtn.addEventListener("click", () => void pickFolder());
+welcomeChooseBtn.addEventListener("click", () => void pickFolder());
+
+navJobs.addEventListener("click", () => setPlaceView("jobs"));
+navSettings.addEventListener("click", () => setPlaceView("settings"));
+
+modeTabsEl.addEventListener("click", (e) => {
+  const tab = (e.target as HTMLElement).closest(".mode-tab") as HTMLElement | null;
+  if (!tab || !currentCourse) return;
+  currentMode = tab.dataset.mode as Mode;
+  modeTabsEl.querySelectorAll(".mode-tab").forEach((t) => t.classList.remove("active"));
+  tab.classList.add("active");
+  showPanel(currentMode);
+});
+
+searchToggleBtn.addEventListener("click", () => {
+  searchOverlayEl.classList.toggle("open");
+  if (searchOverlayEl.classList.contains("open")) {
+    searchInput.focus();
+    void runSearch(searchInput.value);
+  }
 });
 
 searchInput.addEventListener("input", () => {
   if (searchTimer !== null) window.clearTimeout(searchTimer);
   const query = searchInput.value;
-  searchTimer = window.setTimeout(() => {
-    void runSearch(query);
-  }, 250);
+  searchTimer = window.setTimeout(() => void runSearch(query), 250);
+});
+
+document.addEventListener("click", (e) => {
+  if (!searchOverlayEl.contains(e.target as Node) && e.target !== searchToggleBtn) {
+    searchOverlayEl.classList.remove("open");
+  }
+});
+
+inspectorToggleBtn.addEventListener("click", () => {
+  const open = inspectorBodyEl.classList.toggle("open");
+  inspectorToggleBtn.textContent = open ? "Hide log ▾" : "Show log ▴";
+});
+
+toggleWatch.addEventListener("click", async () => {
+  const on = toggleWatch.classList.contains("off");
+  setToggle(toggleWatch, on);
+  await saveKnowledgeSettings({ watch_enabled: on });
+});
+
+toggleAuto.addEventListener("click", async () => {
+  const on = toggleAuto.classList.contains("off");
+  setToggle(toggleAuto, on);
+  await saveKnowledgeSettings({ auto_update: on });
+});
+
+toggleDelete.addEventListener("click", async () => {
+  const on = toggleDelete.classList.contains("off");
+  setToggle(toggleDelete, on);
+  await saveKnowledgeSettings({ delete_sources_after_digest: on });
 });
 
 reindexBtn.addEventListener("click", async () => {
@@ -361,10 +632,6 @@ reindexBtn.addEventListener("click", async () => {
   }
 });
 
-openBtn.addEventListener("click", async () => {
-  if (knowledgeRoot) await invoke("open_folder", { path: knowledgeRoot });
-});
-
 modelSel.addEventListener("change", persist);
 
 updateBtn.addEventListener("click", async () => {
@@ -372,6 +639,7 @@ updateBtn.addEventListener("click", async () => {
   await refreshAuth();
   if (!authed) return;
   logEl.textContent = "";
+  openInspector();
   try {
     const plan = await invoke<UpdatePlan>("plan_update", { root: knowledgeRoot });
     if (plan.pending.length === 0) {
@@ -388,14 +656,11 @@ confirmBtn.addEventListener("click", async () => {
   if (!knowledgeRoot || !modelSel.value) return;
   await refreshAuth();
   if (!authed) return;
-  let selections: Selection[];
   try {
-    selections = collectSelections();
+    await startUpdateWithSelections(collectSelections());
   } catch (e) {
     logLine(`Could not read ranges: ${e}`);
-    return;
   }
-  await startUpdateWithSelections(selections);
 });
 
 cancelReviewBtn.addEventListener("click", () => {
@@ -454,6 +719,9 @@ function renderEvent(ev: WorkerEvent) {
       break;
     case "committed":
       logLine(`Committed ${ev.commit}: ${(ev.courses ?? []).join(", ")}`);
+      void renderCourseList().then(() => {
+        if (currentCourse) void loadCourseContent(currentCourse);
+      });
       void runSearch(searchInput.value);
       break;
     case "run_done":
@@ -488,12 +756,10 @@ listen<{ job_id: string }>("arbor://job-finished", () => {
 });
 
 listen<{ root: string }>("arbor://files-changed", (e) => {
-  if (knowledgeRoot && e.payload.root === knowledgeRoot) {
-    void handleWatchTriggered();
-  }
+  if (knowledgeRoot && e.payload.root === knowledgeRoot) void handleWatchTriggered();
 });
 
-window.addEventListener("focus", refreshAuth);
+window.addEventListener("focus", () => void refreshAuth());
 
 (async () => {
   await loadSettings();

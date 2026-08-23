@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Arbor",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "identifier": "com.arbor.app",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -14,8 +14,10 @@
     "windows": [
       {
         "title": "Arbor",
-        "width": 720,
-        "height": 640,
+        "width": 1100,
+        "height": 760,
+        "minWidth": 900,
+        "minHeight": 640,
         "resizable": true
       }
     ],

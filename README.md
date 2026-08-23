@@ -2,7 +2,7 @@
 
 Local-first desktop app that turns course PDFs, PowerPoints, and Word files into structured study digests using the [Codex CLI](https://developers.openai.com/codex/cli). Your Knowledge library is a normal git repo on disk. Sources and generated notes stay together in history.
 
-**Current release:** [2.0.0](CHANGELOG.md) (git tag `v2.0.0`). Worker, desktop, and Tauri all report this number (`arbor-worker --version`). This is [PROJECT.md](PROJECT.md) Version 2.
+**Current release:** [3.0.0](CHANGELOG.md) (git tag `v3.0.0`). Worker, desktop, and Tauri all report this number (`arbor-worker --version`). **3.0.0** ships the Version 3 desktop shell; ingest and automation are the Version 2 loop underneath.
 
 For later milestones, see [`PROJECT.md`](PROJECT.md). The original V1 design (`lecture.md` per lecture) is historical: [`docs/superpowers/specs/2026-08-02-arbor-v1-design.md`](docs/superpowers/specs/2026-08-02-arbor-v1-design.md). Living layout is course folders, dated `digests/`, and `arbor-course.json`.
 
@@ -14,20 +14,22 @@ Install the [Codex CLI](https://developers.openai.com/codex/cli) yourself and lo
 
 Clone and run from source for Linux, or to develop.
 
-## What's in 2.0.0
+## What's in 3.0.0
 
 | Area | What you can do |
 |------|-----------------|
+| Shell | Sidebar library, in-app digest preview, sage/cream UI, collapsed job inspector |
 | Ingest | PDF, PPTX, and DOCX. Optional Tesseract OCR on scanned PDF pages. |
 | Review | Page ranges, leftover-page suggestions, in-place digest patch. |
 | Library | Course folders, dated `digests/`, `course.md`, `arbor-course.json` v2 fingerprints. |
 | Watch | Drop a file, wait ~3 seconds, review panel appears. No settings file required. |
 | Auto-run | Opt in with `"auto_update": true` in `.arbor/settings.json`. |
-| Search | Box in the app. `arbor-worker reindex --root` rebuilds FTS. |
-| Jobs | Recent runs with expandable logs. One update at a time. |
+| Search | Overlay in the course header. `arbor-worker reindex --root` rebuilds FTS. |
+| Jobs | Jobs place in the sidebar with per-run logs. One update at a time. |
+| Settings | Watch, auto-run, delete-after-digest, and model in the app. |
 | Notify | macOS notification when a job finishes. |
 
-The window is still the Version 1 single-column shell. Visual redesign is Version 3. Flashcards, quizzes, and chat are later milestones. Codex CLI is still a separate install.
+Flashcards and Quiz tabs are placeholders (Coming soon). Generation is a later wave. Codex CLI is still a separate install.
 
 ---
 

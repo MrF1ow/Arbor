@@ -6,7 +6,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum JobStatus {
-    Queued,
     Running,
     Succeeded,
     Failed,
@@ -16,22 +15,10 @@ pub enum JobStatus {
 impl JobStatus {
     pub fn as_str(self) -> &'static str {
         match self {
-            JobStatus::Queued => "queued",
             JobStatus::Running => "running",
             JobStatus::Succeeded => "succeeded",
             JobStatus::Failed => "failed",
             JobStatus::Cancelled => "cancelled",
-        }
-    }
-
-    pub fn from_str(s: &str) -> Option<Self> {
-        match s {
-            "queued" => Some(JobStatus::Queued),
-            "running" => Some(JobStatus::Running),
-            "succeeded" => Some(JobStatus::Succeeded),
-            "failed" => Some(JobStatus::Failed),
-            "cancelled" => Some(JobStatus::Cancelled),
-            _ => None,
         }
     }
 }
@@ -101,10 +88,6 @@ impl JobCoordinator {
         {
             self.active = None;
         }
-    }
-
-    pub fn is_busy(&self) -> bool {
-        self.active.is_some()
     }
 }
 

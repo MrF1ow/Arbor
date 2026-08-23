@@ -80,6 +80,81 @@ fn default_true() -> bool {
     true
 }
 
+#[derive(serde::Serialize)]
+pub struct DigestInfo {
+    pub name: String,
+    pub path: String,
+}
+
+#[tauri::command]
+pub fn list_courses(root: String) -> Result<Vec<String>, String> {
+    let root_path = Path::new(&root);
+    if !root_path.is_dir() {
+        return Err(format!("Not a folder: {root}"));
+    }
+    let mut courses = Vec::new();
+    for entry in std::fs::read_dir(root_path).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        if !entry.file_type().map_err(|e| e.to_string())?.is_dir() {
+            continue;
+        }
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if name.starts_with('.') {
+            continue;
+        }
+        courses.push(name);
+    }
+    courses.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+    Ok(courses)
+}
+
+#[tauri::command]
+pub fn list_digests(root: String, course: String) -> Result<Vec<DigestInfo>, String> {
+    if course.contains('/') || course.contains('\\') || course.contains("..") {
+        return Err("Invalid course name".into());
+    }
+    let digests_dir = Path::new(&root).join(&course).join("digests");
+    if !digests_dir.is_dir() {
+        return Ok(vec![]);
+    }
+    let mut digests = Vec::new();
+    for entry in std::fs::read_dir(&digests_dir).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        if entry.file_type().map_err(|e| e.to_string())?.is_file()
+            && entry.path().extension().and_then(|e| e.to_str()) == Some("md")
+        {
+            let file_name = entry.file_name().to_string_lossy().into_owned();
+            let stem = file_name.strip_suffix(".md").unwrap_or(&file_name).to_string();
+            digests.push(DigestInfo {
+                name: stem.clone(),
+                path: format!("{course}/digests/{file_name}"),
+            });
+        }
+    }
+    digests.sort_by(|a, b| b.name.cmp(&a.name));
+    Ok(digests)
+}
+
+#[tauri::command]
+pub fn read_markdown(root: String, relative_path: String) -> Result<String, String> {
+    if relative_path.contains("..") {
+        return Err("Invalid path".into());
+    }
+    let path = Path::new(&root).join(&relative_path);
+    if !path.is_file() {
+        return Err(format!("File not found: {relative_path}"));
+    }
+    std::fs::read_to_string(&path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn save_knowledge_settings(root: String, settings: KnowledgeSettings) -> Result<(), String> {
+    let arbor_dir = Path::new(&root).join(".arbor");
+    std::fs::create_dir_all(&arbor_dir).map_err(|e| e.to_string())?;
+    let text = serde_json::to_string_pretty(&settings).map_err(|e| e.to_string())?;
+    std::fs::write(arbor_dir.join("settings.json"), text).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub fn get_knowledge_settings(root: String) -> Result<KnowledgeSettings, String> {
     let path = Path::new(&root).join(".arbor").join("settings.json");

@@ -1,3 +1,8 @@
+export interface DigestInfo {
+  name: string;
+  path: string;
+}
+
 export interface Model {
   id: string;
   label: string;
