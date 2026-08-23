@@ -46,13 +46,14 @@ _TEMPLATE = """You are creating structured study notes from a graduate lecture.
 Output ONLY GitHub-flavored Markdown, no preamble or code fences, using exactly these
 sections in this order:
 
-# <a concise lecture title>
+# <a lecture title of at most eight words>
 ## Overview
 ## Key Concepts
 ## Important Details
 ## Questions to Review
 
 Guidance:
+- Title: at most eight words that name the lecture. Do not use the date as the title.
 - Overview: 2-4 sentence summary of the lecture.
 - Key Concepts: bulleted list of the main ideas.
 - Important Details: specifics, definitions, formulas, and facts worth remembering.
@@ -173,13 +174,14 @@ keep the logical order, and do not lose important details. Output ONLY
 GitHub-flavored Markdown, no preamble or code fences, using exactly these
 sections in this order:
 
-# <a concise lecture title>
+# <a lecture title of at most eight words>
 ## Overview
 ## Key Concepts
 ## Important Details
 ## Questions to Review
 
 Guidance:
+- Title: at most eight words that name the lecture. Do not use the date as the title.
 - Overview: 2-4 sentence summary of the whole lecture.
 - Key Concepts: bulleted list of the main ideas across all parts.
 - Important Details: specifics, definitions, formulas, and facts worth remembering.

@@ -17,7 +17,13 @@
 
           <div class="sidebar-main">
             <div class="nav-section">
-              <div class="nav-label">Library</div>
+              <div class="nav-label-row">
+                <div class="nav-label">Library</div>
+                <button type="button" class="icon-btn" id="add-course" title="Add class" aria-label="Add class" disabled>+</button>
+              </div>
+              <form id="add-course-form" class="add-course-form" hidden>
+                <input id="add-course-name" type="text" maxlength="80" placeholder="Class name" autocomplete="off" />
+              </form>
               <div id="course-list"></div>
             </div>
           </div>
@@ -38,6 +44,7 @@
               <span id="codex-label">Checking Codex…</span>
             </span>
             <a id="codex-docs" href="#" target="_blank" rel="noreferrer" hidden class="btn-link">Set up Codex</a>
+            <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Switch to dark mode">Dark</button>
             <div id="folder-hint" class="folder-hint">No folder selected</div>
             <button id="choose-folder" class="btn-link">Choose Knowledge folder…</button>
             </div>
@@ -48,6 +55,7 @@
           <div class="main" id="main-area">
             <header class="course-header" id="course-header" hidden>
               <h1 class="course-title" id="course-title"></h1>
+              <button type="button" class="btn-secondary" id="add-files">Add files</button>
               <div class="mode-tabs" id="mode-tabs">
                 <button class="mode-tab active" data-mode="notes">Notes</button>
                 <button class="mode-tab" data-mode="flashcards">Flashcards</button>
@@ -72,7 +80,7 @@
               <div class="content-panel active" data-panel="welcome" id="panel-welcome">
                 <div class="welcome">
                   <h2>Welcome to Arbor</h2>
-                  <p>Choose a Knowledge folder to browse your courses, read digests, and update your library.</p>
+                  <p>Choose a Knowledge folder, add a class, and drop lecture files in from the app. Arbor reads them and writes study notes.</p>
                   <button class="btn-primary" id="welcome-choose">Choose Knowledge folder…</button>
                 </div>
               </div>

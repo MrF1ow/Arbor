@@ -110,8 +110,35 @@ fn default_true() -> bool {
 
 #[derive(serde::Serialize)]
 pub struct DigestInfo {
-    pub name: String,
+    pub title: String,
+    pub date: String,
     pub path: String,
+}
+
+fn markdown_title(text: &str) -> Option<String> {
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with("<!--") {
+            continue;
+        }
+        return trimmed
+            .strip_prefix("# ")
+            .map(str::trim)
+            .filter(|title| !title.is_empty())
+            .map(str::to_string);
+    }
+    None
+}
+
+fn date_from_stem(stem: &str) -> String {
+    if let Some((day, clock)) = stem.split_once('T') {
+        if clock.len() >= 4 && clock[..4].chars().all(|c| c.is_ascii_digit()) {
+            let hh = &clock[..2];
+            let mm = &clock[2..4];
+            return format!("{day} · {hh}:{mm}");
+        }
+    }
+    stem.to_string()
 }
 
 #[tauri::command]
@@ -136,6 +163,87 @@ pub fn list_courses(root: String) -> Result<Vec<String>, String> {
     Ok(courses)
 }
 
+const SOURCE_EXTENSIONS: &[&str] = &["pdf", "pptx", "docx"];
+
+fn unique_dest(dir: &Path, file_name: &std::ffi::OsStr) -> PathBuf {
+    let candidate = dir.join(file_name);
+    if !candidate.exists() {
+        return candidate;
+    }
+    let path = Path::new(file_name);
+    let stem = path
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "file".into());
+    let ext = path.extension().map(|s| s.to_string_lossy().into_owned());
+    let mut n = 2u32;
+    loop {
+        let name = match &ext {
+            Some(ext) => format!("{stem}-{n}.{ext}"),
+            None => format!("{stem}-{n}"),
+        };
+        let candidate = dir.join(name);
+        if !candidate.exists() {
+            return candidate;
+        }
+        n += 1;
+    }
+}
+
+#[tauri::command]
+pub fn create_course(root: String, name: String) -> Result<String, String> {
+    let name = name.trim();
+    if name.starts_with('.') {
+        return Err("Invalid course name".into());
+    }
+    validate_path_component(name, "course name")?;
+    let path = Path::new(&root).join(name);
+    if path.exists() {
+        return Err(format!("A class named {name} already exists"));
+    }
+    std::fs::create_dir(&path).map_err(|e| e.to_string())?;
+    Ok(name.to_string())
+}
+
+#[tauri::command]
+pub fn import_sources(
+    root: String,
+    course: String,
+    paths: Vec<String>,
+) -> Result<Vec<String>, String> {
+    validate_path_component(&course, "course name")?;
+    let dest_dir = Path::new(&root).join(&course);
+    if !dest_dir.is_dir() {
+        return Err(format!("Class not found: {course}"));
+    }
+    let mut imported = Vec::new();
+    for src in paths {
+        let src_path = Path::new(&src);
+        if !src_path.is_file() {
+            return Err(format!("File not found: {src}"));
+        }
+        let ext = src_path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        if !SOURCE_EXTENSIONS.contains(&ext.as_str()) {
+            return Err(format!("Unsupported file type: {src}"));
+        }
+        let file_name = src_path
+            .file_name()
+            .ok_or_else(|| format!("Invalid path: {src}"))?;
+        let dest = unique_dest(&dest_dir, file_name);
+        std::fs::copy(src_path, &dest).map_err(|e| e.to_string())?;
+        imported.push(
+            dest.file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default(),
+        );
+    }
+    Ok(imported)
+}
+
 #[tauri::command]
 pub fn list_digests(root: String, course: String) -> Result<Vec<DigestInfo>, String> {
     if course.contains('/') || course.contains('\\') || course.contains("..") {
@@ -156,13 +264,19 @@ pub fn list_digests(root: String, course: String) -> Result<Vec<DigestInfo>, Str
                 .strip_suffix(".md")
                 .unwrap_or(&file_name)
                 .to_string();
+            let date = date_from_stem(&stem);
+            let title = std::fs::read_to_string(entry.path())
+                .ok()
+                .and_then(|text| markdown_title(&text))
+                .unwrap_or_else(|| date.clone());
             digests.push(DigestInfo {
-                name: stem.clone(),
+                title,
+                date,
                 path: format!("{course}/digests/{file_name}"),
             });
         }
     }
-    digests.sort_by(|a, b| b.name.cmp(&a.name));
+    digests.sort_by(|a, b| b.path.cmp(&a.path));
     Ok(digests)
 }
 
@@ -548,6 +662,74 @@ mod tests {
 
         fs::write(course.join("digests").join("b.md"), b"changed").unwrap();
         assert!(study_artifact_stale(root_string, "Biology".into(), "flashcards".into(),).unwrap());
+    }
+
+    #[test]
+    fn list_digests_uses_h1_title_and_filename_date() {
+        let root = temp_root("digest-title");
+        let digests = root.join("Biology").join("digests");
+        fs::create_dir_all(&digests).unwrap();
+        fs::write(
+            digests.join("2026-08-12.md"),
+            "<!-- arbor-pages:1-4 -->\n# Glycolysis net yield\n## Overview\nNotes.\n",
+        )
+        .unwrap();
+
+        let listed = list_digests(root.to_string_lossy().into_owned(), "Biology".into()).unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].title, "Glycolysis net yield");
+        assert_eq!(listed[0].date, "2026-08-12");
+        assert_eq!(listed[0].path, "Biology/digests/2026-08-12.md");
+    }
+
+    #[test]
+    fn create_course_makes_a_folder_and_rejects_duplicates() {
+        let root = temp_root("create-course");
+        let name = create_course(root.to_string_lossy().into_owned(), " Organic Chem ".into())
+            .unwrap();
+        assert_eq!(name, "Organic Chem");
+        assert!(root.join("Organic Chem").is_dir());
+        assert!(create_course(
+            root.to_string_lossy().into_owned(),
+            "Organic Chem".into()
+        )
+        .is_err());
+        assert!(create_course(root.to_string_lossy().into_owned(), "../x".into()).is_err());
+    }
+
+    #[test]
+    fn import_sources_copies_supported_files_with_unique_names() {
+        let root = temp_root("import");
+        let course = root.join("Biology");
+        fs::create_dir_all(&course).unwrap();
+        let src_dir = root.join("inbox");
+        fs::create_dir_all(&src_dir).unwrap();
+        let first = src_dir.join("lecture.pdf");
+        fs::write(&first, b"%PDF").unwrap();
+
+        let imported = import_sources(
+            root.to_string_lossy().into_owned(),
+            "Biology".into(),
+            vec![first.to_string_lossy().into_owned()],
+        )
+        .unwrap();
+        assert_eq!(imported, vec!["lecture.pdf"]);
+        assert!(course.join("lecture.pdf").is_file());
+
+        let again = import_sources(
+            root.to_string_lossy().into_owned(),
+            "Biology".into(),
+            vec![first.to_string_lossy().into_owned()],
+        )
+        .unwrap();
+        assert_eq!(again, vec!["lecture-2.pdf"]);
+        assert!(course.join("lecture-2.pdf").is_file());
+        assert!(import_sources(
+            root.to_string_lossy().into_owned(),
+            "Biology".into(),
+            vec![src_dir.join("notes.txt").to_string_lossy().into_owned()],
+        )
+        .is_err());
     }
 }
 

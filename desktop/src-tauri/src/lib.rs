@@ -40,6 +40,8 @@ pub fn run() {
             commands::save_knowledge_settings,
             commands::start_folder_watch,
             commands::list_courses,
+            commands::create_course,
+            commands::import_sources,
             commands::list_digests,
             commands::read_markdown,
             commands::read_study_json,

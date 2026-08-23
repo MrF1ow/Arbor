@@ -39,7 +39,9 @@ import {
   parseCitationsReport,
 } from "./citations";
 import { renderMarkdown } from "./markdown";
+import { resolvedTheme, toggledAppearance } from "./theme";
 import type {
+  Appearance,
   AuthStatus,
   ConceptGraph,
   DigestInfo,
@@ -83,6 +85,11 @@ const docsLink = $("codex-docs") as HTMLAnchorElement;
 const digestListEl = $("digest-list");
 const courseIndexLink = $("course-index-link");
 const readingArticleEl = $("reading-article");
+const addCourseBtn = $("add-course") as HTMLButtonElement;
+const addCourseForm = $("add-course-form") as HTMLFormElement;
+const addCourseNameEl = $("add-course-name") as HTMLInputElement;
+const addFilesBtn = $("add-files") as HTMLButtonElement;
+const themeToggleBtn = $("theme-toggle") as HTMLButtonElement;
 const flashcardsCopyEl = $("flashcards-copy");
 const flashcardsEmptyEl = $("flashcards-empty");
 const flashcardsDeckEl = $("flashcards-deck");
@@ -158,6 +165,7 @@ const searchSemanticInput = $<HTMLInputElement>("search-semantic");
 const searchResultsEl = $("search-results");
 
 let knowledgeRoot: string | null = null;
+let appearance: Appearance = "system";
 let authed = false;
 let activeUpdateJobId: string | null = null;
 let studyJobRunning = false;
@@ -220,6 +228,7 @@ function setCourseView(course: string, mode: Mode = currentMode, notesPath?: str
   });
   showPanel(mode);
   setNavActive("course", course);
+  refreshFolderTools();
   if (mode === "notes") void loadCourseContent(course, notesPath);
   if (mode === "flashcards") void loadFlashcards(course);
   if (mode === "quiz") void loadQuiz(course);
@@ -277,8 +286,24 @@ function refreshFolderTools() {
   const ready = Boolean(knowledgeRoot);
   searchToggleBtn.disabled = !ready;
   reindexBtn.disabled = !ready;
+  addCourseBtn.disabled = !ready;
+  addFilesBtn.disabled = !(ready && currentCourse);
   refreshUpdateEnabled();
   refreshStudyEnabled();
+}
+
+function systemPrefersDark(): boolean {
+  return window.matchMedia("(prefers-color-scheme: dark)").matches;
+}
+
+function applyTheme() {
+  const theme = resolvedTheme(appearance, systemPrefersDark());
+  document.documentElement.dataset.theme = theme;
+  themeToggleBtn.textContent = theme === "dark" ? "Light" : "Dark";
+  themeToggleBtn.setAttribute(
+    "aria-label",
+    theme === "dark" ? "Switch to light mode" : "Switch to dark mode",
+  );
 }
 
 function shortenPath(path: string): string {
@@ -298,7 +323,7 @@ async function renderCourseList() {
     courses = [];
   }
   if (courses.length === 0) {
-    courseListEl.innerHTML = '<p class="nav-empty">No course folders</p>';
+    courseListEl.innerHTML = '<p class="nav-empty">No classes yet</p>';
     return;
   }
   for (const course of courses) {
@@ -306,7 +331,10 @@ async function renderCourseList() {
     btn.className = "nav-item";
     btn.dataset.place = "course";
     btn.dataset.course = course;
-    btn.innerHTML = `<span class="icon">◈</span> ${course}`;
+    const icon = document.createElement("span");
+    icon.className = "icon";
+    icon.textContent = "◈";
+    btn.append(icon, document.createTextNode(` ${course}`));
     btn.addEventListener("click", () => setCourseView(course, "notes"));
     courseListEl.appendChild(btn);
   }
@@ -326,7 +354,10 @@ async function loadDigestPreview(course: string, relativePath: string) {
       ? `<div class="page-chip">Pages ${pageChip}</div>${html}`
       : html;
   } catch (e) {
-    readingArticleEl.innerHTML = `<p class="reading-empty">Could not load file: ${e}</p>`;
+    const isCourseIndex = relativePath.endsWith("/course.md");
+    readingArticleEl.innerHTML = isCourseIndex
+      ? `<p class="reading-empty">No notes yet. Add lecture files, then Update knowledge.</p>`
+      : `<p class="reading-empty">Could not load file: ${e}</p>`;
   }
   await renderNotesConceptChips(course, relativePath);
 }
@@ -344,7 +375,13 @@ async function loadCourseContent(course: string, initialPath?: string) {
       const btn = document.createElement("button");
       btn.className = "digest-link";
       btn.dataset.path = d.path;
-      btn.innerHTML = `<span class="name">${d.name}</span><span class="date">${d.name}</span>`;
+      const titleEl = document.createElement("span");
+      titleEl.className = "name";
+      titleEl.textContent = d.title;
+      const dateEl = document.createElement("span");
+      dateEl.className = "date";
+      dateEl.textContent = d.date;
+      btn.append(titleEl, dateEl);
       btn.addEventListener("click", () => void loadDigestPreview(course, d.path));
       digestListEl.appendChild(btn);
     }
@@ -779,7 +816,7 @@ async function activateKnowledgeRoot(picked: string) {
     setCourseView(courses[0], "notes");
   } else {
     setPlaceView("welcome");
-    readingArticleEl.innerHTML = '<p class="reading-empty">Add course folders to your Knowledge directory.</p>';
+    readingArticleEl.innerHTML = '<p class="reading-empty">Add a class with +, then add lecture files to it.</p>';
   }
 }
 
@@ -1042,6 +1079,8 @@ async function saveKnowledgeSettings(
 
 async function loadSettings() {
   const s = await invoke<Settings>("get_settings");
+  appearance = s.appearance ?? "system";
+  applyTheme();
   if (s.knowledge_root) {
     knowledgeRoot = s.knowledge_root;
     folderHintEl.textContent = shortenPath(s.knowledge_root);
@@ -1061,7 +1100,11 @@ async function loadSettings() {
 
 async function persist() {
   await invoke("save_settings", {
-    settings: { knowledge_root: knowledgeRoot, model_id: modelSel.value || null } satisfies Settings,
+    settings: {
+      knowledge_root: knowledgeRoot,
+      model_id: modelSel.value || null,
+      appearance,
+    } satisfies Settings,
   });
 }
 
@@ -1119,8 +1162,86 @@ async function pickFolder() {
   await persist();
 }
 
+async function createCourseFromForm() {
+  if (!knowledgeRoot) return;
+  const name = addCourseNameEl.value.trim();
+  if (!name) {
+    addCourseNameEl.focus();
+    return;
+  }
+  try {
+    const course = await invoke<string>("create_course", { root: knowledgeRoot, name });
+    addCourseForm.hidden = true;
+    addCourseNameEl.value = "";
+    await renderCourseList();
+    setCourseView(course, "notes");
+  } catch (error) {
+    addCourseNameEl.setCustomValidity(String(error));
+    addCourseNameEl.reportValidity();
+    addCourseNameEl.setCustomValidity("");
+  }
+}
+
+async function importLectureFiles() {
+  if (!knowledgeRoot || !currentCourse) return;
+  const picked = await open({
+    multiple: true,
+    filters: [{ name: "Lecture files", extensions: ["pdf", "pptx", "docx"] }],
+  });
+  const paths = typeof picked === "string" ? [picked] : picked;
+  if (!paths || paths.length === 0) return;
+  try {
+    const imported = await invoke<string[]>("import_sources", {
+      root: knowledgeRoot,
+      course: currentCourse,
+      paths,
+    });
+    logLine(
+      imported.length === 1
+        ? `Added ${imported[0]} to ${currentCourse}.`
+        : `Added ${imported.length} files to ${currentCourse}.`,
+    );
+    inspectorEl.hidden = false;
+  } catch (error) {
+    logLine(`Could not add files: ${error}`);
+    inspectorEl.hidden = false;
+  }
+}
+
 chooseBtn.addEventListener("click", () => void pickFolder());
 welcomeChooseBtn.addEventListener("click", () => void pickFolder());
+
+themeToggleBtn.addEventListener("click", () => {
+  appearance = toggledAppearance(resolvedTheme(appearance, systemPrefersDark()));
+  applyTheme();
+  void persist();
+});
+
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+  if (appearance === "system") applyTheme();
+});
+
+addCourseBtn.addEventListener("click", () => {
+  if (addCourseBtn.disabled) return;
+  addCourseForm.hidden = !addCourseForm.hidden;
+  if (!addCourseForm.hidden) {
+    addCourseNameEl.value = "";
+    addCourseNameEl.focus();
+  }
+});
+
+addCourseForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  void createCourseFromForm();
+});
+
+addCourseNameEl.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    addCourseForm.hidden = true;
+  }
+});
+
+addFilesBtn.addEventListener("click", () => void importLectureFiles());
 
 navJobs.addEventListener("click", () => setPlaceView("jobs"));
 navSettings.addEventListener("click", () => setPlaceView("settings"));

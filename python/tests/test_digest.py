@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from arbor_worker.prepare import PrepareResult
-from arbor_worker.digest import build_prompt, validate_digest, DigestError, REQUIRED_SECTIONS
+from arbor_worker.digest import build_prompt, build_synthesis_prompt, validate_digest, DigestError, REQUIRED_SECTIONS
 
 
 def test_prompt_includes_sections_and_text():
@@ -12,6 +12,16 @@ def test_prompt_includes_sections_and_text():
     for section in REQUIRED_SECTIONS:
         assert section in prompt
     assert "Photosynthesis converts light." in prompt
+
+
+def test_prompt_asks_for_an_eight_word_title_not_a_date():
+    prep = PrepareResult("pptx_text", text="Photosynthesis converts light.")
+    prompt = build_prompt("lecture01.pptx", prep)
+    assert "at most eight words" in prompt
+    assert "Do not use the date as the title" in prompt
+    synthesis = build_synthesis_prompt("lecture01.pdf", ["# Part\n## Overview\nnotes\n"])
+    assert "at most eight words" in synthesis
+    assert "# <a lecture title of at most eight words>" in synthesis
 
 
 def test_prompt_image_mode_mentions_images():
