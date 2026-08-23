@@ -2,6 +2,8 @@
 
 > **Goal:** Ship the student-trustworthy shell, then knowledge enhancement (flashcards, quiz, search upgrades) on top of it — without breaking the v2 ingest loop.
 
+**Versioning:** See [PROJECT.md Version numbering](../../../PROJECT.md#version-numbering) and [`.cursor/rules/arbor-versioning.mdc`](../../../.cursor/rules/arbor-versioning.mdc). Version 3 work ships as `v2.x` until **`v3.0.0`** when the full milestone is done.
+
 **Format contract:** [`docs/superpowers/specs/2026-08-22-v3-study-artifacts-format.md`](../../specs/2026-08-22-v3-study-artifacts-format.md)
 
 **Shell design:** [`docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md`](../../specs/2026-08-22-v3-desktop-shell-design.md)
@@ -9,7 +11,7 @@
 ## Context
 
 - **2.0.0** shipped automation (jobs, FTS, watch, OCR, Word) on the v1 UI.
-- **2.1.0** shipped the desktop shell on `main` (Wave 0). Version 3 is **in progress**.
+- **2.1.0** shipped the desktop shell (Wave 0, tag `v2.1.0`). Version 3 is **in progress**.
 - **`v3.0.0` is reserved** for full Version 3 completion (all PROJECT.md v3 features).
 - **Flashcards / quiz / embeddings** are planned in Waves 1–5; no worker code yet.
 
@@ -32,7 +34,7 @@
 - Multiple AI providers (later)
 - Scheduler
 - Cloud sync (Version 5)
-- Diagram analysis, citation verification, full knowledge graph UI (v3 stretch or v3.5)
+- Diagram analysis, citation verification, full knowledge graph UI (`v2.6.0` stretch or post-`v3.0.0`)
 
 ## Core architectural answers
 

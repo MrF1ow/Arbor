@@ -2,7 +2,7 @@
 
 Package version for the worker, desktop, and Tauri app. See [Version numbering](PROJECT.md#version-numbering) in `PROJECT.md`.
 
-**Version 2** is complete at `v2.0.0`. **Version 3** is in progress; incremental releases use `v2.1.0`, `v2.2.0`, … until `v3.0.0` when the full v3 milestone ships.
+**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is in progress; incremental releases use `v2.1.0`, `v2.2.0`, … until `v3.0.0` when the full v3 milestone ships. **Current tag:** `v2.1.0`.
 
 ## Unreleased
 

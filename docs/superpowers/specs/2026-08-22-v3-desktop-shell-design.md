@@ -140,13 +140,15 @@ Models stay `.arbor/models.json` with the same dropdown, just moved into Setting
 
 ## Build order
 
-1. Window size, type, color, spacing. Same one-column content, less "terminal." Proves the look without navigation risk.
-2. Sidebar + course list from disk. Course header with Notes / Flashcards / Quiz tabs (Flashcards and Quiz empty for now). Main pane shows `course.md` preview in Notes mode.
-3. Inspector for Update / review / log / jobs.
-4. Settings place that writes `.arbor/settings.json`.
-5. Flashcards mode — wire tab to real deck UI and generation.
-6. Quiz mode — same pattern.
-7. Embeddings, concepts, knowledge graph — new modes or extensions on Notes, not layout changes.
+Steps 1–4 shipped in package **`v2.1.0`**. Steps 5–7 target `v2.2.0`–`v2.5.0` (see [v3 program](../plans/2026-08-22-v3-program/overview.md)).
+
+1. Window size, type, color, spacing. Same one-column content, less "terminal." Proves the look without navigation risk. **(v2.1.0)**
+2. Sidebar + course list from disk. Course header with Notes / Flashcards / Quiz tabs (Flashcards and Quiz empty for now). Main pane shows `course.md` preview in Notes mode. **(v2.1.0)**
+3. Inspector for Update / review / log / jobs. **(v2.1.0)**
+4. Settings place that writes `.arbor/settings.json`. **(v2.1.0)**
+5. Flashcards mode — wire tab to real deck UI and generation. **(v2.3.0)**
+6. Quiz mode — same pattern. **(v2.4.0)**
+7. Embeddings, concepts, knowledge graph — new modes or extensions on Notes, not layout changes. **(v2.5.0–v2.6.0; `v3.0.0` when all v3 features ship)**
 
 Each step should still run the Mac V2 E2E ingest path. If a shell change breaks Confirm or watch, it is not done.
 

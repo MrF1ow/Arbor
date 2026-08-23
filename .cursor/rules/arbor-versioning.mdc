@@ -24,7 +24,7 @@ alwaysApply: true
 | Tag | Product | Notes |
 |-----|---------|-------|
 | `v2.0.0` | Version 2 | Shipped |
-| `v2.1.0` | Version 3 (partial) | Desktop shell; v3 milestone not complete |
+| `v2.1.0` | Version 3 (partial) | Desktop shell shipped (`v2.1.0` tagged) |
 | `v3.0.0` | Version 3 | **Not yet** — tag only when PROJECT.md v3 list is done |
 
 Program: `docs/superpowers/plans/2026-08-22-v3-program/overview.md`.
