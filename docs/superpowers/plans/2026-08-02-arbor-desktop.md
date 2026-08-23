@@ -1,6 +1,6 @@
 # Arbor Desktop (Tauri) Implementation Plan
 
-> **Status (2026-08-19):** Historical shell plan. Living desktop is **0.2.0** with a ranges review panel, not a single start page.
+> **Status (2026-08-22):** Historical shell plan. Superseded by [`docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md`](../../specs/2026-08-22-v3-desktop-shell-design.md) (shipped in desktop **3.0.0**).
 >
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 >

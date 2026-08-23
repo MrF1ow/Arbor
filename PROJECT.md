@@ -560,6 +560,8 @@ A shell a student would trust, then knowledge enhancement on that shell.
 
 **Current release (shell):** 3.0.0 (`v3.0.0`). The desktop shell shipped in 3.0.0. See [`docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md`](docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md).
 
+Implementation program (Waves 1–5): [`docs/superpowers/plans/2026-08-22-v3-program/overview.md`](docs/superpowers/plans/2026-08-22-v3-program/overview.md). Study artifact format: [`docs/superpowers/specs/2026-08-22-v3-study-artifacts-format.md`](docs/superpowers/specs/2026-08-22-v3-study-artifacts-format.md).
+
 Shipped in 3.0.0
 
 * Professional desktop shell (sidebar, course mode tabs, digest preview, job inspector)

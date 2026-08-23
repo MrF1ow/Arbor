@@ -4,6 +4,8 @@ Date: 2026-08-22
 
 Status: shipped in **3.0.0** (2026-08-22). Supersedes the 2.0.0 single-column UI.
 
+**Related:** Version 3 program [`../plans/2026-08-22-v3-program/overview.md`](../plans/2026-08-22-v3-program/overview.md). Study artifacts format (Waves 1–3) [`2026-08-22-v3-study-artifacts-format.md`](2026-08-22-v3-study-artifacts-format.md). Reference mockup [`../../mockups/v3-shell.html`](../../mockups/v3-shell.html).
+
 ## Problem
 
 2.0.0 is a working ingest tool. The window is 720×640. Everything lives in one column: folder picker, search, format guidance, model, auth badge, Update, review table, a black terminal log, then job history. A student downloading this from GitHub sees a debug panel, not a study app.
