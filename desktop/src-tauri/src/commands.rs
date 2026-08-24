@@ -130,6 +130,12 @@ fn markdown_title(text: &str) -> Option<String> {
     None
 }
 
+const CACHE_DIR_NAME: &str = "_arbor_cache";
+
+fn is_course_dir_name(name: &str) -> bool {
+    !name.is_empty() && !name.starts_with('.') && name != CACHE_DIR_NAME
+}
+
 fn date_from_stem(stem: &str) -> String {
     if let Some((day, clock)) = stem.split_once('T') {
         if clock.len() >= 4 && clock[..4].chars().all(|c| c.is_ascii_digit()) {
@@ -154,7 +160,7 @@ pub fn list_courses(root: String) -> Result<Vec<String>, String> {
             continue;
         }
         let name = entry.file_name().to_string_lossy().into_owned();
-        if name.starts_with('.') {
+        if !is_course_dir_name(&name) {
             continue;
         }
         courses.push(name);
@@ -193,7 +199,7 @@ fn unique_dest(dir: &Path, file_name: &std::ffi::OsStr) -> PathBuf {
 #[tauri::command]
 pub fn create_course(root: String, name: String) -> Result<String, String> {
     let name = name.trim();
-    if name.starts_with('.') {
+    if !is_course_dir_name(name) {
         return Err("Invalid course name".into());
     }
     validate_path_component(name, "course name")?;
@@ -683,6 +689,20 @@ mod tests {
     }
 
     #[test]
+    fn list_courses_skips_cache_and_dot_dirs() {
+        let root = temp_root("list-courses");
+        fs::create_dir(root.join("Biology")).unwrap();
+        fs::create_dir(root.join("Organic Chem")).unwrap();
+        fs::create_dir(root.join("_arbor_cache")).unwrap();
+        fs::create_dir(root.join(".arbor")).unwrap();
+        fs::create_dir(root.join(".git")).unwrap();
+        fs::write(root.join("notes.md"), b"# not a course\n").unwrap();
+
+        let listed = list_courses(root.to_string_lossy().into_owned()).unwrap();
+        assert_eq!(listed, vec!["Biology", "Organic Chem"]);
+    }
+
+    #[test]
     fn create_course_makes_a_folder_and_rejects_duplicates() {
         let root = temp_root("create-course");
         let name = create_course(root.to_string_lossy().into_owned(), " Organic Chem ".into())
@@ -695,6 +715,11 @@ mod tests {
         )
         .is_err());
         assert!(create_course(root.to_string_lossy().into_owned(), "../x".into()).is_err());
+        assert!(create_course(
+            root.to_string_lossy().into_owned(),
+            "_arbor_cache".into()
+        )
+        .is_err());
     }
 
     #[test]

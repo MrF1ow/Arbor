@@ -1,6 +1,73 @@
+use std::ffi::OsString;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+
+pub fn parse_worker_json_output(stdout: &str, stderr: &str) -> Result<serde_json::Value, String> {
+    let mut last_invalid: Option<(serde_json::Error, String)> = None;
+    for line in stdout.lines().rev() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        match serde_json::from_str::<serde_json::Value>(line) {
+            Ok(value) => return Ok(value),
+            Err(err) => {
+                if last_invalid.is_none() {
+                    last_invalid = Some((err, line.to_string()));
+                }
+            }
+        }
+    }
+    if let Some((err, last)) = last_invalid {
+        return Err(format!("invalid worker json: {err}: {last}"));
+    }
+    Err(format!("worker produced no output (stderr: {stderr})"))
+}
+
+pub fn sidecar_path_in(dir: &Path) -> Option<PathBuf> {
+    let plain = dir.join("arbor-worker");
+    if plain.is_file() {
+        return Some(plain);
+    }
+    let entries = std::fs::read_dir(dir).ok()?;
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let text = name.to_string_lossy();
+        if text.starts_with("arbor-worker-") && entry.path().is_file() {
+            return Some(entry.path());
+        }
+    }
+    None
+}
+
+pub fn augmented_path_from(home: Option<&str>, current: Option<&str>) -> OsString {
+    let mut parts: Vec<OsString> = Vec::new();
+    if let Some(home) = home {
+        parts.push(Path::new(home).join(".local/bin").into_os_string());
+    }
+    parts.push(OsString::from("/opt/homebrew/bin"));
+    parts.push(OsString::from("/usr/local/bin"));
+    if let Some(current) = current.filter(|path| !path.is_empty()) {
+        parts.push(OsString::from(current));
+    }
+    let mut joined = OsString::new();
+    for (i, part) in parts.iter().enumerate() {
+        if i > 0 {
+            joined.push(":");
+        }
+        joined.push(part);
+    }
+    joined
+}
+
+fn process_path() -> OsString {
+    augmented_path_from(
+        std::env::var("HOME").ok().as_deref(),
+        std::env::var("PATH").ok().as_deref(),
+    )
+}
+
 
 pub fn resolve_worker_argv(
     env: &dyn Fn(&str) -> Option<String>,
@@ -34,8 +101,7 @@ pub fn resolve_worker_argv(
 
 pub fn packaged_sidecar() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
-    let candidate = exe.parent()?.join("arbor-worker");
-    candidate.is_file().then_some(candidate)
+    sidecar_path_in(exe.parent()?)
 }
 
 #[allow(dead_code)]
@@ -57,20 +123,13 @@ pub fn run_worker_json(app_dir: &Path, sub_args: &[&str]) -> Result<serde_json::
     );
     let output = Command::new(&argv[0])
         .args(&argv[1..])
+        .env("PATH", process_path())
         .output()
         .map_err(|e| format!("failed to launch worker: {e}"))?;
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let last = stdout
-        .lines()
-        .rev()
-        .find(|l| !l.trim().is_empty())
-        .ok_or_else(|| {
-            format!(
-                "worker produced no output (stderr: {})",
-                String::from_utf8_lossy(&output.stderr)
-            )
-        })?;
-    serde_json::from_str(last).map_err(|e| format!("invalid worker json: {e}: {last}"))
+    parse_worker_json_output(
+        &String::from_utf8_lossy(&output.stdout),
+        &String::from_utf8_lossy(&output.stderr),
+    )
 }
 
 #[cfg(feature = "desktop-runtime")]
@@ -221,6 +280,7 @@ fn spawn_worker_stream(
 
         let mut child = match Command::new(&argv[0])
             .args(&argv[1..])
+            .env("PATH", process_path())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
@@ -467,5 +527,52 @@ mod tests {
                 "--force",
             ]
         );
+    }
+
+    #[test]
+    fn parse_worker_json_uses_the_last_json_line() {
+        let value = parse_worker_json_output(
+            "warning: downloading\n{\"authenticated\":false,\"reason\":\"not found\"}\nerror: exit 1\n",
+            "",
+        )
+        .unwrap();
+        assert_eq!(value["authenticated"], false);
+        assert_eq!(value["reason"], "not found");
+    }
+
+    #[test]
+    fn parse_worker_json_reports_stderr_when_stdout_is_empty() {
+        let err = parse_worker_json_output("", "failed to launch uv").unwrap_err();
+        assert!(err.contains("failed to launch uv"));
+    }
+
+    #[test]
+    fn augmented_path_puts_homebrew_ahead_of_usr_bin() {
+        let path = augmented_path_from(Some("/Users/ada"), Some("/usr/bin:/bin"));
+        let text = path.to_string_lossy();
+        let brew = text.find("/opt/homebrew/bin").expect("homebrew");
+        let usr = text.find("/usr/bin").expect("usr");
+        assert!(brew < usr);
+        assert!(text.contains("/Users/ada/.local/bin"));
+    }
+
+    #[test]
+    fn sidecar_in_dir_finds_triple_suffixed_binary() {
+        let dir = std::env::temp_dir().join(format!(
+            "arbor-sidecar-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let triple = dir.join("arbor-worker-aarch64-apple-darwin");
+        std::fs::write(&triple, b"x").unwrap();
+        assert_eq!(sidecar_path_in(&dir).as_deref(), Some(triple.as_path()));
+        let plain = dir.join("arbor-worker");
+        std::fs::write(&plain, b"x").unwrap();
+        assert_eq!(sidecar_path_in(&dir).as_deref(), Some(plain.as_path()));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

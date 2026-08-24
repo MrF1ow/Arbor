@@ -39,7 +39,7 @@ import {
   parseCitationsReport,
 } from "./citations";
 import { renderMarkdown } from "./markdown";
-import { resolvedTheme, toggledAppearance } from "./theme";
+import { parseAppearance, resolvedTheme } from "./theme";
 import type {
   Appearance,
   AuthStatus,
@@ -89,7 +89,7 @@ const addCourseBtn = $("add-course") as HTMLButtonElement;
 const addCourseForm = $("add-course-form") as HTMLFormElement;
 const addCourseNameEl = $("add-course-name") as HTMLInputElement;
 const addFilesBtn = $("add-files") as HTMLButtonElement;
-const themeToggleBtn = $("theme-toggle") as HTMLButtonElement;
+const appearanceSel = $("appearance") as HTMLSelectElement;
 const flashcardsCopyEl = $("flashcards-copy");
 const flashcardsEmptyEl = $("flashcards-empty");
 const flashcardsDeckEl = $("flashcards-deck");
@@ -299,11 +299,7 @@ function systemPrefersDark(): boolean {
 function applyTheme() {
   const theme = resolvedTheme(appearance, systemPrefersDark());
   document.documentElement.dataset.theme = theme;
-  themeToggleBtn.textContent = theme === "dark" ? "Light" : "Dark";
-  themeToggleBtn.setAttribute(
-    "aria-label",
-    theme === "dark" ? "Switch to light mode" : "Switch to dark mode",
-  );
+  if (appearanceSel.value !== appearance) appearanceSel.value = appearance;
 }
 
 function shortenPath(path: string): string {
@@ -1080,6 +1076,7 @@ async function saveKnowledgeSettings(
 async function loadSettings() {
   const s = await invoke<Settings>("get_settings");
   appearance = s.appearance ?? "system";
+  appearanceSel.value = appearance;
   applyTheme();
   if (s.knowledge_root) {
     knowledgeRoot = s.knowledge_root;
@@ -1095,7 +1092,12 @@ async function loadSettings() {
   } else {
     setPlaceView("welcome");
   }
-  await loadModels(s.model_id);
+  try {
+    await loadModels(s.model_id);
+  } catch (error) {
+    modelSel.innerHTML = "";
+    logLine(`Could not load models: ${error}`);
+  }
 }
 
 async function persist() {
@@ -1144,7 +1146,8 @@ async function refreshAuth() {
       }
     } catch (e) {
       authed = false;
-      codexLabelEl.textContent = `Check failed`;
+      const detail = String(e).trim();
+      codexLabelEl.textContent = detail || "Check failed";
       codexStatusEl.className = "auth-badge bad";
     }
     refreshUpdateEnabled();
@@ -1211,8 +1214,10 @@ async function importLectureFiles() {
 chooseBtn.addEventListener("click", () => void pickFolder());
 welcomeChooseBtn.addEventListener("click", () => void pickFolder());
 
-themeToggleBtn.addEventListener("click", () => {
-  appearance = toggledAppearance(resolvedTheme(appearance, systemPrefersDark()));
+appearanceSel.addEventListener("change", () => {
+  const next = parseAppearance(appearanceSel.value);
+  if (!next) return;
+  appearance = next;
   applyTheme();
   void persist();
 });
@@ -1678,7 +1683,11 @@ listen<{ root: string }>("arbor://files-changed", (e) => {
 window.addEventListener("focus", () => void refreshAuth());
 
 (async () => {
-  await loadSettings();
+  try {
+    await loadSettings();
+  } catch (error) {
+    logLine(`Could not load settings: ${error}`);
+  }
   await refreshAuth();
   refreshFolderTools();
 })();

@@ -9,7 +9,9 @@ Package version for the worker, desktop, and Tauri app. See [Version numbering](
 Library UX (toward package `v2.2.0`).
 
 - Add a class from the Library sidebar. Add lecture PDF, PowerPoint, or Word files into the open class from the course header. Arbor copies them into the Knowledge folder so Update can see them.
-- Light and Dark button in the sidebar. The choice is stored with app settings and no longer depends only on the OS color scheme.
+- Appearance (System, Light, Dark) lives in Settings. The choice is stored with app settings and no longer depends only on the OS color scheme.
+- The `_arbor_cache` worker folder is not listed as a class.
+- Codex auth looks in `~/.local/bin`, `/opt/homebrew/bin`, and `/usr/local/bin` as well as `PATH`, so a Finder-launched Mac app can see a Homebrew Codex install. A failed check shows the worker error instead of a bare "Check failed".
 - Digest index titles come from the lecture H1 (prompt: at most eight words). The dated filename stays on disk and shows as the date line.
 - Notes reading pane scrolls on WebKit (Mac). Digest markdown renders bold, italic, numbered lists, asterisk bullets, and nested lists.
 

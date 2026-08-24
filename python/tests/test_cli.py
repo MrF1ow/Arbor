@@ -45,6 +45,19 @@ def test_list_models_default(tmp_path):
     assert {"id", "label"} <= set(data["models"][0].keys())
 
 
+def test_check_auth_prints_json_when_codex_probe_raises(monkeypatch):
+    def boom():
+        raise RuntimeError("sidecar exploded")
+
+    monkeypatch.setattr("arbor_worker.commands.check_codex_auth", boom)
+    code, out, _ = run(["check-auth"])
+    data = _json.loads(out)
+    assert code == 1
+    assert data["authenticated"] is False
+    assert "sidecar exploded" in data["reason"]
+    assert "docs_url" in data
+
+
 def _knowledge_repo_with_pdf(tmp_path, pages=1, name="Biology/mega.pdf"):
     import subprocess
 

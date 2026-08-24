@@ -11,3 +11,8 @@ export function resolvedTheme(appearance: Appearance, systemDark: boolean): Them
 export function toggledAppearance(current: Theme): Exclude<Appearance, "system"> {
   return current === "dark" ? "light" : "dark";
 }
+
+export function parseAppearance(value: string): Appearance | null {
+  if (value === "system" || value === "light" || value === "dark") return value;
+  return null;
+}
