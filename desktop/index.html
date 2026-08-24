@@ -44,7 +44,6 @@
               <span id="codex-label">Checking Codex…</span>
             </span>
             <a id="codex-docs" href="#" target="_blank" rel="noreferrer" hidden class="btn-link">Set up Codex</a>
-            <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Switch to dark mode">Dark</button>
             <div id="folder-hint" class="folder-hint">No folder selected</div>
             <button id="choose-folder" class="btn-link">Choose Knowledge folder…</button>
             </div>
@@ -217,8 +216,16 @@
               <div class="content-panel" data-panel="settings">
                 <div class="place-view">
                   <h2>Settings</h2>
-                  <p>Knowledge folder behavior and model selection.</p>
+                  <p>Appearance, Knowledge folder behavior, and model selection.</p>
                   <div class="settings-group">
+                    <div class="setting-row">
+                      <span>Appearance</span>
+                      <select id="appearance">
+                        <option value="system">System</option>
+                        <option value="light">Light</option>
+                        <option value="dark">Dark</option>
+                      </select>
+                    </div>
                     <div class="setting-row">
                       <span>Watch folder for new files</span>
                       <button class="toggle" id="toggle-watch" type="button" aria-label="Watch folder"></button>

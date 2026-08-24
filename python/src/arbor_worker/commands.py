@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from arbor_worker.alignment import PageRange
-from arbor_worker.auth import check_codex_auth
+from arbor_worker.auth import AuthResult, check_codex_auth
 from arbor_worker.cache import ensure_gitignored
 from arbor_worker.events import EventEmitter
 from arbor_worker.gitstate import GitStateError, commit_batch
@@ -39,7 +39,10 @@ _DEFAULT_FAKE_MD = (
 
 def cmd_check_auth(args) -> int:
     settings = default_settings()
-    res = check_codex_auth()
+    try:
+        res = check_codex_auth()
+    except Exception as exc:
+        res = AuthResult(False, str(exc) or "Codex CLI check failed")
     print(json.dumps({
         "authenticated": res.ok,
         "reason": res.reason,

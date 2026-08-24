@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import tempfile
 from pathlib import Path
 
-from arbor_worker.auth import check_codex_auth, resolve_codex_command
+from arbor_worker.auth import check_codex_auth, gui_path, resolve_codex_command
 from arbor_worker.provider.base import Model, ProviderRequest, ProviderResult
 
 
@@ -45,11 +46,14 @@ class CodexCliProvider:
         with tempfile.TemporaryDirectory() as td:
             out_file = Path(td) / "last_message.md"
             argv = self.build_argv(request, out_file)
+            env = os.environ.copy()
+            env["PATH"] = gui_path()
             proc = self._runner(
                 argv,
                 input=request.prompt,
                 capture_output=True,
                 text=True,
+                env=env,
             )
             if proc.returncode != 0:
                 detail = (proc.stderr or proc.stdout or "").strip()
