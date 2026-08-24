@@ -130,7 +130,7 @@ fn run_watcher(app: AppHandle, state: Arc<WatchState>, root: PathBuf, generation
 
 fn should_watch(path: &Path) -> bool {
     let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-    if name.starts_with('.') || name == "_arbor_cache" {
+    if name.starts_with('.') || name.eq_ignore_ascii_case("_arbor_cache") {
         return false;
     }
     let ext = path

@@ -5,3 +5,4 @@ ts	phase	decision	why	evidence	result
 2026-08-23T23:09:19Z	verify	cargo test --lib 36/36	create_course, import_sources, list_digests H1 title, appearance default	desktop/src-tauri cargo test --locked --lib	tests green
 2026-08-23T23:09:19Z	verify	python digest tests	eight-word title prompt in generate and synthesis	pytest tests/test_digest.py tests/test_digest_files.py	tests green
 2026-08-23T23:09:19Z	verify	frontend production build	tsc and vite	desktop npm run build	build ok
+2026-08-24T00:45:00Z	verify	hide _arbor_cache from list_courses; Codex extra bin dirs; appearance in Settings	Mac follow-up: cache listed as a class, Finder PATH misses Homebrew Codex, theme toggle in sidebar	commands.rs list_courses, auth.py extra_bin_dirs, index.html #appearance	open

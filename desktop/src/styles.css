@@ -235,21 +235,6 @@ html, body {
   margin: 8px 16px;
 }
 
-.theme-toggle {
-  margin-top: 10px;
-  width: 100%;
-  border: 1px solid var(--cream-border);
-  border-radius: 6px;
-  background: var(--cream-elevated);
-  color: var(--ink);
-  font: inherit;
-  font-size: 12px;
-  padding: 6px 10px;
-  cursor: pointer;
-}
-
-.theme-toggle:hover { background: var(--sage-tint); }
-
 .sidebar-footer {
   padding: 8px 16px 16px;
 }

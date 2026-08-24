@@ -20,3 +20,12 @@ test("toggle flips the resolved theme into an explicit appearance", async () => 
   assert.equal(toggledAppearance("light"), "dark");
   assert.equal(toggledAppearance("dark"), "light");
 });
+
+test("accepts only system, light, or dark appearance values", async () => {
+  const { parseAppearance } = await subject();
+
+  assert.equal(parseAppearance("system"), "system");
+  assert.equal(parseAppearance("light"), "light");
+  assert.equal(parseAppearance("dark"), "dark");
+  assert.equal(parseAppearance("sepia"), null);
+});
