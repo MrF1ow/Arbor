@@ -133,7 +133,7 @@ fn markdown_title(text: &str) -> Option<String> {
 const CACHE_DIR_NAME: &str = "_arbor_cache";
 
 fn is_course_dir_name(name: &str) -> bool {
-    !name.is_empty() && !name.starts_with('.') && name != CACHE_DIR_NAME
+    !name.is_empty() && !name.starts_with('.') && !name.eq_ignore_ascii_case(CACHE_DIR_NAME)
 }
 
 fn date_from_stem(stem: &str) -> String {
@@ -694,6 +694,9 @@ mod tests {
         fs::create_dir(root.join("Biology")).unwrap();
         fs::create_dir(root.join("Organic Chem")).unwrap();
         fs::create_dir(root.join("_arbor_cache")).unwrap();
+        if !root.join("_ARBOR_CACHE").exists() {
+            fs::create_dir(root.join("_ARBOR_CACHE")).unwrap();
+        }
         fs::create_dir(root.join(".arbor")).unwrap();
         fs::create_dir(root.join(".git")).unwrap();
         fs::write(root.join("notes.md"), b"# not a course\n").unwrap();
@@ -718,6 +721,11 @@ mod tests {
         assert!(create_course(
             root.to_string_lossy().into_owned(),
             "_arbor_cache".into()
+        )
+        .is_err());
+        assert!(create_course(
+            root.to_string_lossy().into_owned(),
+            "_ARBOR_CACHE".into()
         )
         .is_err());
     }
