@@ -135,12 +135,12 @@ Expected: `{"authenticated": true, ...}` on stdout. If not, fix Codex auth befor
 From the **repo root**:
 
 ```bash
-export ARBOR_REPO_DIR="$(pwd)"   # tells the shell where python/ lives
-
 cd desktop
 npm install
 npm run tauri dev
 ```
+
+Dev builds locate `python/` by walking up from the desktop crate. Set `ARBOR_REPO_DIR` to the repo root only if that walk would be wrong.
 
 The app opens with folder picker, model dropdown, Codex auth badge, **Update Knowledge**, progress log, and **Open folder**.
 
@@ -212,7 +212,7 @@ Event schema and manual live-check steps: [`python/README.md`](python/README.md)
 
 | Variable | Purpose |
 |----------|---------|
-| `ARBOR_REPO_DIR` | Repo root containing `python/` (desktop uses this to locate the worker) |
+| `ARBOR_REPO_DIR` | Optional repo-root override containing `python/` (dev builds walk up to find it) |
 | `ARBOR_PYTHON_DIR` | Override path to the uv project (default: `$ARBOR_REPO_DIR/python`) |
 | `ARBOR_WORKER_CMD` | Full override of worker launch command (space-separated tokens) |
 | `WEBKIT_DISABLE_DMABUF_RENDERER=1` | WebKit fallback on problematic Wayland setups |
@@ -316,7 +316,7 @@ Model IDs must match what your Codex CLI accepts.
 | Nothing to process | Only new, changed, or leftover-page sources trigger work |
 | Wrong page window | Check `suggested_ranges` from `plan-update`. Blank is whole-file only for new sources, not truncation. |
 | PPTX prepare failed | Export slides as PDF, or install LibreOffice for image fallback |
-| Desktop can't find worker | Packaged app uses the bundled sidecar. From a clone, set `ARBOR_REPO_DIR` to the Arbor repo root |
+| Desktop can't find worker | Packaged app uses the bundled sidecar. From a clone, `tauri dev` walks up to `python/`. If that fails, set `ARBOR_REPO_DIR` to the Arbor repo root |
 | Watch stays silent | Folder selected; wait 3s. Missing settings.json still watches. Set `"watch_enabled": false` only to disable. |
 | Wayland / NVIDIA crash | See [Linux graphics](#linux-graphics-wayland--nvidia) |
 

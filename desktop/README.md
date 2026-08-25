@@ -17,10 +17,10 @@ Design spec: [`docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md`](..
 ## Run in dev
 
 ```bash
-# From repo root, tell the shell where the worker lives:
-export ARBOR_REPO_DIR="$(pwd)"          # repo root containing python/
 cd desktop && npm install && npm run tauri dev
 ```
+
+Dev builds walk up from `desktop/src-tauri` to the repo root (the folder that contains `python/`). `ARBOR_REPO_DIR` still overrides that if you need to point at a different checkout.
 
 `ARBOR_WORKER_CMD` (space-separated) fully overrides how the worker is launched when no
 sidecar binary sits next to the app executable. `ARBOR_PYTHON_DIR` overrides just the uv
