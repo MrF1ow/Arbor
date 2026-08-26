@@ -9,6 +9,7 @@ Package version for the worker, desktop, and Tauri app. See [Version numbering](
 Library UX (toward package `v2.2.0`).
 
 - Desktop `tauri dev` finds the worker by walking up to `python/pyproject.toml` instead of using Tauri's `resource_dir` parent. That parent was `src-tauri/target`, so the model picker failed with `Project directory 'target/python' does not exist`. `ARBOR_REPO_DIR` still overrides. If the worker project is missing, the error names that variable.
+- Opening the Vite URL in a browser no longer throws `Cannot read properties of undefined (reading 'invoke')`. The welcome pane says to use the Arbor desktop window.
 - Add a class from the Library sidebar. Add lecture PDF, PowerPoint, or Word files into the open class from the course header. Arbor copies them into the Knowledge folder so Update can see them.
 - Appearance (System, Light, Dark) lives in Settings. The choice is stored with app settings and no longer depends only on the OS color scheme.
 - The `_arbor_cache` worker folder is not listed as a class.

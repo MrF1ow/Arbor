@@ -1,6 +1,7 @@
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import { open } from "@tauri-apps/plugin-dialog";
+import { invoke as tauriInvoke } from "@tauri-apps/api/core";
+import { listen as tauriListen } from "@tauri-apps/api/event";
+import { open as tauriOpen } from "@tauri-apps/plugin-dialog";
+import { hasTauriInvoke, TAURI_UNAVAILABLE } from "./tauri";
 import {
   createReview,
   currentCard,
@@ -65,6 +66,27 @@ import type {
 } from "./types";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+
+function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+  if (!hasTauriInvoke(window)) {
+    return Promise.reject(new Error(TAURI_UNAVAILABLE));
+  }
+  return tauriInvoke<T>(cmd, args);
+}
+
+function listen<T>(event: string, handler: (event: { payload: T }) => void) {
+  if (!hasTauriInvoke(window)) {
+    return Promise.reject(new Error(TAURI_UNAVAILABLE));
+  }
+  return tauriListen<T>(event, handler);
+}
+
+function open(opts: Parameters<typeof tauriOpen>[0]) {
+  if (!hasTauriInvoke(window)) {
+    return Promise.reject(new Error(TAURI_UNAVAILABLE));
+  }
+  return tauriOpen(opts);
+}
 
 type Place = "welcome" | "course" | "jobs" | "settings";
 
@@ -1159,10 +1181,14 @@ async function refreshAuth() {
 }
 
 async function pickFolder() {
-  const picked = await open({ directory: true, multiple: false });
-  if (typeof picked !== "string") return;
-  await activateKnowledgeRoot(picked);
-  await persist();
+  try {
+    const picked = await open({ directory: true, multiple: false });
+    if (typeof picked !== "string") return;
+    await activateKnowledgeRoot(picked);
+    await persist();
+  } catch (error) {
+    logLine(`Could not choose folder: ${error}`);
+  }
 }
 
 async function createCourseFromForm() {
@@ -1591,13 +1617,21 @@ function renderEvent(ev: WorkerEvent) {
   }
 }
 
-listen<{ line: string }>("arbor://progress", (e) => {
-  try {
-    renderEvent(JSON.parse(e.payload.line) as WorkerEvent);
-  } catch {
-    logLine(e.payload.line);
-  }
-});
+function subscribeWorkerEvents() {
+  void listen<{ line: string }>("arbor://progress", (e) => {
+    try {
+      renderEvent(JSON.parse(e.payload.line) as WorkerEvent);
+    } catch {
+      logLine(e.payload.line);
+    }
+  });
+  void listen<JobFinished>("arbor://job-finished", (event) => {
+    void handleJobFinished(event.payload);
+  });
+  void listen<{ root: string }>("arbor://files-changed", (e) => {
+    if (knowledgeRoot && e.payload.root === knowledgeRoot) void handleWatchTriggered();
+  });
+}
 
 async function startEmbedJob(root: string) {
   try {
@@ -1672,17 +1706,22 @@ async function handleJobFinished(finished: JobFinished) {
   }
 }
 
-listen<JobFinished>("arbor://job-finished", (event) => {
-  void handleJobFinished(event.payload);
-});
-
-listen<{ root: string }>("arbor://files-changed", (e) => {
-  if (knowledgeRoot && e.payload.root === knowledgeRoot) void handleWatchTriggered();
-});
-
-window.addEventListener("focus", () => void refreshAuth());
+function showDesktopOnlyMessage() {
+  const copy = document.querySelector("#panel-welcome .welcome p");
+  if (copy) {
+    copy.textContent =
+      "This is the Vite dev server. Open the Arbor desktop window; a browser tab cannot talk to the worker.";
+  }
+  logLine(TAURI_UNAVAILABLE);
+}
 
 (async () => {
+  if (!hasTauriInvoke(window)) {
+    showDesktopOnlyMessage();
+    return;
+  }
+  window.addEventListener("focus", () => void refreshAuth());
+  subscribeWorkerEvents();
   try {
     await loadSettings();
   } catch (error) {
