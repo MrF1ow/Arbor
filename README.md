@@ -2,9 +2,9 @@
 
 Local-first desktop app that turns course PDFs, PowerPoints, and Word files into structured study digests using the [Codex CLI](https://developers.openai.com/codex/cli). Your Knowledge library is a normal git repo on disk. Sources and generated notes stay together in history.
 
-**Current release:** [2.1.0](CHANGELOG.md) (git tag `v2.1.0`). Worker, desktop, and Tauri all report this number (`arbor-worker --version`).
+**Current release:** [2.2.0](CHANGELOG.md) (package `2.2.0`). Worker, desktop, and Tauri all report this number (`arbor-worker --version`). The operator tags `v2.2.0` after this lands.
 
-**Version 2** (`v2.0.0`) shipped automation on the old UI. **Version 3** is in progress: `v2.1.0` adds the new desktop shell. **`v3.0.0` is reserved** for when the full Version 3 milestone in [`PROJECT.md`](PROJECT.md) ships (flashcards, quiz, embeddings, and the rest). See [Version numbering](PROJECT.md#version-numbering).
+**Version 2** (`v2.0.0`) shipped automation on the old UI. **Version 3** is in progress. `v2.1.0` added the desktop shell. `2.2.0` adds the study loop. **`v3.0.0` is reserved** until a Mac E2E run is recorded. See [Version numbering](PROJECT.md#version-numbering).
 
 For later milestones, see [`PROJECT.md`](PROJECT.md). The original V1 design (`lecture.md` per lecture) is historical: [`docs/superpowers/specs/2026-08-02-arbor-v1-design.md`](docs/superpowers/specs/2026-08-02-arbor-v1-design.md). Living layout is course folders, dated `digests/`, and `arbor-course.json`.
 
@@ -16,7 +16,7 @@ Install the [Codex CLI](https://developers.openai.com/codex/cli) yourself and lo
 
 Clone and run from source for Linux, or to develop.
 
-## What's in 2.1.0 (Version 3 shell, milestone in progress)
+## What's in 2.1.0 (Version 3 shell)
 
 | Area | What you can do |
 |------|-----------------|
@@ -31,7 +31,21 @@ Clone and run from source for Linux, or to develop.
 | Settings | Watch, auto-run, delete-after-digest, and model in the app. |
 | Notify | macOS notification when a job finishes. |
 
-Flashcards and Quiz tabs are placeholders (Coming soon). **`v3.0.0` ships when the full Version 3 feature set is done**, not at shell-only. Codex CLI is still a separate install.
+## What's in 2.2.0 (Version 3 study loop)
+
+The 2.1.0 shell plus:
+
+| Area | What you can do |
+|------|-----------------|
+| Flashcards | Generate a deck. Flip, then Again / Wrong / Mastered. Flip and Next do not grade. |
+| Quiz | Generate, Submit. Previous / Next restore the submitted choice. Each question scores once per session. |
+| Graph | Concepts and figures. Source chips open Notes. |
+| Search | Full-text by default. Semantic toggle uses local embeddings. |
+| Citations | Check citations. Unverified badges on invented claims. |
+| Source chips | Open Notes and scroll to the cited heading when that heading id exists. |
+| Library | Add a class and lecture files from the sidebar. Appearance lives in Settings. |
+
+**`v3.0.0` ships when the Mac E2E study-loop run is recorded**, not at this package bump. Codex CLI is still a separate install.
 
 ---
 

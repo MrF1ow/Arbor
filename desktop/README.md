@@ -1,8 +1,8 @@
 # Arbor Desktop
 
-Tauri v2 shell for Arbor (package **2.1.0**). Drives the `arbor-worker` CLI (see `../python`).
+Tauri v2 shell for Arbor (package **2.2.0**). Drives the `arbor-worker` CLI (see `../python`).
 
-The UI is the Version 3 shell (first delivery in **v2.1.0**; full Version 3 completes at **v3.0.0**). Sidebar library, course workspace with Notes / Flashcards / Quiz tabs, in-app digest preview, and a collapsed bottom inspector for Update and job logs.
+The UI is the Version 3 shell. First delivery was **v2.1.0**. Package **2.2.0** adds the study loop. Full Version 3 completes at **v3.0.0** after a recorded Mac E2E run. Sidebar library, course workspace with Notes / Flashcards / Quiz / Graph tabs, in-app digest preview, and a collapsed bottom inspector for Update and job logs.
 
 Design spec: [`docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md`](../docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md). Reference mockup: [`docs/mockups/v3-shell.html`](../docs/mockups/v3-shell.html).
 
@@ -63,5 +63,5 @@ See [Tauri Linux graphics debugging](https://v2.tauri.app/develop/debug/linux-gr
 10. **Folder watch:** drop a new PDF, wait ~3 seconds → review panel in the inspector.
 11. **Jobs place:** sidebar **Jobs** lists recent runs with expandable log.
 12. **Settings place:** toggles write `.arbor/settings.json`; reindex succeeds.
-13. **Modes:** Flashcards and Quiz tabs show an empty state with a disabled **Generate** button.
+13. **Modes:** empty Generate when no deck. Flip then Again / Wrong / Mastered when a deck exists. Quiz Submit. Graph tab.
 14. **Cancel:** Cancel during a run stops after the current range; log shows "Cancelled".

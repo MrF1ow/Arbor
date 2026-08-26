@@ -576,7 +576,7 @@ A study app a student would download, with local memory and a concept graph an A
 
 The shell is the storefront. Flashcards and quiz are the study loop. Embeddings, concepts, cross-document links, and a graph-lite view are the memory a later tutor (Version 4) will use instead of rereading every digest. Diagram analysis and citation checks ground that memory in the notes the student already has.
 
-**Status:** In progress. **`v3.0.0` ships when every feature in "Required for v3.0.0" below is done.** None of those items are stretch. Incremental delivery uses `v2.1.0`, `v2.2.0`, … Package `v2.1.0` is the first step after Version 2. Waves 1 through 7 are on `main` untagged. Wave 8 is issue [#42](https://github.com/MrF1ow/Arbor/issues/42).
+**Status:** In progress. Package **2.2.0** has the study loop. **`v3.0.0` ships when the Mac E2E run is recorded.** Incremental delivery used `v2.1.0` then `2.2.0`. Waves 1 through 8 are in this package. Do not backfill `v2.3.0` through `v2.8.0`.
 
 **Shipped so far (`v2.1.0`):** desktop shell — [`docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md`](docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md).
 
@@ -587,25 +587,25 @@ Shipped in v2.1.0 (shell only)
 * Professional desktop shell (sidebar, course mode tabs, digest preview, job inspector)
 * In-app settings (watch, auto-run, delete-after-digest, model)
 * Search overlay navigates to digest preview in Notes mode
-* Flashcards and Quiz tabs (Coming soon placeholders at that tag)
+* Flashcards and Quiz tabs were empty at that tag
 
-On `main` (package still 2.1.0, PRs #36–#41)
+Shipped in 2.2.0 (PRs #36–#41, #47, #50, #51)
 
 * Study generate jobs, skill protocol, retries
 * Flashcards and quiz generate / refresh / review
+* Flip then Again / Wrong / Mastered (progress `correct` / `wrong` written from the UI)
+* Quiz session answers that do not double-count on Previous/Next
+* Source chips scroll to the cited heading
 * Local hashed embeddings and semantic search
 * Concepts, cross-document links, graph-lite UI
 * Diagram figures merged into the graph
 * Local citation checks and Unverified badges
+* Living docs match the app
 
-Required for `v3.0.0` (Wave 8, issue #42)
+Required for `v3.0.0`
 
-* Flashcard Again / Wrong / Mastered (progress `correct` / `wrong` actually written from the UI)
-* Quiz session answers that do not double-count on Previous/Next
-* Source chips scroll to the cited heading
-* Living docs match the app (README still describes Coming soon)
-* Mac E2E study-loop run recorded
-* Package `2.2.0`, then tag `v3.0.0` after that Mac run
+* Mac E2E study-loop run recorded on issue [#42](https://github.com/MrF1ow/Arbor/issues/42) or in [`mac-e2e.md`](docs/superpowers/plans/2026-08-22-v3-program/mac-e2e.md)
+* Then tag `v3.0.0`
 
 ---
 
