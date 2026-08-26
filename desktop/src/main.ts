@@ -40,7 +40,7 @@ import {
   failedIdsFor,
   parseCitationsReport,
 } from "./citations";
-import { renderMarkdown } from "./markdown";
+import { headingId, renderMarkdown } from "./markdown";
 import { parseAppearance, resolvedTheme } from "./theme";
 import type {
   Appearance,
@@ -239,7 +239,12 @@ function setNavActive(place: Place, course?: string) {
   navSettings.classList.toggle("active", place === "settings");
 }
 
-function setCourseView(course: string, mode: Mode = currentMode, notesPath?: string) {
+function setCourseView(
+  course: string,
+  mode: Mode = currentMode,
+  notesPath?: string,
+  heading?: string | null,
+) {
   currentPlace = "course";
   currentCourse = course;
   currentMode = mode;
@@ -255,7 +260,7 @@ function setCourseView(course: string, mode: Mode = currentMode, notesPath?: str
   showPanel(mode);
   setNavActive("course", course);
   refreshFolderTools();
-  if (mode === "notes") void loadCourseContent(course, notesPath);
+  if (mode === "notes") void loadCourseContent(course, notesPath, heading);
   if (mode === "flashcards") void loadFlashcards(course);
   if (mode === "quiz") void loadQuiz(course);
   if (mode === "graph") void loadGraph(course);
@@ -362,7 +367,22 @@ async function renderCourseList() {
   }
 }
 
-async function loadDigestPreview(course: string, relativePath: string) {
+function scrollNotesToHeading(heading: string | null | undefined) {
+  const pane = document.querySelector(".reading-pane");
+  const id = heading ? headingId(heading) : "";
+  const target = id ? readingArticleEl.querySelector(`[id="${id}"]`) : null;
+  if (target) {
+    target.scrollIntoView({ block: "start" });
+    return;
+  }
+  pane?.scrollTo(0, 0);
+}
+
+async function loadDigestPreview(
+  course: string,
+  relativePath: string,
+  heading?: string | null,
+) {
   if (!knowledgeRoot) return;
   currentNotesPath = relativePath;
   courseIndexLink.classList.toggle("active", relativePath === `${course}/course.md`);
@@ -382,9 +402,14 @@ async function loadDigestPreview(course: string, relativePath: string) {
       : `<p class="reading-empty">Could not load file: ${e}</p>`;
   }
   await renderNotesConceptChips(course, relativePath);
+  scrollNotesToHeading(heading);
 }
 
-async function loadCourseContent(course: string, initialPath?: string) {
+async function loadCourseContent(
+  course: string,
+  initialPath?: string,
+  heading?: string | null,
+) {
   if (!knowledgeRoot) return;
   digestListEl.innerHTML = "";
   const courseMdPath = `${course}/course.md`;
@@ -408,9 +433,9 @@ async function loadCourseContent(course: string, initialPath?: string) {
       digestListEl.appendChild(btn);
     }
     const first = initialPath ?? (digests.length > 0 ? digests[0].path : courseMdPath);
-    await loadDigestPreview(course, first);
+    await loadDigestPreview(course, first, heading);
   } catch {
-    await loadDigestPreview(course, courseMdPath);
+    await loadDigestPreview(course, courseMdPath, heading);
   }
 }
 
@@ -681,7 +706,12 @@ function renderConceptGraph() {
       : source.digest;
     btn.addEventListener("click", () => {
       if (!currentCourse) return;
-      setCourseView(currentCourse, "notes", `${currentCourse}/${source.digest}`);
+      setCourseView(
+        currentCourse,
+        "notes",
+        `${currentCourse}/${source.digest}`,
+        source.heading,
+      );
     });
     conceptSourcesEl.appendChild(btn);
   }
@@ -1453,8 +1483,13 @@ flashcardShuffleBtn.addEventListener("click", () => {
 
 flashcardSourceBtn.addEventListener("click", () => {
   if (!flashcardReview || !flashcardCourse) return;
-  const path = `${flashcardCourse}/${currentCard(flashcardReview).source.digest}`;
-  setCourseView(flashcardCourse, "notes", path);
+  const card = currentCard(flashcardReview);
+  setCourseView(
+    flashcardCourse,
+    "notes",
+    `${flashcardCourse}/${card.source.digest}`,
+    card.source.heading,
+  );
 });
 
 quizChoiceBtns.forEach((button) => {
@@ -1489,8 +1524,13 @@ quizPrevBtn.addEventListener("click", () => {
 
 quizSourceBtn.addEventListener("click", () => {
   if (!quizReview || !quizCourse) return;
-  const path = `${quizCourse}/${currentQuestion(quizReview).source.digest}`;
-  setCourseView(quizCourse, "notes", path);
+  const question = currentQuestion(quizReview);
+  setCourseView(
+    quizCourse,
+    "notes",
+    `${quizCourse}/${question.source.digest}`,
+    question.source.heading,
+  );
 });
 
 updateBtn.addEventListener("click", async () => {

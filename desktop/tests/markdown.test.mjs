@@ -50,6 +50,19 @@ test("keeps bold inside a list item", async () => {
   assert.match(html, /<li><strong>Key enzyme<\/strong> in glycolysis<\/li>/);
 });
 
+test("headingId slugs and renderMarkdown stamps h2 ids", async () => {
+  const { headingId, renderMarkdown } = await subject();
+
+  assert.equal(headingId("Cells"), "cells");
+  assert.equal(headingId("Net yield (ATP)"), "net-yield-atp");
+  assert.equal(headingId("Nested heading!"), "nested-heading");
+
+  const { html } = renderMarkdown("## Cells\ntext\n### Nested heading!\n");
+  assert.match(html, /<h2 id="cells">Cells<\/h2>/);
+  assert.match(html, /<h3 id="nested-heading">Nested heading!<\/h3>/);
+  assert.doesNotMatch(html, /<h1 id=/);
+});
+
 test("extractDigestTitle reads the H1 and skips page markers", async () => {
   const { extractDigestTitle } = await subject();
 
