@@ -19,16 +19,15 @@ alwaysApply: true
 
 5. **CHANGELOG and package versions stay aligned** across worker, desktop, and Tauri (`pyproject.toml`, `desktop/package.json`, `Cargo.toml`).
 
-## Current state (2026-08-23)
+## Current state (2026-08-26)
 
 | Tag | Product | Notes |
 |-----|---------|-------|
 | `v2.0.0` | Version 2 | Shipped |
 | `v2.1.0` | Version 3 (partial) | Desktop shell tagged |
-| *(untagged on main)* | Version 3 (waves 1–7) | Study loop, memory, graph, diagrams, citations. Package still `2.1.0` |
-| `v2.2.0` | Version 3 closeout | Wave 8 (issue #42). Not tagged yet |
-| `v3.0.0` | Version 3 | **Not yet** — tag after Wave 8 and a recorded Mac E2E run |
+| `v2.2.0` | Version 3 closeout | Package bumped. Operator tags after land. Mac E2E still open. |
+| `v3.0.0` | Version 3 | **Not yet.** Tag after a recorded Mac E2E run. |
 
-Do not backfill `v2.2.0` through `v2.8.0` for PRs #36–#41. Next package tag is `v2.2.0` for Wave 8 plus that unreleased work.
+Do not backfill `v2.3.0` through `v2.8.0` for PRs #36–#41. Package `2.2.0` is Wave 8 plus that unreleased work. The operator tags `v2.2.0` after this lands.
 
 Program: `docs/superpowers/plans/2026-08-22-v3-program/overview.md`. Closeout: `docs/superpowers/specs/2026-08-23-v3-closeout-design.md`.

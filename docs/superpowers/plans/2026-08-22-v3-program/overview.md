@@ -2,7 +2,7 @@
 
 > **Goal:** Ship a study app a student would download, with local memory and a concept graph an AI can query, without breaking the v2 ingest loop.
 
-**Versioning:** Product Version 3 is built as package **`v2.x`**. `v2.1.0` was the shell. Waves 1 through 7 landed on `main` without per-wave tags. Do not backfill `v2.2.0` through `v2.8.0`. Next package tag is **`v2.2.0`** when Wave 8 lands. Tag **`v3.0.0` only when every required feature below is done and the Mac E2E run is recorded.** Never publish `3.1.0` or `3.2.0`. See [PROJECT.md Version numbering](../../../../PROJECT.md#version-numbering) and [`.cursor/rules/arbor-versioning.mdc`](../../../../.cursor/rules/arbor-versioning.mdc).
+**Versioning:** Product Version 3 is built as package **`v2.x`**. `v2.1.0` was the shell. Waves 1 through 8 land together as package **`2.2.0`**. Do not backfill `v2.3.0` through `v2.8.0`. The operator tags **`v2.2.0`** after this package bump lands. Tag **`v3.0.0` only when every required feature below is done and the Mac E2E run is recorded.** Never publish `3.1.0` or `3.2.0`. See [PROJECT.md Version numbering](../../../../PROJECT.md#version-numbering) and [`.cursor/rules/arbor-versioning.mdc`](../../../../.cursor/rules/arbor-versioning.mdc).
 
 **Format contract:** [`docs/superpowers/specs/2026-08-22-v3-study-artifacts-format.md`](../../specs/2026-08-22-v3-study-artifacts-format.md)
 
@@ -16,8 +16,8 @@
 
 - **2.0.0** shipped automation (jobs, FTS, watch, OCR, Word) on the v1 UI.
 - **2.1.0** shipped the desktop shell (Wave 0). Version 3 is **in progress**.
-- Waves 1 through 7 are on `main` (PRs #36 through #41). Package version is still `2.1.0`.
-- **`v3.0.0` is reserved** for the full milestone. Code for flashcards, quiz, memory, graph, diagrams, and citations exists. The study loop, living docs, and Mac E2E do not.
+- Waves 1 through 8 are in package **2.2.0** (PRs #36 through #41, #47, #50, #51, and this docs bump).
+- **`v3.0.0` is reserved** for the full milestone. Code for flashcards, quiz, memory, graph, diagrams, citations, grades, session answers, and heading scroll exists. The Mac E2E record does not.
 
 ## Scope
 
@@ -35,7 +35,7 @@ Version 3 is the first Arbor a student would download **and** the memory Version
 | **Graph** | Concepts, cross-document edges, graph-lite UI | 5 (PR #40) | On `main` |
 | **Diagrams** | Figure concepts merged into the graph | 6 (PR #41) | On `main` |
 | **Citations** | Local verification that claims appear in cited digests | 7 (PR #41) | On `main` |
-| **Closeout** | Grade buttons, quiz session answers, heading scroll, living docs, Mac E2E | 8 (`v2.2.0`) | Open. [#42](https://github.com/MrF1ow/Arbor/issues/42) |
+| **Closeout** | Grade buttons, quiz session answers, heading scroll, living docs, Mac E2E | 8 (`v2.2.0`) | Package 2.2.0. Mac E2E still open. [#42](https://github.com/MrF1ow/Arbor/issues/42) |
 
 ### Out of Version 3
 
@@ -85,7 +85,7 @@ Wave 0 (shell) shipped
 Waves 1–7 on main (PRs #36–#41)
         │
         ▼
-Wave 8 (closeout, issue #42) ──must finish──▶ v2.2.0
+Wave 8 (closeout, issue #42) ──package 2.2.0──▶ operator tags v2.2.0
         │
         ▼
 Mac E2E recorded
@@ -111,8 +111,7 @@ Mac E2E recorded
 | Tag | Wave | User-visible |
 |-----|------|----------------|
 | `v2.1.0` | 0 | Desktop shell |
-| *(untagged on main)* | 1–7 | Generate, flashcards, quiz, semantic search, graph, figures, citation badges |
-| `v2.2.0` | 8 | Grade buttons, stable quiz scores, heading scroll, docs that match the app |
+| `v2.2.0` | 1–8 | Generate, flashcards, quiz, semantic search, graph, figures, citation badges, grade buttons, stable quiz scores, heading scroll, docs that match the app |
 | **`v3.0.0`** | **all + Mac E2E** | **Version 3 complete** |
 
 ## Verification (every wave)
@@ -153,5 +152,5 @@ Production embedder is a local hashed 1-3 gram bag into 256 dimensions, L2-norma
 - [x] README shell description (Wave 0, on `main`)
 - [x] `desktop/README.md` update (Wave 0, on `main`)
 - [x] Wave detail docs (this folder)
-- [ ] README / PROJECT.md / desktop README match waves 1–7 (Wave 8)
+- [x] README / PROJECT.md / desktop README match waves 1–8 (package 2.2.0)
 - [ ] Mac E2E checklist run recorded in [mac-e2e.md](mac-e2e.md)
