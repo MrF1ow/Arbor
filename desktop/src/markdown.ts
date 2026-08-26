@@ -1,3 +1,10 @@
+export function headingId(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 function escapeHtml(text: string): string {
   return text
     .replace(/&/g, "&amp;")
@@ -130,13 +137,15 @@ export function renderMarkdown(source: string): { html: string; pageChip: string
     if (trimmed.startsWith("## ")) {
       flushParagraph();
       closeAllLists(lists, parts);
-      parts.push(`<h2>${inlineFormat(trimmed.slice(3))}</h2>`);
+      const heading = trimmed.slice(3);
+      parts.push(`<h2 id="${headingId(heading)}">${inlineFormat(heading)}</h2>`);
       continue;
     }
     if (trimmed.startsWith("### ")) {
       flushParagraph();
       closeAllLists(lists, parts);
-      parts.push(`<h3>${inlineFormat(trimmed.slice(4))}</h3>`);
+      const heading = trimmed.slice(4);
+      parts.push(`<h3 id="${headingId(heading)}">${inlineFormat(heading)}</h3>`);
       continue;
     }
     if (listItem) {
