@@ -153,3 +153,34 @@ test("moves through questions and submits a choice", async () => {
   assert.equal(previousReview(nextReview(submitted)).index, 0);
   assert.equal(previousReview(review).index, 1);
 });
+
+test("submit scores a question once per session even after next and previous", async () => {
+  const {
+    createReview,
+    currentQuestion,
+    nextReview,
+    previousReview,
+    submitChoice,
+  } = await subject();
+  const review = createReview(pack);
+  const first = submitChoice(review, 1, {});
+  assert.deepEqual(first.progress.q_11111111, { seen: 1, correct: 1, wrong: 0 });
+
+  const next = nextReview(first.review);
+  assert.equal(currentQuestion(next).id, "q_22222222");
+  assert.equal(next.submitted, false);
+  assert.equal(next.selected, null);
+
+  const back = previousReview(next);
+  assert.equal(currentQuestion(back).id, "q_11111111");
+  assert.equal(back.submitted, true);
+  assert.equal(back.selected, 1);
+
+  const again = submitChoice(back, 0, first.progress);
+  assert.deepEqual(again.progress, first.progress);
+  assert.equal(again.review.selected, 1);
+
+  const second = submitChoice(next, 0, first.progress);
+  assert.deepEqual(second.progress.q_11111111, { seen: 1, correct: 1, wrong: 0 });
+  assert.deepEqual(second.progress.q_22222222, { seen: 1, correct: 0, wrong: 1 });
+});

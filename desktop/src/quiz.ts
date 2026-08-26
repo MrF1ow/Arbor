@@ -107,6 +107,25 @@ export function createReview(pack: QuizPack): QuizReview {
     index: 0,
     selected: null,
     submitted: false,
+    answers: {},
+  };
+}
+
+function restoreAt(review: QuizReview, index: number): QuizReview {
+  const choice = review.answers[review.questions[index].id];
+  if (choice === undefined) {
+    return {
+      ...review,
+      index,
+      selected: null,
+      submitted: false,
+    };
+  }
+  return {
+    ...review,
+    index,
+    selected: choice,
+    submitted: true,
   };
 }
 
@@ -124,12 +143,19 @@ export function submitChoice(
   choiceIndex: number,
   progress: QuizProgress,
 ): { review: QuizReview; progress: QuizProgress } {
-  if (review.submitted) return { review, progress };
   const question = currentQuestion(review);
+  if (review.answers[question.id] !== undefined || review.submitted) {
+    return { review, progress };
+  }
   const current = progress[question.id] ?? { seen: 0, correct: 0, wrong: 0 };
   const correct = choiceIndex === question.answer_index;
   return {
-    review: { ...review, selected: choiceIndex, submitted: true },
+    review: {
+      ...review,
+      selected: choiceIndex,
+      submitted: true,
+      answers: { ...review.answers, [question.id]: choiceIndex },
+    },
     progress: {
       ...progress,
       [question.id]: {
@@ -142,21 +168,14 @@ export function submitChoice(
 }
 
 export function nextReview(review: QuizReview): QuizReview {
-  return {
-    ...review,
-    index: (review.index + 1) % review.questions.length,
-    selected: null,
-    submitted: false,
-  };
+  return restoreAt(review, (review.index + 1) % review.questions.length);
 }
 
 export function previousReview(review: QuizReview): QuizReview {
-  return {
-    ...review,
-    index: (review.index - 1 + review.questions.length) % review.questions.length,
-    selected: null,
-    submitted: false,
-  };
+  return restoreAt(
+    review,
+    (review.index - 1 + review.questions.length) % review.questions.length,
+  );
 }
 
 export function quizJobArgs(
