@@ -112,12 +112,14 @@ export type QuizReview =
       index: number;
       selected: number | null;
       submitted: false;
+      answers: Record<string, number>;
     }
   | {
       questions: QuizQuestion[];
       index: number;
       selected: number;
       submitted: true;
+      answers: Record<string, number>;
     };
 
 export interface QuizProgressEntry {
