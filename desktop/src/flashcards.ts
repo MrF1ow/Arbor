@@ -93,6 +93,24 @@ export function incrementSeen(
   };
 }
 
+export type FlashcardGrade = "again" | "wrong" | "mastered";
+
+export function gradeFlashcard(
+  progress: FlashcardProgress,
+  id: string,
+  grade: FlashcardGrade,
+): FlashcardProgress {
+  const current = progress[id] ?? { seen: 0, correct: 0, wrong: 0 };
+  return {
+    ...progress,
+    [id]: {
+      seen: current.seen + 1,
+      correct: current.correct + (grade === "mastered" ? 1 : 0),
+      wrong: current.wrong + (grade === "wrong" ? 1 : 0),
+    },
+  };
+}
+
 export function shuffleCards(
   cards: readonly Flashcard[],
   random: () => number = Math.random,
@@ -127,6 +145,10 @@ export function nextReview(review: FlashcardReview): FlashcardReview {
     index: (review.index + 1) % review.cards.length,
     flipped: false,
   };
+}
+
+export function advanceAfterGrade(review: FlashcardReview): FlashcardReview {
+  return nextReview(review);
 }
 
 export function previousReview(review: FlashcardReview): FlashcardReview {

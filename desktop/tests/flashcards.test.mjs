@@ -46,6 +46,37 @@ test("parses a flashcard deck at the JSON boundary", async () => {
   );
 });
 
+test("grades again, wrong, and mastered without mutating prior progress", async () => {
+  const { gradeFlashcard, parseFlashcardProgress } = await subject();
+  const prior = {
+    fc_11111111: { seen: 2, correct: 1, wrong: 1 },
+  };
+
+  const again = gradeFlashcard(parseFlashcardProgress(prior), "fc_11111111", "again");
+  assert.deepEqual(again.fc_11111111, { seen: 3, correct: 1, wrong: 1 });
+
+  const wrong = gradeFlashcard(parseFlashcardProgress(prior), "fc_11111111", "wrong");
+  assert.deepEqual(wrong.fc_11111111, { seen: 3, correct: 1, wrong: 2 });
+
+  const mastered = gradeFlashcard(parseFlashcardProgress(prior), "fc_11111111", "mastered");
+  assert.deepEqual(mastered.fc_11111111, { seen: 3, correct: 2, wrong: 1 });
+
+  assert.deepEqual(prior.fc_11111111, { seen: 2, correct: 1, wrong: 1 });
+  assert.deepEqual(gradeFlashcard({}, "fc_new", "again").fc_new, {
+    seen: 1,
+    correct: 0,
+    wrong: 0,
+  });
+});
+
+test("advance after grade moves to the next card face down", async () => {
+  const { createReview, flipReview, advanceAfterGrade } = await subject();
+  const flipped = flipReview(createReview(deck));
+  const next = advanceAfterGrade(flipped);
+  assert.equal(next.index, 1);
+  assert.equal(next.flipped, false);
+});
+
 test("increments seen without changing other progress", async () => {
   const { incrementSeen, parseFlashcardProgress } = await subject();
   const prior = {

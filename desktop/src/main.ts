@@ -3,11 +3,12 @@ import { listen as tauriListen } from "@tauri-apps/api/event";
 import { open as tauriOpen } from "@tauri-apps/plugin-dialog";
 import { hasTauriInvoke, TAURI_UNAVAILABLE } from "./tauri";
 import {
+  advanceAfterGrade,
   createReview,
   currentCard,
   flashcardJobArgs,
   flipReview,
-  incrementSeen,
+  gradeFlashcard,
   nextReview,
   parseFlashcardDeck,
   parseFlashcardProgress,
@@ -125,6 +126,9 @@ const flashcardCitationEl = $("flashcard-citation");
 const flashcardTagsEl = $("flashcard-tags");
 const flashcardPrevBtn = $("flashcard-prev");
 const flashcardFlipBtn = $("flashcard-flip");
+const flashcardAgainBtn = $("flashcard-again") as HTMLButtonElement;
+const flashcardWrongBtn = $("flashcard-wrong") as HTMLButtonElement;
+const flashcardMasteredBtn = $("flashcard-mastered") as HTMLButtonElement;
 const flashcardNextBtn = $("flashcard-next");
 const flashcardShuffleBtn = $("flashcard-shuffle");
 const quizCopyEl = $("quiz-copy");
@@ -426,6 +430,10 @@ function renderCurrentFlashcard() {
   flashcardCitationEl.title = citationsReport?.failures.find(
     (failure) => failure.path === "study/flashcards.json" && failure.id === card.id,
   )?.reason ?? "";
+  const gradesHidden = !flashcardReview.flipped;
+  flashcardAgainBtn.hidden = gradesHidden;
+  flashcardWrongBtn.hidden = gradesHidden;
+  flashcardMasteredBtn.hidden = gradesHidden;
 }
 
 async function loadFlashcards(course: string) {
@@ -479,13 +487,16 @@ function persistFlashcardProgress() {
     .catch((error) => logLine(`Could not save flashcard progress: ${error}`));
 }
 
-function markCurrentFlashcardSeen() {
-  if (!flashcardReview) return;
-  flashcardProgress = incrementSeen(
+function gradeCurrentFlashcard(grade: "again" | "wrong" | "mastered") {
+  if (!flashcardReview || !flashcardReview.flipped) return;
+  flashcardProgress = gradeFlashcard(
     flashcardProgress,
     currentCard(flashcardReview).id,
+    grade,
   );
   persistFlashcardProgress();
+  flashcardReview = advanceAfterGrade(flashcardReview);
+  renderCurrentFlashcard();
 }
 
 async function startFlashcardJob(force: boolean) {
@@ -1402,14 +1413,24 @@ generateCitationsBtn.addEventListener("click", () => {
 
 flashcardFlipBtn.addEventListener("click", () => {
   if (!flashcardReview) return;
-  if (!flashcardReview.flipped) markCurrentFlashcardSeen();
   flashcardReview = flipReview(flashcardReview);
   renderCurrentFlashcard();
 });
 
+flashcardAgainBtn.addEventListener("click", () => {
+  gradeCurrentFlashcard("again");
+});
+
+flashcardWrongBtn.addEventListener("click", () => {
+  gradeCurrentFlashcard("wrong");
+});
+
+flashcardMasteredBtn.addEventListener("click", () => {
+  gradeCurrentFlashcard("mastered");
+});
+
 flashcardNextBtn.addEventListener("click", () => {
   if (!flashcardReview) return;
-  markCurrentFlashcardSeen();
   flashcardReview = nextReview(flashcardReview);
   renderCurrentFlashcard();
 });
