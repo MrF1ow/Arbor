@@ -68,7 +68,6 @@ fn process_path() -> OsString {
     )
 }
 
-
 pub fn resolve_worker_argv(
     env: &dyn Fn(&str) -> Option<String>,
     default_python_dir: &str,
@@ -110,6 +109,70 @@ pub fn default_python_dir(app_dir: &Path) -> String {
     app_dir.join("python").to_string_lossy().to_string()
 }
 
+pub fn is_arbor_repo(dir: &Path) -> bool {
+    let pyproject = dir.join("python").join("pyproject.toml");
+    std::fs::read_to_string(pyproject)
+        .map(|contents| contents.contains("arbor-worker"))
+        .unwrap_or(false)
+}
+
+fn absolute_start(start: &Path, current_dir: Option<&Path>) -> PathBuf {
+    if start.is_absolute() {
+        start.to_path_buf()
+    } else if let Some(cwd) = current_dir {
+        cwd.join(start)
+    } else {
+        start.to_path_buf()
+    }
+}
+
+pub fn find_repo_root(start: &Path) -> Option<PathBuf> {
+    start
+        .ancestors()
+        .find(|dir| is_arbor_repo(dir))
+        .map(|dir| dir.to_path_buf())
+}
+
+/// Locate the Arbor repo root (the folder that contains `python/`).
+///
+/// `ARBOR_REPO_DIR` always wins. Otherwise walk up from the crate dir, the
+/// executable, the process cwd, and Tauri's resource dir looking for
+/// `python/pyproject.toml`. That avoids `tauri dev` treating
+/// `src-tauri/target/` as the repo and running `uv --project target/python`.
+pub fn resolve_repo_dir(
+    env: &dyn Fn(&str) -> Option<String>,
+    resource_dir: Option<&Path>,
+    current_dir: Option<&Path>,
+    current_exe: Option<&Path>,
+    cargo_manifest_dir: Option<&Path>,
+) -> PathBuf {
+    if let Some(dir) = env("ARBOR_REPO_DIR") {
+        return PathBuf::from(dir);
+    }
+    let starts = [cargo_manifest_dir, current_exe, current_dir, resource_dir];
+    for start in starts.into_iter().flatten() {
+        let abs = absolute_start(start, current_dir);
+        if let Some(repo) = find_repo_root(&abs) {
+            return repo;
+        }
+    }
+    PathBuf::from(".")
+}
+
+pub fn uv_project_missing_error(argv: &[String]) -> Option<String> {
+    let project = argv
+        .windows(2)
+        .find(|pair| pair[0] == "--project")
+        .map(|pair| pair[1].as_str())?;
+    if Path::new(project).join("pyproject.toml").is_file() {
+        None
+    } else {
+        Some(format!(
+            "worker project not found at '{project}'. Set ARBOR_REPO_DIR to the Arbor repo root (the folder that contains python/)."
+        ))
+    }
+}
+
 #[cfg(feature = "desktop-runtime")]
 pub fn run_worker_json(app_dir: &Path, sub_args: &[&str]) -> Result<serde_json::Value, String> {
     use std::process::Command;
@@ -121,6 +184,9 @@ pub fn run_worker_json(app_dir: &Path, sub_args: &[&str]) -> Result<serde_json::
         sub_args,
         sidecar.as_deref(),
     );
+    if let Some(err) = uv_project_missing_error(&argv) {
+        return Err(err);
+    }
     let output = Command::new(&argv[0])
         .args(&argv[1..])
         .env("PATH", process_path())
@@ -277,6 +343,20 @@ fn spawn_worker_stream(
                 }
             }
         };
+        if let Some(err) = uv_project_missing_error(&argv) {
+            let line = serde_json::json!({ "type": "error", "message": err }).to_string();
+            let _ = jobs::append_event(&knowledge_root, &job_id, &line);
+            let _ = jobs::finish_job(
+                &knowledge_root,
+                &job_id,
+                jobs::JobStatus::Failed,
+                -1,
+                Some(err),
+            );
+            let _ = app.emit("arbor://progress", serde_json::json!({ "line": line }));
+            release(&app, &job_id);
+            return;
+        }
 
         let mut child = match Command::new(&argv[0])
             .args(&argv[1..])
@@ -574,5 +654,153 @@ mod tests {
         std::fs::write(&plain, b"x").unwrap();
         assert_eq!(sidecar_path_in(&dir).as_deref(), Some(plain.as_path()));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn unique_dir(prefix: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "{prefix}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn fake_arbor_layout() -> PathBuf {
+        let repo = unique_dir("arbor-repo");
+        std::fs::create_dir_all(repo.join("python")).unwrap();
+        std::fs::write(
+            repo.join("python/pyproject.toml"),
+            "[project]\nname = \"arbor-worker\"\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(repo.join("desktop/src-tauri/target/debug")).unwrap();
+        repo
+    }
+
+    #[test]
+    fn tauri_dev_does_not_resolve_python_under_target() {
+        let repo = fake_arbor_layout();
+        let src_tauri = repo.join("desktop/src-tauri");
+        let resource_dir = src_tauri.join("target/debug");
+        let exe = resource_dir.join("arbor");
+
+        // The previous fallback used resource_dir.parent(), which is `target`
+        // and produced `uv --project target/python`.
+        assert_eq!(
+            default_python_dir(resource_dir.parent().unwrap()),
+            resource_dir
+                .parent()
+                .unwrap()
+                .join("python")
+                .to_string_lossy()
+        );
+
+        let resolved = resolve_repo_dir(
+            &no_env,
+            Some(resource_dir.as_path()),
+            Some(src_tauri.as_path()),
+            Some(exe.as_path()),
+            Some(src_tauri.as_path()),
+        );
+        assert_eq!(resolved, repo);
+        assert_eq!(
+            default_python_dir(&resolved),
+            repo.join("python").to_string_lossy()
+        );
+        let _ = std::fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn relative_resource_dir_still_finds_repo_via_cwd() {
+        let repo = fake_arbor_layout();
+        let src_tauri = repo.join("desktop/src-tauri");
+        let resolved = resolve_repo_dir(
+            &no_env,
+            Some(Path::new("target/debug")),
+            Some(src_tauri.as_path()),
+            None,
+            None,
+        );
+        assert_eq!(resolved, repo);
+        assert_eq!(
+            default_python_dir(&PathBuf::from("target")),
+            "target/python"
+        );
+        let _ = std::fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn arbor_repo_dir_env_wins_over_walk() {
+        let repo = fake_arbor_layout();
+        let other = unique_dir("arbor-other");
+        let env = |k: &str| {
+            if k == "ARBOR_REPO_DIR" {
+                Some(other.to_string_lossy().into_owned())
+            } else {
+                None
+            }
+        };
+        let resource = repo.join("desktop/src-tauri/target/debug");
+        let src_tauri = repo.join("desktop/src-tauri");
+        let resolved = resolve_repo_dir(
+            &env,
+            Some(resource.as_path()),
+            Some(src_tauri.as_path()),
+            None,
+            Some(src_tauri.as_path()),
+        );
+        assert_eq!(resolved, other);
+        let _ = std::fs::remove_dir_all(&repo);
+        let _ = std::fs::remove_dir_all(&other);
+    }
+
+    #[test]
+    fn resolve_repo_dir_returns_dot_when_nothing_matches() {
+        let isolated = unique_dir("arbor-empty");
+        let exe = isolated.join("bin/app");
+        let resolved = resolve_repo_dir(
+            &no_env,
+            Some(isolated.as_path()),
+            Some(isolated.as_path()),
+            Some(exe.as_path()),
+            Some(isolated.as_path()),
+        );
+        assert_eq!(resolved, PathBuf::from("."));
+        let _ = std::fs::remove_dir_all(&isolated);
+    }
+
+    #[test]
+    fn uv_project_missing_error_names_arbor_repo_dir() {
+        let argv = vec![
+            "uv".into(),
+            "run".into(),
+            "--project".into(),
+            "target/python".into(),
+            "arbor-worker".into(),
+            "list-models".into(),
+        ];
+        let err = uv_project_missing_error(&argv).expect("missing project");
+        assert!(err.contains("target/python"));
+        assert!(err.contains("ARBOR_REPO_DIR"));
+    }
+
+    #[test]
+    fn uv_project_missing_error_silent_when_pyproject_exists() {
+        let repo = fake_arbor_layout();
+        let python = repo.join("python").to_string_lossy().into_owned();
+        let argv = vec![
+            "uv".into(),
+            "run".into(),
+            "--project".into(),
+            python,
+            "arbor-worker".into(),
+            "list-models".into(),
+        ];
+        assert_eq!(uv_project_missing_error(&argv), None);
+        let _ = std::fs::remove_dir_all(&repo);
     }
 }

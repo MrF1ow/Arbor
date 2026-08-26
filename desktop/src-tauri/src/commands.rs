@@ -11,15 +11,20 @@ use std::sync::Arc;
 use tauri::Manager;
 
 fn repo_dir(app: &tauri::AppHandle) -> PathBuf {
-    std::env::var("ARBOR_REPO_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| {
-            app.path()
-                .resource_dir()
-                .ok()
-                .and_then(|d| d.parent().map(|p| p.to_path_buf()))
-                .unwrap_or_else(|| PathBuf::from("."))
-        })
+    let resource_dir = app.path().resource_dir().ok();
+    let current_dir = std::env::current_dir().ok();
+    let current_exe = std::env::current_exe().ok();
+    #[cfg(debug_assertions)]
+    let cargo_manifest_dir = Some(PathBuf::from(env!("CARGO_MANIFEST_DIR")));
+    #[cfg(not(debug_assertions))]
+    let cargo_manifest_dir = None::<PathBuf>;
+    worker::resolve_repo_dir(
+        &|k| std::env::var(k).ok(),
+        resource_dir.as_deref(),
+        current_dir.as_deref(),
+        current_exe.as_deref(),
+        cargo_manifest_dir.as_deref(),
+    )
 }
 
 #[tauri::command]
@@ -708,26 +713,14 @@ mod tests {
     #[test]
     fn create_course_makes_a_folder_and_rejects_duplicates() {
         let root = temp_root("create-course");
-        let name = create_course(root.to_string_lossy().into_owned(), " Organic Chem ".into())
-            .unwrap();
+        let name =
+            create_course(root.to_string_lossy().into_owned(), " Organic Chem ".into()).unwrap();
         assert_eq!(name, "Organic Chem");
         assert!(root.join("Organic Chem").is_dir());
-        assert!(create_course(
-            root.to_string_lossy().into_owned(),
-            "Organic Chem".into()
-        )
-        .is_err());
+        assert!(create_course(root.to_string_lossy().into_owned(), "Organic Chem".into()).is_err());
         assert!(create_course(root.to_string_lossy().into_owned(), "../x".into()).is_err());
-        assert!(create_course(
-            root.to_string_lossy().into_owned(),
-            "_arbor_cache".into()
-        )
-        .is_err());
-        assert!(create_course(
-            root.to_string_lossy().into_owned(),
-            "_ARBOR_CACHE".into()
-        )
-        .is_err());
+        assert!(create_course(root.to_string_lossy().into_owned(), "_arbor_cache".into()).is_err());
+        assert!(create_course(root.to_string_lossy().into_owned(), "_ARBOR_CACHE".into()).is_err());
     }
 
     #[test]
