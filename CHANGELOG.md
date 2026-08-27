@@ -6,6 +6,8 @@ Package version for the worker, desktop, and Tauri app. See [Version numbering](
 
 ## Unreleased
 
+- Add files no longer creates `lecture-2.pdf` when a lecture with that name is already in the class. Same name replaces the existing file so page alignment can run. A file already in the class is left in place. Numbered copies are only for two same-named files in one picker batch.
+
 ## 2.2.0 — 2026-08-26
 
 Package `2.2.0`. Git tag `v2.2.0` is for the operator after this lands. **Product:** Version 3 in progress (study loop). Not `v3.0.0`. That tag waits for a recorded Mac E2E run.
