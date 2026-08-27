@@ -944,10 +944,15 @@ async function startUpdateWithSelections(
   }
 }
 
-async function presentUpdatePlan(reason: "watch" | "import") {
+async function presentUpdatePlan(
+  reason: "watch" | "import",
+  settings?: KnowledgeSettings,
+) {
   if (!knowledgeRoot) return;
-  const ks = await invoke<KnowledgeSettings>("get_knowledge_settings", { root: knowledgeRoot });
   try {
+    const ks =
+      settings ??
+      (await invoke<KnowledgeSettings>("get_knowledge_settings", { root: knowledgeRoot }));
     const plan = await invoke<UpdatePlan>("plan_update", { root: knowledgeRoot });
     if (plan.pending.length === 0) return;
     logLine(
@@ -981,7 +986,7 @@ async function handleWatchTriggered() {
   if (Date.now() < suppressWatchUntil) return;
   const ks = await invoke<KnowledgeSettings>("get_knowledge_settings", { root: knowledgeRoot });
   if (!ks.watch_enabled) return;
-  await presentUpdatePlan("watch");
+  await presentUpdatePlan("watch", ks);
 }
 
 function formatRanges(ranges: [number, number][]): string {
@@ -1275,6 +1280,9 @@ async function importLectureFiles() {
   });
   const paths = typeof picked === "string" ? [picked] : picked;
   if (!paths || paths.length === 0) return;
+  // Watch debounce is 3s plus a 500ms poll; keep this longer so the copy's
+  // own notify event does not reopen the review we show below.
+  suppressWatchUntil = Date.now() + 5000;
   try {
     const imported = await invoke<string[]>("import_sources", {
       root: knowledgeRoot,
@@ -1287,7 +1295,6 @@ async function importLectureFiles() {
         : `Added ${imported.length} files to ${currentCourse}.`,
     );
     inspectorEl.hidden = false;
-    suppressWatchUntil = Date.now() + 4000;
     await presentUpdatePlan("import");
   } catch (error) {
     logLine(`Could not add files: ${error}`);

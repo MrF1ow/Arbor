@@ -5,7 +5,6 @@ use crate::watch::WatchState;
 use crate::worker;
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
-use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
@@ -239,7 +238,7 @@ pub fn import_sources(
         return Err(format!("Class not found: {course}"));
     }
     let mut imported = Vec::new();
-    let mut used_names: HashSet<OsString> = HashSet::new();
+    let mut used_names: HashSet<String> = HashSet::new();
     for src in paths {
         let src_path = Path::new(&src);
         if !src_path.is_file() {
@@ -256,19 +255,20 @@ pub fn import_sources(
         let file_name = src_path
             .file_name()
             .ok_or_else(|| format!("Invalid path: {src}"))?;
+        let name_key = file_name.to_string_lossy().to_ascii_lowercase();
         if path_is_under(src_path, &dest_dir) {
-            imported.push(dest_file_name(src_path)?);
-            used_names.insert(file_name.to_os_string());
+            imported.push(file_name.to_string_lossy().into_owned());
+            used_names.insert(name_key);
             continue;
         }
-        let dest = if used_names.contains(file_name) {
+        let dest = if used_names.contains(&name_key) {
             unique_dest(&dest_dir, file_name)
         } else {
             dest_dir.join(file_name)
         };
         std::fs::copy(src_path, &dest).map_err(|e| e.to_string())?;
         let out_name = dest_file_name(&dest)?;
-        used_names.insert(file_name.to_os_string());
+        used_names.insert(name_key);
         imported.push(out_name);
     }
     Ok(imported)
@@ -881,6 +881,33 @@ mod tests {
 
         assert_eq!(imported, vec!["lecture.pdf", "lecture-2.pdf"]);
         assert_eq!(fs::read(course.join("lecture.pdf")).unwrap(), b"%PDF-a");
+        assert_eq!(fs::read(course.join("lecture-2.pdf")).unwrap(), b"%PDF-b");
+    }
+
+    #[test]
+    fn import_sources_unique_names_ignore_case_in_same_batch() {
+        let root = temp_root("import-case");
+        let course = root.join("Biology");
+        fs::create_dir_all(&course).unwrap();
+        let a = root.join("a");
+        let b = root.join("b");
+        fs::create_dir_all(&a).unwrap();
+        fs::create_dir_all(&b).unwrap();
+        fs::write(a.join("Lecture.pdf"), b"%PDF-a").unwrap();
+        fs::write(b.join("lecture.pdf"), b"%PDF-b").unwrap();
+
+        let imported = import_sources(
+            root.to_string_lossy().into_owned(),
+            "Biology".into(),
+            vec![
+                a.join("Lecture.pdf").to_string_lossy().into_owned(),
+                b.join("lecture.pdf").to_string_lossy().into_owned(),
+            ],
+        )
+        .unwrap();
+
+        assert_eq!(imported, vec!["Lecture.pdf", "lecture-2.pdf"]);
+        assert_eq!(fs::read(course.join("Lecture.pdf")).unwrap(), b"%PDF-a");
         assert_eq!(fs::read(course.join("lecture-2.pdf")).unwrap(), b"%PDF-b");
     }
 }
