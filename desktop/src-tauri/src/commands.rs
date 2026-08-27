@@ -4,7 +4,8 @@ use crate::settings::{self, Settings};
 use crate::watch::WatchState;
 use crate::worker;
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
@@ -177,10 +178,6 @@ pub fn list_courses(root: String) -> Result<Vec<String>, String> {
 const SOURCE_EXTENSIONS: &[&str] = &["pdf", "pptx", "docx"];
 
 fn unique_dest(dir: &Path, file_name: &std::ffi::OsStr) -> PathBuf {
-    let candidate = dir.join(file_name);
-    if !candidate.exists() {
-        return candidate;
-    }
     let path = Path::new(file_name);
     let stem = path
         .file_stem()
@@ -199,6 +196,20 @@ fn unique_dest(dir: &Path, file_name: &std::ffi::OsStr) -> PathBuf {
         }
         n += 1;
     }
+}
+
+fn path_is_under(path: &Path, dir: &Path) -> bool {
+    match (path.canonicalize(), dir.canonicalize()) {
+        (Ok(path), Ok(dir)) => path.starts_with(dir),
+        _ => false,
+    }
+}
+
+fn dest_file_name(path: &Path) -> Result<String, String> {
+    path.file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .filter(|n| !n.is_empty())
+        .ok_or_else(|| format!("Invalid path: {}", path.display()))
 }
 
 #[tauri::command]
@@ -228,6 +239,7 @@ pub fn import_sources(
         return Err(format!("Class not found: {course}"));
     }
     let mut imported = Vec::new();
+    let mut used_names: HashSet<OsString> = HashSet::new();
     for src in paths {
         let src_path = Path::new(&src);
         if !src_path.is_file() {
@@ -244,13 +256,20 @@ pub fn import_sources(
         let file_name = src_path
             .file_name()
             .ok_or_else(|| format!("Invalid path: {src}"))?;
-        let dest = unique_dest(&dest_dir, file_name);
+        if path_is_under(src_path, &dest_dir) {
+            imported.push(dest_file_name(src_path)?);
+            used_names.insert(file_name.to_os_string());
+            continue;
+        }
+        let dest = if used_names.contains(file_name) {
+            unique_dest(&dest_dir, file_name)
+        } else {
+            dest_dir.join(file_name)
+        };
         std::fs::copy(src_path, &dest).map_err(|e| e.to_string())?;
-        imported.push(
-            dest.file_name()
-                .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or_default(),
-        );
+        let out_name = dest_file_name(&dest)?;
+        used_names.insert(file_name.to_os_string());
+        imported.push(out_name);
     }
     Ok(imported)
 }
@@ -724,7 +743,7 @@ mod tests {
     }
 
     #[test]
-    fn import_sources_copies_supported_files_with_unique_names() {
+    fn import_sources_copies_supported_files_and_replaces_same_name() {
         let root = temp_root("import");
         let course = root.join("Biology");
         fs::create_dir_all(&course).unwrap();
@@ -742,20 +761,127 @@ mod tests {
         assert_eq!(imported, vec!["lecture.pdf"]);
         assert!(course.join("lecture.pdf").is_file());
 
+        fs::write(&first, b"%PDF-v2").unwrap();
         let again = import_sources(
             root.to_string_lossy().into_owned(),
             "Biology".into(),
             vec![first.to_string_lossy().into_owned()],
         )
         .unwrap();
-        assert_eq!(again, vec!["lecture-2.pdf"]);
-        assert!(course.join("lecture-2.pdf").is_file());
+        assert_eq!(again, vec!["lecture.pdf"]);
+        assert_eq!(fs::read(course.join("lecture.pdf")).unwrap(), b"%PDF-v2");
+        assert!(!course.join("lecture-2.pdf").exists());
         assert!(import_sources(
             root.to_string_lossy().into_owned(),
             "Biology".into(),
             vec![src_dir.join("notes.txt").to_string_lossy().into_owned()],
         )
         .is_err());
+    }
+
+    #[test]
+    fn import_sources_replaces_existing_same_named_file() {
+        let root = temp_root("import-replace");
+        let course = root.join("Clin Med 2");
+        fs::create_dir_all(&course).unwrap();
+        fs::write(course.join("Clin Med 1.pdf"), b"%PDF-old").unwrap();
+
+        let inbox = root.join("inbox");
+        fs::create_dir_all(&inbox).unwrap();
+        let incoming = inbox.join("Clin Med 1.pdf");
+        fs::write(&incoming, b"%PDF-new").unwrap();
+
+        let imported = import_sources(
+            root.to_string_lossy().into_owned(),
+            "Clin Med 2".into(),
+            vec![incoming.to_string_lossy().into_owned()],
+        )
+        .unwrap();
+
+        assert_eq!(imported, vec!["Clin Med 1.pdf"]);
+        assert_eq!(
+            fs::read(course.join("Clin Med 1.pdf")).unwrap(),
+            b"%PDF-new"
+        );
+        assert!(!course.join("Clin Med 1-2.pdf").exists());
+    }
+
+    #[test]
+    fn import_sources_skips_copy_when_file_already_in_course() {
+        let root = temp_root("import-inplace");
+        let course = root.join("Clin Med 2");
+        fs::create_dir_all(&course).unwrap();
+        let existing = course.join("Clin Med 1.pdf");
+        fs::write(&existing, b"%PDF-existing").unwrap();
+
+        let imported = import_sources(
+            root.to_string_lossy().into_owned(),
+            "Clin Med 2".into(),
+            vec![existing.to_string_lossy().into_owned()],
+        )
+        .unwrap();
+
+        assert_eq!(imported, vec!["Clin Med 1.pdf"]);
+        assert_eq!(fs::read(&existing).unwrap(), b"%PDF-existing");
+        assert!(!course.join("Clin Med 1-2.pdf").exists());
+        let pdf_count = fs::read_dir(&course)
+            .unwrap()
+            .filter(|e| {
+                e.as_ref()
+                    .ok()
+                    .and_then(|e| e.path().extension().map(|x| x == "pdf"))
+                    .unwrap_or(false)
+            })
+            .count();
+        assert_eq!(pdf_count, 1);
+    }
+
+    #[test]
+    fn import_sources_skips_nested_file_already_in_course() {
+        let root = temp_root("import-nested");
+        let course = root.join("Biology");
+        let nested = course.join("inbox");
+        fs::create_dir_all(&nested).unwrap();
+        let existing = nested.join("lecture.pdf");
+        fs::write(&existing, b"%PDF-nested").unwrap();
+
+        let imported = import_sources(
+            root.to_string_lossy().into_owned(),
+            "Biology".into(),
+            vec![existing.to_string_lossy().into_owned()],
+        )
+        .unwrap();
+
+        assert_eq!(imported, vec!["lecture.pdf"]);
+        assert!(!course.join("lecture.pdf").exists());
+        assert_eq!(fs::read(&existing).unwrap(), b"%PDF-nested");
+    }
+
+    #[test]
+    fn import_sources_unique_names_only_for_same_batch() {
+        let root = temp_root("import-batch");
+        let course = root.join("Biology");
+        fs::create_dir_all(&course).unwrap();
+        let a = root.join("a");
+        let b = root.join("b");
+        fs::create_dir_all(&a).unwrap();
+        fs::create_dir_all(&b).unwrap();
+        fs::write(a.join("lecture.pdf"), b"%PDF-a").unwrap();
+        fs::write(b.join("lecture.pdf"), b"%PDF-b").unwrap();
+
+        let imported = import_sources(
+            root.to_string_lossy().into_owned(),
+            "Biology".into(),
+            vec![
+                a.join("lecture.pdf").to_string_lossy().into_owned(),
+                b.join("lecture.pdf").to_string_lossy().into_owned(),
+            ],
+        )
+        .unwrap();
+
+        assert_eq!(imported, vec!["lecture.pdf", "lecture-2.pdf"]);
+        assert_eq!(fs::read(course.join("lecture.pdf")).unwrap(), b"%PDF-a");
+        assert_eq!(fs::read(course.join("lecture-2.pdf")).unwrap(), b"%PDF-b");
     }
 }
 

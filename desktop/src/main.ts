@@ -198,6 +198,7 @@ let studyJobRunning = false;
 let pendingAutoEmbed = false;
 let pendingAutoQuiz = false;
 let searchTimer: number | null = null;
+let suppressWatchUntil = 0;
 let currentPlace: Place = "welcome";
 let currentCourse: string | null = null;
 let currentMode: Mode = "notes";
@@ -943,14 +944,17 @@ async function startUpdateWithSelections(
   }
 }
 
-async function handleWatchTriggered() {
+async function presentUpdatePlan(reason: "watch" | "import") {
   if (!knowledgeRoot) return;
   const ks = await invoke<KnowledgeSettings>("get_knowledge_settings", { root: knowledgeRoot });
-  if (!ks.watch_enabled) return;
   try {
     const plan = await invoke<UpdatePlan>("plan_update", { root: knowledgeRoot });
     if (plan.pending.length === 0) return;
-    logLine(`Folder watch detected ${plan.pending.length} file(s) to process.`);
+    logLine(
+      reason === "watch"
+        ? `Folder watch detected ${plan.pending.length} file(s) to process.`
+        : `Added files. ${plan.pending.length} file(s) to process.`,
+    );
     openInspector();
     if (ks.auto_update) {
       await refreshAuth();
@@ -959,14 +963,25 @@ async function handleWatchTriggered() {
         logLine("Auto-update waiting for Codex auth. Review and Confirm when ready.");
         return;
       }
-      await startUpdateWithSelections(selectionsFromPending(plan.pending), "watch");
+      await startUpdateWithSelections(
+        selectionsFromPending(plan.pending),
+        reason === "watch" ? "watch" : "manual",
+      );
       return;
     }
     renderReview(plan.pending);
     logLine("Review the detected files and Confirm when ready.");
   } catch (e) {
-    logLine(`Watch plan failed: ${e}`);
+    logLine(reason === "watch" ? `Watch plan failed: ${e}` : `Plan failed: ${e}`);
   }
+}
+
+async function handleWatchTriggered() {
+  if (!knowledgeRoot) return;
+  if (Date.now() < suppressWatchUntil) return;
+  const ks = await invoke<KnowledgeSettings>("get_knowledge_settings", { root: knowledgeRoot });
+  if (!ks.watch_enabled) return;
+  await presentUpdatePlan("watch");
 }
 
 function formatRanges(ranges: [number, number][]): string {
@@ -1272,6 +1287,8 @@ async function importLectureFiles() {
         : `Added ${imported.length} files to ${currentCourse}.`,
     );
     inspectorEl.hidden = false;
+    suppressWatchUntil = Date.now() + 4000;
+    await presentUpdatePlan("import");
   } catch (error) {
     logLine(`Could not add files: ${error}`);
     inspectorEl.hidden = false;
