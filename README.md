@@ -4,7 +4,7 @@ Local-first desktop app that turns course PDFs, PowerPoints, and Word files into
 
 **Current release:** [2.2.0](CHANGELOG.md) (package `2.2.0`). Worker, desktop, and Tauri all report this number (`arbor-worker --version`). The operator tags `v2.2.0` after this lands.
 
-**Version 2** (`v2.0.0`) shipped automation on the old UI. **Version 3** is in progress. `v2.1.0` added the desktop shell. `2.2.0` adds the study loop. **`v3.0.0` is reserved** until a Mac E2E run is recorded. See [Version numbering](PROJECT.md#version-numbering).
+**Version 2** (`v2.0.0`) shipped automation on the old UI. **Version 3** is in progress. `v2.1.0` added the desktop shell. `2.2.0` adds the study loop. **`v3.0.0` is reserved** until the Version 3 Mac batch is recorded on the [implementation checklist](docs/implementation-checklist.md). See [Version numbering](PROJECT.md#version-numbering).
 
 For later milestones, see [`PROJECT.md`](PROJECT.md). The original V1 design (`lecture.md` per lecture) is historical: [`docs/superpowers/specs/2026-08-02-arbor-v1-design.md`](docs/superpowers/specs/2026-08-02-arbor-v1-design.md). Living layout is course folders, dated `digests/`, and `arbor-course.json`.
 
@@ -45,7 +45,7 @@ The 2.1.0 shell plus:
 | Source chips | Open Notes and scroll to the cited heading when that heading id exists. |
 | Library | Add a class and lecture files from the sidebar. Appearance lives in Settings. |
 
-**`v3.0.0` ships when the Mac E2E study-loop run is recorded**, not at this package bump. Codex CLI is still a separate install.
+**`v3.0.0` ships when the Version 3 Mac batch is recorded**, not at this package bump. Codex CLI is still a separate install. Remaining Version 3 work (Notes links/tables) and the gate list: [implementation checklist](docs/implementation-checklist.md).
 
 ---
 

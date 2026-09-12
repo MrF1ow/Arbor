@@ -10,7 +10,7 @@
 
 **Shell design:** [`docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md`](../../specs/2026-08-22-v3-desktop-shell-design.md)
 
-**Closeout:** [`docs/superpowers/specs/2026-08-23-v3-closeout-design.md`](../../specs/2026-08-23-v3-closeout-design.md). Tracking issue [#42](https://github.com/MrF1ow/Arbor/issues/42).
+**Closeout:** [`docs/superpowers/specs/2026-08-23-v3-closeout-design.md`](../../specs/2026-08-23-v3-closeout-design.md). Wave 8 study-loop code is on `main`. GitHub [#42](https://github.com/MrF1ow/Arbor/issues/42) is Notes UX leftover, not this closeout. Status ledger: [`docs/implementation-checklist.md`](../../../implementation-checklist.md).
 
 ## Context
 
@@ -35,7 +35,7 @@ Version 3 is the first Arbor a student would download **and** the memory Version
 | **Graph** | Concepts, cross-document edges, graph-lite UI | 5 (PR #40) | On `main` |
 | **Diagrams** | Figure concepts merged into the graph | 6 (PR #41) | On `main` |
 | **Citations** | Local verification that claims appear in cited digests | 7 (PR #41) | On `main` |
-| **Closeout** | Grade buttons, quiz session answers, heading scroll, living docs, Mac E2E | 8 (`v2.2.0`) | Package 2.2.0. Mac E2E still open. [#42](https://github.com/MrF1ow/Arbor/issues/42) |
+| **Closeout** | Grade buttons, quiz session answers, heading scroll, living docs, Mac E2E | 8 (`v2.2.0`) | Study-loop code on `main`. Mac batch still open. Notes leftovers: [#42](https://github.com/MrF1ow/Arbor/issues/42) and [implementation checklist](../../../implementation-checklist.md). |
 
 ### Out of Version 3
 
@@ -46,7 +46,7 @@ Version 3 is the first Arbor a student would download **and** the memory Version
 - Anki export, pretty graph canvas, remote vector DBs
 - Make-card-from-selection (shell spec: later refinement)
 
-If issue #42 lists an out-of-v3 item, file it for Version 4 or later. Do not pull it into Wave 8.
+Issue #42’s remaining Notes items (links, tables, reserved-root names, recorded scroll) stay in Version 3. Chat, Anki, extra providers, and a pretty graph canvas stay out. Version 4 does not start until the Version 3 Mac batch is recorded.
 
 ## Locked decisions
 
@@ -85,13 +85,13 @@ Wave 0 (shell) shipped
 Waves 1–7 on main (PRs #36–#41)
         │
         ▼
-Wave 8 (closeout, issue #42) ──package 2.2.0──▶ operator tags v2.2.0
+Wave 8 (closeout) ──package 2.2.0──▶ Notes leftovers (#42) locally green
         │
         ▼
-Mac E2E recorded
+One Mac batch (mac-e2e.md) ──▶ operator tags v2.2.0 then v3.0.0
         │
         ▼
-     v3.0.0
+Version 4 (#20 chat) may start
 ```
 
 ## Waves
@@ -104,7 +104,7 @@ Mac E2E recorded
 5. [wave-5-graph](wave-5-graph.md). Concepts, links, graph-lite (PR #40)
 6. [wave-6-diagrams](wave-6-diagrams.md). Figures into the graph (PR #41)
 7. [wave-7-citations](wave-7-citations.md). Local citation checks (PR #41)
-8. [wave-8-closeout](wave-8-closeout.md). Grade, session answers, heading scroll, docs, E2E ([#42](https://github.com/MrF1ow/Arbor/issues/42))
+8. [wave-8-closeout](wave-8-closeout.md). Grade, session answers, heading scroll, docs. Mac batch: [mac-e2e.md](mac-e2e.md). Notes leftovers: [2026-09-12-v3-notes-gate.md](../2026-09-12-v3-notes-gate.md) ([#42](https://github.com/MrF1ow/Arbor/issues/42))
 
 ## Release map
 
@@ -112,7 +112,7 @@ Mac E2E recorded
 |-----|------|----------------|
 | `v2.1.0` | 0 | Desktop shell |
 | `v2.2.0` | 1–8 | Generate, flashcards, quiz, semantic search, graph, figures, citation badges, grade buttons, stable quiz scores, heading scroll, docs that match the app |
-| **`v3.0.0`** | **all + Mac E2E** | **Version 3 complete** |
+| **`v3.0.0`** | **all + Notes leftovers + Mac batch** | **Version 3 complete** |
 
 ## Verification (every wave)
 

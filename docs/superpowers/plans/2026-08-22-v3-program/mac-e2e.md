@@ -2,11 +2,15 @@
 
 Parent: [overview.md](overview.md)
 
-**Status:** still open. Wave 0 shipped the shell in `v2.1.0`. Waves 1–7 are on `main`. Record a run before tagging `v3.0.0`. Closeout spec: [`../../specs/2026-08-23-v3-closeout-design.md`](../../specs/2026-08-23-v3-closeout-design.md). Issue [#42](https://github.com/MrF1ow/Arbor/issues/42).
+**Status:** still open. Living ledger: [`docs/implementation-checklist.md`](../../../implementation-checklist.md). Record a run **once** after the Version 3 Notes leftovers in [2026-09-12-v3-notes-gate.md](../2026-09-12-v3-notes-gate.md) are locally green. This is the Version 3 Mac batch. It also covers leftover Version 2 proof from issue [#30](https://github.com/MrF1ow/Arbor/issues/30).
+
+GitHub issue [#42](https://github.com/MrF1ow/Arbor/issues/42) is Notes UX, not this file’s tracker. Write the run record in this file and on the implementation checklist.
 
 ## Goal
 
-Prove the v2 ingest loop still works in the Version 3 shell, then prove the study loop. A classmate can pick a folder, Update, Confirm, commit, search, watch-review, generate a deck, grade a card, take a quiz, and open a heading chip.
+Prove the v2 ingest loop still works in the Version 3 shell, prove the study loop, and prove Notes leftovers (links, tables, scroll). A classmate can pick a folder, Update, Confirm, commit, search, watch-review, generate a deck, grade a card, take a quiz, click a `course.md` digest link, and open a heading chip.
+
+Do not run this after every small PR. Linux/VM tests gate merges. This batch gates **`v3.0.0`**.
 
 ## Checklist
 
@@ -15,9 +19,9 @@ Run on a Mac with Codex CLI authenticated. Use a throwaway Knowledge git repo an
 - [ ] Fresh Knowledge folder, git init, pick it in Arbor
 - [ ] Update knowledge → review table → Confirm
 - [ ] Digest written under `digests/`, `course.md` updated, git commit appears
-- [ ] Notes mode shows the digest preview (serif, page-marker chips)
+- [ ] Notes mode shows the digest preview (serif, page-marker chips). Closing `arbor-pages` comments are not visible as text
 - [ ] Search overlay finds a word from the digest and opens Notes at that file
-- [ ] Drop a second PDF into the course folder. Watch opens review. Confirm ingests it.
+- [ ] Drop a second PDF into the course folder. Watch opens review. Confirm ingests it
 - [ ] Inspector log stays collapsed until Update or a running job
 - [ ] Settings toggles persist in `.arbor/settings.json`
 
@@ -31,7 +35,33 @@ Run on a Mac with Codex CLI authenticated. Use a throwaway Knowledge git repo an
 - [ ] Graph Generate, click a source chip, Notes opens
 - [ ] Check citations. An invented card back shows Unverified. Honest cards do not
 
-Record date, macOS version, and Arbor build (commit or DMG tag) in a comment on issue #42 or in this file when done.
+## Notes leftovers (issue #42)
+
+- [ ] Course overview (`course.md`) shows a clickable digest link, not raw `[file](digests/file)`
+- [ ] That link opens the digest in Notes
+- [ ] A table in a digest renders as a table
+- [ ] A long digest scrolls from beginning to end in the reading pane
+- [ ] `_arbor_cache` is not listed as a class. Creating a class named `study` is rejected
+
+## Leftover Version 2 proof (issue #30)
+
+- [ ] Recent runs shows the succeeded job; Log shows JSONL
+- [ ] Start a second Update while one is running → rejected
+- [ ] macOS notification on job finish
+- [ ] A `.docx` ingests into a digest
+- [ ] Finder-launched DMG (no checkout, no `uv`, no `ARBOR_REPO_DIR`) can pick a folder, pass Codex auth, and run Update
+- [ ] (Optional) `auto_update` starts a job on file drop
+- [ ] (Optional) scanned PDF with Tesseract still produces a digest
+
+## Record
+
+When done, fill this in **here** and on `docs/implementation-checklist.md`. Then the operator may tag `v2.2.0` (if needed) and `v3.0.0`. Version 4 must not start before that tag.
+
+- Date:
+- macOS version:
+- Apple Silicon / Intel:
+- Arbor build (commit or DMG tag):
+- Failures (copy each onto the checklist Blockers table):
 
 ## Static / runtime
 
