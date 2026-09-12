@@ -74,3 +74,28 @@ test("extractDigestTitle reads the H1 and skips page markers", async () => {
   );
   assert.equal(extractDigestTitle("## Overview\nNo title here.\n"), null);
 });
+
+test("renders a markdown link and keeps the label", async () => {
+  const { renderMarkdown } = await subject();
+  const { html } = renderMarkdown("See [2026-08-22.md](digests/2026-08-22.md).\n");
+  assert.match(html, /<a [^>]*href="digests\/2026-08-22\.md"/);
+  assert.match(html, />2026-08-22\.md<\/a>/);
+  assert.doesNotMatch(html, /\[2026-08-22\.md\]/);
+});
+
+test("rejects javascript hrefs", async () => {
+  const { renderMarkdown } = await subject();
+  const { html } = renderMarkdown("[x](javascript:alert(1))\n");
+  assert.doesNotMatch(html, /<a /);
+  assert.match(html, /x/);
+});
+
+test("strips opening and closing arbor-pages markers", async () => {
+  const { renderMarkdown } = await subject();
+  const { html, pageChip } = renderMarkdown(
+    "<!-- arbor-pages:1-4 -->\n# Title\n## Overview\nNotes.\n<!-- /arbor-pages:1-4 -->\n",
+  );
+  assert.equal(pageChip, "1–4");
+  assert.doesNotMatch(html, /arbor-pages/);
+  assert.doesNotMatch(html, /&lt;!--/);
+});

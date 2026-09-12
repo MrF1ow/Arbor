@@ -13,9 +13,29 @@ function escapeHtml(text: string): string {
     .replace(/"/g, "&quot;");
 }
 
+function safeHref(raw: string): { href: string; digest: string | null } | null {
+  const href = raw.trim();
+  if (/^(javascript|data|vbscript):/i.test(href)) return null;
+  if (href.includes("..")) return null;
+  const digestMatch = href.match(/^(?:\.\/)?(digests\/[^/#\s]+\.md)(?:#(.+))?$/i);
+  if (digestMatch) {
+    return { href: digestMatch[1], digest: digestMatch[1] };
+  }
+  if (/^https?:\/\//i.test(href) || href.startsWith("#")) {
+    return { href, digest: null };
+  }
+  return null;
+}
+
 function inlineFormat(text: string): string {
   const escaped = escapeHtml(text);
-  const withCode = escaped.replace(/`([^`]+)`/g, "<code>$1</code>");
+  const withLinks = escaped.replace(/\[([^\]]+)\]\(((?:[^()]|\([^()]*\))*)\)/g, (_full, label: string, url: string) => {
+    const safe = safeHref(url);
+    if (!safe) return label;
+    const digestAttr = safe.digest === null ? "" : ` data-arbor-digest="${safe.digest}"`;
+    return `<a href="${safe.href}"${digestAttr}>${label}</a>`;
+  });
+  const withCode = withLinks.replace(/`([^`]+)`/g, "<code>$1</code>");
   const withBold = withCode.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
   return withBold.replace(/(^|[^*])\*([^*]+)\*/g, "$1<em>$2</em>");
 }
@@ -102,9 +122,9 @@ export function renderMarkdown(source: string): { html: string; pageChip: string
   let pageChip: string | null = null;
   const pageMatch = source.match(/<!--\s*arbor-pages:([^>]+)\s*-->/);
   if (pageMatch) {
-    pageChip = pageMatch[1].replace(/-/g, "–");
-    source = source.replace(/<!--\s*arbor-pages:[^>]+-->\s*/g, "");
+    pageChip = pageMatch[1].trim().replace(/-/g, "–");
   }
+  source = source.replace(/<!--\s*\/?arbor-pages:[^>]+-->\s*/g, "");
 
   const lines = source.replace(/\r\n/g, "\n").split("\n");
   const parts: string[] = [];
