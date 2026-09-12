@@ -113,3 +113,14 @@ test("strips opening and closing arbor-pages markers", async () => {
   assert.doesNotMatch(html, /arbor-pages/);
   assert.doesNotMatch(html, /&lt;!--/);
 });
+
+test("renders a GFM table", async () => {
+  const { renderMarkdown } = await subject();
+  const { html } = renderMarkdown(
+    "| Drug | Use |\n| --- | --- |\n| Atenolol | Beta blocker |\n",
+  );
+  assert.match(html, /<table>/);
+  assert.match(html, /<th>Drug<\/th>/);
+  assert.match(html, /<td>Atenolol<\/td>/);
+  assert.doesNotMatch(html, /<p>\| Drug/);
+});

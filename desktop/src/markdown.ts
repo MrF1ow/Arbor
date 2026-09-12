@@ -122,6 +122,35 @@ function appendListItem(stack: OpenList[], item: ListItemMatch, parts: string[])
   top.items.push(inlineFormat(item.content));
 }
 
+interface MarkdownTable {
+  header: string[];
+  rows: string[][];
+}
+
+function isPipeRow(line: string): boolean {
+  return /^\s*\|.+\|\s*$/.test(line);
+}
+
+function isTableSeparator(line: string): boolean {
+  return /^\s*\|[\s:|-]+\|\s*$/.test(line);
+}
+
+function splitCells(line: string): string[] {
+  return line
+    .trim()
+    .split("|")
+    .slice(1, -1)
+    .map((cell) => cell.trim());
+}
+
+function renderTable(table: MarkdownTable): string {
+  const header = table.header.map((cell) => `<th>${inlineFormat(cell)}</th>`).join("");
+  const body = table.rows
+    .map((row) => `<tr>${row.map((cell) => `<td>${inlineFormat(cell)}</td>`).join("")}</tr>`)
+    .join("");
+  return `<table><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
 export function renderMarkdown(source: string): { html: string; pageChip: string | null } {
   let pageChip: string | null = null;
   const pageMatch = source.match(/<!--\s*arbor-pages:([^>]+)\s*-->/);
@@ -141,14 +170,32 @@ export function renderMarkdown(source: string): { html: string; pageChip: string
     paragraph = [];
   };
 
-  for (const raw of lines) {
-    const line = raw.replace(/\s+$/, "");
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].replace(/\s+$/, "");
     const trimmed = line.trim();
     const listItem = matchListItem(line);
+    const nextLine = i + 1 < lines.length ? lines[i + 1].replace(/\s+$/, "") : "";
 
     if (trimmed === "") {
       flushParagraph();
       closeAllLists(lists, parts);
+      continue;
+    }
+
+    if (isPipeRow(line) && isTableSeparator(nextLine)) {
+      flushParagraph();
+      closeAllLists(lists, parts);
+      const header = splitCells(line);
+      i += 2;
+      const rows: string[][] = [];
+      while (i < lines.length) {
+        const bodyLine = lines[i].replace(/\s+$/, "");
+        if (!isPipeRow(bodyLine)) break;
+        rows.push(splitCells(bodyLine));
+        i += 1;
+      }
+      i -= 1;
+      parts.push(renderTable({ header, rows }));
       continue;
     }
 
