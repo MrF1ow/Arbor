@@ -102,7 +102,7 @@ These are issue [#42](https://github.com/MrF1ow/Arbor/issues/42) acceptance crit
 | Markdown links render; `digests/*.md` opens that digest in Notes | [#42](https://github.com/MrF1ow/Arbor/issues/42) | [x] | [x] | [ ] |
 | Markdown tables render as tables | [#42](https://github.com/MrF1ow/Arbor/issues/42) | [x] | [x] | [ ] |
 | Closing `arbor-pages` markers stripped from the reading pane | [#42](https://github.com/MrF1ow/Arbor/issues/42) | [x] | [x] | [ ] |
-| Shared reserved-dir policy (`_arbor_cache`, `.arbor`, `study`, `digests` at Knowledge root) | [#42](https://github.com/MrF1ow/Arbor/issues/42) | [ ] | [ ] | [ ] |
+| Shared reserved-dir policy (`_arbor_cache`, `.arbor`, `study`, `digests` at Knowledge root) | [#42](https://github.com/MrF1ow/Arbor/issues/42) | [x] | [x] | [ ] |
 | Long digest scrolls end-to-end in the real Arbor window | [#42](https://github.com/MrF1ow/Arbor/issues/42) | CSS present | [x] CSS unit tests | [ ] |
 | `validate_digest` on patch output | [#3](https://github.com/MrF1ow/Arbor/issues/3) | [ ] | [ ] | n/a |
 
