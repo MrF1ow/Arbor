@@ -161,6 +161,7 @@ def _apply_patch(
             prep=prep,
             cwd=cwd,
         ).markdown
+        validate_digest(generated, page_range=_to_marker_range(block))
         inner = _extract_inner(generated, block)
         patched = replace_page_marker(markdown, span.page_range, inner)
         if patched.status != "ok" or patched.markdown is None:

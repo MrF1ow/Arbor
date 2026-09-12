@@ -51,7 +51,7 @@ Shipped as part of `v2.0.0`. GitHub issues #3, #4, #19, #21.
 |------|-------|-------------|----------|-----------|-------|
 | Desktop app, Update, PDF/PPTX, course folders, dated digests, git commit | — | [x] | [x] | [x] | Clin Med 2 run on #30 (2026-08-22) |
 | Digest prompt source rules + reject `\(`, `\[`, `\frac` on create/regenerate | [#3](https://github.com/MrF1ow/Arbor/issues/3) | [x] | [x] | [x] | Live run reported no LaTeX |
-| `validate_digest` on **patch** splices | [#3](https://github.com/MrF1ow/Arbor/issues/3) follow-up | [ ] | [ ] | n/a until local | `_apply_patch` skips validation. Version 3 Notes-gate plan includes this. |
+| `validate_digest` on **patch** splices | [#3](https://github.com/MrF1ow/Arbor/issues/3) follow-up | [x] | [x] | n/a until local | `_apply_patch` validates each provider splice. |
 | Codex GUI PATH, 10s timeout, single-flight auth | [#19](https://github.com/MrF1ow/Arbor/issues/19) | [x] | [x] | [ ] | Homebrew paths added in 2.2.0; Finder proof is on the Version 3 Mac batch |
 | Manifest v2, fingerprints, page markers, dirty ranges, in-place patch | [#21](https://github.com/MrF1ow/Arbor/issues/21) | [x] | [x] | [x] | Clin Med 2 |
 | Single-digest `course.md` index (not a full copy) | [#21](https://github.com/MrF1ow/Arbor/issues/21) | [x] | [x] | [ ] | Index is written; **link rendering** is Version 3 Notes |
@@ -104,7 +104,7 @@ These are issue [#42](https://github.com/MrF1ow/Arbor/issues/42) acceptance crit
 | Closing `arbor-pages` markers stripped from the reading pane | [#42](https://github.com/MrF1ow/Arbor/issues/42) | [x] | [x] | [ ] |
 | Shared reserved-dir policy (`_arbor_cache`, `.arbor`, `study`, `digests` at Knowledge root) | [#42](https://github.com/MrF1ow/Arbor/issues/42) | [x] | [x] | [ ] |
 | Long digest scrolls end-to-end in the real Arbor window | [#42](https://github.com/MrF1ow/Arbor/issues/42) | CSS present | [x] CSS unit tests | [ ] |
-| `validate_digest` on patch output | [#3](https://github.com/MrF1ow/Arbor/issues/3) | [ ] | [ ] | n/a |
+| `validate_digest` on patch output | [#3](https://github.com/MrF1ow/Arbor/issues/3) | [x] | [x] | n/a |
 
 ### Version 3 Mac batch (once, after remaining rows are locally green)
 

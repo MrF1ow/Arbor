@@ -250,7 +250,8 @@ def test_patch_range_4_5_only_that_block_changes(tmp_path: Path):
     original = _coverage_digest()
     digest_path.write_text(original)
 
-    provider = FakeProvider("patched notes for pages 4-5")
+    patched_body = _complete_body("Patched").rstrip("\n")
+    provider = FakeProvider(_marked(4, 5, "Patched"))
     prep = PrepareResult("pdf_images", image_paths=_page_images(10))
     action = DigestAction("patch", PageRange(4, 5), digest_file=digest_rel)
     updated = apply_digest_action(
@@ -266,7 +267,7 @@ def test_patch_range_4_5_only_that_block_changes(tmp_path: Path):
 
     text = digest_path.read_text()
     assert _block(1, 3, "notes for pages 1-3") in text
-    assert _block(4, 5, "patched notes for pages 4-5") in text
+    assert _block(4, 5, patched_body) in text
     assert _block(6, 10, "notes for pages 6-10") in text
     assert "old notes for pages 4-5" not in text
     assert text.startswith("# Lecture\n")
@@ -275,7 +276,7 @@ def test_patch_range_4_5_only_that_block_changes(tmp_path: Path):
     assert parsed.status == "ok"
     assert [span.body for span in parsed.spans] == [
         "notes for pages 1-3",
-        "patched notes for pages 4-5",
+        patched_body,
         "notes for pages 6-10",
     ]
 
@@ -290,7 +291,7 @@ def test_patch_range_4_5_only_that_block_changes(tmp_path: Path):
 
 def test_patch_provider_output_with_markers_replaces_inner_only():
     original = _coverage_digest()
-    provider = FakeProvider(_block(4, 5, "model wrapped 4-5"))
+    provider = FakeProvider(_marked(4, 5, "Model wrapped 4-5"))
     prep = PrepareResult("pdf_images", image_paths=_page_images(10))
     updated = apply_digest_action(
         DigestAction("patch", PageRange(4, 5), digest_file="digests/2026-08-12.md"),
@@ -301,10 +302,23 @@ def test_patch_provider_output_with_markers_replaces_inner_only():
         existing_markdown=original,
         cwd=Path("."),
     )
-    assert _block(4, 5, "model wrapped 4-5") in updated
+    assert _block(4, 5, _complete_body("Model wrapped 4-5").rstrip("\n")) in updated
     assert updated.count("<!-- arbor-pages:4-5 -->") == 1
     assert "old notes for pages 4-5" not in updated
     assert _block(1, 3, "notes for pages 1-3") in updated
+
+
+def test_patch_rejects_frac_in_provider_output():
+    original = _coverage_digest()
+    bad = (
+        "<!-- arbor-pages:4-5 -->\n"
+        "# Lecture\n## Overview\nThis overview is definitely long enough to pass.\n"
+        "## Key Concepts\n- a\n## Important Details\n- \\frac{1}{2}\n"
+        "## Questions to Review\n- c?\n"
+        "<!-- /arbor-pages:4-5 -->\n"
+    )
+    with pytest.raises(DigestError, match="LaTeX"):
+        _apply_patch_4_5(FakeProvider(bad), original)
 
 
 def test_patch_malformed_provider_output_raises_instead_of_poisoning():
