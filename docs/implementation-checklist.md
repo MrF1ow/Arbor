@@ -99,7 +99,7 @@ These are issue [#42](https://github.com/MrF1ow/Arbor/issues/42) acceptance crit
 
 | Item | Issue | Implemented | Local/VM | Mac batch |
 |------|-------|-------------|----------|-----------|
-| Markdown links render; `digests/*.md` opens that digest in Notes | [#42](https://github.com/MrF1ow/Arbor/issues/42) | [ ] | [ ] | [ ] |
+| Markdown links render; `digests/*.md` opens that digest in Notes | [#42](https://github.com/MrF1ow/Arbor/issues/42) | [x] | [x] | [ ] |
 | Markdown tables render as tables | [#42](https://github.com/MrF1ow/Arbor/issues/42) | [ ] | [ ] | [ ] |
 | Closing `arbor-pages` markers stripped from the reading pane | [#42](https://github.com/MrF1ow/Arbor/issues/42) | [x] | [x] | [ ] |
 | Shared reserved-dir policy (`_arbor_cache`, `.arbor`, `study`, `digests` at Knowledge root) | [#42](https://github.com/MrF1ow/Arbor/issues/42) | [ ] | [ ] | [ ] |

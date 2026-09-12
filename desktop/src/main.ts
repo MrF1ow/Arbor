@@ -402,6 +402,14 @@ async function loadDigestPreview(
       ? `<p class="reading-empty">No notes yet. Add lecture files, then Update knowledge.</p>`
       : `<p class="reading-empty">Could not load file: ${e}</p>`;
   }
+  readingArticleEl.querySelectorAll("a[data-arbor-digest]").forEach((anchor) => {
+    anchor.addEventListener("click", (event) => {
+      event.preventDefault();
+      const digest = (anchor as HTMLElement).dataset.arborDigest;
+      if (!digest || !currentCourse) return;
+      void loadDigestPreview(currentCourse, `${currentCourse}/${digest}`);
+    });
+  });
   await renderNotesConceptChips(course, relativePath);
   scrollNotesToHeading(heading);
 }

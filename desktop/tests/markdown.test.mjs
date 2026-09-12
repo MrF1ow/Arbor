@@ -90,6 +90,20 @@ test("rejects javascript hrefs", async () => {
   assert.match(html, /x/);
 });
 
+test("arborDigestTarget returns a digest path or null", async () => {
+  const { arborDigestTarget } = await subject();
+
+  assert.equal(arborDigestTarget("digests/2026-08-22.md"), "digests/2026-08-22.md");
+  assert.equal(arborDigestTarget("./digests/2026-08-22.md"), "digests/2026-08-22.md");
+  assert.equal(arborDigestTarget("digests/2026-08-22.md#cells"), "digests/2026-08-22.md");
+  assert.equal(arborDigestTarget("https://example.com"), null);
+  assert.equal(arborDigestTarget("#overview"), null);
+  assert.equal(arborDigestTarget("javascript:alert(1)"), null);
+  assert.equal(arborDigestTarget("data:text/html,hi"), null);
+  assert.equal(arborDigestTarget("../secret.md"), null);
+  assert.equal(arborDigestTarget("notes/other.md"), null);
+});
+
 test("strips opening and closing arbor-pages markers", async () => {
   const { renderMarkdown } = await subject();
   const { html, pageChip } = renderMarkdown(

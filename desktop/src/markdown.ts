@@ -27,6 +27,10 @@ function safeHref(raw: string): { href: string; digest: string | null } | null {
   return null;
 }
 
+export function arborDigestTarget(href: string): string | null {
+  return safeHref(href)?.digest ?? null;
+}
+
 function inlineFormat(text: string): string {
   const escaped = escapeHtml(text);
   const withLinks = escaped.replace(/\[([^\]]+)\]\(((?:[^()]|\([^()]*\))*)\)/g, (_full, label: string, url: string) => {
