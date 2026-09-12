@@ -488,6 +488,8 @@ Each stage should be replaceable.
 
 Package releases (`0.1.0`, `0.2.0`, `1.0.0`, `2.0.0`, …) are in [`CHANGELOG.md`](CHANGELOG.md).
 
+**Done vs tested** lives in [`docs/implementation-checklist.md`](docs/implementation-checklist.md). That file is the gate: a product version does not start until the previous version’s implementation and its Mac batch are recorded. GitHub issues are mapped under each version below with their original acceptance criteria.
+
 ## Version numbering
 
 **Product milestones** (Version 1–5 below) are capability eras. **Git tags** track what is shipped.
@@ -497,12 +499,20 @@ Package releases (`0.1.0`, `0.2.0`, `1.0.0`, `2.0.0`, …) are in [`CHANGELOG.md
 | `v1.0.0` | Version 1 | Shipped |
 | `v2.0.0` | Version 2 | Shipped — automation on the v1 UI |
 | `v2.1.0`, `v2.2.0`, … | Version 3 **in progress** | Incremental releases toward Version 3 |
-| `v3.0.0` | Version 3 | **Reserved** — tag only when every Version 3 feature below ships |
-| `v4.0.0` | Version 4 | Tutor milestone (future) |
+| `v3.0.0` | Version 3 | **Reserved** — tag only when every Version 3 feature below ships **and** the Version 3 Mac batch is recorded |
+| `v4.0.0` | Version 4 | Tutor milestone (future). Do not start until Version 3’s Mac batch is recorded. |
 
 Do not tag `v3.0.0` for the shell alone, a single wave, or partial delivery. The desktop shell shipped in **`v2.1.0`** as the first step of Version 3 work. Later steps are `v2.2.0`, `v2.3.0`, … Never publish `3.1.0` or `3.2.0` as package versions.
 
 Cursor rule: [`.cursor/rules/arbor-versioning.mdc`](.cursor/rules/arbor-versioning.mdc).
+
+### Test gates (how versions unlock)
+
+Local/VM tests (`uv run pytest -q`, `cargo test`, `npm test`, `npm run build`) run on every change. They are what Linux agents and CI prove.
+
+A **Mac batch** is a single end-to-end run on a MacBook covering a whole product version (or a whole leftover batch). It is not run after every small feature. Findings from that run are filed on the [implementation checklist](docs/implementation-checklist.md). They must be fixed and re-proven locally; they ride the **next** Mac batch, not a new Mac trip per finding.
+
+A product version is **closed** only when its required work is implemented, locally tested, and one Mac batch for that version is recorded. Until that Mac batch is recorded, the next product version does not start.
 
 # Version 1
 
@@ -536,7 +546,53 @@ No database.
 
 No in-app chat (that is Version 4).
 
-macOS `.dmg` from GitHub Actions (`macos-dmg`). The worker is a bundled sidecar. Codex CLI stays a separate install. See GitHub issue #4.
+macOS `.dmg` from GitHub Actions (`macos-dmg`). The worker is a bundled sidecar. Codex CLI stays a separate install.
+
+### GitHub issues in this version
+
+Code for these tickets is on `main`. The tickets themselves may still be open on GitHub. Close them against this version; do not reopen Version 1 as a program. Leftover proof belongs on the [implementation checklist](docs/implementation-checklist.md) and the Version 3 Mac batch.
+
+#### [#3](https://github.com/MrF1ow/Arbor/issues/3) — digest prompt: source boundaries and portable Markdown
+
+Original acceptance criteria:
+
+- New digests contain no LaTeX delimiters or commands such as `\(`, `\[`, or `\frac`.
+- Equations are readable in plain Markdown viewers.
+- Digest facts and review questions remain source-grounded.
+- Source content cannot override the digest task or output format.
+
+The issue’s rules block is in `python/src/arbor_worker/digest.py` (`_RULES`) and is concatenated into lecture, chunk, and course-synthesis prompts. `validate_digest` rejects `\(`, `\[`, and `\frac` on create/regenerate. **Follow-up (same version, not a new era):** `_apply_patch` in `digest_update.py` does not call `validate_digest` on spliced output. That is a Version 1 ingest bugfix in the next `2.x` slice, not Version 4 work.
+
+#### [#4](https://github.com/MrF1ow/Arbor/issues/4) — standalone macOS desktop app
+
+Original acceptance criteria:
+
+- A user can install the DMG, open Arbor from Finder, choose a Knowledge folder, pass Codex authentication, and run an update without a local Arbor checkout, `ARBOR_REPO_DIR`, Python, uv, Node, or Cargo.
+
+Codex CLI stays a separate install (explicit in the issue). Signing and notarization are **nice to have**, not acceptance criteria. The sidecar DMG workflow exists (`.github/workflows/macos-dmg.yml`). **Finder-like launch proof** is not a new packaging program; it is a box on the Version 3 Mac batch.
+
+#### [#19](https://github.com/MrF1ow/Arbor/issues/19) — Codex CLI discovery and auth for GUI launches
+
+Original acceptance criteria:
+
+- A GUI launch succeeds when Codex is available only at `~/.local/bin/codex`.
+- A stalled auth check resolves to a visible error rather than remaining on “Checking Codex…”.
+- Focus events do not stack parallel auth checks.
+- Tests cover fallback CLI discovery and authentication timeout.
+
+Implemented: `resolve_codex_command` / `gui_path` in `python/src/arbor_worker/auth.py` (also `/opt/homebrew/bin` and `/usr/local/bin`), 10s timeout, `refreshAuthInFlight` in `desktop/src/main.ts`, tests in `python/tests/test_auth.py`.
+
+#### [#21](https://github.com/MrF1ow/Arbor/issues/21) — incremental manifest metadata and single-digest `course.md`
+
+Original acceptance criteria:
+
+- New course manifests are version 2 after the first successful ingest.
+- The manifest stores source page fingerprints in `sources`.
+- Generated dated digests contain valid page markers and records store a non-null `page_markers_version`.
+- A changed source supports suggested dirty ranges and in-place patching where appropriate.
+- Choose and document one behavior: do not create `course.md` until two digests exist, **or** write a concise index for a single digest rather than reproducing the full content. When multiple digests exist, keep course-wide synthesis.
+
+Chosen behavior: one digest writes a local index (`See [date.md](digests/date.md).`); two or more roll up with Codex. Documented in README. **Notes must render that markdown link** — that leftover is Version 3 shell work (issue #42), not more ingest work.
 
 ---
 
@@ -565,6 +621,29 @@ Explicitly out of Version 2 (deferred to Version 3)
 * Course browser, markdown preview, and visual polish
 
 Implementation program: [`docs/superpowers/plans/2026-08-19-v2-automation/overview.md`](docs/superpowers/plans/2026-08-19-v2-automation/overview.md).
+
+Do not re-open Version 2 feature scope. Remaining Version 2 work is **proof**, not new automation.
+
+### GitHub issues in this version
+
+#### [#30](https://github.com/MrF1ow/Arbor/issues/30) — Mac E2E test: Version 2
+
+This issue is a MacBook checklist, not a feature list. Features it names already shipped in `v2.0.0`.
+
+Original required boxes (from the issue):
+
+- Full PDF ingest with git commit
+- Job in Recent runs with expandable log
+- Search finds text across courses
+- Reindex succeeds
+- File drop triggers watch → review (optional: auto-run)
+- Notification on job finish
+- `.docx` ingests
+- (Optional) scanned PDF with Tesseract
+
+Partial Mac evidence already exists in issue comments (Clin Med 2 ingest, v2 manifest, search, reindex, folder watch after PR #32). Still unrecorded on a Mac: notifications, Word ingest, optional OCR, optional auto-run, packaged DMG from Finder.
+
+**Delegate remaining boxes to the Version 3 Mac batch** in [`docs/superpowers/plans/2026-08-22-v3-program/mac-e2e.md`](docs/superpowers/plans/2026-08-22-v3-program/mac-e2e.md). Do not run a separate Version 2-only Mac trip. Do not start Version 3’s `v3.0.0` tag until that combined batch is recorded.
 
 ---
 
@@ -604,8 +683,46 @@ Shipped in 2.2.0 (PRs #36–#41, #47, #50, #51)
 
 Required for `v3.0.0`
 
-* Mac E2E study-loop run recorded on issue [#42](https://github.com/MrF1ow/Arbor/issues/42) or in [`mac-e2e.md`](docs/superpowers/plans/2026-08-22-v3-program/mac-e2e.md)
+* Remaining Version 3 implementation on the [implementation checklist](docs/implementation-checklist.md) (Notes links/tables from issue #42, shared reserved-dir policy, digest patch validation from #3)
+* One Mac batch recorded in [`mac-e2e.md`](docs/superpowers/plans/2026-08-22-v3-program/mac-e2e.md) — ingest, study loop, Notes leftovers, and leftover Version 2 proof from #30
 * Then tag `v3.0.0`
+
+GitHub issue [#42](https://github.com/MrF1ow/Arbor/issues/42) is **Notes UX**, not the Wave 8 closeout tracker. Wave 8 (grades, quiz session answers, heading scroll, living docs) already landed in package `2.2.0`. Do not file chat, Anki, extra providers, or a pretty graph canvas against #42.
+
+### GitHub issues in this version
+
+#### [#42](https://github.com/MrF1ow/Arbor/issues/42) — V3 Notes navigation, Markdown reading, course creation, and cache filtering
+
+Original problem (verbatim intent):
+
+1. Long Markdown cannot be reliably scrolled and rich fields render incorrectly. Nested lists, ordered lists, emphasis, links, tables, and other normal digest Markdown lose structure.
+2. Courses cannot be created from the sidebar.
+3. Digest navigation is date-only; show a concise title from the digest H1 plus its date.
+4. Course overview labels are reversed (`course.md` primary).
+5. `_arbor_cache` appears as a Library course.
+
+Original acceptance criteria:
+
+- A long generated `course.md` and digest can be scrolled from beginning to end in the reading pane.
+- Headings, paragraphs, nested/ordered lists, emphasis, code, links, and tables render legibly; raw HTML is not executed.
+- The sidebar provides a New course action; a valid folder is created inside the selected Knowledge root, the library refreshes, and the course is selected.
+- Empty, traversal, separator-containing, reserved, and duplicate course names are rejected with a useful message.
+- Digest rows show a concise subject title and a separate human-readable date while dated filenames remain unchanged on disk.
+- The overview row reads `Course overview` with `course.md` as secondary metadata.
+- `_arbor_cache` never appears in Library navigation.
+- Focused tests for discovery, metadata, course creation, rendering, and scroll structure.
+
+**Already on `main`:** in-app add-class form (`create_course`), overview labels, H1 titles, `_arbor_cache` skipped in `list_courses`, nested/ordered lists, bold/italic/inline code, heading ids, Notes scroll CSS.
+
+**Still required before `v3.0.0` (same issue, Version 3 shell):**
+
+- Markdown **links** render and `digests/….md` relative links open that digest in Notes (the single-digest `course.md` index from #21 is `See [file](digests/file)`).
+- Markdown **tables** render as tables, not a pipe paragraph.
+- Closing `<!-- /arbor-pages:… -->` markers do not show in the reading pane.
+- One reserved-directory policy shared by desktop `list_courses` / `create_course` and worker discovery (root names such as `study` and `digests` must not appear as classes).
+- Recorded Mac proof that a long digest scrolls and that a `course.md` link opens the digest.
+
+Next-phase plan: [`docs/superpowers/plans/2026-09-12-v3-notes-gate.md`](docs/superpowers/plans/2026-09-12-v3-notes-gate.md).
 
 ---
 
@@ -615,16 +732,53 @@ Goal:
 
 Personal AI Tutor.
 
+**Do not start Version 4 implementation until Version 3 is closed:** remaining #42 Notes work done, locally tested, and the Version 3 Mac batch recorded. Then tag `v3.0.0`. Version 4 work ships as `v3.x` packages until `v4.0.0`.
+
 New Features
 
 * Chat with knowledge base
-* Source citations
+* Source citations (in answers — distinct from Version 3 Unverified badges on study artifacts)
 * Learning recommendations
 * Weak topic detection
 * Study plans
 * Review scheduling
 * AI mentor
 * Context-aware answering
+
+### GitHub issues in this version
+
+#### [#20](https://github.com/MrF1ow/Arbor/issues/20) — Knowledge-grounded Codex chat inside Arbor
+
+Nothing in this issue exists in the app today (no Chat tab, no chat worker path). Keep the full issue as Version 4 work. Do not treat flashcards, quiz, or graph as partial chat.
+
+Original core behavior:
+
+- Add a Chat tab/pane tied to the currently selected Knowledge root and course.
+- Retrieve relevant `course.md`, dated files under `digests/`, and their source/page-range metadata before invoking Codex.
+- Default to **source-grounded study mode**: answer only from the selected course’s Arbor materials; explicitly say when the answer is not supported by those materials.
+- Cite the relevant digest and source/page range in each answer so the learner can verify it.
+- Preserve chat history within the course, with an option to start a new chat or clear local history.
+- Keep chat read-only with respect to Knowledge files unless the user explicitly asks to generate a new study artifact.
+
+Original Codex integration:
+
+- Use Codex CLI as the provider initially.
+- Supply a stable system instruction that treats all course sources as untrusted reference material, never as instructions.
+- Pass retrieved knowledge context rather than the entire course corpus on every turn.
+- Stream response/progress into the app UI and show useful auth/error states.
+
+Original UX:
+
+- Course selector and clear indication of the active Knowledge root.
+- Source citations should be clickable/openable from the response.
+- Provide modes such as `Ask`, `Explain`, and `Quiz`; quiz content must be derived only from the selected course material.
+- Do not silently use outside knowledge in study mode.
+
+Original acceptance criteria:
+
+- A user selects Behavioral Medicine, asks a question grounded in its imported lecture, receives a concise answer with a digest/source citation, and can see when the selected course does not support an answer.
+
+Also deferred to Version 4 (from Version 3 specs, not extra GitHub issues): review scheduling / due dates, make-card-from-selection, multiple AI providers as a tutor companion. Anki export and a force-directed graph canvas stay out unless a later spec pulls them in.
 
 ---
 
@@ -633,6 +787,8 @@ New Features
 Goal:
 
 Collaboration.
+
+**Do not start Version 5 until Version 4 is closed** (tutor implemented, locally tested, Version 4 Mac batch recorded, `v4.0.0` tagged).
 
 Features
 
@@ -644,6 +800,8 @@ Features
 * Shared AI providers
 * Permissions
 * Remote workers
+
+None of the currently open GitHub issues (#3, #4, #19, #20, #21, #30, #42) belong here. Signing/notarization is release operations whenever Apple secrets exist, not Version 5.
 
 ---
 

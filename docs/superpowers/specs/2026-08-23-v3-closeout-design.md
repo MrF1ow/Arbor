@@ -1,10 +1,10 @@
-# Version 3 closeout (issue #42)
+# Version 3 closeout
 
 Date: 2026-08-23
 
 Status: design. Required before `v3.0.0`. Program: [`../plans/2026-08-22-v3-program/overview.md`](../plans/2026-08-22-v3-program/overview.md). Plan: [`../plans/2026-08-22-v3-program/wave-8-closeout.md`](../plans/2026-08-22-v3-program/wave-8-closeout.md).
 
-Tracking issue: [#42](https://github.com/MrF1ow/Arbor/issues/42)
+Tracking issue for **Notes UX leftovers:** [#42](https://github.com/MrF1ow/Arbor/issues/42). Wave 8 study-loop work (grades, quiz session, heading scroll) already landed in package `2.2.0`. Status ledger: [`../../implementation-checklist.md`](../../implementation-checklist.md). Do not treat #42 as the Mac E2E tracker; record Mac batches in [`../plans/2026-08-22-v3-program/mac-e2e.md`](../plans/2026-08-22-v3-program/mac-e2e.md).
 
 ## How this spec was written
 

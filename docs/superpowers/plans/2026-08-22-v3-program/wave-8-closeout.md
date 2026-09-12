@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript desktop (`desktop/src/*.ts`, `desktop/index.html`), node:test in `desktop/tests/*.mjs`, Tauri only if a command signature changes (it should not).
 
-**Issue:** [#42](https://github.com/MrF1ow/Arbor/issues/42). Spec: [`docs/superpowers/specs/2026-08-23-v3-closeout-design.md`](../../specs/2026-08-23-v3-closeout-design.md). Parent: [overview.md](overview.md).
+**Issue:** GitHub [#42](https://github.com/MrF1ow/Arbor/issues/42) is Notes UX (remaining work after this wave). This plan is the study-loop closeout. Spec: [`docs/superpowers/specs/2026-08-23-v3-closeout-design.md`](../../specs/2026-08-23-v3-closeout-design.md). Parent: [overview.md](overview.md). Ledger: [`docs/implementation-checklist.md`](../../../implementation-checklist.md).
 
 ## Global Constraints
 
