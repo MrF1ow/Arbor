@@ -6,8 +6,11 @@ Package version for the worker, desktop, and Tauri app. See [Version numbering](
 
 ## Unreleased
 
+- Digest markdown renders links and GitHub-flavored tables. A relative `digests/*.md` link opens that digest in the reading pane. The reading pane strips closing `arbor-pages` comments.
+- `study` and `digests` at the Knowledge root are reserved names. They are not listed as classes. Adding a class rejects those names.
+- An in-place digest patch validates each provider splice with `validate_digest`. Non-portable LaTeX (`\(`, `\[`, `\frac`) is rejected the same way as create and regenerate.
 - Add files no longer creates `lecture-2.pdf` when a lecture with that name is already in the class. Same name replaces the existing file so page alignment can run. A file already in the class is left in place. Numbered copies are only for two same-named files in one picker batch.
-- Living [implementation checklist](docs/implementation-checklist.md) tracks implemented vs locally tested vs Mac-batch tested. Product versions do not start until the previous version’s Mac batch is recorded. GitHub issues #3, #4, #19, #21, #30, #42, and #20 are mapped into `PROJECT.md` versions with their original acceptance criteria. Next engineering slice is [Version 3 Notes leftovers](docs/superpowers/plans/2026-09-12-v3-notes-gate.md) (links, tables, reserved dirs, patch validation), then one Mac batch.
+- Living [implementation checklist](docs/implementation-checklist.md) tracks implemented vs locally tested vs Mac-batch tested. Product versions do not start until the previous version’s Mac batch is recorded. GitHub issues #3, #4, #19, #21, #30, #42, and #20 are mapped into `PROJECT.md` versions with their original acceptance criteria. [Version 3 Notes leftovers](docs/superpowers/plans/2026-09-12-v3-notes-gate.md) (links, tables, reserved dirs, patch validation) are locally tested. The next step is one Mac batch.
 
 ## 2.2.0 — 2026-08-26
 
