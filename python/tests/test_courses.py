@@ -30,6 +30,8 @@ def test_ignores_root_files_cache_digests_and_dotdirs(tmp_path: Path, make_pdf):
     make_pdf(tmp_path / "_arbor_cache" / "abc" / "cached.pdf", pages=1)
     (tmp_path / ".arbor").mkdir()
     make_pdf(tmp_path / ".arbor" / "hidden.pdf", pages=1)
+    (tmp_path / "study").mkdir()
+    make_pdf(tmp_path / "study" / "artifact.pdf", pages=1)
     (tmp_path / "Biology" / "digests").mkdir(parents=True)
     make_pdf(tmp_path / "Biology" / "digests" / "old.pdf", pages=1)
     make_pdf(tmp_path / "Biology" / "real.pdf", pages=1)

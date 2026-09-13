@@ -74,3 +74,53 @@ test("extractDigestTitle reads the H1 and skips page markers", async () => {
   );
   assert.equal(extractDigestTitle("## Overview\nNo title here.\n"), null);
 });
+
+test("renders a markdown link and keeps the label", async () => {
+  const { renderMarkdown } = await subject();
+  const { html } = renderMarkdown("See [2026-08-22.md](digests/2026-08-22.md).\n");
+  assert.match(html, /<a [^>]*href="digests\/2026-08-22\.md"/);
+  assert.match(html, />2026-08-22\.md<\/a>/);
+  assert.doesNotMatch(html, /\[2026-08-22\.md\]/);
+});
+
+test("rejects javascript hrefs", async () => {
+  const { renderMarkdown } = await subject();
+  const { html } = renderMarkdown("[x](javascript:alert(1))\n");
+  assert.doesNotMatch(html, /<a /);
+  assert.match(html, /x/);
+});
+
+test("arborDigestTarget returns a digest path or null", async () => {
+  const { arborDigestTarget } = await subject();
+
+  assert.equal(arborDigestTarget("digests/2026-08-22.md"), "digests/2026-08-22.md");
+  assert.equal(arborDigestTarget("./digests/2026-08-22.md"), "digests/2026-08-22.md");
+  assert.equal(arborDigestTarget("digests/2026-08-22.md#cells"), "digests/2026-08-22.md");
+  assert.equal(arborDigestTarget("https://example.com"), null);
+  assert.equal(arborDigestTarget("#overview"), null);
+  assert.equal(arborDigestTarget("javascript:alert(1)"), null);
+  assert.equal(arborDigestTarget("data:text/html,hi"), null);
+  assert.equal(arborDigestTarget("../secret.md"), null);
+  assert.equal(arborDigestTarget("notes/other.md"), null);
+});
+
+test("strips opening and closing arbor-pages markers", async () => {
+  const { renderMarkdown } = await subject();
+  const { html, pageChip } = renderMarkdown(
+    "<!-- arbor-pages:1-4 -->\n# Title\n## Overview\nNotes.\n<!-- /arbor-pages:1-4 -->\n",
+  );
+  assert.equal(pageChip, "1–4");
+  assert.doesNotMatch(html, /arbor-pages/);
+  assert.doesNotMatch(html, /&lt;!--/);
+});
+
+test("renders a GFM table", async () => {
+  const { renderMarkdown } = await subject();
+  const { html } = renderMarkdown(
+    "| Drug | Use |\n| --- | --- |\n| Atenolol | Beta blocker |\n",
+  );
+  assert.match(html, /<table>/);
+  assert.match(html, /<th>Drug<\/th>/);
+  assert.match(html, /<td>Atenolol<\/td>/);
+  assert.doesNotMatch(html, /<p>\| Drug/);
+});

@@ -109,7 +109,7 @@ fn run_watcher(app: AppHandle, state: Arc<WatchState>, root: PathBuf, generation
                     EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_)
                 ) {
                     for path in event.paths {
-                        if should_watch(&path) {
+                        if should_watch(&root, &path) {
                             state.note_change(generation, path);
                         }
                     }
@@ -128,9 +128,15 @@ fn run_watcher(app: AppHandle, state: Arc<WatchState>, root: PathBuf, generation
     }
 }
 
-fn should_watch(path: &Path) -> bool {
-    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-    if name.starts_with('.') || name.eq_ignore_ascii_case("_arbor_cache") {
+fn should_watch(root: &Path, path: &Path) -> bool {
+    let Ok(relative_path) = path.strip_prefix(root) else {
+        return false;
+    };
+    if relative_path
+        .iter()
+        .filter_map(|component| component.to_str())
+        .any(crate::commands::is_reserved_course_name)
+    {
         return false;
     }
     let ext = path
@@ -139,4 +145,19 @@ fn should_watch(path: &Path) -> bool {
         .unwrap_or("")
         .to_lowercase();
     matches!(ext.as_str(), "pdf" | "pptx" | "docx" | "md")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::should_watch;
+    use std::path::Path;
+
+    #[test]
+    fn should_watch_scopes_reserved_names_to_the_knowledge_root() {
+        let root = Path::new("/tmp/.hidden-knowledge");
+
+        assert!(!should_watch(root, &root.join("study/foo.pdf")));
+        assert!(should_watch(root, &root.join("Biology/lecture.pdf")));
+        assert!(!should_watch(root, &root.join("Biology/digests/x.md")));
+    }
 }

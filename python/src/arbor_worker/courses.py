@@ -5,7 +5,7 @@ from pathlib import Path
 
 from arbor_worker.sources import classify
 
-IGNORED_DIR_NAMES = {".git", ".arbor"}
+IGNORED_DIR_NAMES = {".git", ".arbor", "study", "digests"}
 
 
 @dataclass(frozen=True)

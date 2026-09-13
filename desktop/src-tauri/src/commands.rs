@@ -135,10 +135,16 @@ fn markdown_title(text: &str) -> Option<String> {
     None
 }
 
-const CACHE_DIR_NAME: &str = "_arbor_cache";
+pub(crate) fn is_reserved_course_name(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    lower == "_arbor_cache"
+        || lower == "study"
+        || lower == "digests"
+        || name.starts_with('.')
+}
 
 fn is_course_dir_name(name: &str) -> bool {
-    !name.is_empty() && !name.starts_with('.') && !name.eq_ignore_ascii_case(CACHE_DIR_NAME)
+    !name.is_empty() && !is_reserved_course_name(name)
 }
 
 fn date_from_stem(stem: &str) -> String {
@@ -723,6 +729,8 @@ mod tests {
         }
         fs::create_dir(root.join(".arbor")).unwrap();
         fs::create_dir(root.join(".git")).unwrap();
+        fs::create_dir(root.join("study")).unwrap();
+        fs::create_dir(root.join("digests")).unwrap();
         fs::write(root.join("notes.md"), b"# not a course\n").unwrap();
 
         let listed = list_courses(root.to_string_lossy().into_owned()).unwrap();
@@ -740,6 +748,8 @@ mod tests {
         assert!(create_course(root.to_string_lossy().into_owned(), "../x".into()).is_err());
         assert!(create_course(root.to_string_lossy().into_owned(), "_arbor_cache".into()).is_err());
         assert!(create_course(root.to_string_lossy().into_owned(), "_ARBOR_CACHE".into()).is_err());
+        assert!(create_course(root.to_string_lossy().into_owned(), "study".into()).is_err());
+        assert!(create_course(root.to_string_lossy().into_owned(), "digests".into()).is_err());
     }
 
     #[test]
