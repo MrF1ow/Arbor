@@ -6,7 +6,14 @@ test("library chrome exposes add class, add files, and settings appearance", asy
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const css = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
 
-  for (const id of ["add-course", "add-course-form", "add-course-name", "add-files", "appearance"]) {
+  for (const id of [
+    "add-course",
+    "add-course-form",
+    "add-course-name",
+    "add-course-error",
+    "add-files",
+    "appearance",
+  ]) {
     assert.match(html, new RegExp(`id="${id}"`), `missing #${id}`);
   }
 

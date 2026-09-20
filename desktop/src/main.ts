@@ -111,6 +111,7 @@ const readingArticleEl = $("reading-article");
 const addCourseBtn = $("add-course") as HTMLButtonElement;
 const addCourseForm = $("add-course-form") as HTMLFormElement;
 const addCourseNameEl = $("add-course-name") as HTMLInputElement;
+const addCourseErrorEl = $("add-course-error");
 const addFilesBtn = $("add-files") as HTMLButtonElement;
 const appearanceSel = $("appearance") as HTMLSelectElement;
 const flashcardsCopyEl = $("flashcards-copy");
@@ -1269,14 +1270,15 @@ async function createCourseFromForm() {
   }
   try {
     const course = await invoke<string>("create_course", { root: knowledgeRoot, name });
+    addCourseErrorEl.textContent = "";
+    addCourseErrorEl.hidden = true;
     addCourseForm.hidden = true;
     addCourseNameEl.value = "";
     await renderCourseList();
     setCourseView(course, "notes");
   } catch (error) {
-    addCourseNameEl.setCustomValidity(String(error));
-    addCourseNameEl.reportValidity();
-    addCourseNameEl.setCustomValidity("");
+    addCourseErrorEl.textContent = String(error);
+    addCourseErrorEl.hidden = false;
   }
 }
 
@@ -1330,6 +1332,8 @@ addCourseBtn.addEventListener("click", () => {
   addCourseForm.hidden = !addCourseForm.hidden;
   if (!addCourseForm.hidden) {
     addCourseNameEl.value = "";
+    addCourseErrorEl.textContent = "";
+    addCourseErrorEl.hidden = true;
     addCourseNameEl.focus();
   }
 });
@@ -1337,6 +1341,11 @@ addCourseBtn.addEventListener("click", () => {
 addCourseForm.addEventListener("submit", (event) => {
   event.preventDefault();
   void createCourseFromForm();
+});
+
+addCourseNameEl.addEventListener("input", () => {
+  addCourseErrorEl.textContent = "";
+  addCourseErrorEl.hidden = true;
 });
 
 addCourseNameEl.addEventListener("keydown", (event) => {
