@@ -11,7 +11,7 @@ Living tracker for **implemented / locally tested / Mac-batch tested**. Capabili
 
 **Current era:** Version 3. **Next version (Version 4) is blocked** until the Version 3 Mac batch is recorded.
 
-**Current package:** `2.2.0` (untagged; latest GitHub Release is `v2.1.0`).
+**Current package:** `2.2.0` (tagged `v2.2.0`). **`v3.0.0` is not tagged.** The 2026-09-20 Mac batch recorded failures in the Blockers table. It does not close Version 3.
 
 | Marker | Meaning |
 |--------|---------|
@@ -119,9 +119,9 @@ Record date, macOS version, and commit or DMG in [mac-e2e.md](superpowers/plans/
 | Finder DMG launch (no repo / `uv`) | [ ] |
 | Optional auto-run / OCR | [ ] if available |
 
-**Mac batch recorded:** _not yet_
+**Mac batch recorded:** 2026-09-20 partial (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)). Failures block `v3.0.0`. Do not tag until a later run is clean.
 
-After this table is filled, tag `v2.2.0` if not already tagged, then tag **`v3.0.0`**. Only then may Version 4 start.
+After this table is filled from a clean Mac run, tag **`v3.0.0`**. Only then may Version 4 start. `v2.2.0` is already tagged.
 
 ---
 
@@ -157,7 +157,10 @@ Add a row when a Mac batch finds a failure. Status starts as implemented-no / lo
 
 | Date | Version | Finding | Implemented | Local/VM | Next Mac batch |
 |------|---------|---------|-------------|----------|----------------|
-| _none yet_ | | | | | |
+| 2026-09-20 | 3 / `2.2.0` | [#57](https://github.com/MrF1ow/Arbor/issues/57) Concepts job fails: `unknown concept edge` when the model uses node labels. Graph is blocked. | [ ] | [ ] | [ ] |
+| 2026-09-20 | 3 / `2.2.0` | [#57](https://github.com/MrF1ow/Arbor/issues/57) Check citations marks honest flashcards Unverified (`**copperleaf**` vs `Copperleaf.`). | [ ] | [ ] | [ ] |
+| 2026-09-20 | 3 / `2.2.0` | [#57](https://github.com/MrF1ow/Arbor/issues/57) Create Class rejects reserved names such as `study` with no visible error. | [ ] | [ ] | [ ] |
+| 2026-09-20 | 3 / `2.2.0` | [#57](https://github.com/MrF1ow/Arbor/issues/57) Quiz shows per-question correctness only. No session score such as `4 / 6 correct`. Improvement, not a failure. | [ ] | [ ] | [ ] |
 
 ---
 
