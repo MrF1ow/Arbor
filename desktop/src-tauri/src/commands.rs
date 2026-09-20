@@ -220,10 +220,15 @@ fn dest_file_name(path: &Path) -> Result<String, String> {
 #[tauri::command]
 pub fn create_course(root: String, name: String) -> Result<String, String> {
     let name = name.trim();
-    if !is_course_dir_name(name) {
-        return Err("Invalid course name".into());
+    if name.is_empty() {
+        return Err("Class name cannot be empty".into());
     }
     validate_path_component(name, "course name")?;
+    if is_reserved_course_name(name) {
+        return Err(format!(
+            "\"{name}\" is reserved. Choose a different class name."
+        ));
+    }
     let path = Path::new(&root).join(name);
     if path.exists() {
         return Err(format!("A class named {name} already exists"));
@@ -738,18 +743,32 @@ mod tests {
     }
 
     #[test]
-    fn create_course_makes_a_folder_and_rejects_duplicates() {
+    fn create_course_makes_a_folder_and_rejects_invalid_names() {
         let root = temp_root("create-course");
+        let root_string = root.to_string_lossy().into_owned();
         let name =
-            create_course(root.to_string_lossy().into_owned(), " Organic Chem ".into()).unwrap();
+            create_course(root_string.clone(), " Organic Chem ".into()).unwrap();
         assert_eq!(name, "Organic Chem");
         assert!(root.join("Organic Chem").is_dir());
-        assert!(create_course(root.to_string_lossy().into_owned(), "Organic Chem".into()).is_err());
-        assert!(create_course(root.to_string_lossy().into_owned(), "../x".into()).is_err());
-        assert!(create_course(root.to_string_lossy().into_owned(), "_arbor_cache".into()).is_err());
-        assert!(create_course(root.to_string_lossy().into_owned(), "_ARBOR_CACHE".into()).is_err());
-        assert!(create_course(root.to_string_lossy().into_owned(), "study".into()).is_err());
-        assert!(create_course(root.to_string_lossy().into_owned(), "digests".into()).is_err());
+
+        assert_eq!(
+            create_course(root_string.clone(), "Organic Chem".into()).unwrap_err(),
+            "A class named Organic Chem already exists"
+        );
+        assert_eq!(
+            create_course(root_string.clone(), "../x".into()).unwrap_err(),
+            "Invalid course name"
+        );
+        assert_eq!(
+            create_course(root_string.clone(), " ".into()).unwrap_err(),
+            "Class name cannot be empty"
+        );
+
+        for reserved in ["study", "digests", "_arbor_cache", "_ARBOR_CACHE", ".private"] {
+            let error = create_course(root_string.clone(), reserved.into()).unwrap_err();
+            assert!(error.contains("reserved"), "{error}");
+            assert!(error.contains(reserved), "{error}");
+        }
     }
 
     #[test]

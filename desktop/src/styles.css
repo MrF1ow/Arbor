@@ -190,6 +190,14 @@ html, body {
   color: var(--ink);
 }
 
+.add-course-error {
+  margin-top: 6px;
+  color: var(--danger);
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 .nav-item {
   display: flex;
   align-items: center;

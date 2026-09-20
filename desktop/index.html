@@ -22,7 +22,8 @@
                 <button type="button" class="icon-btn" id="add-course" title="Add class" aria-label="Add class" disabled>+</button>
               </div>
               <form id="add-course-form" class="add-course-form" hidden>
-                <input id="add-course-name" type="text" maxlength="80" placeholder="Class name" autocomplete="off" />
+                <input id="add-course-name" type="text" maxlength="80" placeholder="Class name" autocomplete="off" aria-describedby="add-course-error" />
+                <p id="add-course-error" class="add-course-error" role="alert" hidden></p>
               </form>
               <div id="course-list"></div>
             </div>
