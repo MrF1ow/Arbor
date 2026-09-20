@@ -7,6 +7,7 @@ Package version for the worker, desktop, and Tauri app. See [Version numbering](
 ## Unreleased
 
 - Concepts validation resolves edge labels and slugs to assigned node ids. Ambiguous labels fail instead of selecting either node. This fixes the Graph blocker from issue [#57](https://github.com/MrF1ow/Arbor/issues/57).
+- Citation matching strips Markdown emphasis and punctuation before checking claims and headings, so formatted digest words match sentence-style study text ([#57](https://github.com/MrF1ow/Arbor/issues/57)).
 - Digest markdown renders links and GitHub-flavored tables. A relative `digests/*.md` link opens that digest in the reading pane. The reading pane strips closing `arbor-pages` comments.
 - `study` and `digests` at the Knowledge root are reserved names. They are not listed as classes. Adding a class rejects those names.
 - An in-place digest patch validates each provider splice with `validate_digest`. Non-portable LaTeX (`\(`, `\[`, `\frac`) is rejected the same way as create and regenerate.

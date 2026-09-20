@@ -158,7 +158,7 @@ Add a row when a Mac batch finds a failure. Status starts as implemented-no / lo
 | Date | Version | Finding | Implemented | Local/VM | Next Mac batch |
 |------|---------|---------|-------------|----------|----------------|
 | 2026-09-20 | 3 / `2.2.0` | [#57](https://github.com/MrF1ow/Arbor/issues/57) Concepts job fails: `unknown concept edge` when the model uses node labels. Graph is blocked. | [x] | [x] | [ ] |
-| 2026-09-20 | 3 / `2.2.0` | [#57](https://github.com/MrF1ow/Arbor/issues/57) Check citations marks honest flashcards Unverified (`**copperleaf**` vs `Copperleaf.`). | [ ] | [ ] | [ ] |
+| 2026-09-20 | 3 / `2.2.0` | [#57](https://github.com/MrF1ow/Arbor/issues/57) Check citations marks honest flashcards Unverified (`**copperleaf**` vs `Copperleaf.`). | [x] | [x] | [ ] |
 | 2026-09-20 | 3 / `2.2.0` | [#57](https://github.com/MrF1ow/Arbor/issues/57) Create Class rejects reserved names such as `study` with no visible error. | [ ] | [ ] | [ ] |
 | 2026-09-20 | 3 / `2.2.0` | [#57](https://github.com/MrF1ow/Arbor/issues/57) Quiz shows per-question correctness only. No session score such as `4 / 6 correct`. Improvement, not a failure. | [ ] | [ ] | [ ] |
 

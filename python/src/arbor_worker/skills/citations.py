@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from string import punctuation
 
 from arbor_worker.schemas.study.citations import CitationFailure, CitationsReport
 from arbor_worker.schemas.study.concepts import ConceptGraph
@@ -9,7 +10,9 @@ from arbor_worker.schemas.study.quiz import QuizPack
 
 
 def normalize_claim(text: str) -> str:
-    return " ".join(text.lower().split())
+    return " ".join(
+        text.lower().translate(str.maketrans({mark: " " for mark in punctuation})).split()
+    )
 
 
 def digest_body(course_dir: Path, digest: str) -> str | None:

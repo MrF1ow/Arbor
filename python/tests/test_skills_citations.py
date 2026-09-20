@@ -7,7 +7,7 @@ from pathlib import Path
 
 from arbor_worker import cli
 from arbor_worker.events import parse_lines
-from arbor_worker.skills.citations import CitationsSkill, claim_in_digest
+from arbor_worker.skills.citations import CitationsSkill, claim_in_digest, heading_in_digest
 
 
 def _write_digest(root: Path, text: str = "# Cells\n\nCells divide.\n") -> None:
@@ -45,6 +45,17 @@ def _run_generate(root: Path, *extra: str) -> tuple[int, list[dict]]:
 def test_matching_claim_passes_invented_claim_fails():
     assert claim_in_digest("Cells divide.", "# Cells\n\nCells divide.\n")
     assert not claim_in_digest("Unicorns photosynthesize.", "# Cells\n\nCells divide.\n")
+
+
+def test_matching_claim_strips_markdown_and_punctuation():
+    body = "The dye is **copperleaf**."
+
+    assert claim_in_digest("Copperleaf.", body)
+    assert not claim_in_digest("Unicorns photosynthesize.", body)
+
+
+def test_matching_heading_strips_markdown():
+    assert heading_in_digest("Copperleaf", "## **Copperleaf**")
 
 
 def test_generate_flags_bogus_card_only(git_repo: Path):
