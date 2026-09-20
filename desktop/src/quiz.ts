@@ -133,6 +133,16 @@ export function currentQuestion(review: QuizReview): QuizQuestion {
   return review.questions[review.index];
 }
 
+export function sessionScore(review: QuizReview): { correct: number; total: number } {
+  let correct = 0;
+  for (const question of review.questions) {
+    if (review.answers[question.id] === question.answer_index) {
+      correct += 1;
+    }
+  }
+  return { correct, total: review.questions.length };
+}
+
 export function selectChoice(review: QuizReview, choiceIndex: number): QuizReview {
   if (review.submitted) return review;
   return { ...review, selected: choiceIndex };

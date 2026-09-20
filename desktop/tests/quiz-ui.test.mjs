@@ -12,6 +12,7 @@ test("quiz panel exposes generation, pack controls, and settings", async () => {
     "quiz-stale",
     "refresh-quiz",
     "quiz-count",
+    "quiz-score",
     "quiz-prompt",
     "quiz-choice-0",
     "quiz-choice-1",

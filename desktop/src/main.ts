@@ -25,6 +25,7 @@ import {
   previousReview as previousQuizReview,
   quizJobArgs,
   selectChoice,
+  sessionScore,
   shouldAutoGenerateQuiz,
   submitChoice,
 } from "./quiz";
@@ -139,6 +140,7 @@ const generateQuizBtn = $("generate-quiz") as HTMLButtonElement;
 const refreshQuizBtn = $("refresh-quiz") as HTMLButtonElement;
 const quizStaleEl = $("quiz-stale");
 const quizCountEl = $("quiz-count");
+const quizScoreEl = $("quiz-score");
 const quizPromptEl = $("quiz-prompt");
 const quizChoiceBtns = [0, 1, 2, 3].map(
   (index) => $(`quiz-choice-${index}`) as HTMLButtonElement,
@@ -557,6 +559,8 @@ function renderCurrentQuiz() {
   if (!quizReview) return;
   const question = currentQuestion(quizReview);
   quizCountEl.textContent = `${quizReview.index + 1} of ${quizReview.questions.length}`;
+  const score = sessionScore(quizReview);
+  quizScoreEl.textContent = `${score.correct} / ${score.total} correct`;
   quizPromptEl.textContent = question.prompt;
   quizChoiceBtns.forEach((button, index) => {
     button.textContent = question.choices[index];

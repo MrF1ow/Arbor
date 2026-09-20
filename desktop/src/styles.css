@@ -851,6 +851,10 @@ html, body {
   font-size: 13px;
 }
 
+#quiz-score {
+  margin-inline-start: 12px;
+}
+
 .quiz-card {
   width: min(680px, 100%);
   padding: 40px;
