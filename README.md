@@ -2,7 +2,7 @@
 
 Local-first desktop app that turns course PDFs, PowerPoints, and Word files into structured study digests using the [Codex CLI](https://developers.openai.com/codex/cli). Your Knowledge library is a normal git repo on disk. Sources and generated notes stay together in history.
 
-**Current release:** [2.2.0](CHANGELOG.md) (package `2.2.0`). Worker, desktop, and Tauri all report this number (`arbor-worker --version`). The operator tags `v2.2.0` after this lands.
+**Current release:** [2.2.0](CHANGELOG.md) (package `2.2.0`, tag `v2.2.0`). Worker, desktop, and Tauri all report this number (`arbor-worker --version`). **`v3.0.0` waits** for a later clean Mac E2E run. The 2026-09-20 batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) does not close Version 3.
 
 **Version 2** (`v2.0.0`) shipped automation on the old UI. **Version 3** is in progress. `v2.1.0` added the desktop shell. `2.2.0` adds the study loop. **`v3.0.0` is reserved** until the Version 3 Mac batch is recorded on the [implementation checklist](docs/implementation-checklist.md). See [Version numbering](PROJECT.md#version-numbering).
 
