@@ -11,7 +11,7 @@ Living tracker for **implemented / locally tested / Mac-batch tested**. Capabili
 
 **Current era:** Version 3. **Next version (Version 4) is blocked** until the Version 3 Mac batch is recorded.
 
-**Current package:** `2.2.0` (tagged `v2.2.0`). **`v3.0.0` is not tagged.** The 2026-09-20 Mac batch recorded failures in the Blockers table. It does not close Version 3.
+**Current package:** `2.3.0` (latest tag `v2.2.0`). **`v3.0.0` is not tagged.** The 2026-09-20 Mac batch recorded failures in the Blockers table. It does not close Version 3.
 
 | Marker | Meaning |
 |--------|---------|
@@ -77,7 +77,7 @@ Shipped `v2.0.0`. Do not add features here. Leftover proof rides the Version 3 M
 
 ## Version 3 — study app (current)
 
-Package `2.2.0` on `main`. **`v3.0.0` blocked** on remaining rows + Mac batch.
+Package `2.3.0` on `main`. **`v3.0.0` blocked** on remaining rows + Mac batch.
 
 ### Shipped (do not re-do)
 
@@ -157,7 +157,7 @@ Add a row when a Mac batch finds a failure. Status starts as implemented-no / lo
 
 | Date | Version | Finding | Implemented | Local/VM | Next Mac batch |
 |------|---------|---------|-------------|----------|----------------|
-| 2026-09-20 | 3 / `2.2.0` | [#57](https://github.com/MrF1ow/Arbor/issues/57) Concepts job fails: `unknown concept edge` when the model uses node labels. Graph is blocked. | [ ] | [ ] | [ ] |
+| 2026-09-20 | 3 / `2.2.0` | [#57](https://github.com/MrF1ow/Arbor/issues/57) Concepts job fails: `unknown concept edge` when the model uses node labels. Graph is blocked. | [x] | [x] | [ ] |
 | 2026-09-20 | 3 / `2.2.0` | [#57](https://github.com/MrF1ow/Arbor/issues/57) Check citations marks honest flashcards Unverified (`**copperleaf**` vs `Copperleaf.`). | [ ] | [ ] | [ ] |
 | 2026-09-20 | 3 / `2.2.0` | [#57](https://github.com/MrF1ow/Arbor/issues/57) Create Class rejects reserved names such as `study` with no visible error. | [ ] | [ ] | [ ] |
 | 2026-09-20 | 3 / `2.2.0` | [#57](https://github.com/MrF1ow/Arbor/issues/57) Quiz shows per-question correctness only. No session score such as `4 / 6 correct`. Improvement, not a failure. | [ ] | [ ] | [ ] |
