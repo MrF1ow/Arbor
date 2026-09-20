@@ -59,7 +59,7 @@ class ConceptsSkill:
             f'{course}","nodes":[{{"name":"Glycolysis","summary":'
             '"Cytoplasmic breakdown of glucose to pyruvate.",'
             '"sources":[{{"digest":"digests/2026-08-15.md","heading":"Glycolysis"}}]}}],'
-            '"edges":[{{"from":"glycolysis","to":"pyruvate","relation":"produces",'
+            '"edges":[{{"from":"Glycolysis","to":"Pyruvate","relation":"produces",'
             '"sources":[{{"digest":"digests/2026-08-15.md","heading":"Glycolysis"}}]}}]}\n\n'
             f"Course digests:\n\n{digest_text}"
         )
@@ -67,12 +67,14 @@ class ConceptsSkill:
     def validate(self, payload: dict) -> ConceptGraph:
         graph = ConceptGraph.model_validate(payload)
         merged_nodes: dict[str, ConceptNode] = {}
-        id_map: dict[str, str] = {}
+        id_map: dict[str, set[str]] = {}
+        name_map: dict[str, set[str]] = {}
         for node in graph.nodes:
             node_id = assigned_node_id(node)
             if node.id:
-                id_map[node.id] = node_id
-            id_map[node_id] = node_id
+                id_map.setdefault(node.id, set()).add(node_id)
+            id_map.setdefault(node_id, set()).add(node_id)
+            name_map.setdefault(node.name.strip().casefold(), set()).add(node_id)
             assigned = node.model_copy(update={"id": node_id})
             existing = merged_nodes.get(node_id)
             if existing is None:
@@ -82,10 +84,21 @@ class ConceptsSkill:
                 update={"sources": merge_sources(existing.sources, assigned.sources)}
             )
         known = set(merged_nodes)
+
+        def resolve_endpoint(raw: str) -> str:
+            candidates = set(id_map.get(raw, ()))
+            slug = concept_id(raw)
+            if slug in known:
+                candidates.add(slug)
+            candidates.update(name_map.get(raw.strip().casefold(), ()))
+            if len(candidates) > 1:
+                raise ValueError(f"ambiguous concept edge endpoint: {raw}")
+            return next(iter(candidates), raw)
+
         merged_edges: dict[tuple[str, str, str], ConceptEdge] = {}
         for edge in graph.edges:
-            from_id = id_map.get(edge.from_, edge.from_)
-            to_id = id_map.get(edge.to, edge.to)
+            from_id = resolve_endpoint(edge.from_)
+            to_id = resolve_endpoint(edge.to)
             if from_id not in known or to_id not in known:
                 raise ValueError(f"unknown concept edge: {from_id} -> {to_id}")
             if from_id == to_id:

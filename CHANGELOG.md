@@ -2,10 +2,11 @@
 
 Package version for the worker, desktop, and Tauri app. See [Version numbering](PROJECT.md#version-numbering) in `PROJECT.md`.
 
-**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is in progress; incremental releases use `v2.1.0`, `v2.2.0`, … until `v3.0.0` when the full v3 milestone ships. **Current package:** `2.2.0`. **Current tag:** `v2.2.0`. **`v3.0.0` waits** for a later clean Mac E2E run. The 2026-09-20 batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) recorded failures and does not close Version 3.
+**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is in progress; incremental releases use `v2.1.0`, `v2.2.0`, … until `v3.0.0` when the full v3 milestone ships. **Current package:** `2.3.0`. **Current tag:** `v2.2.0`. **`v3.0.0` waits** for a later clean Mac E2E run. The 2026-09-20 batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) recorded failures and does not close Version 3.
 
 ## Unreleased
 
+- Concepts validation resolves edge labels and slugs to assigned node ids. Ambiguous labels fail instead of selecting either node. This fixes the Graph blocker from issue [#57](https://github.com/MrF1ow/Arbor/issues/57).
 - Digest markdown renders links and GitHub-flavored tables. A relative `digests/*.md` link opens that digest in the reading pane. The reading pane strips closing `arbor-pages` comments.
 - `study` and `digests` at the Knowledge root are reserved names. They are not listed as classes. Adding a class rejects those names.
 - An in-place digest patch validates each provider splice with `validate_digest`. Non-portable LaTeX (`\(`, `\[`, `\frac`) is rejected the same way as create and regenerate.

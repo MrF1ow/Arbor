@@ -167,21 +167,64 @@ def test_validate_rejects_invalid_graphs(payload: dict):
         _skill().validate(payload)
 
 
-def test_validate_rejects_unknown_and_self_edges():
-    skill = _skill()
+def test_validate_resolves_edge_labels_to_assigned_ids():
+    graph = _skill().validate(
+        _graph(
+            _node("Synthetic handout"),
+            _node("Arbor Mac end-to-end workflow"),
+            edges=[
+                _edge(
+                    "Synthetic handout",
+                    "Arbor Mac end-to-end workflow",
+                )
+            ],
+        )
+    )
 
+    assert graph.edges[0].from_ == "synthetic-handout"
+    assert graph.edges[0].to == "arbor-mac-end-to-end-workflow"
+
+
+def test_validate_keeps_slug_edge_endpoints():
+    graph = _skill().validate(
+        _graph(
+            _node("Glycolysis"),
+            _node("Pyruvate"),
+            edges=[_edge("glycolysis", "pyruvate")],
+        )
+    )
+
+    assert graph.edges[0].from_ == "glycolysis"
+    assert graph.edges[0].to == "pyruvate"
+
+
+def test_validate_rejects_unknown_edge_endpoint():
     with pytest.raises(ValueError, match="unknown"):
-        skill.validate(
+        _skill().validate(
             _graph(
                 _node("Glycolysis"),
                 edges=[_edge("glycolysis", "missing")],
             )
         )
+
+
+def test_validate_rejects_self_edge():
     with pytest.raises(ValueError, match="self"):
-        skill.validate(
+        _skill().validate(
             _graph(
                 _node("Glycolysis"),
                 edges=[_edge("glycolysis", "glycolysis")],
+            )
+        )
+
+
+def test_validate_rejects_ambiguous_edge_endpoint_alias():
+    with pytest.raises(ValueError, match="ambiguous concept edge endpoint: Beta"):
+        _skill().validate(
+            _graph(
+                _node("Alpha", node_id="Beta"),
+                _node("Beta"),
+                edges=[_edge("Beta", "alpha")],
             )
         )
 
