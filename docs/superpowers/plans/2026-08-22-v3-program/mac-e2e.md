@@ -55,13 +55,23 @@ Run on a Mac with Codex CLI authenticated. Use a throwaway Knowledge git repo an
 
 ## Record
 
-When done, fill this in **here** and on `docs/implementation-checklist.md`. Then the operator may tag `v2.2.0` (if needed) and `v3.0.0`. Version 4 must not start before that tag.
+When done, fill this in **here** and on `docs/implementation-checklist.md`. Then the operator may tag `v3.0.0`. `v2.2.0` is already tagged. Version 4 must not start before `v3.0.0`.
 
-- Date:
-- macOS version:
-- Apple Silicon / Intel:
-- Arbor build (commit or DMG tag):
-- Failures (copy each onto the checklist Blockers table):
+### 2026-09-20 (partial, issue [#57](https://github.com/MrF1ow/Arbor/issues/57))
+
+This run does **not** close Version 3. Do not tag `v3.0.0` from it.
+
+- Date: 2026-09-20
+- macOS version: not recorded in #57
+- Apple Silicon / Intel: not recorded in #57
+- Arbor build: package `2.2.0` / `main` after #56 (`v2.2.0`)
+- Failures (copied onto the checklist Blockers table):
+  - Concepts: `unknown concept edge: Synthetic handout -> Arbor Mac end-to-end workflow`. Graph blocked.
+  - Citations: honest flashcards Unverified (`**copperleaf**` vs `Copperleaf.`).
+  - Create Class: reserved name `study` rejected with no visible error.
+  - Quiz session score (`N / M correct`) missing. Requested improvement, not a failure.
+- Passes recorded in #57 (ingest, watch, Notes link/scroll/markers, lexical and semantic search, flashcards, quiz no double-count, settings persist, DOCX). Leave the boxes above unchecked until a later run re-confirms after the blocker fixes.
+- Untested in #57: GFM table in a generated digest, Recent Runs / JSONL, second Update rejection, macOS notification, Finder DMG, optional auto-update and OCR.
 
 ## Static / runtime
 
