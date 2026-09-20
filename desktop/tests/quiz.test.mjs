@@ -154,6 +154,19 @@ test("moves through questions and submits a choice", async () => {
   assert.equal(previousReview(review).index, 1);
 });
 
+test("sessionScore counts matching answers in this session", async () => {
+  const { createReview, nextReview, sessionScore, submitChoice } = await subject();
+  const review = createReview(pack);
+
+  assert.deepEqual(sessionScore(review), { correct: 0, total: 2 });
+
+  const first = submitChoice(review, 1, {});
+  assert.deepEqual(sessionScore(first.review), { correct: 1, total: 2 });
+
+  const second = submitChoice(nextReview(first.review), 0, first.progress);
+  assert.deepEqual(sessionScore(second.review), { correct: 1, total: 2 });
+});
+
 test("submit scores a question once per session even after next and previous", async () => {
   const {
     createReview,

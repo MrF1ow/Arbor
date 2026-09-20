@@ -9,6 +9,7 @@ Package version for the worker, desktop, and Tauri app. See [Version numbering](
 - Concepts validation resolves edge labels and slugs to assigned node ids. Ambiguous labels fail instead of selecting either node. This fixes the Graph blocker from issue [#57](https://github.com/MrF1ow/Arbor/issues/57).
 - Citation matching strips Markdown emphasis and punctuation before checking claims and headings, so formatted digest words match sentence-style study text ([#57](https://github.com/MrF1ow/Arbor/issues/57)).
 - The default Tauri capability grants `notification:default`, so job-end notifications can pass the plugin permission check. Issue [#57](https://github.com/MrF1ow/Arbor/issues/57).
+- Quiz toolbar shows the session score as `N / M correct` from this session's answers. The question index stays as `N of M`.
 - Digest markdown renders links and GitHub-flavored tables. A relative `digests/*.md` link opens that digest in the reading pane. The reading pane strips closing `arbor-pages` comments.
 - `study`, `digests`, `_arbor_cache`, and dot-prefixed names at the Knowledge root are reserved. Create Class now keeps a clear rejection reason visible in the sidebar instead of relying on a native WebKit validity tooltip.
 - An in-place digest patch validates each provider splice with `validate_digest`. Non-portable LaTeX (`\(`, `\[`, `\frac`) is rejected the same way as create and regenerate.
