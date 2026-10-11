@@ -81,7 +81,7 @@ Editing digests by hand never triggers reprocessing.
 | **Python ≥ 3.11** | Worker runtime |
 | **[uv](https://docs.astral.sh/uv/)** | Installs and runs the Python worker |
 | **Rust + cargo** | Tauri desktop shell ([rustup](https://rustup.rs/)) |
-| **Node.js 20+** and **npm** | Desktop frontend build |
+| **Node.js 22.6+** and **npm** | Desktop frontend build and tests |
 
 ### Linux (desktop build)
 
