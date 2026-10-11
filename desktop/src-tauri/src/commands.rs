@@ -5,7 +5,7 @@ use crate::watch::WatchState;
 use crate::worker;
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
 use tauri::Manager;
@@ -321,12 +321,36 @@ pub fn list_digests(root: String, course: String) -> Result<Vec<DigestInfo>, Str
     Ok(digests)
 }
 
-#[tauri::command]
-pub fn read_markdown(root: String, relative_path: String) -> Result<String, String> {
-    if relative_path.contains("..") {
+fn resolve_in_root(root: &str, relative: &str) -> Result<PathBuf, String> {
+    let relative_path = Path::new(relative);
+    if relative_path.is_absolute()
+        || relative_path
+            .components()
+            .any(|component| !matches!(component, Component::Normal(_)))
+    {
         return Err("Invalid path".into());
     }
-    let path = Path::new(&root).join(&relative_path);
+    let root_path = Path::new(root);
+    let joined = root_path.join(relative_path);
+    let canon_root = root_path
+        .canonicalize()
+        .map_err(|_| "Invalid path".to_string())?;
+    let canon_joined = match joined.canonicalize() {
+        Ok(path) => path,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            return Err(format!("File not found: {relative}"));
+        }
+        Err(_) => return Err("Invalid path".into()),
+    };
+    if !canon_joined.starts_with(&canon_root) {
+        return Err("Invalid path".into());
+    }
+    Ok(canon_joined)
+}
+
+#[tauri::command]
+pub fn read_markdown(root: String, relative_path: String) -> Result<String, String> {
+    let path = resolve_in_root(&root, &relative_path)?;
     if !path.is_file() {
         return Err(format!("File not found: {relative_path}"));
     }
@@ -938,6 +962,57 @@ mod tests {
         assert_eq!(imported, vec!["Lecture.pdf", "lecture-2.pdf"]);
         assert_eq!(fs::read(course.join("Lecture.pdf")).unwrap(), b"%PDF-a");
         assert_eq!(fs::read(course.join("lecture-2.pdf")).unwrap(), b"%PDF-b");
+    }
+
+    #[test]
+    fn read_markdown_rejects_absolute_path() {
+        let root = temp_root("md-abs");
+        let err =
+            read_markdown(root.to_string_lossy().into_owned(), "/etc/passwd".into()).unwrap_err();
+        assert_eq!(err, "Invalid path");
+    }
+
+    #[test]
+    fn read_markdown_rejects_parent_segments() {
+        let root = temp_root("md-dotdot");
+        let err = read_markdown(
+            root.to_string_lossy().into_owned(),
+            "Biology/../../etc/passwd".into(),
+        )
+        .unwrap_err();
+        assert_eq!(err, "Invalid path");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn read_markdown_rejects_symlink_escape() {
+        let root = temp_root("md-link");
+        let outside = temp_root("md-outside");
+        let secret = outside.join("secret.md");
+        fs::write(&secret, "secret").unwrap();
+        std::os::unix::fs::symlink(&secret, root.join("leak.md")).unwrap();
+        let err = read_markdown(root.to_string_lossy().into_owned(), "leak.md".into()).unwrap_err();
+        assert_eq!(err, "Invalid path");
+    }
+
+    #[test]
+    fn read_markdown_reads_nested_file() {
+        let root = temp_root("md-ok");
+        let dir = root.join("Biology").join("digests");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("note.md"), "hello").unwrap();
+        let text = read_markdown(
+            root.to_string_lossy().into_owned(),
+            "Biology/digests/note.md".into(),
+        )
+        .unwrap();
+        assert_eq!(text, "hello");
+        let missing = read_markdown(
+            root.to_string_lossy().into_owned(),
+            "Biology/digests/missing.md".into(),
+        )
+        .unwrap_err();
+        assert_eq!(missing, "File not found: Biology/digests/missing.md");
     }
 }
 

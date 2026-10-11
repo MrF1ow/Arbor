@@ -42,6 +42,7 @@ import {
   parseCitationsReport,
 } from "./citations";
 import { headingId, renderMarkdown } from "./markdown";
+import { renderSearchHit } from "./search-hit";
 import { parseAppearance, resolvedTheme } from "./theme";
 import type {
   Appearance,
@@ -396,14 +397,23 @@ async function loadDigestPreview(
   try {
     const raw = await invoke<string>("read_markdown", { root: knowledgeRoot, relativePath });
     const { html, pageChip } = renderMarkdown(raw);
-    readingArticleEl.innerHTML = pageChip
-      ? `<div class="page-chip">Pages ${pageChip}</div>${html}`
-      : html;
+    readingArticleEl.innerHTML = html;
+    if (pageChip) {
+      const chip = document.createElement("div");
+      chip.className = "page-chip";
+      chip.textContent = `Pages ${pageChip}`;
+      readingArticleEl.prepend(chip);
+    }
   } catch (e) {
     const isCourseIndex = relativePath.endsWith("/course.md");
-    readingArticleEl.innerHTML = isCourseIndex
-      ? `<p class="reading-empty">No notes yet. Add lecture files, then Update knowledge.</p>`
-      : `<p class="reading-empty">Could not load file: ${e}</p>`;
+    if (isCourseIndex) {
+      readingArticleEl.innerHTML = `<p class="reading-empty">No notes yet. Add lecture files, then Update knowledge.</p>`;
+    } else {
+      const p = document.createElement("p");
+      p.className = "reading-empty";
+      p.textContent = `Could not load file: ${e}`;
+      readingArticleEl.replaceChildren(p);
+    }
   }
   readingArticleEl.querySelectorAll("a[data-arbor-digest]").forEach((anchor) => {
     anchor.addEventListener("click", (event) => {
@@ -912,9 +922,7 @@ async function runSearch(query: string) {
     return;
   }
   for (const hit of hits) {
-    const btn = document.createElement("button");
-    btn.className = "search-hit";
-    btn.innerHTML = `<div class="title">${hit.title}</div><div class="sub">${hit.course} · ${hit.path}${hit.page_range ? ` · p.${hit.page_range}` : ""}</div><div class="snippet">${hit.snippet}</div>`;
+    const btn = renderSearchHit(hit);
     btn.addEventListener("click", () => {
       searchOverlayEl.classList.remove("open");
       const rel = hit.path.includes("/") ? hit.path : `${hit.course}/${hit.path}`;
@@ -1087,7 +1095,10 @@ function updateInspectorStatus(job?: JobSummary) {
   }
   const time = job.finished_at ?? job.started_at;
   const label = job.status === "succeeded" ? "succeeded" : job.status;
-  inspectorStatusEl.innerHTML = `Last job: <span class="ok">${label}</span> · ${time}`;
+  const status = document.createElement("span");
+  status.className = "ok";
+  status.textContent = label;
+  inspectorStatusEl.replaceChildren("Last job: ", status, ` · ${time}`);
 }
 
 async function loadJobHistory() {
@@ -1121,7 +1132,12 @@ async function loadJobHistory() {
       jobsListEl.appendChild(row);
     }
   } catch (e) {
-    jobsListEl.innerHTML = `<div class="setting-row"><span>Could not load jobs: ${e}</span></div>`;
+    const row = document.createElement("div");
+    row.className = "setting-row";
+    const span = document.createElement("span");
+    span.textContent = `Could not load jobs: ${e}`;
+    row.appendChild(span);
+    jobsListEl.replaceChildren(row);
   }
 }
 
