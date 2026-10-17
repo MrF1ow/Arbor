@@ -32,6 +32,34 @@ def test_build_argv_text_uses_prompt_file(tmp_path: Path):
     assert "--tools" not in argv
 
 
+def test_grok_disallowed_tools_list():
+    expected = [
+        "run_terminal_cmd",
+        "write",
+        "search_replace",
+        "task",
+        "web_search",
+        "web_fetch",
+        "read_file",
+        "grep",
+        "list_dir",
+        "todo_write",
+        "monitor",
+        "search_tool",
+        "use_tool",
+        "workflow",
+        "enter_plan_mode",
+        "exit_plan_mode",
+        "ask_user_question",
+        "send_feedback",
+        "image_gen",
+        "image_edit",
+        "image_to_video",
+        "reference_to_video",
+    ]
+    assert GROK_DISALLOWED_TOOLS.split(",") == expected
+
+
 def test_build_argv_image_uses_prompt_json(tmp_path: Path):
     img = tmp_path / "page.jpg"
     img.write_bytes(b"\xff\xd8\xff")

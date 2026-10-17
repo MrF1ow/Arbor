@@ -27,7 +27,9 @@ DEFAULT_GROK_MODELS = [
 
 GROK_DISALLOWED_TOOLS = (
     "run_terminal_cmd,write,search_replace,task,web_search,web_fetch,"
-    "read_file,grep,list_dir"
+    "read_file,grep,list_dir,todo_write,monitor,search_tool,use_tool,"
+    "workflow,enter_plan_mode,exit_plan_mode,ask_user_question,send_feedback,"
+    "image_gen,image_edit,image_to_video,reference_to_video"
 )
 
 
