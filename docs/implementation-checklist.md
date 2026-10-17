@@ -77,7 +77,7 @@ Shipped `v2.0.0`. Do not add features here. Leftover proof rides the Version 3 M
 
 ## Version 3 — study app (current)
 
-Package `2.3.0` on `main`. **`v3.0.0` blocked** on remaining rows + Mac batch.
+Package `2.3.0` on `main` (tag `v2.3.0`). **`v3.0.0` is blocked on the Mac batch.** The implementation rows below are done and locally tested.
 
 ### Shipped (do not re-do)
 
@@ -93,9 +93,9 @@ Package `2.3.0` on `main`. **`v3.0.0` blocked** on remaining rows + Mac batch.
 | Add class, add files, theme, hide `_arbor_cache`, H1 digest titles | [x] | [x] | [ ] |
 | Nested/ordered lists, bold, italic, inline code in Notes | [x] | [x] | [ ] |
 
-### Remaining — must finish before the Version 3 Mac batch
+### Notes leftovers — implemented locally, Mac proof open
 
-These are issue [#42](https://github.com/MrF1ow/Arbor/issues/42) acceptance criteria that did not land, plus the #3 patch-validation follow-up. Plan: [2026-09-12-v3-notes-gate.md](superpowers/plans/2026-09-12-v3-notes-gate.md).
+Issue [#42](https://github.com/MrF1ow/Arbor/issues/42) and the #3 patch-validation follow-up landed on `main`. The plan is [2026-09-12-v3-notes-gate.md](superpowers/plans/2026-09-12-v3-notes-gate.md). Mac boxes stay open until a `v2.3.0` batch records them.
 
 | Item | Issue | Implemented | Local/VM | Mac batch |
 |------|-------|-------------|----------|-----------|
@@ -106,7 +106,7 @@ These are issue [#42](https://github.com/MrF1ow/Arbor/issues/42) acceptance crit
 | Long digest scrolls end-to-end in the real Arbor window | [#42](https://github.com/MrF1ow/Arbor/issues/42) | CSS present | [x] CSS unit tests | [ ] |
 | `validate_digest` on patch output | [#3](https://github.com/MrF1ow/Arbor/issues/3) | [x] | [x] | n/a |
 
-### Version 3 Mac batch (once, after remaining rows are locally green)
+### Version 3 Mac batch (the open gate)
 
 Record date, macOS version, and commit or DMG in [mac-e2e.md](superpowers/plans/2026-08-22-v3-program/mac-e2e.md) and here.
 

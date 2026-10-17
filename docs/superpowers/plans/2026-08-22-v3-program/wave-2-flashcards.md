@@ -1,5 +1,7 @@
 # Wave 2: Flashcards (`v2.3.0`)
 
+> **Status (2026-10-17):** Landed inside tag `v2.2.0`. The `v2.3.0` in the title was the original plan number. That tag is now the Mac-batch fix release, not this wave. Do not execute this plan. The open gate is the Mac batch in [mac-e2e.md](mac-e2e.md).
+
 Parent: [overview.md](overview.md)
 
 Depends on Wave 1.

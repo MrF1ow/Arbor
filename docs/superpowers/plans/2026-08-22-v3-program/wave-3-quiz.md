@@ -1,5 +1,7 @@
 # Wave 3: Quiz (`v2.4.0`)
 
+> **Status (2026-10-17):** Landed inside tag `v2.2.0`. There is no `v2.4.0`. Do not execute this plan. Current release is `v2.3.0`. The open gate is the Mac batch in [mac-e2e.md](mac-e2e.md).
+
 Parent: [overview.md](overview.md)
 
 Depends on Wave 1. May run in parallel with Wave 2.

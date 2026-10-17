@@ -2,7 +2,7 @@
 
 Date: 2026-08-23
 
-Status: design. Required for `v3.0.0`. Program: [`../plans/2026-08-22-v3-program/overview.md`](../plans/2026-08-22-v3-program/overview.md). Study JSON skills: [`2026-08-22-v3-study-artifacts-format.md`](2026-08-22-v3-study-artifacts-format.md).
+Status: shipped in `v2.2.0` (embeddings, concepts, diagrams, citations). Mac proof is still open. Current release is `v2.3.0`. Program: [`../plans/2026-08-22-v3-program/overview.md`](../plans/2026-08-22-v3-program/overview.md). Study JSON skills: [`2026-08-22-v3-study-artifacts-format.md`](2026-08-22-v3-study-artifacts-format.md). Ledger: [`../../implementation-checklist.md`](../../implementation-checklist.md).
 
 ## Problem
 
