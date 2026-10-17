@@ -104,6 +104,8 @@ class ClaudeCliProvider:
     def run(self, request: ProviderRequest) -> ProviderResult:
         if self._guard_active():
             raise ProviderError(CLAUDECODE_GUARD)
+        if resolve_cli_command("claude", self._which) is None:
+            raise ProviderError("Claude CLI not found on PATH")
         argv = self.build_argv(request)
         env = os.environ.copy()
         env["PATH"] = gui_path()
@@ -113,6 +115,7 @@ class ClaudeCliProvider:
             capture_output=True,
             text=True,
             cwd=request.cwd,
+            env=env,
         )
         if proc.returncode != 0:
             detail = (proc.stderr or proc.stdout or "").strip()

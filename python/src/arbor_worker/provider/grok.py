@@ -112,6 +112,8 @@ class GrokCliProvider:
         return ProviderResult(markdown=text)
 
     def run(self, request: ProviderRequest) -> ProviderResult:
+        if resolve_cli_command("grok", self._which) is None:
+            raise ProviderError("Grok CLI not found on PATH")
         env = os.environ.copy()
         env["PATH"] = gui_path()
         if request.image_paths:

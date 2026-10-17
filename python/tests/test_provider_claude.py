@@ -8,6 +8,7 @@ from arbor_worker.provider.claude import (
     CLAUDECODE_GUARD,
     ClaudeCliProvider,
 )
+from arbor_worker.auth import gui_path
 from arbor_worker.provider.base import ProviderError
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "providers"
@@ -107,6 +108,47 @@ def test_claude_guard_off_uses_runner(monkeypatch, tmp_path: Path):
     prov = ClaudeCliProvider(models=[Model("m", "M")], runner=runner)
     prov.run(ProviderRequest(prompt="p", model_id="m", cwd=tmp_path))
     assert called.get("yes")
+
+
+def test_run_passes_gui_path_env(monkeypatch, tmp_path: Path):
+    monkeypatch.delenv("CLAUDECODE", raising=False)
+    expected_path = gui_path()
+    captured = {}
+
+    def runner(argv, **kwargs):
+        captured["env"] = kwargs.get("env")
+
+        class R:
+            returncode = 0
+            stdout = (FIXTURES / "claude-result.json").read_text()
+            stderr = ""
+
+        return R()
+
+    prov = ClaudeCliProvider(
+        models=[Model("m", "M")],
+        runner=runner,
+        which=lambda name: "/usr/bin/claude",
+    )
+    prov.run(ProviderRequest(prompt="p", model_id="m", cwd=tmp_path))
+    assert captured["env"] is not None
+    assert captured["env"]["PATH"] == expected_path
+
+
+def test_run_raises_when_cli_missing(monkeypatch, tmp_path: Path):
+    monkeypatch.delenv("CLAUDECODE", raising=False)
+    monkeypatch.setattr("arbor_worker.auth.Path.home", lambda: tmp_path)
+
+    def runner(*args, **kwargs):
+        raise AssertionError("runner must not be called")
+
+    prov = ClaudeCliProvider(
+        models=[Model("m", "M")],
+        runner=runner,
+        which=lambda name: None,
+    )
+    with pytest.raises(ProviderError, match="Claude CLI not found on PATH"):
+        prov.run(ProviderRequest(prompt="p", model_id="m", cwd=tmp_path))
 
 
 def test_auth_success():

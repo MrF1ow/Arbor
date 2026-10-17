@@ -124,3 +124,18 @@ def test_auth_timeout():
         runner=runner,
     )
     assert prov.is_available() is False
+
+
+def test_run_raises_when_cli_missing(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr("arbor_worker.auth.Path.home", lambda: tmp_path)
+
+    def runner(*args, **kwargs):
+        raise AssertionError("runner must not be called")
+
+    prov = GrokCliProvider(
+        models=[Model("m", "M")],
+        runner=runner,
+        which=lambda name: None,
+    )
+    with pytest.raises(ProviderError, match="Grok CLI not found on PATH"):
+        prov.run(ProviderRequest(prompt="p", model_id="grok-4.7", cwd=tmp_path))
