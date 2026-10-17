@@ -64,14 +64,14 @@ def test_run_parses_fixture(tmp_path: Path):
 
         return R()
 
-    prov = GrokCliProvider(models=[Model("m", "M")], runner=runner)
+    prov = GrokCliProvider(models=[Model("m", "M")], runner=runner, which=lambda name: "/usr/bin/grok")
     res = prov.run(ProviderRequest(prompt="go", model_id="grok-4.7", cwd=tmp_path))
     assert res.markdown == "arbor-ok"
     assert captured["argv"][1] == "--prompt-file"
 
 
 def test_run_raises_on_error_json(tmp_path: Path):
-    prov = GrokCliProvider(models=[Model("m", "M")], runner=lambda *a, **k: type(
+    prov = GrokCliProvider(models=[Model("m", "M")], which=lambda name: "/usr/bin/grok", runner=lambda *a, **k: type(
         "R", (), {"returncode": 1, "stdout": '{"type":"error","message":"bad"}', "stderr": ""}
     )())
     with pytest.raises(ProviderError, match="bad"):
@@ -84,7 +84,7 @@ def test_run_nonzero_without_json_error_uses_stderr(tmp_path: Path):
     def runner(*a, **k):
         return type("R", (), {"returncode": 1, "stdout": "", "stderr": stderr})()
 
-    prov = GrokCliProvider(models=[Model("m", "M")], runner=runner)
+    prov = GrokCliProvider(models=[Model("m", "M")], runner=runner, which=lambda name: "/usr/bin/grok")
     with pytest.raises(ProviderError, match="unexpected argument") as exc:
         prov.run(ProviderRequest(prompt="p", model_id="grok-4.7", cwd=tmp_path))
     assert "grok failed (1)" in str(exc.value)

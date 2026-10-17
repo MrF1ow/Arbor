@@ -65,7 +65,7 @@ def test_run_parses_fixture(tmp_path: Path):
 
         return R()
 
-    prov = ClaudeCliProvider(models=[Model("m", "M")], runner=runner)
+    prov = ClaudeCliProvider(models=[Model("m", "M")], runner=runner, which=lambda name: "/usr/bin/claude")
     res = prov.run(
         ProviderRequest(prompt="prompt text", model_id="m", cwd=tmp_path),
     )
@@ -83,7 +83,7 @@ def test_run_raises_on_is_error(tmp_path: Path):
 
         return R()
 
-    prov = ClaudeCliProvider(models=[Model("m", "M")], runner=runner)
+    prov = ClaudeCliProvider(models=[Model("m", "M")], runner=runner, which=lambda name: "/usr/bin/claude")
     with pytest.raises(ProviderError, match="Authentication"):
         prov.run(ProviderRequest(prompt="p", model_id="m", cwd=tmp_path))
 
@@ -111,7 +111,7 @@ def test_claude_guard_off_uses_runner(monkeypatch, tmp_path: Path):
 
         return R()
 
-    prov = ClaudeCliProvider(models=[Model("m", "M")], runner=runner)
+    prov = ClaudeCliProvider(models=[Model("m", "M")], runner=runner, which=lambda name: "/usr/bin/claude")
     prov.run(ProviderRequest(prompt="p", model_id="m", cwd=tmp_path))
     assert called.get("yes")
 
