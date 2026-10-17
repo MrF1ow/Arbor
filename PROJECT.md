@@ -488,7 +488,7 @@ Each stage should be replaceable.
 
 Package releases (`0.1.0`, `0.2.0`, `1.0.0`, `2.0.0`, …) are in [`CHANGELOG.md`](CHANGELOG.md).
 
-**Done vs tested** lives in [`docs/implementation-checklist.md`](docs/implementation-checklist.md). That file is the gate: a product version does not start until the previous version’s implementation and its Mac batch are recorded. GitHub issues are mapped under each version below with their original acceptance criteria.
+**Done vs tested** lives in [`docs/implementation-checklist.md`](docs/implementation-checklist.md). That file is the gate: a product version closes when its rows are implemented, locally tested, and one Linux live run is recorded in [`linux-live-run.md`](docs/superpowers/plans/2026-10-17-roadmap-completion/linux-live-run.md). Mac batches are optional and never block a tag. The next product version does not start until that Linux live run is recorded. GitHub issues are mapped under each version below with their original acceptance criteria.
 
 ## Version numbering
 
@@ -499,7 +499,7 @@ Package releases (`0.1.0`, `0.2.0`, `1.0.0`, `2.0.0`, …) are in [`CHANGELOG.md
 | `v1.0.0` | Version 1 | Shipped |
 | `v2.0.0` | Version 2 | Shipped — automation on the v1 UI |
 | `v2.1.0`, `v2.2.0`, `v2.3.0`, … | Version 3 **in progress** | Incremental releases toward Version 3 |
-| `v3.0.0` | Version 3 | **Reserved** — tag only when every Version 3 feature below ships **and** the Version 3 Mac batch is recorded |
+| `v3.0.0` | Version 3 | **Reserved** — tag only when every Version 3 feature below ships **and** one Linux live run is recorded. Mac proof does not block the tag. |
 | `v3.1.0`, `v3.2.0`, … | Version 4 **in progress** | After `v3.0.0`. Tutor work until `v4.0.0` |
 | `v4.0.0` | Version 4 | Tutor milestone complete |
 
@@ -511,9 +511,9 @@ Cursor rule: [`.cursor/rules/arbor-versioning.mdc`](.cursor/rules/arbor-versioni
 
 Local/VM tests (`uv run pytest -q`, `cargo test`, `npm test`, `npm run build`) run on every change. They are what Linux agents and CI prove.
 
-A **Mac batch** is a single end-to-end run on a MacBook covering a whole product version (or a whole leftover batch). It is not run after every small feature. Findings from that run are filed on the [implementation checklist](docs/implementation-checklist.md). They must be fixed and re-proven locally; they ride the **next** Mac batch, not a new Mac trip per finding.
+A **Linux live run** is one recorded run of the real Tauri app on this Linux machine, written in [`linux-live-run.md`](docs/superpowers/plans/2026-10-17-roadmap-completion/linux-live-run.md). It is not run after every small feature. Live runs use the Grok CLI. Codex stays supported and is unit-tested with fakes. Agents never select the Claude provider during a live run.
 
-A product version is **closed** only when its required work is implemented, locally tested, and one Mac batch for that version is recorded. Until that Mac batch is recorded, the next product version does not start.
+A product version is **closed** only when its required work is implemented, locally tested, and one Linux live run for that version is recorded. Mac batches are optional and never block a tag. Until that Linux live run is recorded, the next product version does not start.
 
 # Version 1
 
@@ -551,7 +551,7 @@ macOS `.dmg` from GitHub Actions (`macos-dmg`). The worker is a bundled sidecar.
 
 ### GitHub issues in this version
 
-Code for these tickets is on `main`. The tickets themselves may still be open on GitHub. Close them against this version; do not reopen Version 1 as a program. Leftover proof belongs on the [implementation checklist](docs/implementation-checklist.md) and the Version 3 Mac batch.
+Code for these tickets is on `main`. The tickets themselves may still be open on GitHub. Close them against this version; do not reopen Version 1 as a program. Leftover proof belongs on the [implementation checklist](docs/implementation-checklist.md) and the Version 3 Linux live run. Mac proof is optional.
 
 #### [#3](https://github.com/MrF1ow/Arbor/issues/3) — digest prompt: source boundaries and portable Markdown
 
@@ -570,7 +570,7 @@ Original acceptance criteria:
 
 - A user can install the DMG, open Arbor from Finder, choose a Knowledge folder, pass Codex authentication, and run an update without a local Arbor checkout, `ARBOR_REPO_DIR`, Python, uv, Node, or Cargo.
 
-Codex CLI stays a separate install (explicit in the issue). Signing and notarization are **nice to have**, not acceptance criteria. The sidecar DMG workflow exists (`.github/workflows/macos-dmg.yml`). **Finder-like launch proof** is not a new packaging program; it is a box on the Version 3 Mac batch.
+Codex CLI stays a separate install (explicit in the issue). Signing and notarization are **nice to have**, not acceptance criteria. The sidecar DMG workflow exists (`.github/workflows/macos-dmg.yml`). **Packaged launch proof** is the Linux build box in [`linux-live-run.md`](docs/superpowers/plans/2026-10-17-roadmap-completion/linux-live-run.md). A Finder DMG launch is optional Mac proof.
 
 #### [#19](https://github.com/MrF1ow/Arbor/issues/19) — Codex CLI discovery and auth for GUI launches
 
@@ -644,7 +644,7 @@ Original required boxes (from the issue):
 
 Partial Mac evidence already exists in issue comments (Clin Med 2 ingest, v2 manifest, search, reindex, folder watch after PR #32). Still unrecorded on a Mac: notifications, Word ingest, optional OCR, optional auto-run, packaged DMG from Finder.
 
-**Delegate remaining boxes to the Version 3 Mac batch** in [`docs/superpowers/plans/2026-08-22-v3-program/mac-e2e.md`](docs/superpowers/plans/2026-08-22-v3-program/mac-e2e.md). Do not run a separate Version 2-only Mac trip. Do not start Version 3’s `v3.0.0` tag until that combined batch is recorded.
+**Delegate remaining boxes to the Version 3 Linux live run** in [`linux-live-run.md`](docs/superpowers/plans/2026-10-17-roadmap-completion/linux-live-run.md). Optional Mac proof lives in [`mac-e2e.md`](docs/superpowers/plans/2026-08-22-v3-program/mac-e2e.md). Do not run a separate Version 2-only Mac trip. Do not start Version 3’s `v3.0.0` tag until that Linux live run is recorded.
 
 ---
 
@@ -656,7 +656,7 @@ A study app a student would download, with local memory and a concept graph an A
 
 The shell is the storefront. Flashcards and quiz are the study loop. Embeddings, concepts, cross-document links, and a graph-lite view are the memory a later tutor (Version 4) will use instead of rereading every digest. Diagram analysis and citation checks ground that memory in the notes the student already has.
 
-**Status:** In progress. Package **2.2.0** has the study loop. Package **2.3.0** (`v2.3.0`) is the fix release after the 2026-09-20 Mac batch. **`v3.0.0` ships when a later clean Mac batch is recorded** on the [implementation checklist](docs/implementation-checklist.md). Waves 1 through 8 shipped in `2.2.0`. Do not invent `v2.4.0` through `v2.8.0` for those waves.
+**Status:** In progress. Package **2.2.0** has the study loop. Package **2.3.0** (`v2.3.0`) is the fix release after the 2026-09-20 Mac batch. Package **2.4.0** is the current package (tree mark and Linux live-run gate). **`v3.0.0` ships when the Linux live run is recorded** on the [implementation checklist](docs/implementation-checklist.md) and in [`linux-live-run.md`](docs/superpowers/plans/2026-10-17-roadmap-completion/linux-live-run.md). Do not renumber waves 1–8; they shipped in `2.2.0`. Later `2.x` tags, starting with `2.4.0`, are the slices in [`docs/superpowers/plans/2026-10-17-roadmap-completion/overview.md`](docs/superpowers/plans/2026-10-17-roadmap-completion/overview.md).
 
 **Shipped so far (`v2.1.0`):** desktop shell — [`docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md`](docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md).
 
@@ -684,10 +684,11 @@ Shipped in 2.2.0 (PRs #36–#41, #47, #50, #51)
 
 Required for `v3.0.0`
 
-Implementation rows on the [implementation checklist](docs/implementation-checklist.md) are done and locally tested, including Notes links and tables, the reserved-directory policy, and digest patch validation. What remains is the Mac batch:
+Implementation rows on the [implementation checklist](docs/implementation-checklist.md) are done and locally tested, including Notes links and tables, the reserved-directory policy, and digest patch validation. What remains is the Linux live run:
 
-* One clean Mac batch recorded in [`mac-e2e.md`](docs/superpowers/plans/2026-08-22-v3-program/mac-e2e.md) and on that checklist — ingest, study loop, Notes, notifications, Word ingest, and a Finder DMG launch
+* One clean Linux live run recorded in [`linux-live-run.md`](docs/superpowers/plans/2026-10-17-roadmap-completion/linux-live-run.md) and on that checklist — ingest, study loop, Notes, notifications, Word ingest, and a packaged Linux build
 * Then tag `v3.0.0`
+* Mac proof is optional ([`mac-e2e.md`](docs/superpowers/plans/2026-08-22-v3-program/mac-e2e.md))
 
 GitHub issue [#42](https://github.com/MrF1ow/Arbor/issues/42) is **Notes UX**, not the Wave 8 closeout tracker. Wave 8 (grades, quiz session answers, heading scroll, living docs) already landed in package `2.2.0`. Do not file chat, Anki, extra providers, or a pretty graph canvas against #42.
 
@@ -716,7 +717,7 @@ Original acceptance criteria:
 
 **Already on `main` (package `2.3.0`):** in-app add-class form (`create_course`), overview labels, H1 titles, reserved-directory filtering, nested and ordered lists, emphasis, links, tables, heading ids, in-pane digest links, closing page-marker stripping, and Notes scroll CSS. Row status lives on the [implementation checklist](docs/implementation-checklist.md).
 
-**Still required before `v3.0.0`:** the Mac boxes on that checklist, including a long digest that scrolls in the Arbor window and a `course.md` link that opens the digest. The 2026-09-12 plan is the record of how the local rows landed: [`docs/superpowers/plans/2026-09-12-v3-notes-gate.md`](docs/superpowers/plans/2026-09-12-v3-notes-gate.md).
+**Still required before `v3.0.0`:** the Linux live run boxes on that checklist and in [`linux-live-run.md`](docs/superpowers/plans/2026-10-17-roadmap-completion/linux-live-run.md), including a long digest that scrolls in the Arbor window and a `course.md` link that opens the digest. Mac proof is optional. The 2026-09-12 plan is the record of how the local rows landed: [`docs/superpowers/plans/2026-09-12-v3-notes-gate.md`](docs/superpowers/plans/2026-09-12-v3-notes-gate.md).
 
 ---
 
@@ -726,7 +727,7 @@ Goal:
 
 Personal AI Tutor.
 
-**Start Version 4 only after `v3.0.0`.** That tag waits for a clean Version 3 Mac batch on the [implementation checklist](docs/implementation-checklist.md). Notes implementation for issue #42 is already on `main`. Version 4 then ships as `v3.1.0`, `v3.2.0`, and so on, until `v4.0.0`.
+**Start Version 4 only after `v3.0.0`.** That tag waits for a recorded Version 3 Linux live run on the [implementation checklist](docs/implementation-checklist.md). Notes implementation for issue #42 is already on `main`. Version 4 then ships as `v3.1.0`, `v3.2.0`, and so on, until `v4.0.0`.
 
 New Features
 
@@ -782,7 +783,7 @@ Goal:
 
 Collaboration.
 
-**Do not start Version 5 until Version 4 is closed** (tutor implemented, locally tested, Version 4 Mac batch recorded, `v4.0.0` tagged).
+**Do not start Version 5 until Version 4 is closed** (tutor implemented, locally tested, Version 4 Linux live run recorded, `v4.0.0` tagged). Mac proof is optional.
 
 Features
 

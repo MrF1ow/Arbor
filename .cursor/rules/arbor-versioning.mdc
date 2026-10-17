@@ -13,13 +13,13 @@ alwaysApply: true
 
 2. **Version 3 is in progress until `v3.0.0`.** Work toward Version 3 ships as **`v2.1.0`, `v2.2.0`, `v2.3.0`, …** Package `v2.1.0` is the first step after Version 2. `v3.0.0` is the Version 3 completion tag.
 
-3. **`v3.0.0` is reserved for full Version 3 completion** — all features listed under Version 3 in `PROJECT.md` (shell, flashcards, quiz, concepts, diagrams, citations, cross-document linking, knowledge graph, embeddings, semantic search) **and** a clean Version 3 Mac batch on the [implementation checklist](docs/implementation-checklist.md). Do not tag `v3.0.0` for the shell alone, a fix release, or partial delivery. Do not drop graph, embeddings, diagrams, or citations from that list to ship earlier.
+3. **`v3.0.0` is reserved for full Version 3 completion** — all features listed under Version 3 in `PROJECT.md` (shell, flashcards, quiz, concepts, diagrams, citations, cross-document linking, knowledge graph, embeddings, semantic search) **and** a recorded Linux live run on the [implementation checklist](docs/implementation-checklist.md). Mac proof does not block the tag. Do not tag `v3.0.0` for the shell alone, a fix release, or partial delivery. Do not drop graph, embeddings, diagrams, or citations from that list to ship earlier.
 
 4. **Version 4 starts at `v4.0.0`** when the tutor milestone is complete. After `v3.0.0` is tagged, Version 4 work ships as **`v3.1.0`, `v3.2.0`, …** until `v4.0.0`. Do not start that work before `v3.0.0`.
 
 5. **CHANGELOG and package versions stay aligned** across worker, desktop, and Tauri (`python/src/arbor_worker/__init__.py`, `pyproject.toml`, `desktop/package.json`, `Cargo.toml`, `tauri.conf.json`). `arbor-worker --version` reads `__init__.py`.
 
-6. **Version gates** live in [`docs/implementation-checklist.md`](docs/implementation-checklist.md). Local/VM tests gate every merge. A MacBook end-to-end batch gates tagging the product version (`v3.0.0`, `v4.0.0`, …). Do not Mac-test every small feature. Do not start the next product version until the current version’s Mac batch is recorded.
+6. **Version gates** live in [`docs/implementation-checklist.md`](docs/implementation-checklist.md). Local/VM tests gate every merge. A Linux live run gates the product-version tags (`v3.0.0`, `v4.0.0`, …). Mac batches are optional and never block a tag. Do not live-test every small feature. Do not start the next product version until the current version’s Linux live run is recorded.
 
 ## Current state (2026-10-17)
 
@@ -27,9 +27,10 @@ alwaysApply: true
 |-----|---------|-------|
 | `v2.0.0` | Version 2 | Shipped |
 | `v2.1.0` | Version 3 (partial) | Desktop shell |
-| `v2.2.0` | Version 3 study loop | Waves 1–8. Do not invent `v2.4.0`–`v2.8.0` for PRs #36–#41. |
-| `v2.3.0` | Version 3 fixes | Mac-batch fixes from issue #57, Notes leftovers, path confinement and CSP. Next Mac run uses this tag. |
-| `v3.0.0` | Version 3 | **Not yet.** Tag after a clean Mac E2E run recorded on the checklist. |
+| `v2.2.0` | Version 3 study loop | Waves 1–8. Do not invent `v2.4.0`–`v2.8.0` for those wave PRs #36–#41. |
+| `v2.3.0` | Version 3 fixes | Mac-batch fixes from issue #57, Notes leftovers, path confinement and CSP. |
+| `v2.4.0` | Version 3 (partial) | Tree mark; Linux live-run gate (not `v3.0.0`). Linux live run uses this package. |
+| `v3.0.0` | Version 3 | **Not yet.** Tag after a recorded Linux live run on the checklist. |
 | `v3.1.0`, `v3.2.0`, … | Version 4 in progress | Only after `v3.0.0`. Tutor work until `v4.0.0`. |
 
-Program: `docs/superpowers/plans/2026-08-22-v3-program/overview.md`. Gates: `docs/implementation-checklist.md`. Next step: the Mac batch in `docs/superpowers/plans/2026-08-22-v3-program/mac-e2e.md`.
+Program: `docs/superpowers/plans/2026-08-22-v3-program/overview.md`. Gates: `docs/implementation-checklist.md`. Next step: the Linux live run in `docs/superpowers/plans/2026-10-17-roadmap-completion/linux-live-run.md`. `mac-e2e.md` is optional.
