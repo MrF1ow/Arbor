@@ -78,6 +78,18 @@ def test_run_raises_on_error_json(tmp_path: Path):
         prov.run(ProviderRequest(prompt="p", model_id="grok-4.7", cwd=tmp_path))
 
 
+def test_run_nonzero_without_json_error_uses_stderr(tmp_path: Path):
+    stderr = "error: unexpected argument '--nope'"
+
+    def runner(*a, **k):
+        return type("R", (), {"returncode": 1, "stdout": "", "stderr": stderr})()
+
+    prov = GrokCliProvider(models=[Model("m", "M")], runner=runner)
+    with pytest.raises(ProviderError, match="unexpected argument") as exc:
+        prov.run(ProviderRequest(prompt="p", model_id="grok-4.7", cwd=tmp_path))
+    assert "grok failed (1)" in str(exc.value)
+
+
 def test_auth_success():
     prov = GrokCliProvider(
         models=[Model("m", "M")],

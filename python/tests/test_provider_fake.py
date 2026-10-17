@@ -33,3 +33,9 @@ def test_fake_models_and_availability():
     assert p.status().reason == ""
     assert p.list_models() == [Model("id", "Label")]
     assert p.name == "fake"
+
+
+def test_fake_unavailable_reports_reason():
+    p = FakeProvider(markdown="x", available=False)
+    assert p.is_available() is False
+    assert p.status().reason == "Fake provider unavailable"

@@ -93,10 +93,12 @@ def _resolve_llm_provider(
     emitter: EventEmitter,
     *,
     fake_markdown: str | None = None,
+    emit_missing_model_error: bool = True,
 ):
     entry = PROVIDERS[provider_id]
     if provider_id != "fake" and not model_id:
-        emitter.error(message=f"--model is required with the {provider_id} provider")
+        if emit_missing_model_error:
+            emitter.error(message=f"--model is required with the {provider_id} provider")
         return None, 2
     if provider_id == "codex":
         auth = check_codex_auth()
@@ -355,6 +357,7 @@ def cmd_generate(args) -> int:
             args.model,
             emitter,
             fake_markdown=fake_markdown,
+            emit_missing_model_error=False,
         )
     else:
         resolved, code = _resolve_llm_provider(
@@ -362,6 +365,7 @@ def cmd_generate(args) -> int:
             root,
             args.model,
             emitter,
+            emit_missing_model_error=False,
         )
     if code is not None:
         if code == 2:

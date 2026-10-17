@@ -19,7 +19,9 @@ class FakeProvider:
         self.calls: list[ProviderRequest] = []
 
     def status(self) -> ProviderStatus:
-        return ProviderStatus(True, "")
+        if self._available:
+            return ProviderStatus(True, "")
+        return ProviderStatus(False, "Fake provider unavailable")
 
     def is_available(self) -> bool:
         return self.status().available

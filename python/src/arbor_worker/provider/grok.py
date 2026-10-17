@@ -142,10 +142,15 @@ class GrokCliProvider:
             finally:
                 prompt_path.unlink(missing_ok=True)
         if proc.returncode != 0:
-            detail = (proc.stderr or proc.stdout or "").strip()
+            stdout = proc.stdout or ""
             try:
-                self._parse_stdout(proc.stdout or "")
-            except ProviderError:
-                raise
+                payload = json.loads(stdout)
+            except json.JSONDecodeError:
+                payload = None
+            if isinstance(payload, dict) and (
+                payload.get("type") == "error" or payload.get("is_error")
+            ):
+                raise ProviderError(str(payload.get("message") or "grok error"))
+            detail = (proc.stderr or proc.stdout or "").strip() or "grok failed"
             raise ProviderError(f"grok failed ({proc.returncode}): {detail}")
         return self._parse_stdout(proc.stdout or "")
