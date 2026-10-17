@@ -4,13 +4,15 @@
 
 Local-first desktop app that turns course PDFs, PowerPoints, and Word files into structured study digests using a signed-in CLI provider (Codex CLI, Claude Code, or Grok CLI). Your Knowledge library is a normal git repo on disk. Sources and generated notes stay together in history.
 
-**Current release:** [2.4.0](CHANGELOG.md) (package `2.4.0`; tag `v2.4.0` is cut when this release lands). Worker, desktop, and Tauri all report this number (`arbor-worker --version`). **`v3.0.0` waits** for a recorded Linux live run of this build. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) does not close Version 3.
+**Current release:** [2.5.0](CHANGELOG.md) (package `2.5.0`; tag `v2.5.0` is cut when this release lands). Worker, desktop, and Tauri all report this number (`arbor-worker --version`). **`v3.0.0` waits** for a recorded Linux live run of this build. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) does not close Version 3.
 
-**Version 2** (`v2.0.0`) shipped automation on the old UI. **Version 3** is in progress. `v2.1.0` added the desktop shell. `2.2.0` adds the study loop. `2.3.0` is the fix release after that. **`2.4.0`** is the brand and gate release (tree mark and Linux live-run tag gate). **`v3.0.0` is reserved** until the Linux live run is recorded on the [implementation checklist](docs/implementation-checklist.md). Mac runs are optional and do not block the tag. See [Version numbering](PROJECT.md#version-numbering).
+**Version 2** (`v2.0.0`) shipped automation on the old UI. **Version 3** is in progress. `v2.1.0` added the desktop shell. `2.2.0` adds the study loop. `2.3.0` is the fix release after that. **`2.4.0`** is the brand and gate release (tree mark and Linux live-run tag gate). **`2.5.0`** adds Codex, Claude, and Grok CLI providers with a Settings picker. **`v3.0.0` is reserved** until the Linux live run is recorded on the [implementation checklist](docs/implementation-checklist.md). Mac runs are optional and do not block the tag. See [Version numbering](PROJECT.md#version-numbering).
 
-## What's in 2.4.0
+## What's in 2.5.0
 
-Transparent tree mark in the sidebar, welcome screen, favicon, and window icons (cream trunk on the dark theme). The version gate is a recorded Linux live run; Mac batches are optional and never block a tag.
+Provider registry with Codex CLI, Claude Code CLI, and Grok CLI behind one worker interface. Settings picks **Provider** above **Model**; the top bar shows the selected provider's auth state and docs link.
+
+Package **2.4.0** was the tree mark and Linux live-run gate release; **`v3.0.0` still waits** for a recorded Linux live run.
 
 For later milestones, see [`PROJECT.md`](PROJECT.md). The original V1 design (`lecture.md` per lecture) is historical: [`docs/superpowers/specs/2026-08-02-arbor-v1-design.md`](docs/superpowers/specs/2026-08-02-arbor-v1-design.md). Living layout is course folders, dated `digests/`, and `arbor-course.json`.
 

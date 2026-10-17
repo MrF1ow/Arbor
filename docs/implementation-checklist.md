@@ -12,7 +12,7 @@ Living tracker for **implemented / locally tested / live-run tested**. Capabilit
 
 **Current era:** Version 3. **Next version (Version 4) is blocked** until the Version 3 Linux live run is recorded. A Mac run does not close Version 3.
 
-**Current package:** `2.4.0` (`v2.4.0` is this release; the tag is cut when it lands). **`v3.0.0` is not tagged.** The Linux live run uses the current package. The 2026-09-20 Mac batch recorded failures in the Blockers table and does not close Version 3.
+**Current package:** `2.5.0` (`v2.5.0` is this release; the tag is cut when it lands). **`v3.0.0` is not tagged.** The Linux live run uses the current package. The 2026-09-20 Mac batch recorded failures in the Blockers table and does not close Version 3.
 
 | Marker | Meaning |
 |--------|---------|
@@ -78,7 +78,7 @@ Shipped `v2.0.0`. Do not add features here. Leftover proof rides the Version 3 L
 
 ## Version 3 — study app (current)
 
-Package `2.4.0` (this release; tag `v2.4.0` when it lands). **`v3.0.0` is blocked on the Linux live run.** The implementation rows below are done and locally tested.
+Package `2.5.0` (this release; tag `v2.5.0` when it lands). **`v3.0.0` is blocked on the Linux live run.** The implementation rows below are done and locally tested.
 
 ### Shipped (do not re-do)
 
