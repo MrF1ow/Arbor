@@ -345,6 +345,8 @@ tags
 
 This allows switching AI providers without modifying downstream code.
 
+**Shipped in 2.5.0:** Codex CLI, Claude Code CLI, and Grok CLI share one worker `CliProvider` interface (`codex`, `claude`, `grok` in the registry). API providers (OpenAI API, Anthropic API, Gemini, Ollama, LM Studio) are not shipped yet.
+
 ---
 
 # Skills
@@ -666,6 +668,7 @@ Shipped in v2.1.0 (shell only)
 
 * Professional desktop shell (sidebar, course mode tabs, digest preview, job inspector)
 * In-app settings (watch, auto-run, delete-after-digest, model)
+* Settings provider and model pickers (Codex, Claude, or Grok CLI)
 * Search overlay navigates to digest preview in Notes mode
 * Flashcards and Quiz tabs were empty at that tag
 

@@ -10,7 +10,7 @@ Design spec: [`docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md`](..
 
 - Rust + cargo, Node 20+, npm
 - `uv` on PATH and the worker installed: `cd ../python && uv sync`
-- Codex CLI installed and authenticated: <https://developers.openai.com/codex/cli>
+- One of Codex CLI, Claude Code, or Grok CLI installed and signed in — [Codex CLI](https://developers.openai.com/codex/cli), [Claude Code](https://code.claude.com/docs), [Grok CLI](https://x.ai/grok)
 - Linux only: webkit2gtk + libsoup dev packages
 - Optional (PPTX image fallback): LibreOffice (`soffice`)
 
