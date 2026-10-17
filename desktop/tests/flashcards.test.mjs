@@ -111,17 +111,18 @@ test("shuffles a copy of the deck", async () => {
   assert.equal(deck.cards[0].id, "fc_11111111");
 });
 
-test("builds Codex study job arguments", async () => {
+test("builds study job arguments", async () => {
   const { flashcardJobArgs } = await subject();
 
   assert.deepEqual(
-    flashcardJobArgs("/knowledge", "Biology", true, "gpt-5.6-sol"),
+    flashcardJobArgs("/knowledge", "Biology", true, "gpt-5.6-sol", "codex"),
     {
       root: "/knowledge",
       course: "Biology",
       skill: "flashcards",
       force: true,
       model: "gpt-5.6-sol",
+      provider: "codex",
     },
   );
 });

@@ -164,6 +164,7 @@ export function flashcardJobArgs(
   course: string,
   force: boolean,
   model: string,
+  provider: string,
 ) {
   return {
     root,
@@ -171,6 +172,7 @@ export function flashcardJobArgs(
     skill: "flashcards",
     force,
     model,
+    provider,
   };
 }
 

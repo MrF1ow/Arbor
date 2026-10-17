@@ -109,6 +109,7 @@ export function conceptJobArgs(
   course: string,
   force: boolean,
   model: string,
+  provider: string,
 ) {
   return {
     root,
@@ -116,6 +117,7 @@ export function conceptJobArgs(
     skill: "concepts",
     force,
     model,
+    provider,
   };
 }
 
@@ -124,6 +126,7 @@ export function diagramJobArgs(
   course: string,
   force: boolean,
   model: string,
+  provider: string,
 ) {
   return {
     root,
@@ -131,5 +134,6 @@ export function diagramJobArgs(
     skill: "diagrams",
     force,
     model,
+    provider,
   };
 }

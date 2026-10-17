@@ -193,6 +193,7 @@ export function quizJobArgs(
   course: string,
   force: boolean,
   model: string,
+  provider: string,
 ) {
   return {
     root,
@@ -200,6 +201,7 @@ export function quizJobArgs(
     skill: "quiz",
     force,
     model,
+    provider,
   };
 }
 
