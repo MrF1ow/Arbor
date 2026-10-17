@@ -220,7 +220,12 @@ pub fn job_events(knowledge_root: &Path, job_id: &str) -> Result<Vec<JobEventRow
     rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
 }
 
-pub fn resolve_terminal_status(line: &str, exit_code: i32) -> (JobStatus, Option<String>) {
+pub fn resolve_terminal_status(
+    line: &str,
+    exit_code: i32,
+    provider_label: &str,
+) -> (JobStatus, Option<String>) {
+    let auth_fallback = || format!("{provider_label} is not authenticated");
     if let Ok(value) = serde_json::from_str::<serde_json::Value>(line) {
         if value.get("type").and_then(|t| t.as_str()) == Some("cancelled") {
             return (JobStatus::Cancelled, None);
@@ -229,8 +234,8 @@ pub fn resolve_terminal_status(line: &str, exit_code: i32) -> (JobStatus, Option
             let reason = value
                 .get("reason")
                 .and_then(|r| r.as_str())
-                .unwrap_or("Codex not authenticated")
-                .to_string();
+                .map(str::to_string)
+                .unwrap_or_else(auth_fallback);
             return (JobStatus::Failed, Some(reason));
         }
         if value.get("type").and_then(|t| t.as_str()) == Some("error") {
@@ -243,10 +248,7 @@ pub fn resolve_terminal_status(line: &str, exit_code: i32) -> (JobStatus, Option
         }
     }
     if exit_code == 3 {
-        return (
-            JobStatus::Failed,
-            Some("Codex CLI is not authenticated".into()),
-        );
+        return (JobStatus::Failed, Some(auth_fallback()));
     }
     if exit_code != 0 {
         return (
@@ -299,8 +301,23 @@ mod tests {
 
     #[test]
     fn resolve_terminal_status_maps_cancelled() {
-        let (status, _) = resolve_terminal_status(r#"{"type":"cancelled"}"#, 0);
+        let (status, _) = resolve_terminal_status(r#"{"type":"cancelled"}"#, 0, "Codex");
         assert_eq!(status, JobStatus::Cancelled);
+    }
+
+    #[test]
+    fn resolve_terminal_status_exit_code_3_uses_provider_label() {
+        let (status, summary) = resolve_terminal_status("", 3, "Grok");
+        assert_eq!(status, JobStatus::Failed);
+        assert_eq!(summary.as_deref(), Some("Grok is not authenticated"));
+    }
+
+    #[test]
+    fn resolve_terminal_status_auth_failed_without_reason_uses_provider_label() {
+        let (status, summary) =
+            resolve_terminal_status(r#"{"type":"auth_failed"}"#, 0, "Claude");
+        assert_eq!(status, JobStatus::Failed);
+        assert_eq!(summary.as_deref(), Some("Claude is not authenticated"));
     }
 
     #[test]

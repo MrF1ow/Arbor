@@ -21,6 +21,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::check_auth,
             commands::list_models,
+            commands::list_providers,
             commands::plan_update,
             commands::get_settings,
             commands::save_settings,
