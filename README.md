@@ -4,9 +4,9 @@
 
 Local-first desktop app that turns course PDFs, PowerPoints, and Word files into structured study digests using the [Codex CLI](https://developers.openai.com/codex/cli). Your Knowledge library is a normal git repo on disk. Sources and generated notes stay together in history.
 
-**Current release:** [2.3.0](CHANGELOG.md) (package `2.3.0`, tag `v2.3.0`). Worker, desktop, and Tauri all report this number (`arbor-worker --version`). **`v3.0.0` waits** for a later clean Mac E2E run of this build. The 2026-09-20 batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) does not close Version 3.
+**Current release:** [2.3.0](CHANGELOG.md) (package `2.3.0`, tag `v2.3.0`). Worker, desktop, and Tauri all report this number (`arbor-worker --version`). **`v3.0.0` waits** for a recorded Linux live run of this build. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) does not close Version 3.
 
-**Version 2** (`v2.0.0`) shipped automation on the old UI. **Version 3** is in progress. `v2.1.0` added the desktop shell. `2.2.0` adds the study loop. `2.3.0` is the fix release after that. **`v3.0.0` is reserved** until the Version 3 Mac batch is recorded on the [implementation checklist](docs/implementation-checklist.md). See [Version numbering](PROJECT.md#version-numbering).
+**Version 2** (`v2.0.0`) shipped automation on the old UI. **Version 3** is in progress. `v2.1.0` added the desktop shell. `2.2.0` adds the study loop. `2.3.0` is the fix release after that. **`v3.0.0` is reserved** until the Linux live run is recorded on the [implementation checklist](docs/implementation-checklist.md). Mac runs are optional and do not block the tag. See [Version numbering](PROJECT.md#version-numbering).
 
 For later milestones, see [`PROJECT.md`](PROJECT.md). The original V1 design (`lecture.md` per lecture) is historical: [`docs/superpowers/specs/2026-08-02-arbor-v1-design.md`](docs/superpowers/specs/2026-08-02-arbor-v1-design.md). Living layout is course folders, dated `digests/`, and `arbor-course.json`.
 
@@ -61,7 +61,7 @@ The 2.2.0 study loop, plus the fixes from the 2026-09-20 Mac batch and tighter d
 | Desktop | File reads stay inside the Knowledge root. AI text is escaped. A content security policy is set. |
 | Notify | The default capability includes `notification:default`. |
 
-**`v3.0.0` ships when the Version 3 Mac batch is recorded** against this release. Codex CLI is still a separate install. The gate list is the [implementation checklist](docs/implementation-checklist.md).
+**`v3.0.0` ships when the Linux live run is recorded** against this release. Codex CLI is still a separate install. The gate list is the [implementation checklist](docs/implementation-checklist.md).
 
 ---
 
