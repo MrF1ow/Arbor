@@ -27,8 +27,9 @@ alwaysApply: true
 |-----|---------|-------|
 | `v2.0.0` | Version 2 | Shipped |
 | `v2.1.0` | Version 3 (partial) | Desktop shell |
-| `v2.2.0` | Version 3 study loop | Waves 1–8. Do not invent `v2.4.0`–`v2.8.0` for PRs #36–#41. |
-| `v2.3.0` | Version 3 fixes | Mac-batch fixes from issue #57, Notes leftovers, path confinement and CSP. Linux live run uses this package. |
+| `v2.2.0` | Version 3 study loop | Waves 1–8. Do not invent `v2.4.0`–`v2.8.0` for those wave PRs #36–#41. |
+| `v2.3.0` | Version 3 fixes | Mac-batch fixes from issue #57, Notes leftovers, path confinement and CSP. |
+| `v2.4.0` | Version 3 (partial) | Tree mark; Linux live-run gate (not `v3.0.0`). Linux live run uses this package. |
 | `v3.0.0` | Version 3 | **Not yet.** Tag after a recorded Linux live run on the checklist. |
 | `v3.1.0`, `v3.2.0`, … | Version 4 in progress | Only after `v3.0.0`. Tutor work until `v4.0.0`. |
 

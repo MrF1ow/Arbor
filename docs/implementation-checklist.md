@@ -12,7 +12,7 @@ Living tracker for **implemented / locally tested / live-run tested**. Capabilit
 
 **Current era:** Version 3. **Next version (Version 4) is blocked** until the Version 3 Linux live run is recorded. A Mac run does not close Version 3.
 
-**Current package:** `2.3.0` (tag `v2.3.0`). **`v3.0.0` is not tagged.** The Linux live run uses the current package. The 2026-09-20 Mac batch recorded failures in the Blockers table and does not close Version 3.
+**Current package:** `2.4.0` (`v2.4.0` is this release; the tag is cut when it lands). **`v3.0.0` is not tagged.** The Linux live run uses the current package. The 2026-09-20 Mac batch recorded failures in the Blockers table and does not close Version 3.
 
 | Marker | Meaning |
 |--------|---------|
@@ -27,7 +27,7 @@ Living tracker for **implemented / locally tested / live-run tested**. Capabilit
 | From | To | May continue when |
 |------|----|-------------------|
 | Version 1 | Version 2 | Version 1 implemented + locally tested. Mac proof for packaging may ride a later batch. **Passed** (`v2.0.0` tagged). |
-| Version 2 | Version 3 shell | Version 2 features implemented + locally tested. **Passed** (`v2.0.0` tagged; shell is `v2.1.0`). Leftover Version 2 Mac boxes ride the Version 3 batch. |
+| Version 2 | Version 3 shell | Version 2 features implemented + locally tested. **Passed** (`v2.0.0` tagged; shell is `v2.1.0`). Leftover proof rides the Version 3 Linux live run. Mac proof is optional. |
 | Version 3 work | **`v3.0.0` tag** | All Version 3 required rows implemented + locally tested **and** one Linux live run recorded in [linux-live-run.md](superpowers/plans/2026-10-17-roadmap-completion/linux-live-run.md). **Not passed.** Mac does not block it. |
 | Version 3 | Version 4 | `v3.0.0` tagged. **Blocked.** Do not implement issue #20 until then. |
 | Version 4 | Version 5 | `v4.0.0` tagged after a Version 4 Linux live run. |
@@ -52,7 +52,7 @@ Shipped as part of `v2.0.0`. GitHub issues #3, #4, #19, #21.
 |------|-------|-------------|----------|----------|----------------|-------|
 | Desktop app, Update, PDF/PPTX, course folders, dated digests, git commit | — | [x] | [x] | [ ] | [x] | Clin Med 2 run on #30 (2026-08-22) |
 | Digest prompt source rules + reject `\(`, `\[`, `\frac` on create/regenerate | [#3](https://github.com/MrF1ow/Arbor/issues/3) | [x] | [x] | [ ] | [x] | Live run reported no LaTeX |
-| `validate_digest` on **patch** splices | [#3](https://github.com/MrF1ow/Arbor/issues/3) follow-up | [x] | [x] | n/a until local | n/a until local | `_apply_patch` validates each provider splice. |
+| `validate_digest` on **patch** splices | [#3](https://github.com/MrF1ow/Arbor/issues/3) follow-up | [x] | [x] | n/a | n/a | `_apply_patch` validates each provider splice. |
 | Codex GUI PATH, 10s timeout, single-flight auth | [#19](https://github.com/MrF1ow/Arbor/issues/19) | [x] | [x] | [ ] | [ ] | Homebrew paths added in 2.2.0; Finder proof is optional Mac proof; Linux live run is the gate |
 | Manifest v2, fingerprints, page markers, dirty ranges, in-place patch | [#21](https://github.com/MrF1ow/Arbor/issues/21) | [x] | [x] | [ ] | [x] | Clin Med 2 |
 | Single-digest `course.md` index (not a full copy) | [#21](https://github.com/MrF1ow/Arbor/issues/21) | [x] | [x] | [ ] | [ ] | Index is written; **link rendering** is Version 3 Notes |
@@ -78,7 +78,7 @@ Shipped `v2.0.0`. Do not add features here. Leftover proof rides the Version 3 L
 
 ## Version 3 — study app (current)
 
-Package `2.3.0` on `main` (tag `v2.3.0`). **`v3.0.0` is blocked on the Linux live run.** The implementation rows below are done and locally tested.
+Package `2.4.0` (this release; tag `v2.4.0` when it lands). **`v3.0.0` is blocked on the Linux live run.** The implementation rows below are done and locally tested.
 
 ### Shipped (do not re-do)
 

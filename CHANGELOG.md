@@ -2,11 +2,18 @@
 
 Package version for the worker, desktop, and Tauri app. See [Version numbering](PROJECT.md#version-numbering) in `PROJECT.md`.
 
-**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is in progress; incremental releases use `v2.1.0`, `v2.2.0`, `v2.3.0`, … until `v3.0.0` when the full v3 milestone ships. **Current package:** `2.3.0`. **Current tag:** `v2.3.0`. **`v3.0.0` waits** for a later clean Mac E2E run. The 2026-09-20 batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) recorded failures and does not close Version 3.
+**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is in progress; incremental releases use `v2.1.0`, `v2.2.0`, `v2.3.0`, … until `v3.0.0` when the full v3 milestone ships. **Current package:** `2.4.0`. **Current tag:** `v2.4.0` is cut when this release lands. **`v3.0.0` waits** for a recorded Linux live run, not a Mac batch. The 2026-09-20 batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) recorded failures and does not close Version 3.
 
 ## Unreleased
 
-Nothing yet. The next product tag is `v3.0.0`, after a clean Mac batch recorded on the [implementation checklist](docs/implementation-checklist.md).
+Nothing pending above `2.4.0`. **`v3.0.0`** still waits for a recorded Linux live run on the [implementation checklist](docs/implementation-checklist.md).
+
+## 2.4.0 — 2026-10-17
+
+Git tag: `v2.4.0` when this release lands. **Product:** Version 3 in progress (tree mark and tag gate). Not `v3.0.0`. Worker, desktop, and Tauri report `2.4.0`, including `arbor-worker --version`.
+
+- Transparent tree mark in the sidebar, welcome screen, favicon, and window/taskbar icons, with a cream trunk on the dark theme.
+- The version gate is a recorded Linux live run in [linux-live-run.md](docs/superpowers/plans/2026-10-17-roadmap-completion/linux-live-run.md). Mac batches are optional and never block a tag.
 
 ## 2.3.0 — 2026-10-17
 
