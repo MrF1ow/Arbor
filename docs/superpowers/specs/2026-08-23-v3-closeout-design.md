@@ -2,7 +2,7 @@
 
 Date: 2026-08-23
 
-Status: design. Required before `v3.0.0`. Program: [`../plans/2026-08-22-v3-program/overview.md`](../plans/2026-08-22-v3-program/overview.md). Plan: [`../plans/2026-08-22-v3-program/wave-8-closeout.md`](../plans/2026-08-22-v3-program/wave-8-closeout.md).
+Status: implemented in `v2.2.0` (grades, quiz session, heading scroll, living docs). Notes leftovers and the Mac-batch fixes are in `v2.3.0`. `v3.0.0` still waits for a clean Mac batch. Do not re-implement this spec. Program: [`../plans/2026-08-22-v3-program/overview.md`](../plans/2026-08-22-v3-program/overview.md). Plan: [`../plans/2026-08-22-v3-program/wave-8-closeout.md`](../plans/2026-08-22-v3-program/wave-8-closeout.md). Ledger: [`../../implementation-checklist.md`](../../implementation-checklist.md).
 
 Tracking issue for **Notes UX leftovers:** [#42](https://github.com/MrF1ow/Arbor/issues/42). Wave 8 study-loop work (grades, quiz session, heading scroll) already landed in package `2.2.0`. Status ledger: [`../../implementation-checklist.md`](../../implementation-checklist.md). Do not treat #42 as the Mac E2E tracker; record Mac batches in [`../plans/2026-08-22-v3-program/mac-e2e.md`](../plans/2026-08-22-v3-program/mac-e2e.md).
 
@@ -11,6 +11,8 @@ Tracking issue for **Notes UX leftovers:** [#42](https://github.com/MrF1ow/Arbor
 Waves 1 through 7 are on `main` (PRs #36 through #41). Package version is still `2.1.0`. The Cursor GitHub App can read pull requests and cannot read issue bodies, so the text of #42 was not available to the planning agent. The remainder below is the Version 3 work that living specs already require and that those PRs left unfinished. If #42 names extra items, add them as Wave 8 PRs. Do not use that as a door to chat, Anki, a pretty canvas, or extra AI providers.
 
 ## Problem
+
+This was the gap on 2026-08-23. Grades, session answers, heading scroll, and the living-doc pass have since landed.
 
 A student can generate flashcards, take a quiz, search by meaning, and walk a concept graph. The study loop is still incomplete, the docs still describe the 2.1.0 shell, and `v3.0.0` would be a lie if tagged today.
 
@@ -73,6 +75,8 @@ Do not publish `3.1.0`. Do not invent seven historical tags for PRs #36 through 
 | `v3.0.0` | After `v2.2.0` and a recorded Mac E2E run |
 
 Package versions stay `2.1.0` until the Wave 8 implementation PR that is meant to be tagged. This design PR does not bump them.
+
+**Current (2026-10-17):** that decision is finished. `v2.2.0` and `v2.3.0` are tagged. The package is `2.3.0`. After `v3.0.0`, Version 4 ships as `v3.1.0`, `v3.2.0`, and so on. The “stay on 2.1.0” and “do not publish 3.1.0” lines above are the decision as written on 2026-08-23.
 
 ## Out of Version 3
 

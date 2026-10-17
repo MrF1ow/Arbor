@@ -1,6 +1,8 @@
 # Version 3 closeout Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Status (2026-10-17):** Landed in `v2.2.0`. Do not execute these tasks. Current release is `v2.3.0`. The open gate is the Mac batch in [mac-e2e.md](mac-e2e.md). Versioning: [`.cursor/rules/arbor-versioning.mdc`](../../../../.cursor/rules/arbor-versioning.mdc).
+
+> **For agentic workers:** This plan is a record. The checkboxes below were the original task list. Do not implement them again.
 
 **Goal:** Finish the study loop, heading scroll, and living docs so Version 3 can be tagged after a recorded Mac E2E run.
 

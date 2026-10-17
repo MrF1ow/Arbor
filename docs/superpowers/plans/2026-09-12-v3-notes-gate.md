@@ -1,6 +1,8 @@
 # Version 3 Notes gate Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Status (2026-10-17):** Landed. Links, tables, reserved names, and patch validation are on `main` in `v2.3.0` and locally tested. Do not execute these tasks. Mac proof is still open in [mac-e2e.md](2026-08-22-v3-program/mac-e2e.md). Versioning: [`.cursor/rules/arbor-versioning.mdc`](../../../.cursor/rules/arbor-versioning.mdc).
+
+> **For agentic workers:** This plan is a record. The checkboxes below were the original task list. Do not implement them again.
 
 **Goal:** Finish the Version 3 storefront leftovers (Notes links/tables/markers, reserved course names, digest patch validation) and prove them locally so one MacBook batch can close Version 3.
 

@@ -1,5 +1,7 @@
 # Wave 7: Citation verification (`v2.8.0`)
 
+> **Status (2026-10-17):** Landed inside tag `v2.2.0`. There is no `v2.8.0`. Do not execute this plan. Current release is `v2.3.0`. The open gate is the Mac batch in [mac-e2e.md](mac-e2e.md).
+
 Parent: [overview.md](overview.md)
 
 Spec: [knowledge layer](../../specs/2026-08-23-v3-knowledge-layer-design.md)

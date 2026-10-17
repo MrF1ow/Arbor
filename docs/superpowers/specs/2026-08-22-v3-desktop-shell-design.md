@@ -2,7 +2,7 @@
 
 Date: 2026-08-22
 
-Status: shipped in package **2.1.0** (2026-08-22). Part of Version 3 **in progress** — not a `v3.0.0` release.
+Status: shell shipped in **`v2.1.0`**. Flashcards, quiz, embeddings, graph, diagrams, and citations shipped in **`v2.2.0`**. Current release is **`v2.3.0`**. Not a `v3.0.0` release.
 
 **Related:** Version 3 program [`../plans/2026-08-22-v3-program/overview.md`](../plans/2026-08-22-v3-program/overview.md). Study artifacts format (Waves 1–3) [`2026-08-22-v3-study-artifacts-format.md`](2026-08-22-v3-study-artifacts-format.md). Reference mockup [`../../mockups/v3-shell.html`](../../mockups/v3-shell.html).
 
@@ -140,18 +140,18 @@ Models stay `.arbor/models.json` with the same dropdown, just moved into Setting
 
 ## Build order
 
-Steps 1–4 shipped in package **`v2.1.0`**. Steps 5–7 target `v2.2.0`–`v2.5.0` (see [v3 program](../plans/2026-08-22-v3-program/overview.md)).
+Steps 1–4 shipped in **`v2.1.0`**. Steps 5–7 shipped in **`v2.2.0`**. They were not separate tags `v2.3.0` through `v2.8.0`. See the [v3 program](../plans/2026-08-22-v3-program/overview.md).
 
 1. Window size, type, color, spacing. Same one-column content, less "terminal." Proves the look without navigation risk. **(v2.1.0)**
 2. Sidebar + course list from disk. Course header with Notes / Flashcards / Quiz tabs (Flashcards and Quiz empty for now). Main pane shows `course.md` preview in Notes mode. **(v2.1.0)**
 3. Inspector for Update / review / log / jobs. **(v2.1.0)**
 4. Settings place that writes `.arbor/settings.json`. **(v2.1.0)**
-5. Flashcards mode — wire tab to real deck UI and generation. **(v2.3.0)**
-6. Quiz mode — same pattern. **(v2.4.0)**
-7. Embeddings, concepts, knowledge graph, diagrams, citations — new modes or extensions on Notes, not layout changes. **(`v2.5.0`–`v2.8.0`; `v3.0.0` when all v3 features ship)**
+5. Flashcards mode — wire tab to real deck UI and generation. **(shipped in v2.2.0)**
+6. Quiz mode — same pattern. **(shipped in v2.2.0)**
+7. Embeddings, concepts, knowledge graph, diagrams, citations — new modes or extensions on Notes, not layout changes. **(shipped in v2.2.0; `v3.0.0` waits for the Mac batch)**
 
 Each step should still run the Mac V2 E2E ingest path. If a shell change breaks Confirm or watch, it is not done.
 
 ## Success
 
-A classmate who has never seen the repo can download a 2.x build, pick a folder, and believe this is a notes app that happens to ingest lectures. They should not see a log until they start an Update. `v3.0.0` is the tag when study, memory, and graph are all present.
+A classmate who has never seen the repo can download a 2.x build, pick a folder, and believe this is a notes app that happens to ingest lectures. They should not see a log until they start an Update. Study, memory, and graph are in `v2.2.0`. `v3.0.0` is the tag after a clean Mac batch of `v2.3.0`.
