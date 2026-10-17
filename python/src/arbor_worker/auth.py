@@ -24,7 +24,10 @@ def extra_bin_dirs(
     home: Path,
     extra_dirs: Iterable[Path] | None = None,
 ) -> list[Path]:
-    dirs = [Path(home) / ".local/bin"]
+    dirs = [
+        Path(home) / ".local/bin",
+        Path(home) / ".grok" / "bin",
+    ]
     dirs.extend(DEFAULT_EXTRA_BIN_DIRS if extra_dirs is None else extra_dirs)
     seen: set[Path] = set()
     unique: list[Path] = []
@@ -60,20 +63,63 @@ def gui_path(
     return os.pathsep.join(parts)
 
 
+def resolve_cli_command(
+    name: str,
+    which,
+    home: Path | None = None,
+    extra_dirs: Iterable[Path] | None = None,
+) -> str | None:
+    found = which(name)
+    if found:
+        return found
+    root = Path.home() if home is None else Path(home)
+    for directory in extra_bin_dirs(root, extra_dirs):
+        candidate = directory / name
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return None
+
+
 def resolve_codex_command(
     which,
     home: Path | None = None,
     extra_dirs: Iterable[Path] | None = None,
 ) -> str | None:
-    found = which("codex")
-    if found:
-        return found
-    root = Path.home() if home is None else Path(home)
-    for directory in extra_bin_dirs(root, extra_dirs):
-        candidate = directory / "codex"
-        if candidate.is_file() and os.access(candidate, os.X_OK):
-            return str(candidate)
-    return None
+    return resolve_cli_command("codex", which, home, extra_dirs)
+
+
+def check_cli_auth(
+    argv: list[str],
+    *,
+    runner=subprocess.run,
+    home: Path | None = None,
+    extra_dirs: Iterable[Path] | None = None,
+    timeout: float = 10,
+    timeout_reason: str = "CLI auth check timeout",
+    failure_reason: str = "CLI is not authenticated",
+    ok=None,
+) -> AuthResult:
+    env = os.environ.copy()
+    env["PATH"] = gui_path(home, extra_dirs=extra_dirs)
+    try:
+        proc = runner(
+            argv,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            env=env,
+        )
+    except subprocess.TimeoutExpired:
+        return AuthResult(False, timeout_reason)
+    except Exception as exc:
+        return AuthResult(False, str(exc) or failure_reason)
+    if ok is not None:
+        if ok(proc):
+            return AuthResult(True, "")
+    elif proc.returncode == 0:
+        return AuthResult(True, "")
+    detail = (proc.stdout or "").strip() or (proc.stderr or "").strip()
+    return AuthResult(False, detail or failure_reason)
 
 
 def check_codex_auth(
@@ -85,21 +131,11 @@ def check_codex_auth(
     cmd = resolve_codex_command(which, home, extra_dirs)
     if cmd is None:
         return AuthResult(False, "Codex CLI not found on PATH")
-    env = os.environ.copy()
-    env["PATH"] = gui_path(home, extra_dirs=extra_dirs)
-    try:
-        proc = runner(
-            [cmd, "login", "status"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-            env=env,
-        )
-    except subprocess.TimeoutExpired:
-        return AuthResult(False, "Codex CLI login status timeout")
-    except Exception as exc:
-        return AuthResult(False, str(exc) or "Codex CLI is not authenticated")
-    if proc.returncode == 0:
-        return AuthResult(True, "")
-    detail = (proc.stdout or "").strip() or (proc.stderr or "").strip()
-    return AuthResult(False, detail or "Codex CLI is not authenticated")
+    return check_cli_auth(
+        [cmd, "login", "status"],
+        runner=runner,
+        home=home,
+        extra_dirs=extra_dirs,
+        timeout_reason="Codex CLI login status timeout",
+        failure_reason="Codex CLI is not authenticated",
+    )

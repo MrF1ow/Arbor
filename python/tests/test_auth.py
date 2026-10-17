@@ -1,7 +1,7 @@
 import subprocess
 from pathlib import Path
 
-from arbor_worker.auth import check_codex_auth, resolve_codex_command
+from arbor_worker.auth import check_codex_auth, resolve_cli_command, resolve_codex_command
 
 
 class FakeCompleted:
@@ -81,6 +81,15 @@ def test_login_status_uses_resolved_path():
     res = check_codex_auth(runner=runner, which=lambda name: "/opt/codex")
     assert res.ok is True
     assert captured["argv"][:3] == ["/opt/codex", "login", "status"]
+
+
+def test_resolve_grok_home_bin(tmp_path: Path):
+    grok_bin = tmp_path / ".grok" / "bin"
+    grok_bin.mkdir(parents=True)
+    exe = grok_bin / "grok"
+    exe.write_text("#!/bin/sh\n")
+    exe.chmod(0o755)
+    assert resolve_cli_command("grok", which=lambda name: None, home=tmp_path) == str(exe)
 
 
 def test_resolve_falls_back_to_extra_bin_dir(tmp_path: Path):

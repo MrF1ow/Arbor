@@ -244,8 +244,8 @@ def test_generate_passes_prepare_cache_images(git_repo: Path, monkeypatch):
             return super().run(request)
 
     monkeypatch.setattr(
-        "arbor_worker.commands.FakeProvider",
-        lambda markdown: Capture(markdown),
+        "arbor_worker.provider.registry.FakeProvider",
+        lambda markdown, models=None, available=True: Capture(markdown),
     )
     monkeypatch.setenv("ARBOR_FAKE_MD", _fake_figure())
 

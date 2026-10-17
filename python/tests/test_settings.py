@@ -38,6 +38,34 @@ def test_load_models_from_file(tmp_path: Path):
     assert models == [Model(id="custom-1", label="Custom One")]
 
 
+def test_load_models_flat_file_applies_only_to_codex(tmp_path: Path):
+    cfg = tmp_path / ".arbor"
+    cfg.mkdir()
+    (cfg / "models.json").write_text(
+        json.dumps({"models": [{"id": "custom-1", "label": "Custom One"}]})
+    )
+    grok_models = load_models(tmp_path, "grok")
+    assert grok_models[0].id == "grok-4.7"
+
+
+def test_load_models_providers_map(tmp_path: Path):
+    cfg = tmp_path / ".arbor"
+    cfg.mkdir()
+    (cfg / "models.json").write_text(
+        json.dumps(
+            {
+                "models": [{"id": "codex-flat", "label": "Flat"}],
+                "providers": {
+                    "grok": [{"id": "grok-custom", "label": "Grok Custom"}],
+                    "codex": [{"id": "codex-map", "label": "Codex Map"}],
+                },
+            }
+        )
+    )
+    assert load_models(tmp_path, "codex") == [Model("codex-map", "Codex Map")]
+    assert load_models(tmp_path, "grok") == [Model("grok-custom", "Grok Custom")]
+
+
 def test_course_defaults():
     from arbor_worker.settings import default_settings
 

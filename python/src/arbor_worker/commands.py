@@ -13,8 +13,8 @@ from arbor_worker.cache import ensure_gitignored
 from arbor_worker.events import EventEmitter
 from arbor_worker.gitstate import GitStateError, commit_batch
 from arbor_worker.provider.base import ProviderRequest
-from arbor_worker.provider.codex import CodexCliProvider
 from arbor_worker.provider.fake import FakeProvider
+from arbor_worker.provider.registry import PROVIDERS, PROVIDER_ORDER, make_provider
 from arbor_worker.settings import default_settings, load_models, load_settings
 from arbor_worker.skills import SKILLS
 from arbor_worker.skills.base import run_skill
@@ -30,32 +30,92 @@ from arbor_worker.skills.manifest import (
     write_manifest,
 )
 
-_DEFAULT_FAKE_MD = (
-    "# Lecture\n## Overview\nThis is a fake digest overview long enough to validate.\n"
-    "## Key Concepts\n- concept\n## Important Details\n- detail\n"
-    "## Questions to Review\n- question?\n"
-)
-
-
 def cmd_check_auth(args) -> int:
-    settings = default_settings()
-    try:
-        res = check_codex_auth()
-    except Exception as exc:
-        res = AuthResult(False, str(exc) or "Codex CLI check failed")
+    provider_id = getattr(args, "provider", "codex") or "codex"
+    entry = PROVIDERS[provider_id]
+    if provider_id == "codex":
+        try:
+            res = check_codex_auth()
+        except Exception as exc:
+            res = AuthResult(False, str(exc) or "Codex CLI check failed")
+        docs_url = entry.docs_url
+    elif provider_id == "fake":
+        res = AuthResult(True, "")
+        docs_url = entry.docs_url
+    else:
+        root = Path(".")
+        provider = make_provider(provider_id, root)
+        status = provider.status()
+        res = AuthResult(status.available, status.reason)
+        docs_url = entry.docs_url
     print(json.dumps({
         "authenticated": res.ok,
         "reason": res.reason,
-        "docs_url": settings.docs_url,
+        "docs_url": docs_url,
     }))
     return 0 if res.ok else 1
 
 
 def cmd_list_models(args) -> int:
     root = Path(getattr(args, "root", None) or ".")
-    models = load_models(root)
+    provider_id = getattr(args, "provider", "codex") or "codex"
+    models = load_models(root, provider_id)
     print(json.dumps({"models": [{"id": m.id, "label": m.label} for m in models]}))
     return 0
+
+
+def cmd_list_providers(args) -> int:
+    root = Path(getattr(args, "root", None) or ".")
+    payload = []
+    for provider_id in PROVIDER_ORDER:
+        entry = PROVIDERS[provider_id]
+        provider = make_provider(provider_id, root)
+        status = provider.status()
+        models = load_models(root, provider_id)
+        payload.append(
+            {
+                "id": provider_id,
+                "label": entry.label,
+                "available": status.available,
+                "reason": status.reason,
+                "docs_url": entry.docs_url,
+                "models": [{"id": m.id, "label": m.label} for m in models],
+            }
+        )
+    print(json.dumps(payload))
+    return 0
+
+
+def _resolve_llm_provider(
+    provider_id: str,
+    root: Path,
+    model_id: str | None,
+    emitter: EventEmitter,
+    *,
+    fake_markdown: str | None = None,
+):
+    entry = PROVIDERS[provider_id]
+    if provider_id != "fake" and not model_id:
+        emitter.error(message=f"--model is required with the {provider_id} provider")
+        return None, 2
+    if provider_id == "codex":
+        auth = check_codex_auth()
+        if not auth.ok:
+            emitter.auth_failed(reason=auth.reason, docs_url=entry.docs_url)
+            return None, 3
+    elif provider_id != "fake":
+        provider = make_provider(provider_id, root)
+        status = provider.status()
+        if not status.available:
+            emitter.auth_failed(reason=status.reason, docs_url=entry.docs_url)
+            return None, 3
+    provider = make_provider(
+        provider_id,
+        root,
+        fake_markdown=fake_markdown,
+    )
+    resolved_model = model_id or "fake-model"
+    return (provider, resolved_model), None
 
 
 def _load_selections(plan_path: str | None) -> dict[str, list[PageRange] | None]:
@@ -93,14 +153,10 @@ def cmd_update(args) -> int:
     settings = load_settings(root)
     emitter = EventEmitter(sys.stdout)
 
-    if args.provider == "codex":
-        auth = check_codex_auth()
-        if not auth.ok:
-            emitter.auth_failed(reason=auth.reason, docs_url=settings.docs_url)
-            return 3
-        provider = CodexCliProvider(models=load_models(root))
-    else:
-        provider = FakeProvider(markdown=os.environ.get("ARBOR_FAKE_MD", _DEFAULT_FAKE_MD))
+    resolved, code = _resolve_llm_provider(args.provider, root, args.model, emitter)
+    if code is not None:
+        return code
+    provider, _model_id = resolved
 
     cancel_file = Path(args.cancel_file) if args.cancel_file else None
     try:
@@ -282,24 +338,7 @@ def cmd_generate(args) -> int:
         )
         return 0
 
-    if args.provider == "codex":
-        if not args.model:
-            emitter.skill_failed(
-                course=args.course,
-                skill=skill.name,
-                message="--model is required with the codex provider",
-            )
-            return 2
-        auth = check_codex_auth()
-        if not auth.ok:
-            emitter.auth_failed(
-                reason=auth.reason,
-                docs_url=settings.docs_url,
-            )
-            return 3
-        provider = CodexCliProvider(models=load_models(root))
-        model_id = args.model
-    else:
+    if args.provider == "fake":
         fake_markdown = os.environ.get(
             "ARBOR_FAKE_MD",
             json.dumps(
@@ -310,8 +349,29 @@ def cmd_generate(args) -> int:
                 }
             ),
         )
-        provider = FakeProvider(markdown=fake_markdown)
-        model_id = args.model or "fake-model"
+        resolved, code = _resolve_llm_provider(
+            args.provider,
+            root,
+            args.model,
+            emitter,
+            fake_markdown=fake_markdown,
+        )
+    else:
+        resolved, code = _resolve_llm_provider(
+            args.provider,
+            root,
+            args.model,
+            emitter,
+        )
+    if code is not None:
+        if code == 2:
+            emitter.skill_failed(
+                course=args.course,
+                skill=skill.name,
+                message=f"--model is required with the {args.provider} provider",
+            )
+        return code
+    provider, model_id = resolved
 
     emitter.skill_started(course=args.course, skill=skill.name)
 

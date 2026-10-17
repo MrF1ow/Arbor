@@ -1,0 +1,7 @@
+{
+  "type": "result",
+  "subtype": "success",
+  "is_error": false,
+  "result": "# Claude digest\n## Overview\nFixture markdown body.\n",
+  "session_id": "sess-fixture-001"
+}

@@ -28,7 +28,8 @@ def test_fake_returns_unmarked_markdown_when_prompt_asks_for_page_markers():
 
 
 def test_fake_models_and_availability():
-    p = FakeProvider(markdown="x", models=[Model("id", "Label")], available=False)
-    assert p.is_available() is False
+    p = FakeProvider(markdown="x", models=[Model("id", "Label")])
+    assert p.is_available() is True
+    assert p.status().reason == ""
     assert p.list_models() == [Model("id", "Label")]
     assert p.name == "fake"

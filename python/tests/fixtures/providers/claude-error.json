@@ -1,0 +1,7 @@
+{
+  "type": "result",
+  "subtype": "success",
+  "is_error": true,
+  "result": "Authentication required",
+  "session_id": "sess-fixture-002"
+}

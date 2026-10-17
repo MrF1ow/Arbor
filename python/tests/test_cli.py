@@ -29,6 +29,7 @@ def test_subcommands_registered():
     assert {
         "check-auth",
         "list-models",
+        "list-providers",
         "update",
         "plan-update",
         "generate",
