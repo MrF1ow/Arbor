@@ -36,17 +36,18 @@ test("parses a citations report at the JSON boundary", async () => {
   );
 });
 
-test("builds Codex study job arguments for citations", async () => {
+test("builds study job arguments for citations", async () => {
   const { citationJobArgs } = await subject();
 
   assert.deepEqual(
-    citationJobArgs("/knowledge", "Biology", true, "gpt-5.6-sol"),
+    citationJobArgs("/knowledge", "Biology", true, "gpt-5.6-sol", "codex"),
     {
       root: "/knowledge",
       course: "Biology",
       skill: "citations",
       force: true,
       model: "gpt-5.6-sol",
+      provider: "codex",
     },
   );
 });

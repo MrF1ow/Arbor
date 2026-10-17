@@ -5,6 +5,16 @@ from pathlib import Path
 from typing import Protocol, runtime_checkable
 
 
+class ProviderError(Exception):
+    pass
+
+
+@dataclass(frozen=True)
+class ProviderStatus:
+    available: bool
+    reason: str
+
+
 @dataclass(frozen=True)
 class Model:
     id: str
@@ -24,9 +34,24 @@ class ProviderResult:
     markdown: str
 
 
+def image_media_type(path: Path) -> str:
+    suffix = path.suffix.lower()
+    if suffix == ".png":
+        return "image/png"
+    if suffix in (".jpg", ".jpeg"):
+        return "image/jpeg"
+    if suffix == ".webp":
+        return "image/webp"
+    if suffix == ".gif":
+        return "image/gif"
+    return "image/png"
+
+
 @runtime_checkable
 class CliProvider(Protocol):
     name: str
+
+    def status(self) -> ProviderStatus: ...
 
     def is_available(self) -> bool: ...
 

@@ -43,6 +43,7 @@ import {
 } from "./citations";
 import { headingId, renderMarkdown } from "./markdown";
 import { renderSearchHit } from "./search-hit";
+import { pickerProviders, providerBadge } from "./provider";
 import { parseAppearance, resolvedTheme } from "./theme";
 import type {
   Appearance,
@@ -57,6 +58,7 @@ import type {
   KnowledgeSettings,
   Mode,
   Model,
+  ProviderInfo,
   PendingSource,
   QuizProgress,
   QuizReview,
@@ -104,9 +106,9 @@ const inspectorEl = $("inspector");
 const panels = document.querySelectorAll(".content-panel");
 const navJobs = $("nav-jobs");
 const navSettings = $("nav-settings");
-const codexStatusEl = $("codex-status");
-const codexLabelEl = $("codex-label");
-const docsLink = $("codex-docs") as HTMLAnchorElement;
+const providerStatusEl = $("provider-status");
+const providerLabelEl = $("provider-label");
+const docsLink = $("provider-docs") as HTMLAnchorElement;
 const digestListEl = $("digest-list");
 const courseIndexLink = $("course-index-link");
 const readingArticleEl = $("reading-article");
@@ -170,6 +172,7 @@ const notesConceptChipsEl = $("notes-concept-chips");
 const generateCitationsBtn = $("generate-citations") as HTMLButtonElement;
 const jobsListEl = $("jobs-list");
 const jobsLogEl = $("jobs-log");
+const providerSel = $("provider") as HTMLSelectElement;
 const modelSel = $("model") as HTMLSelectElement;
 const toggleWatch = $("toggle-watch");
 const toggleAuto = $("toggle-auto");
@@ -195,6 +198,7 @@ const searchSemanticInput = $<HTMLInputElement>("search-semantic");
 const searchResultsEl = $("search-results");
 
 let knowledgeRoot: string | null = null;
+let providerId = "codex";
 let appearance: Appearance = "system";
 let authed = false;
 let activeUpdateJobId: string | null = null;
@@ -555,7 +559,7 @@ async function startFlashcardJob(force: boolean) {
   try {
     const jobId = await invoke<string>(
       "start_study_job",
-      flashcardJobArgs(knowledgeRoot, currentCourse, force, modelSel.value),
+      flashcardJobArgs(knowledgeRoot, currentCourse, force, modelSel.value, providerId),
     );
     logLine(`Flashcard job ${jobId} started.`);
   } catch (error) {
@@ -795,7 +799,7 @@ async function startQuizJob(force: boolean) {
   try {
     const jobId = await invoke<string>(
       "start_study_job",
-      quizJobArgs(knowledgeRoot, currentCourse, force, modelSel.value),
+      quizJobArgs(knowledgeRoot, currentCourse, force, modelSel.value, providerId),
     );
     logLine(`Quiz job ${jobId} started.`);
   } catch (error) {
@@ -814,7 +818,7 @@ async function startConceptJob(force: boolean) {
   try {
     const jobId = await invoke<string>(
       "start_study_job",
-      conceptJobArgs(knowledgeRoot, currentCourse, force, modelSel.value),
+      conceptJobArgs(knowledgeRoot, currentCourse, force, modelSel.value, providerId),
     );
     logLine(`Concept job ${jobId} started.`);
   } catch (error) {
@@ -833,7 +837,7 @@ async function startDiagramJob(force: boolean) {
   try {
     const jobId = await invoke<string>(
       "start_study_job",
-      diagramJobArgs(knowledgeRoot, currentCourse, force, modelSel.value),
+      diagramJobArgs(knowledgeRoot, currentCourse, force, modelSel.value, providerId),
     );
     logLine(`Diagram job ${jobId} started.`);
   } catch (error) {
@@ -869,7 +873,7 @@ async function startCitationJob(force: boolean) {
   try {
     const jobId = await invoke<string>(
       "start_study_job",
-      citationJobArgs(knowledgeRoot, currentCourse, force, modelSel.value),
+      citationJobArgs(knowledgeRoot, currentCourse, force, modelSel.value, providerId),
     );
     logLine(`Citations job ${jobId} started.`);
   } catch (error) {
@@ -890,6 +894,7 @@ async function activateKnowledgeRoot(picked: string) {
     logLine(`Could not initialize git: ${e}`);
   }
   await invoke("start_folder_watch", { root: picked });
+  await loadProviders(providerId);
   await loadModels(modelSel.value || null);
   await persist();
   await renderCourseList();
@@ -952,6 +957,7 @@ async function startUpdateWithSelections(
     activeUpdateJobId = await invoke<string>("start_update", {
       root: knowledgeRoot,
       model: modelSel.value,
+      provider: providerId,
       selections,
       trigger,
     });
@@ -986,7 +992,9 @@ async function presentUpdatePlan(
       await refreshAuth();
       if (!authed) {
         renderReview(plan.pending);
-        logLine("Auto-update waiting for Codex auth. Review and Confirm when ready.");
+        logLine(
+          `Auto-update waiting for ${currentProviderLabel()} auth. Review and Confirm when ready.`,
+        );
         return;
       }
       await startUpdateWithSelections(
@@ -1185,11 +1193,55 @@ async function saveKnowledgeSettings(
   await invoke("save_knowledge_settings", { root: knowledgeRoot, settings: next });
 }
 
+const PROVIDER_FALLBACK = [
+  { id: "codex", label: "Codex" },
+  { id: "claude", label: "Claude" },
+  { id: "grok", label: "Grok" },
+];
+
+function currentProviderLabel(): string {
+  const opt = providerSel.selectedOptions[0];
+  return opt?.textContent?.trim() || providerId;
+}
+
+function selectedModelLabel(): string {
+  const opt = modelSel.selectedOptions[0];
+  return opt?.textContent?.trim() || modelSel.value || "";
+}
+
+async function loadProviders(selectedId: string) {
+  let rows: { id: string; label: string }[];
+  try {
+    const list = await invoke<ProviderInfo[]>("list_providers", {
+      root: knowledgeRoot ?? undefined,
+    });
+    rows = pickerProviders(list.map((p) => ({ id: p.id, label: p.label })));
+  } catch {
+    rows = PROVIDER_FALLBACK;
+  }
+  providerSel.innerHTML = "";
+  for (const p of rows) {
+    const opt = document.createElement("option");
+    opt.value = p.id;
+    opt.textContent = p.label;
+    providerSel.appendChild(opt);
+  }
+  const id = rows.some((r) => r.id === selectedId) ? selectedId : (rows[0]?.id ?? "codex");
+  providerSel.value = id;
+  providerId = id;
+}
+
 async function loadSettings() {
   const s = await invoke<Settings>("get_settings");
+  providerId = s.provider_id?.trim() || "codex";
   appearance = s.appearance ?? "system";
   appearanceSel.value = appearance;
   applyTheme();
+  try {
+    await loadProviders(providerId);
+  } catch (error) {
+    logLine(`Could not load providers: ${error}`);
+  }
   if (s.knowledge_root) {
     knowledgeRoot = s.knowledge_root;
     folderHintEl.textContent = shortenPath(s.knowledge_root);
@@ -1217,6 +1269,7 @@ async function persist() {
     settings: {
       knowledge_root: knowledgeRoot,
       model_id: modelSel.value || null,
+      provider_id: providerId,
       appearance,
     } satisfies Settings,
   });
@@ -1225,6 +1278,7 @@ async function persist() {
 async function loadModels(selected: string | null) {
   const res = await invoke<{ models: Model[] }>("list_models", {
     root: knowledgeRoot ?? undefined,
+    provider: providerId,
   });
   modelSel.innerHTML = "";
   for (const m of res.models) {
@@ -1233,34 +1287,41 @@ async function loadModels(selected: string | null) {
     opt.textContent = m.label;
     modelSel.appendChild(opt);
   }
-  if (selected) modelSel.value = selected;
+  if (selected && res.models.some((m) => m.id === selected)) {
+    modelSel.value = selected;
+  } else if (res.models.length > 0) {
+    modelSel.value = res.models[0].id;
+  }
 }
 
 let refreshAuthInFlight: Promise<void> | null = null;
 
 async function refreshAuth() {
   if (refreshAuthInFlight) return refreshAuthInFlight;
+  const label = currentProviderLabel();
   refreshAuthInFlight = (async () => {
-    codexLabelEl.textContent = "Checking Codex…";
-    codexStatusEl.className = "auth-badge";
+    providerLabelEl.textContent = `Checking ${label}…`;
+    providerStatusEl.className = "auth-badge";
     docsLink.hidden = true;
+    const modelLabel = selectedModelLabel();
     try {
-      const a = await invoke<AuthStatus>("check_auth");
+      const a = await invoke<AuthStatus>("check_auth", { provider: providerId });
       authed = a.authenticated;
       if (a.authenticated) {
-        codexLabelEl.textContent = "Codex connected";
-        codexStatusEl.className = "auth-badge";
+        providerLabelEl.textContent = providerBadge(label, modelLabel, true);
+        providerStatusEl.className = "auth-badge";
+        docsLink.hidden = true;
       } else {
-        codexLabelEl.textContent = a.reason;
-        codexStatusEl.className = "auth-badge bad";
+        providerLabelEl.textContent = providerBadge(label, modelLabel, false);
+        providerStatusEl.className = "auth-badge bad";
         docsLink.href = a.docs_url;
+        docsLink.textContent = `Set up ${label}`;
         docsLink.hidden = false;
       }
-    } catch (e) {
+    } catch {
       authed = false;
-      const detail = String(e).trim();
-      codexLabelEl.textContent = detail || "Check failed";
-      codexStatusEl.className = "auth-badge bad";
+      providerLabelEl.textContent = providerBadge(label, modelLabel, false);
+      providerStatusEl.className = "auth-badge bad";
     }
     refreshUpdateEnabled();
     refreshStudyEnabled();
@@ -1461,8 +1522,25 @@ reindexBtn.addEventListener("click", async () => {
   }
 });
 
+providerSel.addEventListener("change", () => {
+  providerId = providerSel.value;
+  const prevModel = modelSel.value;
+  void (async () => {
+    try {
+      await loadModels(prevModel || null);
+    } catch (error) {
+      modelSel.innerHTML = "";
+      logLine(`Could not load models: ${error}`);
+    }
+    refreshStudyEnabled();
+    await refreshAuth();
+    await persist();
+  })();
+});
+
 modelSel.addEventListener("change", () => {
   refreshStudyEnabled();
+  void refreshAuth();
   void persist();
 });
 
@@ -1700,7 +1778,7 @@ function renderEvent(ev: WorkerEvent) {
       logLine(`\nDone. processed=${ev.processed} failed=${ev.failed} skipped=${ev.skipped}`);
       break;
     case "auth_failed":
-      logLine(`Codex not authenticated: ${ev.reason}`);
+      logLine(`${currentProviderLabel()} is not authenticated: ${ev.reason}`);
       break;
     case "error":
       logLine(`Error: ${ev.message}`);

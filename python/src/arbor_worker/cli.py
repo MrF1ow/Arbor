@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 
 from arbor_worker import __version__
+from arbor_worker.provider.registry import provider_choices
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -10,9 +11,23 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=__version__)
     sub = parser.add_subparsers(dest="command")
 
-    sub.add_parser("check-auth", help="Check Codex CLI authentication.")
+    ca = sub.add_parser("check-auth", help="Check provider CLI authentication.")
+    ca.add_argument(
+        "--provider",
+        default="codex",
+        choices=provider_choices(),
+        help="Provider to check (default: codex).",
+    )
     lm = sub.add_parser("list-models", help="List selectable models as JSON.")
     lm.add_argument("--root", default=None, help="Knowledge root to read .arbor/models.json from.")
+    lm.add_argument(
+        "--provider",
+        default="codex",
+        choices=provider_choices(),
+        help="Provider whose models to list (default: codex).",
+    )
+    lp = sub.add_parser("list-providers", help="List CLI providers and model catalogs as JSON.")
+    lp.add_argument("--root", default=None, help="Knowledge root to read .arbor/models.json from.")
 
     pu = sub.add_parser("plan-update", help="List sources that would be processed, as JSON.")
     pu.add_argument("--root", required=True, help="Path to the Knowledge git repo.")
@@ -20,7 +35,7 @@ def build_parser() -> argparse.ArgumentParser:
     up = sub.add_parser("update", help="Process new/changed sources under a Knowledge root.")
     up.add_argument("--root", required=True, help="Path to the Knowledge git repo.")
     up.add_argument("--model", required=True, help="Model id passed to the provider.")
-    up.add_argument("--provider", default="codex", choices=["codex", "fake"])
+    up.add_argument("--provider", default="codex", choices=provider_choices())
     up.add_argument("--cancel-file", default=None, help="If this file appears, stop at the next range or action boundary.")
     up.add_argument("--plan", default=None, help='JSON file with {"selections": [{"path", "ranges"}]}.')
 
@@ -29,7 +44,7 @@ def build_parser() -> argparse.ArgumentParser:
     gen.add_argument("--course", required=True, help="Course directory name.")
     gen.add_argument("--skill", required=True, help="Study skill to generate.")
     gen.add_argument("--force", action="store_true", help="Regenerate a current artifact.")
-    gen.add_argument("--provider", default="codex", choices=["codex", "fake"])
+    gen.add_argument("--provider", default="codex", choices=provider_choices())
     gen.add_argument("--model", default=None, help="Model id passed to the provider.")
 
     ri = sub.add_parser("reindex", help="Rebuild the search index under a Knowledge root.")
@@ -65,6 +80,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "list-models":
         from arbor_worker.commands import cmd_list_models
         return cmd_list_models(args)
+    if args.command == "list-providers":
+        from arbor_worker.commands import cmd_list_providers
+        return cmd_list_providers(args)
     if args.command == "plan-update":
         from arbor_worker.commands import cmd_plan_update
         return cmd_plan_update(args)

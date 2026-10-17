@@ -17,7 +17,7 @@ def run(argv):
 def test_version_flag():
     code, out, _ = run(["--version"])
     assert code == 0
-    assert "2.4.0" in out
+    assert "2.5.0" in out
 
 
 def test_subcommands_registered():
@@ -29,6 +29,7 @@ def test_subcommands_registered():
     assert {
         "check-auth",
         "list-models",
+        "list-providers",
         "update",
         "plan-update",
         "generate",

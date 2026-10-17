@@ -79,15 +79,16 @@ test("parses quiz progress and rejects negative counts", async () => {
   );
 });
 
-test("builds Codex study job arguments", async () => {
+test("builds study job arguments", async () => {
   const { quizJobArgs } = await subject();
 
-  assert.deepEqual(quizJobArgs("/knowledge", "Biology", true, "gpt-5.6-sol"), {
+  assert.deepEqual(quizJobArgs("/knowledge", "Biology", true, "gpt-5.6-sol", "codex"), {
     root: "/knowledge",
     course: "Biology",
     skill: "quiz",
     force: true,
     model: "gpt-5.6-sol",
+    provider: "codex",
   });
 });
 

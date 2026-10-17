@@ -22,7 +22,17 @@ export interface AuthStatus {
 export interface Settings {
   knowledge_root: string | null;
   model_id: string | null;
+  provider_id: string;
   appearance: Appearance;
+}
+
+export interface ProviderInfo {
+  id: string;
+  label: string;
+  available: boolean;
+  reason: string;
+  docs_url: string;
+  models: Model[];
 }
 
 export type AlignmentStatus = "clean_append" | "changed" | "ambiguous" | "identical";

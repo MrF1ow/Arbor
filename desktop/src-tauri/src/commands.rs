@@ -10,6 +10,16 @@ use std::process::Command;
 use std::sync::Arc;
 use tauri::Manager;
 
+fn non_empty_provider(provider: Option<String>) -> Option<String> {
+    provider
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn default_provider_id(provider: Option<String>) -> String {
+    non_empty_provider(provider).unwrap_or_else(|| "codex".to_string())
+}
+
 fn repo_dir(app: &tauri::AppHandle) -> PathBuf {
     let resource_dir = app.path().resource_dir().ok();
     let current_dir = std::env::current_dir().ok();
@@ -28,16 +38,42 @@ fn repo_dir(app: &tauri::AppHandle) -> PathBuf {
 }
 
 #[tauri::command]
-pub fn check_auth(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
-    worker::run_worker_json(&repo_dir(&app), &["check-auth"])
+pub fn check_auth(
+    app: tauri::AppHandle,
+    provider: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let repo = repo_dir(&app);
+    match non_empty_provider(provider) {
+        Some(id) => worker::run_worker_json(&repo, &["check-auth", "--provider", &id]),
+        None => worker::run_worker_json(&repo, &["check-auth"]),
+    }
 }
 
 #[tauri::command]
 pub fn list_models(
     app: tauri::AppHandle,
     root: Option<String>,
+    provider: Option<String>,
 ) -> Result<serde_json::Value, String> {
+    let provider_id = non_empty_provider(provider);
     let mut args: Vec<&str> = vec!["list-models"];
+    if let Some(r) = root.as_deref() {
+        args.push("--root");
+        args.push(r);
+    }
+    if let Some(id) = provider_id.as_deref() {
+        args.push("--provider");
+        args.push(id);
+    }
+    worker::run_worker_json(&repo_dir(&app), &args)
+}
+
+#[tauri::command]
+pub fn list_providers(
+    app: tauri::AppHandle,
+    root: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let mut args: Vec<&str> = vec!["list-providers"];
     if let Some(r) = root.as_deref() {
         args.push("--root");
         args.push(r);
@@ -1075,8 +1111,14 @@ pub fn start_update(
     model: String,
     selections: Vec<Selection>,
     trigger: Option<String>,
+    provider: Option<String>,
 ) -> Result<String, String> {
-    let auth = worker::run_worker_json(&repo_dir(&app), &["check-auth"])?;
+    let provider_id = default_provider_id(provider);
+    let label = settings::provider_label(&provider_id);
+    let auth = worker::run_worker_json(
+        &repo_dir(&app),
+        &["check-auth", "--provider", &provider_id],
+    )?;
     let authenticated = auth
         .get("authenticated")
         .and_then(|v| v.as_bool())
@@ -1085,8 +1127,9 @@ pub fn start_update(
         let reason = auth
             .get("reason")
             .and_then(|v| v.as_str())
-            .unwrap_or("Codex CLI is not authenticated");
-        return Err(reason.to_string());
+            .map(str::to_string)
+            .unwrap_or_else(|| format!("{label} is not authenticated"));
+        return Err(reason);
     }
 
     let plan_json = serde_json::to_string(&serde_json::json!({ "selections": selections }))
@@ -1125,6 +1168,7 @@ pub fn start_update(
         app_dir,
         root.clone(),
         model,
+        provider_id,
         cancel,
         plan_path,
         job_id.clone(),
@@ -1141,11 +1185,17 @@ pub fn start_study_job(
     skill: String,
     force: Option<bool>,
     model: Option<String>,
+    provider: Option<String>,
 ) -> Result<String, String> {
     let force = force.unwrap_or(false);
     let model = worker::normalize_study_model(model);
+    let provider_id = default_provider_id(provider);
+    let label = settings::provider_label(&provider_id);
     if model.is_some() {
-        let auth = worker::run_worker_json(&repo_dir(&app), &["check-auth"])?;
+        let auth = worker::run_worker_json(
+            &repo_dir(&app),
+            &["check-auth", "--provider", &provider_id],
+        )?;
         let authenticated = auth
             .get("authenticated")
             .and_then(|value| value.as_bool())
@@ -1154,8 +1204,8 @@ pub fn start_study_job(
             return Err(auth
                 .get("reason")
                 .and_then(|value| value.as_str())
-                .unwrap_or("Codex CLI is not authenticated")
-                .to_string());
+                .map(str::to_string)
+                .unwrap_or_else(|| format!("{label} is not authenticated")));
         }
     }
     let plan_json = serde_json::to_string(&serde_json::json!({
@@ -1195,6 +1245,7 @@ pub fn start_study_job(
         skill,
         force,
         model,
+        provider_id,
         job_id.clone(),
     );
     Ok(job_id)

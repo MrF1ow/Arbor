@@ -41,11 +41,11 @@
             </div>
 
             <div class="sidebar-footer">
-            <span id="codex-status" class="auth-badge">
+            <span id="provider-status" class="auth-badge">
               <span class="auth-dot"></span>
-              <span id="codex-label">Checking Codex…</span>
+              <span id="provider-label">Checking provider…</span>
             </span>
-            <a id="codex-docs" href="#" target="_blank" rel="noreferrer" hidden class="btn-link">Set up Codex</a>
+            <a id="provider-docs" href="#" target="_blank" rel="noreferrer" hidden class="btn-link">Set up provider</a>
             <div id="folder-hint" class="folder-hint">No folder selected</div>
             <button id="choose-folder" class="btn-link">Choose Knowledge folder…</button>
             </div>
@@ -223,7 +223,7 @@
               <div class="content-panel" data-panel="settings">
                 <div class="place-view">
                   <h2>Settings</h2>
-                  <p>Appearance, Knowledge folder behavior, and model selection.</p>
+                  <p>Appearance, Knowledge folder behavior, provider, and model selection.</p>
                   <div class="settings-group">
                     <div class="setting-row">
                       <span>Appearance</span>
@@ -256,6 +256,10 @@
                     <div class="setting-row">
                       <span>Auto-generate quiz after Update</span>
                       <button class="toggle off" id="toggle-auto-quiz" type="button" aria-label="Auto-generate quiz"></button>
+                    </div>
+                    <div class="setting-row">
+                      <span>Provider</span>
+                      <select id="provider"></select>
                     </div>
                     <div class="setting-row">
                       <span>Model</span>

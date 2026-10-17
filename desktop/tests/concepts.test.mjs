@@ -93,32 +93,34 @@ test("lists neighbors with relations", async () => {
   assert.deepEqual(neighbors(parsed, "missing"), []);
 });
 
-test("builds Codex study job arguments for concepts", async () => {
+test("builds study job arguments for concepts", async () => {
   const { conceptJobArgs } = await subject();
 
   assert.deepEqual(
-    conceptJobArgs("/knowledge", "Biology", true, "gpt-5.6-sol"),
+    conceptJobArgs("/knowledge", "Biology", true, "gpt-5.6-sol", "codex"),
     {
       root: "/knowledge",
       course: "Biology",
       skill: "concepts",
       force: true,
       model: "gpt-5.6-sol",
+      provider: "codex",
     },
   );
 });
 
-test("builds Codex study job arguments for diagrams", async () => {
+test("builds study job arguments for diagrams", async () => {
   const { diagramJobArgs } = await subject();
 
   assert.deepEqual(
-    diagramJobArgs("/knowledge", "Biology", false, "gpt-5.6-sol"),
+    diagramJobArgs("/knowledge", "Biology", false, "gpt-5.6-sol", "codex"),
     {
       root: "/knowledge",
       course: "Biology",
       skill: "diagrams",
       force: false,
       model: "gpt-5.6-sol",
+      provider: "codex",
     },
   );
 });

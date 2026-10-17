@@ -345,6 +345,8 @@ tags
 
 This allows switching AI providers without modifying downstream code.
 
+**Shipped in 2.5.0:** Codex CLI, Claude Code CLI, and Grok CLI share one worker `CliProvider` interface (`codex`, `claude`, `grok` in the registry). API providers (OpenAI API, Anthropic API, Gemini, Ollama, LM Studio) are not shipped yet.
+
 ---
 
 # Skills
@@ -656,7 +658,7 @@ A study app a student would download, with local memory and a concept graph an A
 
 The shell is the storefront. Flashcards and quiz are the study loop. Embeddings, concepts, cross-document links, and a graph-lite view are the memory a later tutor (Version 4) will use instead of rereading every digest. Diagram analysis and citation checks ground that memory in the notes the student already has.
 
-**Status:** In progress. Package **2.2.0** has the study loop. Package **2.3.0** (`v2.3.0`) is the fix release after the 2026-09-20 Mac batch. Package **2.4.0** is the current package (tree mark and Linux live-run gate). **`v3.0.0` ships when the Linux live run is recorded** on the [implementation checklist](docs/implementation-checklist.md) and in [`linux-live-run.md`](docs/superpowers/plans/2026-10-17-roadmap-completion/linux-live-run.md). Do not renumber waves 1–8; they shipped in `2.2.0`. Later `2.x` tags, starting with `2.4.0`, are the slices in [`docs/superpowers/plans/2026-10-17-roadmap-completion/overview.md`](docs/superpowers/plans/2026-10-17-roadmap-completion/overview.md).
+**Status:** In progress. Package **2.2.0** has the study loop. Package **2.3.0** (`v2.3.0`) is the fix release after the 2026-09-20 Mac batch. Package **2.5.0** is the current package (CLI provider registry). Package **2.4.0** remains the brand and gate release (tree mark and Linux live-run gate). **`v3.0.0` ships when the Linux live run is recorded** on the [implementation checklist](docs/implementation-checklist.md) and in [`linux-live-run.md`](docs/superpowers/plans/2026-10-17-roadmap-completion/linux-live-run.md). Do not renumber waves 1–8; they shipped in `2.2.0`. Later `2.x` tags, starting with `2.4.0`, are the slices in [`docs/superpowers/plans/2026-10-17-roadmap-completion/overview.md`](docs/superpowers/plans/2026-10-17-roadmap-completion/overview.md).
 
 **Shipped so far (`v2.1.0`):** desktop shell — [`docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md`](docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md).
 
@@ -666,6 +668,7 @@ Shipped in v2.1.0 (shell only)
 
 * Professional desktop shell (sidebar, course mode tabs, digest preview, job inspector)
 * In-app settings (watch, auto-run, delete-after-digest, model)
+* Settings provider and model pickers (Codex, Claude, or Grok CLI)
 * Search overlay navigates to digest preview in Notes mode
 * Flashcards and Quiz tabs were empty at that tag
 

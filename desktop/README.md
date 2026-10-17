@@ -1,6 +1,6 @@
 # Arbor Desktop
 
-Tauri v2 shell for Arbor (package **2.4.0**). Drives the `arbor-worker` CLI (see `../python`).
+Tauri v2 shell for Arbor (package **2.5.0**). Drives the `arbor-worker` CLI (see `../python`).
 
 The UI is the Version 3 shell. First delivery was **v2.1.0**. Package **2.2.0** adds the study loop. Package **2.3.0** is the Mac-batch fix release. Full Version 3 completes at **v3.0.0** after a recorded Linux live run. Mac proof does not block the tag. Sidebar library, course workspace with Notes / Flashcards / Quiz / Graph tabs, in-app digest preview, and a collapsed bottom inspector for Update and job logs.
 
@@ -10,7 +10,7 @@ Design spec: [`docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md`](..
 
 - Rust + cargo, Node 20+, npm
 - `uv` on PATH and the worker installed: `cd ../python && uv sync`
-- Codex CLI installed and authenticated: <https://developers.openai.com/codex/cli>
+- One of Codex CLI, Claude Code, or Grok CLI installed and signed in — [Codex CLI](https://developers.openai.com/codex/cli), [Claude Code](https://code.claude.com/docs), [Grok CLI](https://x.ai/grok)
 - Linux only: webkit2gtk + libsoup dev packages
 - Optional (PPTX image fallback): LibreOffice (`soffice`)
 

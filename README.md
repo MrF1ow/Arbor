@@ -2,15 +2,17 @@
 
 <img src="docs/brand/arbor-logo-wordmark.png" alt="Arbor" width="160" />
 
-Local-first desktop app that turns course PDFs, PowerPoints, and Word files into structured study digests using the [Codex CLI](https://developers.openai.com/codex/cli). Your Knowledge library is a normal git repo on disk. Sources and generated notes stay together in history.
+Local-first desktop app that turns course PDFs, PowerPoints, and Word files into structured study digests using a signed-in CLI provider (Codex CLI, Claude Code, or Grok CLI). Your Knowledge library is a normal git repo on disk. Sources and generated notes stay together in history.
 
-**Current release:** [2.4.0](CHANGELOG.md) (package `2.4.0`; tag `v2.4.0` is cut when this release lands). Worker, desktop, and Tauri all report this number (`arbor-worker --version`). **`v3.0.0` waits** for a recorded Linux live run of this build. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) does not close Version 3.
+**Current release:** [2.5.0](CHANGELOG.md) (package `2.5.0`; tag `v2.5.0` is cut when this release lands). Worker, desktop, and Tauri all report this number (`arbor-worker --version`). **`v3.0.0` waits** for a recorded Linux live run of this build. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) does not close Version 3.
 
-**Version 2** (`v2.0.0`) shipped automation on the old UI. **Version 3** is in progress. `v2.1.0` added the desktop shell. `2.2.0` adds the study loop. `2.3.0` is the fix release after that. **`2.4.0`** is the brand and gate release (tree mark and Linux live-run tag gate). **`v3.0.0` is reserved** until the Linux live run is recorded on the [implementation checklist](docs/implementation-checklist.md). Mac runs are optional and do not block the tag. See [Version numbering](PROJECT.md#version-numbering).
+**Version 2** (`v2.0.0`) shipped automation on the old UI. **Version 3** is in progress. `v2.1.0` added the desktop shell. `2.2.0` adds the study loop. `2.3.0` is the fix release after that. **`2.4.0`** is the brand and gate release (tree mark and Linux live-run tag gate). **`2.5.0`** adds Codex, Claude, and Grok CLI providers with a Settings picker. **`v3.0.0` is reserved** until the Linux live run is recorded on the [implementation checklist](docs/implementation-checklist.md). Mac runs are optional and do not block the tag. See [Version numbering](PROJECT.md#version-numbering).
 
-## What's in 2.4.0
+## What's in 2.5.0
 
-Transparent tree mark in the sidebar, welcome screen, favicon, and window icons (cream trunk on the dark theme). The version gate is a recorded Linux live run; Mac batches are optional and never block a tag.
+Provider registry with Codex CLI, Claude Code CLI, and Grok CLI behind one worker interface. Settings picks **Provider** above **Model**; the top bar shows the selected provider's auth state and docs link.
+
+Package **2.4.0** was the tree mark and Linux live-run gate release; **`v3.0.0` still waits** for a recorded Linux live run.
 
 For later milestones, see [`PROJECT.md`](PROJECT.md). The original V1 design (`lecture.md` per lecture) is historical: [`docs/superpowers/specs/2026-08-02-arbor-v1-design.md`](docs/superpowers/specs/2026-08-02-arbor-v1-design.md). Living layout is course folders, dated `digests/`, and `arbor-course.json`.
 
@@ -97,7 +99,7 @@ Editing digests by hand never triggers reprocessing.
 |-------------|--------|
 | **macOS or Linux** | Packaged DMG is macOS. Linux runs from source. Windows is untested |
 | **Git** | Knowledge library must be a git repo |
-| **Codex CLI** | Installed and logged in — [Codex CLI docs](https://developers.openai.com/codex/cli) |
+| **Codex CLI, Claude Code, or Grok CLI** | One installed and signed in — [Codex CLI](https://developers.openai.com/codex/cli), [Claude Code](https://code.claude.com/docs), or [Grok CLI](https://x.ai/grok) |
 | **Python ≥ 3.11** | Worker runtime |
 | **[uv](https://docs.astral.sh/uv/)** | Installs and runs the Python worker |
 | **Rust + cargo** | Tauri desktop shell ([rustup](https://rustup.rs/)) |
@@ -153,6 +155,8 @@ Verify login:
 codex login   # if not already authenticated
 codex exec --help
 ```
+
+You can use [Claude Code](https://code.claude.com/docs) or [Grok CLI](https://x.ai/grok) instead of Codex. In **Settings**, choose **Provider** above **Model** and sign in with that CLI (`claude auth status`, `grok models`, and so on).
 
 ### 3. Install the Python worker
 
@@ -315,7 +319,9 @@ Component READMEs:
 
 ## Customizing models
 
-Create `.arbor/models.json` in your Knowledge root:
+Create `.arbor/models.json` in your Knowledge root.
+
+A flat `models` list still applies to **Codex** only:
 
 ```json
 {
@@ -326,7 +332,21 @@ Create `.arbor/models.json` in your Knowledge root:
 }
 ```
 
-Model IDs must match what your Codex CLI accepts.
+Optional per-provider overrides:
+
+```json
+{
+  "providers": {
+    "codex": [{ "id": "gpt-5.6-sol", "label": "Sol 5.6" }],
+    "claude": [{ "id": "claude-sonnet-5-5", "label": "Sonnet 5.5" }],
+    "grok": [{ "id": "grok-4.7", "label": "Grok 4.7" }]
+  }
+}
+```
+
+When `providers.<id>` is present, it wins for that provider. Flat `models` does not apply to Grok or Claude.
+
+Model IDs must match what the selected CLI accepts.
 
 `.arbor/settings.json` holds worker options. Missing keys, and a missing file, use these defaults:
 
@@ -346,7 +366,7 @@ Model IDs must match what your Codex CLI accepts.
 
 | Problem | What to try |
 |---------|-------------|
-| Update button disabled | `codex login`, then `uv run arbor-worker check-auth` |
+| Update button disabled | Sign in to the provider selected in Settings (`codex login`, `claude auth status`, or `grok models`), then refocus Arbor |
 | Nothing to process | Only new, changed, or leftover-page sources trigger work |
 | Wrong page window | Check `suggested_ranges` from `plan-update`. Blank is whole-file only for new sources, not truncation. |
 | PPTX prepare failed | Export slides as PDF, or install LibreOffice for image fallback |

@@ -47,6 +47,7 @@ export function citationJobArgs(
   course: string,
   force: boolean,
   model: string,
+  provider: string,
 ) {
   return {
     root,
@@ -54,5 +55,6 @@ export function citationJobArgs(
     skill: "citations",
     force,
     model,
+    provider,
   };
 }

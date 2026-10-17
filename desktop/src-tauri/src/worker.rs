@@ -214,12 +214,43 @@ pub fn normalize_study_model(model: Option<String>) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
+fn effective_provider_id(provider_id: &str) -> &str {
+    if provider_id.is_empty() {
+        "codex"
+    } else {
+        provider_id
+    }
+}
+
+pub fn update_sub_args(
+    root: &str,
+    model: &str,
+    provider_id: &str,
+    cancel_file: &str,
+    plan_file: &str,
+) -> Vec<String> {
+    vec![
+        "update".to_string(),
+        "--root".to_string(),
+        root.to_string(),
+        "--provider".to_string(),
+        effective_provider_id(provider_id).to_string(),
+        "--model".to_string(),
+        model.to_string(),
+        "--cancel-file".to_string(),
+        cancel_file.to_string(),
+        "--plan".to_string(),
+        plan_file.to_string(),
+    ]
+}
+
 pub fn generate_sub_args(
     root: &str,
     course: &str,
     skill: &str,
     force: bool,
     model: Option<String>,
+    provider_id: &str,
 ) -> Vec<String> {
     let mut sub_args = vec![
         "generate".to_string(),
@@ -236,7 +267,7 @@ pub fn generate_sub_args(
     if let Some(model) = normalize_study_model(model) {
         sub_args.extend([
             "--provider".to_string(),
-            "codex".to_string(),
+            effective_provider_id(provider_id).to_string(),
             "--model".to_string(),
             model,
         ]);
@@ -266,24 +297,24 @@ pub fn spawn_update_stream(
     app_dir: PathBuf,
     root: String,
     model: String,
+    provider_id: String,
     cancel_file: PathBuf,
     plan_file: PathBuf,
     job_id: String,
 ) {
     let cancel_str = cancel_file.to_string_lossy().into_owned();
     let plan_str = plan_file.to_string_lossy().into_owned();
-    let sub_args = vec![
-        "update".to_string(),
-        "--root".to_string(),
-        root.clone(),
-        "--model".to_string(),
-        model,
-        "--cancel-file".to_string(),
-        cancel_str,
-        "--plan".to_string(),
-        plan_str,
-    ];
-    spawn_worker_stream(app, app_dir, root, sub_args, job_id, "update");
+    let sub_args = update_sub_args(&root, &model, &provider_id, &cancel_str, &plan_str);
+    let label = crate::settings::provider_label(effective_provider_id(&provider_id));
+    spawn_worker_stream(
+        app,
+        app_dir,
+        root,
+        sub_args,
+        job_id,
+        "update",
+        label,
+    );
 }
 
 #[cfg(feature = "desktop-runtime")]
@@ -295,10 +326,20 @@ pub fn spawn_generate_stream(
     skill: String,
     force: bool,
     model: Option<String>,
+    provider_id: String,
     job_id: String,
 ) {
-    let sub_args = generate_sub_args(&root, &course, &skill, force, model);
-    spawn_worker_stream(app, app_dir, root, sub_args, job_id, "generate");
+    let sub_args = generate_sub_args(&root, &course, &skill, force, model, &provider_id);
+    let label = crate::settings::provider_label(effective_provider_id(&provider_id));
+    spawn_worker_stream(
+        app,
+        app_dir,
+        root,
+        sub_args,
+        job_id,
+        "generate",
+        label,
+    );
 }
 
 #[cfg(feature = "desktop-runtime")]
@@ -310,7 +351,15 @@ pub fn spawn_embed_stream(
     job_id: String,
 ) {
     let sub_args = embed_sub_args(&root, force);
-    spawn_worker_stream(app, app_dir, root, sub_args, job_id, "embed");
+    spawn_worker_stream(
+        app,
+        app_dir,
+        root,
+        sub_args,
+        job_id,
+        "embed",
+        "Provider".to_string(),
+    );
 }
 
 #[cfg(feature = "desktop-runtime")]
@@ -321,6 +370,7 @@ fn spawn_worker_stream(
     sub_args: Vec<String>,
     job_id: String,
     operation: &'static str,
+    provider_label: String,
 ) {
     use crate::jobs::{self, SharedCoordinator};
     use tauri::{Emitter, Manager};
@@ -398,7 +448,10 @@ fn spawn_worker_stream(
                             terminal_summary = value
                                 .get("reason")
                                 .and_then(|r| r.as_str())
-                                .map(str::to_string);
+                                .map(str::to_string)
+                                .or_else(|| {
+                                    Some(format!("{provider_label} is not authenticated"))
+                                });
                         }
                         Some("error") => {
                             terminal_status = Some(jobs::JobStatus::Failed);
@@ -420,7 +473,9 @@ fn spawn_worker_stream(
         let _ = jobs::append_event(&knowledge_root, &job_id, &exit_line);
         let (status, summary) = terminal_status
             .map(|s| (s, terminal_summary))
-            .unwrap_or_else(|| jobs::resolve_terminal_status(&last_line, code));
+            .unwrap_or_else(|| {
+                jobs::resolve_terminal_status(&last_line, code, &provider_label)
+            });
         let _ = jobs::finish_job(&knowledge_root, &job_id, status, code, summary.clone());
         let _ = app.emit("arbor://progress", serde_json::json!({ "line": exit_line }));
         release(&app, &job_id);
@@ -551,7 +606,7 @@ mod tests {
 
     #[test]
     fn generate_args_use_fake_without_a_model() {
-        let args = generate_sub_args("/knowledge", "Biology", "flashcards", false, None);
+        let args = generate_sub_args("/knowledge", "Biology", "flashcards", false, None, "grok");
         assert!(args.ends_with(&["--provider".into(), "fake".into()]));
         assert!(!args.contains(&"--model".to_string()));
     }
@@ -564,6 +619,7 @@ mod tests {
             "flashcards",
             true,
             Some("gpt-5.6-sol".into()),
+            "codex",
         );
         assert!(args.contains(&"--force".to_string()));
         assert!(args.ends_with(&[
@@ -582,8 +638,37 @@ mod tests {
             "flashcards",
             false,
             Some("  ".into()),
+            "grok",
         );
         assert!(args.ends_with(&["--provider".into(), "fake".into()]));
+    }
+
+    #[test]
+    fn generate_args_use_grok_and_model_when_selected() {
+        let args = generate_sub_args(
+            "/knowledge",
+            "Biology",
+            "flashcards",
+            false,
+            Some("grok-4.7".into()),
+            "grok",
+        );
+        assert!(args.ends_with(&[
+            "--provider".into(),
+            "grok".into(),
+            "--model".into(),
+            "grok-4.7".into(),
+        ]));
+    }
+
+    #[test]
+    fn update_sub_args_includes_grok_provider() {
+        let args = update_sub_args("/k", "grok-4.7", "grok", "/cancel", "/plan");
+        assert!(args.contains(&"--provider".to_string()));
+        assert!(args.contains(&"grok".to_string()));
+        assert!(!args.contains(&"codex".to_string()));
+        assert!(args.contains(&"--model".to_string()));
+        assert!(args.contains(&"grok-4.7".to_string()));
     }
 
     #[test]

@@ -359,8 +359,8 @@ def test_generate_splits_oversized_input_and_merges_duplicate_names(
             return ProviderResult(markdown=json.dumps(payload))
 
     monkeypatch.setattr(
-        "arbor_worker.commands.FakeProvider",
-        lambda markdown: CountingProvider(),
+        "arbor_worker.provider.registry.FakeProvider",
+        lambda markdown, models=None, available=True: CountingProvider(),
     )
 
     code, _ = _run_generate(git_repo)

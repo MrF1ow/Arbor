@@ -10,14 +10,41 @@ pub enum Appearance {
     Dark,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+fn default_provider_id() -> String {
+    "codex".to_string()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Settings {
     #[serde(default)]
     pub knowledge_root: Option<String>,
     #[serde(default)]
     pub model_id: Option<String>,
+    #[serde(default = "default_provider_id")]
+    pub provider_id: String,
     #[serde(default)]
     pub appearance: Appearance,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            knowledge_root: None,
+            model_id: None,
+            provider_id: default_provider_id(),
+            appearance: Appearance::default(),
+        }
+    }
+}
+
+pub fn provider_label(id: &str) -> String {
+    match id {
+        "codex" => "Codex".to_string(),
+        "claude" => "Claude".to_string(),
+        "grok" => "Grok".to_string(),
+        "fake" => "Fake".to_string(),
+        other => other.to_string(),
+    }
 }
 
 pub fn to_json(s: &Settings) -> String {
@@ -65,6 +92,7 @@ mod tests {
         let s = Settings {
             knowledge_root: Some("/home/x/Knowledge".into()),
             model_id: Some("gpt-5.6-sol".into()),
+            provider_id: "grok".into(),
             appearance: Appearance::Dark,
         };
         let back = from_json(&to_json(&s));
@@ -81,6 +109,14 @@ mod tests {
         let s = from_json("{}");
         assert!(s.knowledge_root.is_none());
         assert!(s.model_id.is_none());
+        assert_eq!(s.provider_id, "codex");
         assert_eq!(s.appearance, Appearance::System);
+    }
+
+    #[test]
+    fn provider_label_maps_known_ids() {
+        assert_eq!(provider_label("codex"), "Codex");
+        assert_eq!(provider_label("grok"), "Grok");
+        assert_eq!(provider_label("custom-cli"), "custom-cli");
     }
 }

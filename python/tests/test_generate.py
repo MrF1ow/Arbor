@@ -177,6 +177,14 @@ def test_generate_unknown_skill_returns_nonzero(git_repo: Path):
     ]
 
 
+def test_generate_grok_without_model_emits_only_skill_failed(git_repo: Path):
+    _write_digest(git_repo)
+    code, events = _run_generate(git_repo, "--provider", "grok")
+    assert code == 2
+    assert [e["type"] for e in events] == ["skill_failed"]
+    assert "--model is required with the grok provider" in events[0]["message"]
+
+
 def test_generate_without_digests_emits_skill_failed(git_repo: Path):
     (git_repo / "Biology").mkdir()
 

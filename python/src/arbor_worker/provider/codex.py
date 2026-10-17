@@ -7,11 +7,13 @@ import tempfile
 from pathlib import Path
 
 from arbor_worker.auth import check_codex_auth, gui_path, resolve_codex_command
-from arbor_worker.provider.base import Model, ProviderRequest, ProviderResult
-
-
-class ProviderError(Exception):
-    pass
+from arbor_worker.provider.base import (
+    Model,
+    ProviderError,
+    ProviderRequest,
+    ProviderResult,
+    ProviderStatus,
+)
 
 
 class CodexCliProvider:
@@ -22,8 +24,12 @@ class CodexCliProvider:
         self._runner = runner
         self._which = which
 
+    def status(self) -> ProviderStatus:
+        res = check_codex_auth(runner=self._runner, which=self._which)
+        return ProviderStatus(res.ok, res.reason)
+
     def is_available(self) -> bool:
-        return check_codex_auth(runner=self._runner, which=self._which).ok
+        return self.status().available
 
     def list_models(self) -> list[Model]:
         return list(self._models)

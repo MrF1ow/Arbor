@@ -1,20 +1,37 @@
 # arbor-worker
 
-Python worker for Arbor (package **2.4.0**). Turns new or changed course sources (`.pdf`, `.pptx`, `.docx`) in a
-git-tracked Knowledge library into structured markdown digests using the Codex CLI.
+Python worker for Arbor (package **2.5.0**). Turns new or changed course sources (`.pdf`, `.pptx`, `.docx`) in a
+git-tracked Knowledge library into structured markdown digests using the selected CLI provider (Codex, Claude, or Grok).
 
-`uv run arbor-worker --version` prints `2.4.0`.
+`uv run arbor-worker --version` prints `2.5.0`.
 
 ## Requirements
 
 - Python >= 3.11, [uv](https://docs.astral.sh/uv/)
-- Codex CLI installed and authenticated: <https://developers.openai.com/codex/cli>
+- One of Codex CLI, Claude Code, or Grok CLI installed and signed in
+
+## Providers
+
+Registry ids: `codex` (default), `claude`, `grok`, and `fake` (tests).
+
+```bash
+uv run arbor-worker list-providers
+uv run arbor-worker check-auth [--provider codex|claude|grok|fake]
+uv run arbor-worker list-models [--provider …] [--root /path/to/Knowledge]
+uv run arbor-worker update --root /path/to/Knowledge --provider grok --model grok-4.7
+uv run arbor-worker generate --root /path/to/Knowledge --course Biology --skill fixture [--provider …] [--force]
+```
+
+**Claude** — argv is `claude -p --output-format json …` with the prompt on stdin. `run()` raises `ProviderError("Claude provider disabled inside a Claude Code session")` when `CLAUDECODE=1`; `is_available()` is false for the same reason. Tests never spawn `claude`.
+
+**Grok** (CLI 1.0.62) — `-p` does not read stdin, so text prompts use `--prompt-file`. `--tools ""` is not passed (it does not clear the toolset). `--sandbox read-only` is not passed (bubblewrap fails in some environments). Success JSON exposes assistant text in the `text` field (`stopReason`, `sessionId`, `requestId`, `cwd`, usage fields). Auth: `grok models` exits 0 with stdout containing `logged in`. Flags passed: `--prompt-file`, `-m`, `--output-format json`, `--disable-web-search`, `--no-subagents`, `--no-plan`, `--max-turns 1`, `--permission-mode dontAsk`, `--cwd`, `--verbatim`, `--disallowed-tools` (shell, write, edit, task, web, and read tools). Images use `--prompt-json` ACP blocks `{type:text}` and `{type:image, mimeType, data}`.
 
 ## Commands
 
 ```bash
 uv run arbor-worker --version
 uv run arbor-worker check-auth
+uv run arbor-worker list-providers
 uv run arbor-worker list-models
 uv run arbor-worker plan-update --root /path/to/Knowledge
 uv run arbor-worker update --root /path/to/Knowledge --model <model-id> [--plan plan.json]
