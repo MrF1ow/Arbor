@@ -14,6 +14,12 @@ from arbor_worker.provider.base import ProviderError
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "providers"
 
 
+@pytest.fixture(autouse=True)
+def _no_claudecode(monkeypatch):
+    # Tests must not depend on whether the suite runs inside a Claude Code session.
+    monkeypatch.delenv("CLAUDECODE", raising=False)
+
+
 def test_build_argv_text(tmp_path: Path):
     prov = ClaudeCliProvider(models=[Model("m", "M")], which=lambda name: "/usr/bin/claude")
     req = ProviderRequest(prompt="hello", model_id="claude-sonnet-5-5", cwd=tmp_path)
