@@ -55,7 +55,7 @@ Run on a Mac with Codex CLI authenticated. Use a throwaway Knowledge git repo an
 
 ## Record
 
-When done, fill this in **here** and on `docs/implementation-checklist.md`. Then the operator may tag `v3.0.0`. `v2.2.0` is already tagged. Version 4 must not start before `v3.0.0`.
+When done, fill this in **here** and on `docs/implementation-checklist.md`. The next run uses tag **`v2.3.0`**. A clean record of that build is what allows `v3.0.0`. Version 4 starts only after that tag, as `v3.1.0`, `v3.2.0`, and so on.
 
 ### 2026-09-20 (partial, issue [#57](https://github.com/MrF1ow/Arbor/issues/57))
 

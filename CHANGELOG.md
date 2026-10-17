@@ -2,9 +2,15 @@
 
 Package version for the worker, desktop, and Tauri app. See [Version numbering](PROJECT.md#version-numbering) in `PROJECT.md`.
 
-**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is in progress; incremental releases use `v2.1.0`, `v2.2.0`, … until `v3.0.0` when the full v3 milestone ships. **Current package:** `2.3.0`. **Current tag:** `v2.2.0`. **`v3.0.0` waits** for a later clean Mac E2E run. The 2026-09-20 batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) recorded failures and does not close Version 3.
+**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is in progress; incremental releases use `v2.1.0`, `v2.2.0`, `v2.3.0`, … until `v3.0.0` when the full v3 milestone ships. **Current package:** `2.3.0`. **Current tag:** `v2.3.0`. **`v3.0.0` waits** for a later clean Mac E2E run. The 2026-09-20 batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) recorded failures and does not close Version 3.
 
 ## Unreleased
+
+Nothing yet. The next product tag is `v3.0.0`, after a clean Mac batch recorded on the [implementation checklist](docs/implementation-checklist.md).
+
+## 2.3.0 — 2026-10-17
+
+Git tag: `v2.3.0`. **Product:** Version 3 in progress (Mac-batch fixes). Not `v3.0.0`. Worker, desktop, and Tauri report `2.3.0`, including `arbor-worker --version`.
 
 - Concepts validation resolves edge labels and slugs to assigned node ids. Ambiguous labels fail instead of selecting either node. This fixes the Graph blocker from issue [#57](https://github.com/MrF1ow/Arbor/issues/57).
 - Citation matching strips Markdown emphasis and punctuation before checking claims and headings, so formatted digest words match sentence-style study text ([#57](https://github.com/MrF1ow/Arbor/issues/57)).
@@ -15,6 +21,7 @@ Package version for the worker, desktop, and Tauri app. See [Version numbering](
 - An in-place digest patch validates each provider splice with `validate_digest`. Non-portable LaTeX (`\(`, `\[`, `\frac`) is rejected the same way as create and regenerate.
 - Add files no longer creates `lecture-2.pdf` when a lecture with that name is already in the class. Same name replaces the existing file so page alignment can run. A file already in the class is left in place. Numbered copies are only for two same-named files in one picker batch.
 - Living [implementation checklist](docs/implementation-checklist.md) tracks implemented vs locally tested vs Mac-batch tested. Product versions do not start until the previous version’s Mac batch is recorded. GitHub issues #3, #4, #19, #21, #30, #42, and #20 are mapped into `PROJECT.md` versions with their original acceptance criteria. [Version 3 Notes leftovers](docs/superpowers/plans/2026-09-12-v3-notes-gate.md) (links, tables, reserved dirs, patch validation) are locally tested. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) found Concepts edge-label rejection, citation false Unverified, silent reserved class names, and a missing quiz session score. It does not close Version 3.
+- Desktop file reads stay inside the selected Knowledge root. Digest and study text is escaped before it reaches the webview. The window sets a content security policy. CI runs the Python, Rust, and desktop tests. (#64)
 
 ## 2.2.0 — 2026-08-26
 

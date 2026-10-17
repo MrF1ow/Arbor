@@ -11,7 +11,7 @@ Living tracker for **implemented / locally tested / Mac-batch tested**. Capabili
 
 **Current era:** Version 3. **Next version (Version 4) is blocked** until the Version 3 Mac batch is recorded.
 
-**Current package:** `2.3.0` (latest tag `v2.2.0`). **`v3.0.0` is not tagged.** The 2026-09-20 Mac batch recorded failures in the Blockers table. It does not close Version 3.
+**Current package:** `2.3.0` (tag `v2.3.0`). **`v3.0.0` is not tagged.** The next Mac batch should use the `v2.3.0` build. The 2026-09-20 batch recorded failures in the Blockers table and does not close Version 3.
 
 | Marker | Meaning |
 |--------|---------|
@@ -121,7 +121,7 @@ Record date, macOS version, and commit or DMG in [mac-e2e.md](superpowers/plans/
 
 **Mac batch recorded:** 2026-09-20 partial (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)). Failures block `v3.0.0`. Do not tag until a later run is clean.
 
-After this table is filled from a clean Mac run, tag **`v3.0.0`**. Only then may Version 4 start. `v2.2.0` is already tagged.
+After this table is filled from a clean Mac run of **`v2.3.0`**, tag **`v3.0.0`**. Only then may Version 4 start, as `v3.1.0`, `v3.2.0`, and so on.
 
 ---
 

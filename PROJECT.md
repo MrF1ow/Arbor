@@ -498,11 +498,12 @@ Package releases (`0.1.0`, `0.2.0`, `1.0.0`, `2.0.0`, …) are in [`CHANGELOG.md
 |-----|-------------------|---------|
 | `v1.0.0` | Version 1 | Shipped |
 | `v2.0.0` | Version 2 | Shipped — automation on the v1 UI |
-| `v2.1.0`, `v2.2.0`, … | Version 3 **in progress** | Incremental releases toward Version 3 |
+| `v2.1.0`, `v2.2.0`, `v2.3.0`, … | Version 3 **in progress** | Incremental releases toward Version 3 |
 | `v3.0.0` | Version 3 | **Reserved** — tag only when every Version 3 feature below ships **and** the Version 3 Mac batch is recorded |
-| `v4.0.0` | Version 4 | Tutor milestone (future). Do not start until Version 3’s Mac batch is recorded. |
+| `v3.1.0`, `v3.2.0`, … | Version 4 **in progress** | After `v3.0.0`. Tutor work until `v4.0.0` |
+| `v4.0.0` | Version 4 | Tutor milestone complete |
 
-Do not tag `v3.0.0` for the shell alone, a single wave, or partial delivery. The desktop shell shipped in **`v2.1.0`** as the first step of Version 3 work. Later steps are `v2.2.0`, `v2.3.0`, … Never publish `3.1.0` or `3.2.0` as package versions.
+Do not tag `v3.0.0` for the shell alone, a fix release, or partial delivery. The desktop shell shipped in **`v2.1.0`**. The study loop shipped in **`v2.2.0`**. Mac-batch fixes ship in **`v2.3.0`**. After `v3.0.0`, Version 4 work ships as `v3.1.0`, `v3.2.0`, and so on, until `v4.0.0`.
 
 Cursor rule: [`.cursor/rules/arbor-versioning.mdc`](.cursor/rules/arbor-versioning.mdc).
 
@@ -655,7 +656,7 @@ A study app a student would download, with local memory and a concept graph an A
 
 The shell is the storefront. Flashcards and quiz are the study loop. Embeddings, concepts, cross-document links, and a graph-lite view are the memory a later tutor (Version 4) will use instead of rereading every digest. Diagram analysis and citation checks ground that memory in the notes the student already has.
 
-**Status:** In progress. Package **2.2.0** has the study loop. **`v3.0.0` ships when the Mac E2E run is recorded.** Incremental delivery used `v2.1.0` then `2.2.0`. Waves 1 through 8 are in this package. Do not backfill `v2.3.0` through `v2.8.0`.
+**Status:** In progress. Package **2.2.0** has the study loop. Package **2.3.0** (`v2.3.0`) is the fix release after the 2026-09-20 Mac batch. **`v3.0.0` ships when a later clean Mac batch is recorded** on the [implementation checklist](docs/implementation-checklist.md). Waves 1 through 8 shipped in `2.2.0`. Do not invent `v2.4.0` through `v2.8.0` for those waves.
 
 **Shipped so far (`v2.1.0`):** desktop shell — [`docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md`](docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md).
 
@@ -683,8 +684,9 @@ Shipped in 2.2.0 (PRs #36–#41, #47, #50, #51)
 
 Required for `v3.0.0`
 
-* Remaining Version 3 implementation on the [implementation checklist](docs/implementation-checklist.md) (Notes links/tables from issue #42, shared reserved-dir policy, digest patch validation from #3)
-* One Mac batch recorded in [`mac-e2e.md`](docs/superpowers/plans/2026-08-22-v3-program/mac-e2e.md) — ingest, study loop, Notes leftovers, and leftover Version 2 proof from #30
+Implementation rows on the [implementation checklist](docs/implementation-checklist.md) are done and locally tested, including Notes links and tables, the reserved-directory policy, and digest patch validation. What remains is the Mac batch:
+
+* One clean Mac batch recorded in [`mac-e2e.md`](docs/superpowers/plans/2026-08-22-v3-program/mac-e2e.md) and on that checklist — ingest, study loop, Notes, notifications, Word ingest, and a Finder DMG launch
 * Then tag `v3.0.0`
 
 GitHub issue [#42](https://github.com/MrF1ow/Arbor/issues/42) is **Notes UX**, not the Wave 8 closeout tracker. Wave 8 (grades, quiz session answers, heading scroll, living docs) already landed in package `2.2.0`. Do not file chat, Anki, extra providers, or a pretty graph canvas against #42.
@@ -712,17 +714,9 @@ Original acceptance criteria:
 - `_arbor_cache` never appears in Library navigation.
 - Focused tests for discovery, metadata, course creation, rendering, and scroll structure.
 
-**Already on `main`:** in-app add-class form (`create_course`), overview labels, H1 titles, `_arbor_cache` skipped in `list_courses`, nested/ordered lists, bold/italic/inline code, heading ids, Notes scroll CSS.
+**Already on `main` (package `2.3.0`):** in-app add-class form (`create_course`), overview labels, H1 titles, reserved-directory filtering, nested and ordered lists, emphasis, links, tables, heading ids, in-pane digest links, closing page-marker stripping, and Notes scroll CSS. Row status lives on the [implementation checklist](docs/implementation-checklist.md).
 
-**Still required before `v3.0.0` (same issue, Version 3 shell):**
-
-- Markdown **links** render and `digests/….md` relative links open that digest in Notes (the single-digest `course.md` index from #21 is `See [file](digests/file)`).
-- Markdown **tables** render as tables, not a pipe paragraph.
-- Closing `<!-- /arbor-pages:… -->` markers do not show in the reading pane.
-- One reserved-directory policy shared by desktop `list_courses` / `create_course` and worker discovery (root names such as `study` and `digests` must not appear as classes).
-- Recorded Mac proof that a long digest scrolls and that a `course.md` link opens the digest.
-
-Next-phase plan: [`docs/superpowers/plans/2026-09-12-v3-notes-gate.md`](docs/superpowers/plans/2026-09-12-v3-notes-gate.md).
+**Still required before `v3.0.0`:** the Mac boxes on that checklist, including a long digest that scrolls in the Arbor window and a `course.md` link that opens the digest. The 2026-09-12 plan is the record of how the local rows landed: [`docs/superpowers/plans/2026-09-12-v3-notes-gate.md`](docs/superpowers/plans/2026-09-12-v3-notes-gate.md).
 
 ---
 
@@ -732,7 +726,7 @@ Goal:
 
 Personal AI Tutor.
 
-**Do not start Version 4 implementation until Version 3 is closed:** remaining #42 Notes work done, locally tested, and the Version 3 Mac batch recorded. Then tag `v3.0.0`. Version 4 work ships as `v3.x` packages until `v4.0.0`.
+**Start Version 4 only after `v3.0.0`.** That tag waits for a clean Version 3 Mac batch on the [implementation checklist](docs/implementation-checklist.md). Notes implementation for issue #42 is already on `main`. Version 4 then ships as `v3.1.0`, `v3.2.0`, and so on, until `v4.0.0`.
 
 New Features
 
