@@ -580,6 +580,75 @@ def cmd_embed_search(args) -> int:
     return 0
 
 
+def cmd_study_progress(args) -> int:
+    from arbor_worker.study_progress import (
+        StudyProgressError,
+        emit_json_line,
+        parse_utc_now,
+        study_progress_due,
+        study_progress_grade,
+        study_progress_quiz,
+        study_progress_show,
+        study_progress_weak,
+    )
+
+    action = getattr(args, "study_action", None)
+    if action is None:
+        print("study-progress requires a subcommand", file=sys.stderr)
+        return 2
+    root = Path(args.root)
+    course = args.course
+    try:
+        if action == "show":
+            doc = study_progress_show(root, course)
+            emit_json_line(doc)
+            return 0
+        if action == "weak":
+            emit_json_line(study_progress_weak(root, course))
+            return 0
+        if action == "due":
+            now = parse_utc_now(args.now) if args.now else None
+            emit_json_line(study_progress_due(root, course, now=now))
+            return 0
+        if action == "grade":
+            now = parse_utc_now(args.now) if args.now else None
+            doc = study_progress_grade(
+                root,
+                course,
+                args.card_id,
+                args.result,
+                now=now,
+                digest=args.digest,
+                heading=args.heading,
+            )
+            emit_json_line(doc)
+            return 0
+        if action == "quiz":
+            now = parse_utc_now(args.now) if args.now else None
+            doc = study_progress_quiz(
+                root,
+                course,
+                args.question_id,
+                args.result,
+                now=now,
+                digest=args.digest,
+                heading=args.heading,
+            )
+            emit_json_line(doc)
+            return 0
+    except ValueError as error:
+        message = str(error)
+        print(message, file=sys.stderr)
+        if message.startswith("invalid course name:"):
+            return 1
+        return 2
+    except StudyProgressError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    print(f"unknown study-progress action: {action}", file=sys.stderr)
+    return 2
+
+
 def cmd_chat(_args) -> int:
     from arbor_worker.chat import answer
     from arbor_worker.provider.base import ProviderError
