@@ -209,6 +209,34 @@ html[data-theme="dark"] .welcome-mark {
   overflow-wrap: anywhere;
 }
 
+.workspace-root {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.workspace-root:hover {
+  background: var(--sage-tint);
+}
+
+.workspace-root.active {
+  background: var(--sage-tint-strong);
+  color: var(--sage-deep);
+  font-weight: 500;
+}
+
+.workspace-courses .nav-item {
+  padding-left: 22px;
+}
+
 .nav-item {
   display: flex;
   align-items: center;

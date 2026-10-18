@@ -297,6 +297,12 @@ mod tests {
     fn settings_json_never_contains_fake_key() {
         let settings = Settings {
             knowledge_root: Some("/k".into()),
+            knowledge_roots: vec![crate::settings::KnowledgeRootEntry {
+                path: "/k".into(),
+                kind: crate::settings::KnowledgeKind::Personal,
+                name: "k".into(),
+            }],
+            active_root: Some("/k".into()),
             model_id: Some("gpt".into()),
             provider_id: "openai_api".into(),
             appearance: Appearance::System,

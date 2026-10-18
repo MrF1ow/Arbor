@@ -88,6 +88,7 @@ import type {
   QuizReview,
   SearchHit,
   Selection,
+  KnowledgeRootEntry,
   Settings,
   UpdatePlan,
   WorkerEvent,
@@ -289,6 +290,7 @@ const searchSemanticInput = $<HTMLInputElement>("search-semantic");
 const searchResultsEl = $("search-results");
 
 let knowledgeRoot: string | null = null;
+let knowledgeRoots: KnowledgeRootEntry[] = [];
 let providerId = "codex";
 let ollamaBaseUrl = "";
 let lmstudioBaseUrl = "";
@@ -722,32 +724,109 @@ function shortenPath(path: string): string {
   return home.length > 36 ? "…" + home.slice(-34) : home;
 }
 
+function knowledgePathBasename(path: string): string {
+  const trimmed = path.replace(/\/+$/, "");
+  const parts = trimmed.split("/");
+  return parts[parts.length - 1] || trimmed;
+}
+
+function workspaceRootLabel(entry: KnowledgeRootEntry, all: KnowledgeRootEntry[]): string {
+  const dupes = all.filter((e) => e.name === entry.name);
+  if (dupes.length <= 1) return entry.name;
+  const trimmed = entry.path.replace(/\/+$/, "");
+  const parts = trimmed.split("/");
+  const parent = parts.length >= 2 ? parts[parts.length - 2] : "";
+  return parent ? `${entry.name} (${parent})` : entry.name;
+}
+
+function clearChatTranscriptForRootSwitch() {
+  chatLines = [];
+  chatLiveBubble = null;
+  chatLogEl.innerHTML = "";
+}
+
+async function switchKnowledgeRoot(path: string, course?: string) {
+  knowledgeRoot = path;
+  folderHintEl.textContent = shortenPath(path);
+  chatRootEl.textContent = shortenPath(path);
+  chooseBtn.textContent = "Change folder…";
+  await invoke("start_folder_watch", { root: path });
+  await renderCourseList();
+  await loadJobHistory();
+  if (searchInput.value.trim()) {
+    await runSearch(searchInput.value);
+  }
+  clearChatTranscriptForRootSwitch();
+  refreshChatCourseOptions();
+  void refreshSyncUi();
+  await persist();
+  if (course) {
+    setCourseView(course, "notes");
+  } else if (courses.length > 0) {
+    setCourseView(courses[0], "notes");
+  } else {
+    setPlaceView("welcome");
+  }
+}
+
 async function renderCourseList() {
   courseListEl.innerHTML = "";
-  if (!knowledgeRoot) {
-    courseListEl.innerHTML = '<p class="nav-empty">No courses yet</p>';
-    return;
-  }
-  try {
-    courses = await invoke<string[]>("list_courses", { root: knowledgeRoot });
-  } catch {
+  if (knowledgeRoots.length === 0) {
     courses = [];
-  }
-  if (courses.length === 0) {
-    courseListEl.innerHTML = '<p class="nav-empty">No classes yet</p>';
+    courseListEl.innerHTML = '<p class="nav-empty">No courses yet</p>';
+    refreshChatCourseOptions();
     return;
   }
-  for (const course of courses) {
-    const btn = document.createElement("button");
-    btn.className = "nav-item";
-    btn.dataset.place = "course";
-    btn.dataset.course = course;
-    const icon = document.createElement("span");
-    icon.className = "icon";
-    icon.textContent = "◈";
-    btn.append(icon, document.createTextNode(` ${course}`));
-    btn.addEventListener("click", () => setCourseView(course, "notes"));
-    courseListEl.appendChild(btn);
+  for (const entry of knowledgeRoots) {
+    const rootBtn = document.createElement("button");
+    rootBtn.type = "button";
+    rootBtn.className = "workspace-root";
+    if (entry.path === knowledgeRoot) rootBtn.classList.add("active");
+    rootBtn.dataset.root = entry.path;
+    const label = workspaceRootLabel(entry, knowledgeRoots);
+    rootBtn.textContent = `${label} · ${entry.kind}`;
+    rootBtn.title = entry.path;
+    rootBtn.addEventListener("click", () => void switchKnowledgeRoot(entry.path));
+    courseListEl.appendChild(rootBtn);
+
+    const group = document.createElement("div");
+    group.className = "workspace-courses";
+    let rootCourses: string[] = [];
+    try {
+      rootCourses = await invoke<string[]>("list_courses", { root: entry.path });
+    } catch {
+      rootCourses = [];
+    }
+    if (entry.path === knowledgeRoot) {
+      courses = rootCourses;
+    }
+    if (rootCourses.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "nav-empty";
+      empty.textContent = "No classes yet";
+      group.appendChild(empty);
+    } else {
+      for (const course of rootCourses) {
+        const btn = document.createElement("button");
+        btn.className = "nav-item";
+        btn.dataset.place = "course";
+        btn.dataset.course = course;
+        btn.dataset.root = entry.path;
+        const icon = document.createElement("span");
+        icon.className = "icon";
+        icon.textContent = "◈";
+        btn.append(icon, document.createTextNode(` ${course}`));
+        btn.addEventListener("click", () => {
+          if (entry.path !== knowledgeRoot) {
+            void switchKnowledgeRoot(entry.path, course);
+          } else {
+            setCourseView(course, "notes");
+          }
+        });
+        group.appendChild(btn);
+      }
+    }
+    courseListEl.appendChild(group);
   }
   refreshChatCourseOptions();
 }
@@ -1610,30 +1689,23 @@ async function startCitationJob(force: boolean) {
 }
 
 async function activateKnowledgeRoot(picked: string) {
-  knowledgeRoot = picked;
-  folderHintEl.textContent = shortenPath(picked);
-  chatRootEl.textContent = shortenPath(picked);
-  chooseBtn.textContent = "Change folder…";
+  if (!knowledgeRoots.some((e) => e.path === picked)) {
+    knowledgeRoots.push({
+      path: picked,
+      kind: "personal",
+      name: knowledgePathBasename(picked),
+    });
+  }
   try {
     const created = await invoke<boolean>("init_knowledge_repo", { path: picked });
     if (created) logLine(`Initialized git repository in ${picked}`);
   } catch (e) {
     logLine(`Could not initialize git: ${e}`);
   }
-  await invoke("start_folder_watch", { root: picked });
   await loadProviders(providerId);
   await loadModels(modelSel.value || null);
-  await persist();
-  await renderCourseList();
-  await loadJobHistory();
+  await switchKnowledgeRoot(picked);
   refreshFolderTools();
-  void refreshSyncUi();
-  if (courses.length > 0) {
-    setCourseView(courses[0], "notes");
-  } else {
-    setPlaceView("welcome");
-    readingArticleEl.innerHTML = '<p class="reading-empty">Add a class with +, then add lecture files to it.</p>';
-  }
 }
 
 async function refreshSyncUi() {
@@ -2133,18 +2205,22 @@ async function loadSettings() {
   } catch (error) {
     logLine(`Could not load providers: ${error}`);
   }
-  if (s.knowledge_root) {
-    knowledgeRoot = s.knowledge_root;
-    folderHintEl.textContent = shortenPath(s.knowledge_root);
+  knowledgeRoots = Array.isArray(s.knowledge_roots) ? [...s.knowledge_roots] : [];
+  const activePath = s.active_root ?? s.knowledge_root;
+  if (activePath) {
+    knowledgeRoot = activePath;
+    folderHintEl.textContent = shortenPath(activePath);
     chooseBtn.textContent = "Change folder…";
-    await invoke("start_folder_watch", { root: s.knowledge_root });
+    await invoke("start_folder_watch", { root: activePath });
     await renderCourseList();
     await loadJobHistory();
     if (courses.length > 0) {
       setCourseView(courses[0], "notes");
     }
     refreshFolderTools();
+    void refreshSyncUi();
   } else {
+    knowledgeRoot = null;
     setPlaceView("welcome");
   }
   try {
@@ -2161,6 +2237,8 @@ async function persist() {
   syncProviderBaseUrlFromInput();
   await invoke("save_settings", {
     settings: {
+      knowledge_roots: knowledgeRoots,
+      active_root: knowledgeRoot,
       knowledge_root: knowledgeRoot,
       model_id: modelSel.value || null,
       provider_id: providerId,
