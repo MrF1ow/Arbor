@@ -2,11 +2,19 @@
 
 Package version for the worker, desktop, and Tauri app. See [Version numbering](PROJECT.md#version-numbering) in `PROJECT.md`.
 
-**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is complete as package `3.0.0`. **Version 4** is complete as package `4.0.0`. **Version 5** is in progress and will ship as `v4.1.0`, `v4.2.0`, … until `v5.0.0`. **Current package:** `4.5.0`. **Current tag:** `v4.5.0` is cut when this release lands. `v4.4.0` is the previous package and is tagged. `v4.3.0` is not tagged yet. `v4.2.0` is tagged. `v4.1.0` and `v4.0.0` are tagged. `v3.0.0` through `v3.5.0` are already tagged. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) was retested on the 2026-10-17 Linux live run.
+**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is complete as package `3.0.0`. **Version 4** is complete as package `4.0.0`. **Version 5** is complete as package `5.0.0`. **Current package:** `5.0.0`. **Current tag:** `v5.0.0` is cut when this release lands. `v4.5.0` is cut when that release lands. `v4.4.0` is tagged. `v4.3.0` is not tagged yet. `v4.2.0` is tagged. `v4.1.0` and `v4.0.0` are tagged. `v3.0.0` through `v3.5.0` are already tagged. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) was retested on the 2026-10-17 Linux live run.
 
 ## Unreleased
 
-Nothing pending above `4.5.0`.
+Nothing pending above `5.0.0`.
+
+## 5.0.0 — 2026-10-18
+
+Git tag `v5.0.0` when this release lands. **Product:** Version 5 (collaboration) is closed. Worker, desktop, and Tauri report `5.0.0`, including `arbor-worker --version`. The Linux live run is in `docs/superpowers/plans/2026-10-17-roadmap-completion/linux-live-run.md` (boxes C1–C6).
+
+- A head-changing sync always reindexes and embeds, including when `.arbor/vectors.sqlite` does not exist yet. Derived vector files stay gitignored. The first pull on another machine rebuilds semantic search instead of leaving it empty.
+- Live run: shared import and sync, a markdown conflict resolved in the dialog, and per-user flashcard progress that survives a round trip. Viewer role disables write controls and the worker refuses the write. A private sshd on localhost digested a PDF and the local tree committed the digest. `~/.ssh` was not modified.
+- The Anki marketplace skill installed, confirmed, and uninstalled from a local bare index. The folder picker still does not accept Open under Xvfb (issue #70), so the TSV was not written on this run. Issue #88 stays open. Both are carried in the roadmap after Version 5.
 
 ## 4.5.0 — 2026-10-18
 
