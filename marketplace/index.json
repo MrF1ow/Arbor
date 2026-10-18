@@ -1,0 +1,14 @@
+{
+  "packages": [
+    {
+      "id": "anki-export",
+      "kind": "skill",
+      "name": "Anki export",
+      "description": "Export the shared course flashcard deck to an Anki-importable TSV file.",
+      "git": "https://github.com/MrF1ow/Arbor.git",
+      "commit": "429d15dc5a6fde7c61559fc787a737cd0c94414d",
+      "subdir": "marketplace/packages/anki-export",
+      "permissions": ["read_course", "write_export_dir"]
+    }
+  ]
+}

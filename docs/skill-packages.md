@@ -60,6 +60,8 @@ The default index path in the Arbor repository is **`marketplace/index.json`**. 
 
 The worker command **`arbor-worker skill-index --source PATH [--ref REF]`** prints the parsed index as JSON. When the desktop setting for the index source is empty, it will use **`find_default_index`** starting from the app checkout to locate **`marketplace/index.json`**.
 
+The in-repo index lists **`anki-export`** with **`commit`** pinned to the git commit that added **`marketplace/packages/anki-export`** (not the commit that added the index row). The canonical **`git`** URL is **`https://github.com/MrF1ow/Arbor.git`**. For offline install, use a local bare clone of that repository and point a copy of the index at the clone by setting **`git`** to the clone’s **`file://`** URL while keeping the same **`commit`** pin and **`subdir`**.
+
 ## Run
 
 An installed skill runs in a **worker child process** only after the caller sets **`confirmed`** and passes a **`grants`** list that matches the manifest **`permissions`** for that package **id** and **commit** exactly (order does not matter). If `confirmed` is false, or the grant set differs, the worker raises before spawning the child and does not import package code.
