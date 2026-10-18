@@ -246,6 +246,24 @@ def test_migrate_derived_files_untracks_and_commits(tmp_path: Path):
     assert subject == "chore: ignore derived Arbor files"
 
 
+def test_rebuild_embeddings_creates_db_on_first_pull(tmp_path: Path):
+    bare, a, b = _bare_and_clones(tmp_path)
+    path = Path("Biology/digests/leaf.md")
+    unique_term = "FirstPullEmbedTerm99"
+    (a / path).parent.mkdir(parents=True)
+    (a / path).write_text(f"# T\n\n{unique_term}\n")
+    _commit_all(a, "digest on A")
+    sync_root(a)
+    vectors = b / ".arbor" / "vectors.sqlite"
+    assert not vectors.is_file()
+    report = sync_root(b)
+    assert report.ok
+    assert vectors.is_file()
+    hits = search_chunks(b, unique_term, limit=5, embedder=HashedNgramEmbedder())
+    assert hits
+    assert any(unique_term in str(h.get("snippet", "")) for h in hits)
+
+
 def test_rebuild_embeddings_after_upstream_digest_change(tmp_path: Path):
     bare, a, b = _bare_and_clones(tmp_path)
     path = Path("Biology/digests/leaf.md")

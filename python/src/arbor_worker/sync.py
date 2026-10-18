@@ -461,9 +461,7 @@ def _rebuild_after_sync(root: Path) -> None:
     from arbor_worker.indexer import reindex_root
 
     reindex_root(root)
-    vectors = root / ".arbor" / "vectors.sqlite"
-    if vectors.is_file():
-        embed_root(root, HashedNgramEmbedder())
+    embed_root(root, HashedNgramEmbedder())
 
 
 def _sync_user_is_viewer(root: Path, runner=subprocess.run) -> bool:

@@ -47,9 +47,18 @@ From [v4-tutor.md](v4-tutor.md). Behavioral Medicine was not on this machine. Th
 | T6 | Study loop on the fresh course | Due today deck, weak topics (grade some cards wrong first), study plan, and make-card-from-selection |
 | T7 | Signed-out provider | Chat shows the auth state |
 
-## Version 5 script
+## Version 5 script (`v5.0.0`)
 
-Appended by [v5-collaboration.md](v5-collaboration.md) when `v5.0.0` closes.
+From [v5-collaboration.md](v5-collaboration.md). One bare remote and two clones (machines A and B) of one shared library. A third personal root C is only for the SSH worker. One app process; switch the active root. Provider Grok `grok-4.7`.
+
+| # | Box | Pass when |
+|---|-----|-----------|
+| C1 | Import and sync | A imports a lecture and syncs. B pulls and sees the digest. Search and embeddings are rebuilt on B |
+| C2 | Conflict | Both edit the same digest line. The conflict view resolves it, the resolution is pushed, and the other side receives it |
+| C3 | Per-user progress | Both grade the same card differently, sync, and each keeps their own progress |
+| C4 | Marketplace skill | Install the Anki skill from a local bare index, confirm permissions, run it (TSV written), uninstall |
+| C5 | Viewer | With B set to viewer, B cannot run write jobs. The UI is disabled with the reason, and the worker refuses |
+| C6 | Remote worker | A private sshd on localhost digests a PDF. `~/.ssh` is unchanged |
 
 ## Runs
 
@@ -98,3 +107,18 @@ Ingest used folder watch plus Confirm. The GTK Open File dialog on `:97` is moda
 `ARBOR_PATH_PREFIX` does not hide `grok`: the worker prepends `~/.local/bin` and `~/.grok/bin`. T7 bind-mounted a fake `grok` over both symlinks inside a user mount namespace. The real symlinks were unchanged outside it. The real Grok CLI was not logged out.
 
 Hyprland client count for Arbor was 0. Two exact-pid restarts (`pgrep -x desktop` only) cleared a stuck Open File dialog. Xvfb `:97` stayed up. No `hyprctl dispatch`.
+
+### 2026-10-18 — `release/v5.0.0` (package `4.5.0` during the run, then `5.0.0`)
+
+Private Xvfb `:97` (1600x1000) inside `dbus-run-session`. `WAYLAND_DISPLAY` and `HYPRLAND_INSTANCE_SIGNATURE` unset, `GDK_BACKEND=x11`, `CLAUDECODE=1`, Grok `grok-4.7`. Home, XDG, and `GIT_CONFIG_GLOBAL` under `/tmp/arbor-v5/`. Screenshots with `magick import -display :97`. No `hyprctl dispatch`. One app process. Switching the sidebar root switches the machine. Real `~/.config/com.arbor.app/settings.json` stayed `87c2bcd705df9bebaa657bb89c3010e4cc90069b71f568af35a52d8883a2759b`.
+
+Setup: bare remote `/tmp/arbor-v5/remote.git`. Clone A `owner-a@arbor.test` (owner). Clone B `member-b@arbor.test` (editor, then viewer for C5). Shared library Lumen. Personal root C (`/tmp/arbor-v5/C`, RemoteLab) bound to worker `wlive` (127.0.0.1:22222, identity `/tmp/arbor-v5/ssh/client_key`). Lecture fixture `lumen-lecture.pdf` (Mosquito Bay, marker `PYRODINIUMTOKEN`). Remote-worker fixture `remote-lamp.pdf` (marker `REMOTEWORKERTOKEN`, 590-nanometer sodium lamp). Marketplace index `/tmp/arbor-v5/market-index.json` points `anki-export` at `file:///tmp/arbor-v5/market.git` pin `429d15dc5a6fde7c61559fc787a737cd0c94414d`.
+
+| # | Result | Evidence |
+|---|--------|----------|
+| C1 | Fail, then fixed in `1e06fd3` | A digested and embedded (job `job-18dfa8da0600a4ee`, commit `a6ddc8e`), then synced. B pulled the digest and FTS found `PYRODINIUMTOKEN` (`/tmp/arbor-v5/shots/C1-b-fts.png`). Semantic search on B returned "No results" because `.arbor/vectors.sqlite` is gitignored and a first pull did not create it (`C1-b-semantic.png`). `1e06fd3` always reindexes and embeds after a head-changing sync. After that code was on the worker, B's semantic search for `PYRODINIUMTOKEN` returned the Lumen digest with Semantic checked (`C1-b-semantic-reproof.png`). |
+| C2 | Pass | A and B edited the same digest line (`PYRODINIUMTOKEN-A` / `PYRODINIUMTOKEN-B`). Sync opened the conflict dialog for `Lumen/digests/2026-10-18.md` (`C2-dialog-full.png`). Use mine, then Continue sync. Remote and A landed on `9652ddf` with the line `PYRODINIUMTOKEN-B` (`C2-a-got-it.png`). |
+| C3 | Pass | A committed one card `fc_live1` (`4e30b87`) and synced. B pulled it. B graded Mastered (`correct` 1, `wrong` 0, commit `276775e`, author `member-b@arbor.test`). A graded Wrong (`correct` 0, `wrong` 1, commit `1d46801`, author `owner-a@arbor.test`). Merge `200b626` is on both clones. Each file is `.arbor/users/<email>/Lumen/progress.json` and the two grades still differ after the round trip. Shots `c3-b-flipped.png`, `C3-a-after-wrong.png`, `C3-b-after-mastered.png`. |
+| C4 | Install, confirm, and uninstall passed. Run blocked | Browse of the local index listed Anki export. Install wrote `$XDG_DATA_HOME/arbor/skills/anki-export/429d15dc…` and the status said Installed (`c4-installed.png`). Confirm permissions persisted the grant (`c4-confirmed.png`). Run opened Select Folder. Ctrl+L accepted `/tmp/arbor-v5/export` (`c4-picker-ctrll.png`). Open, Cancel, Escape, and Alt+O did not dismiss the dialog (issue #70). The export directory stayed empty. Uninstall removed the skill directory and the grant (`C4-uninstalled.png`). Not marked Live run. |
+| C5 | Pass | Owner A set `member-b@arbor.test` to viewer and saved (`5410923`). B pulled. Update knowledge is disabled and the course shows the viewer reason (`C5-viewer-disabled.png`). `arbor-worker append-card` on B exited 1 with `Viewers cannot run write jobs or push…`. The deck stayed one card. |
+| C6 | Pass, with a marker caveat | Confirm on `remote-lamp.pdf` started `job-18dfaa64594062fc`. The private sshd on 127.0.0.1:22222 accepted the throwaway key. The remote tree is `/tmp/arbor-v5/ssh-work/0b0f395f328ef743/`, and its page images contain `REMOTEWORKERTOKEN`. Local commit `66a1e28` is `digest: RemoteLab`. The digest states the 590-nanometer sodium lamp (`C6-after-job.png`). Grok did not copy the literal marker into the digest. `~/.ssh` before and after match (sha256 and mtime of every entry). System sshd pid 1060 was untouched. |

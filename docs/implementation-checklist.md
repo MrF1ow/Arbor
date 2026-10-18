@@ -10,9 +10,9 @@ Living tracker for **implemented / locally tested / live-run tested**. Capabilit
 - Check **Mac (optional)** only when a recorded MacBook run covered that row. One run covers many rows. Mac never blocks a tag. Do not live-test every PR.
 - **Blockers from Mac runs** at the bottom catch E2E findings from optional Mac proof. Fix locally. Retest on the next Linux live run. They do not start the next version.
 
-**Current era:** Version 5 is in progress. Version 4’s Linux live run is recorded (2026-10-18). A Mac run does not close a version.
+**Current era:** Version 5 closed at `v5.0.0`. Version 4’s Linux live run is recorded (2026-10-18). Version 5’s Linux live run is recorded the same day. A Mac run does not close a version.
 
-**Current package:** `4.5.0`. **`v4.5.0` is cut when this release lands** (not tagged in this commit). **`v4.4.0` is tagged.** **`v4.3.0` is not tagged yet.** **`v4.2.0`, `v4.1.0`, and `v4.0.0` are already tagged.** Version 3’s two Notes rows stay open: markdown tables, and bold/italic, because no live digest contained them. The 2026-09-20 Mac blockers were retested on the 2026-10-17 run.
+**Current package:** `5.0.0`. **`v5.0.0` is cut when this release lands** (not tagged in this commit). **`v4.5.0` is cut when that release lands** (not tagged in this commit). **`v4.4.0` is tagged.** **`v4.3.0` is not tagged yet.** **`v4.2.0`, `v4.1.0`, and `v4.0.0` are already tagged.** Version 3’s two Notes rows stay open: markdown tables, and bold/italic, because no live digest contained them. The 2026-09-20 Mac blockers were retested on the 2026-10-17 run.
 
 | Marker | Meaning |
 |--------|---------|
@@ -30,7 +30,7 @@ Living tracker for **implemented / locally tested / live-run tested**. Capabilit
 | Version 2 | Version 3 shell | Version 2 features implemented + locally tested. **Passed** (`v2.0.0` tagged; shell is `v2.1.0`). Leftover proof rides the Version 3 Linux live run. Mac proof is optional. |
 | Version 3 work | **`v3.0.0` tag** | Linux live run recorded 2026-10-17. Package `3.0.0` is tagged. Tables and emphasis were not in any live digest, so those two checklist rows stay open. Mac does not block the tag. |
 | Version 3 | Version 4 | **Passed.** Linux live run recorded 2026-10-18. Package `4.0.0`. Tag `v4.0.0` when this release lands. |
-| Version 4 | Version 5 | **In progress.** Package `4.5.0` is this release (remote workers over SSH). `v4.4.0` library roles are tagged. Next package is `v4.6.0`. |
+| Version 4 | Version 5 | **Passed.** Linux live run recorded 2026-10-18. Package `5.0.0`. Tag `v5.0.0` when this release lands. |
 
 Local commands (every change):
 
@@ -139,19 +139,19 @@ Also Version 4 (not extra GitHub issues): review scheduling, weak-topic detectio
 
 ---
 
-## Version 5 — collaboration (in progress)
+## Version 5 — collaboration (closed at `v5.0.0`)
 
-No current GitHub issue. Cloud sync, shared libraries, marketplaces, permissions, remote workers. Version 4 is closed at `v4.0.0`. Next package is `v4.6.0`.
+No current GitHub issue for the milestone. Cloud sync, shared libraries, marketplaces, permissions, remote workers. Version 4 is closed at `v4.0.0`. This package is `5.0.0`.
 
 | Item | Implemented | Local/VM | Live run | Mac (optional) |
 |------|-------------|----------|----------|----------------|
-| Git remote sync (`v4.1.0`) | [x] | [x] | [ ] | [ ] |
-| Shared libraries and team workspaces (`v4.2.0`) | [x] | [x] | [ ] | [ ] |
+| Git remote sync (`v4.1.0`) | [x] | [x] | [x] | [ ] |
+| Shared libraries and team workspaces (`v4.2.0`) | [x] | [x] | [x] | [ ] |
 | Skill packages and marketplace (`v4.3.0`) | [x] | [x] | [ ] | [ ] |
-| Library roles and shared provider profiles (v4.4.0) | [x] | [x] | [ ] | [ ] |
-| Remote workers over SSH (v4.5.0) | [x] | [x] | [ ] | [ ] |
+| Library roles and shared provider profiles (v4.4.0) | [x] | [x] | [x] | [ ] |
+| Remote workers over SSH (v4.5.0) | [x] | [x] | [x] | [ ] |
 
-Git remote sync: tagged package 4.1.0. Shared libraries and team workspaces: sidebar groups roots, join/create library, per-user study progress. Live run is not recorded yet. Skill packages and marketplace: `marketplace/index.json` in this repo, Settings → Skills, first-party `anki-export` TSV. Live run is not recorded yet. Role checks are advisory; the git host's permissions are the real control. Remote workers: Settings → Workers, per-root Local or SSH host, rsync and NDJSON over ssh, Arbor-managed known_hosts, local commit after sync back. Live run is not recorded in this commit.
+Git remote sync: boxes C1 and C2. Shared libraries and per-user progress: boxes C1 and C3. Skill packages: box C4 installed, confirmed, and uninstalled the local `anki-export` pin. The run did not write the TSV. The folder picker never accepted Open (issue #70), so that Live run box stays open. Role checks: box C5. The UI disabled write jobs and the worker refused. The git host's permissions remain the real control. Remote workers: box C6, private sshd on 127.0.0.1:22222, local commit after sync back. Host keys stayed in the Arbor-managed file. `~/.ssh` was unchanged.
 
 ---
 

@@ -511,10 +511,9 @@ Package releases (`0.1.0`, `0.2.0`, `1.0.0`, `2.0.0`, …) are in [`CHANGELOG.md
 | `v4.3.0` | Version 5 (partial) | **Shipped** as package `4.3.0` on 2026-10-18. Skill packages and marketplace (the in-repo index). Tag when this release lands. |
 | `v4.4.0` | Version 5 (partial) | **Shipped** as package `4.4.0` on 2026-10-18. Library roles and shared provider profiles. Tagged. |
 | `v4.5.0` | Version 5 (partial) | **Shipped** as package `4.5.0` on 2026-10-18. Remote workers over SSH. Tag when this release lands. |
-| `v4.6.0`, … | Version 5 **in progress** | Collaboration work until `v5.0.0`. |
-| `v5.0.0` | Version 5 | Collaboration milestone complete |
+| `v5.0.0` | Version 5 | **Shipped** as package `5.0.0` on 2026-10-18. Collaboration milestone complete. Linux live run recorded. Tag when this release lands. |
 
-Do not tag `v3.0.0` for the shell alone, a fix release, or partial delivery. The desktop shell shipped in **`v2.1.0`**. The study loop shipped in **`v2.2.0`**. Mac-batch fixes ship in **`v2.3.0`**. Version 4 shipped as `v3.1.0` through `v3.5.0`, then closed at **`v4.0.0`**. Version 5 ships as `v4.1.0` and later until `v5.0.0`.
+Do not tag `v3.0.0` for the shell alone, a fix release, or partial delivery. The desktop shell shipped in **`v2.1.0`**. The study loop shipped in **`v2.2.0`**. Mac-batch fixes ship in **`v2.3.0`**. Version 4 shipped as `v3.1.0` through `v3.5.0`, then closed at **`v4.0.0`**. Version 5 shipped as `v4.1.0` through `v4.5.0`, then closed at **`v5.0.0`**.
 
 Cursor rule: [`.cursor/rules/arbor-versioning.mdc`](.cursor/rules/arbor-versioning.mdc).
 
@@ -795,7 +794,7 @@ Goal:
 
 Collaboration.
 
-**Status:** In progress. Package `4.5.0` shipped remote workers over SSH. Next package is `v4.6.0`. Version 4 is closed at `v4.0.0` (tutor implemented, locally tested, Linux live run recorded 2026-10-18). Tag `v4.0.0` exists. Mac proof is optional.
+**Status:** Shipped as package `5.0.0` on 2026-10-18. Linux live run recorded (boxes C1–C6; the skill TSV run stays open, issue #70). Tag `v5.0.0` when this release lands. Version 4 is closed at `v4.0.0`. Mac proof is optional.
 
 Features
 
@@ -812,7 +811,11 @@ None of the currently open GitHub issues (#3, #4, #19, #20, #21, #30, #42) belon
 
 ---
 
-# Future Ideas
+# Roadmap after Version 5
+
+Version 5 closed at `v5.0.0`. Nothing below is a scheduled package.
+
+## Carried forward
 
 * Audio transcription
 * Lecture recording import
@@ -830,7 +833,12 @@ None of the currently open GitHub issues (#3, #4, #19, #20, #21, #30, #42) belon
 * Zotero integration
 * Obsidian exporter
 * Notion exporter
-* Anki exporter
+* Anki `.apkg` export. The TSV skill shipped in `v4.3.0`.
+
+## Open issues to carry
+
+* [#70](https://github.com/MrF1ow/Arbor/issues/70) — Folder picker never accepts Open under Xvfb/X11. The v5.0.0 live run reproduced it: Ctrl+L took a typed path, and Open, Cancel, and Escape left the dialog up. The Anki skill run never wrote its TSV.
+* [#88](https://github.com/MrF1ow/Arbor/issues/88) — Skill marketplace hardening: set `hooksPath` to `/dev/null` on the skill clone, refuse symlinks under `$XDG_DATA_HOME/arbor`, sanitize the index ref, clear "Skill run started" when the run finishes, stop showing Confirm/Run on provider-kind rows, and consider `.apkg`.
 
 ---
 
