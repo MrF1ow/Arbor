@@ -174,6 +174,22 @@ def build_parser() -> argparse.ArgumentParser:
     lj.add_argument("--url", required=True, help="Git URL of the shared library.")
     lj.add_argument("--dest", required=True, help="Empty folder path for the clone.")
 
+    lshow = sub.add_parser("library-show", help="Show shared library metadata and your role.")
+    lshow.add_argument("--root", required=True, help="Path to the Knowledge git repo.")
+
+    lmem = sub.add_parser("library-members", help="Update library members and roles.")
+    lmem.add_argument("--root", required=True, help="Path to the Knowledge git repo.")
+    lmem.add_argument("--members", required=True, help="JSON array of member objects.")
+
+    lprov = sub.add_parser("library-provider", help="Set or clear the shared provider profile.")
+    lprov.add_argument("--root", required=True, help="Path to the Knowledge git repo.")
+    lprov.add_argument("--id", default=None, help="Provider id.")
+    lprov.add_argument("--model", default=None, help="Provider model.")
+    lprov.add_argument("--clear", action="store_true", help="Remove the shared provider profile.")
+
+    lmig = sub.add_parser("library-migrate", help="Migrate library.json member format.")
+    lmig.add_argument("--root", required=True, help="Path to the Knowledge git repo.")
+
     si = sub.add_parser("skill-install", help="Install a skill package from a pinned git commit.")
     si.add_argument("--git", required=True, dest="git", help="Git URL or local repository path.")
     si.add_argument("--commit", required=True, help="Full 40-character lowercase commit SHA.")
@@ -266,6 +282,18 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "library-join":
         from arbor_worker.commands import cmd_library_join
         return cmd_library_join(args)
+    if args.command == "library-show":
+        from arbor_worker.commands import cmd_library_show
+        return cmd_library_show(args)
+    if args.command == "library-members":
+        from arbor_worker.commands import cmd_library_members
+        return cmd_library_members(args)
+    if args.command == "library-provider":
+        from arbor_worker.commands import cmd_library_provider
+        return cmd_library_provider(args)
+    if args.command == "library-migrate":
+        from arbor_worker.commands import cmd_library_migrate
+        return cmd_library_migrate(args)
     if args.command == "skill-index":
         from arbor_worker.skillpkg.index import cmd_skill_index
         return cmd_skill_index(args)

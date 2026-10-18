@@ -311,6 +311,7 @@ mod tests {
             skill_index_source: String::new(),
             skill_index_ref: String::new(),
             skill_grants: vec![],
+            provider_overrides: vec![],
         };
         let json = crate::settings::to_json(&settings);
         assert!(!json.contains(FAKE_TEST_API_KEY));

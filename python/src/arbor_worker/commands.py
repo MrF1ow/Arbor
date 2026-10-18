@@ -171,11 +171,19 @@ def cmd_plan_update(args) -> int:
 
 
 def cmd_update(args) -> int:
+    from arbor_worker.library import LibraryError, assert_can_write
     from arbor_worker.pipeline import run_update
 
     root = Path(args.root)
     settings = load_settings(root)
     emitter = EventEmitter(sys.stdout)
+
+    try:
+        assert_can_write(root)
+    except LibraryError as error:
+        emitter.error(message=str(error))
+        emitter.run_done(processed=0, failed=0, skipped=0)
+        return 1
 
     resolved, code = _resolve_llm_provider(args.provider, root, args.model, emitter)
     if code is not None:
@@ -201,11 +209,23 @@ def cmd_update(args) -> int:
 
 
 def cmd_generate(args) -> int:
+    from arbor_worker.library import LibraryError, assert_can_write
+
     root = Path(args.root)
     course_dir = root / args.course
     emitter = EventEmitter(sys.stdout)
     settings = load_settings(root)
     skill = SKILLS.get(args.skill)
+
+    try:
+        assert_can_write(root)
+    except LibraryError as error:
+        emitter.skill_failed(
+            course=args.course,
+            skill=args.skill,
+            message=str(error),
+        )
+        return 1
 
     if not course_dir.is_dir():
         emitter.skill_failed(
@@ -735,10 +755,16 @@ def cmd_study_progress(args) -> int:
 
 
 def cmd_study_plan(args) -> int:
+    from arbor_worker.library import LibraryError, assert_can_write
     from arbor_worker.study_progress import emit_json_line
     from arbor_worker.study_plan import generate_study_plan
 
     root = Path(args.root)
+    try:
+        assert_can_write(root)
+    except LibraryError as error:
+        print(str(error), file=sys.stderr)
+        return 1
     emitter = EventEmitter(sys.stderr)
     if args.provider == "fake":
         fake_markdown = os.environ.get(
@@ -803,10 +829,16 @@ def cmd_study_plan(args) -> int:
 
 def cmd_append_card(args) -> int:
     from arbor_worker.append_card import append_flashcard
+    from arbor_worker.library import LibraryError, assert_can_write
     from arbor_worker.study_progress import emit_json_line
 
     root = Path(args.root)
     emitter = EventEmitter(sys.stderr)
+    try:
+        assert_can_write(root)
+    except LibraryError as error:
+        print(str(error), file=sys.stderr)
+        return 1
     try:
         card = append_flashcard(
             root,
@@ -989,4 +1021,119 @@ def cmd_library_join(args) -> int:
         print(str(error), file=sys.stderr)
         return 1
     print(json.dumps(result))
+    return 0
+
+
+def cmd_library_show(args) -> int:
+    from arbor_worker.library import LibraryError, current_role, load_library
+
+    root = Path(args.root)
+    try:
+        doc = load_library(root)
+    except LibraryError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    if doc is None:
+        print(json.dumps({"present": False}))
+        return 0
+    role = current_role(root)
+    payload = {
+        "present": True,
+        "name": doc["name"],
+        "created_by": doc["created_by"],
+        "members": doc["members"],
+        "provider": doc.get("provider"),
+        "role": role,
+    }
+    print(json.dumps(payload))
+    return 0
+
+
+def cmd_library_members(args) -> int:
+    from arbor_worker.library import LibraryError, set_library_members
+
+    root = Path(args.root)
+    try:
+        members = json.loads(args.members)
+    except json.JSONDecodeError:
+        print("Invalid --members JSON", file=sys.stderr)
+        return 1
+    if not isinstance(members, list):
+        print("Invalid --members JSON", file=sys.stderr)
+        return 1
+    try:
+        doc = set_library_members(root, members)
+    except LibraryError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    print(json.dumps(doc))
+    return 0
+
+
+def cmd_library_provider(args) -> int:
+    from arbor_worker.library import LibraryError, set_library_provider
+
+    root = Path(args.root)
+    if args.clear and (args.id is not None or args.model is not None):
+        print("--clear is mutually exclusive with --id and --model", file=sys.stderr)
+        return 1
+    if not args.clear:
+        if not args.id or not args.model:
+            print("--id and --model are required unless --clear", file=sys.stderr)
+            return 1
+    try:
+        if args.clear:
+            doc = set_library_provider(root, None)
+        else:
+            doc = set_library_provider(root, {"id": args.id, "model": args.model})
+    except LibraryError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    print(json.dumps(doc))
+    return 0
+
+
+def cmd_library_migrate(args) -> int:
+    from arbor_worker.gitstate import commit_batch
+    from arbor_worker.library import (
+        LIBRARY_REL,
+        LibraryError,
+        assert_can_write,
+        library_needs_member_migration,
+        load_library,
+        migrate_library_file,
+    )
+
+    root = Path(args.root)
+    path = root / LIBRARY_REL
+    if not path.is_file():
+        print("No shared library at this folder.", file=sys.stderr)
+        return 1
+    needs = library_needs_member_migration(root)
+    if needs:
+        try:
+            assert_can_write(root)
+        except LibraryError as error:
+            print(str(error), file=sys.stderr)
+            return 1
+        before = path.read_bytes()
+        try:
+            doc = migrate_library_file(root)
+        except LibraryError as error:
+            print(str(error), file=sys.stderr)
+            return 1
+        after = path.read_bytes()
+        if before != after:
+            commit_batch(root, [Path(LIBRARY_REL)], "library: migrate members")
+        print(json.dumps(doc))
+        return 0
+    try:
+        doc = load_library(root)
+    except LibraryError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    if doc is None:
+        print("No shared library at this folder.", file=sys.stderr)
+        return 1
+    print(json.dumps(doc))
     return 0

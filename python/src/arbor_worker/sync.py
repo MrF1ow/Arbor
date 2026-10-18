@@ -236,6 +236,13 @@ def migrate_derived_files(
     emitter: EventEmitterType | None = None,
 ) -> None:
     root = Path(root)
+    from arbor_worker.library import LibraryError, current_role
+
+    try:
+        if current_role(root, runner) == "viewer":
+            return
+    except LibraryError:
+        pass
     gi_changed = _append_gitignore_entries(root)
     status = _git(root, ["status", "--porcelain", "--", ".gitignore"], runner=runner)
     if (status.stdout or "").strip():
@@ -459,6 +466,21 @@ def _rebuild_after_sync(root: Path) -> None:
         embed_root(root, HashedNgramEmbedder())
 
 
+def _sync_user_is_viewer(root: Path, runner=subprocess.run) -> bool:
+    from arbor_worker.library import LibraryError, current_role
+
+    try:
+        return current_role(root, runner) == "viewer"
+    except LibraryError:
+        return False
+
+
+def _refuse_viewer_push() -> None:
+    from arbor_worker.library import VIEWER_WRITE_DENIED
+
+    raise GitSyncError(VIEWER_WRITE_DENIED)
+
+
 def sync_root(root: Path, runner=subprocess.run) -> SyncReport:
     root = Path(root)
     if remote_url(root, runner) is None:
@@ -478,7 +500,11 @@ def sync_root(root: Path, runner=subprocess.run) -> SyncReport:
     branch = _current_branch(root, runner)
     upstream_ref = f"{sync_remote}/{branch}"
 
+    viewer = _sync_user_is_viewer(root, runner)
+
     if not _ref_exists(root, upstream_ref, runner):
+        if viewer:
+            _refuse_viewer_push()
         push = _git(root, ["push", "-u", sync_remote, "HEAD"], runner=runner)
         if push.returncode != 0:
             raise GitSyncError(redact_git_text((push.stderr or "").strip()))
@@ -490,6 +516,8 @@ def sync_root(root: Path, runner=subprocess.run) -> SyncReport:
     if behind == 0:
         if ahead == 0:
             return SyncReport(ok=True, action="up_to_date", commit=_short_head(root, runner))
+        if viewer:
+            _refuse_viewer_push()
         push = _git(root, ["push", sync_remote, "HEAD"], runner=runner)
         if push.returncode != 0:
             raise GitSyncError(redact_git_text((push.stderr or "").strip()))
@@ -554,9 +582,10 @@ def sync_root(root: Path, runner=subprocess.run) -> SyncReport:
     finally:
         _cleanup_incomplete_integration(root, runner)
 
-    push = _git(root, ["push", sync_remote, "HEAD"], runner=runner)
-    if push.returncode != 0:
-        raise GitSyncError(redact_git_text((push.stderr or "").strip()))
+    if not viewer:
+        push = _git(root, ["push", sync_remote, "HEAD"], runner=runner)
+        if push.returncode != 0:
+            raise GitSyncError(redact_git_text((push.stderr or "").strip()))
 
     post_head_proc = _git(root, ["rev-parse", "HEAD"], runner=runner)
     post_head = (post_head_proc.stdout or "").strip()
@@ -726,9 +755,10 @@ def continue_sync(root: Path, runner=subprocess.run) -> SyncReport:
 
     sync_remote = sync_remote_name(root, runner)
     assert sync_remote is not None
-    push = _git(root, ["push", sync_remote, "HEAD"], runner=runner)
-    if push.returncode != 0:
-        raise GitSyncError(redact_git_text((push.stderr or "").strip()))
+    if not _sync_user_is_viewer(root, runner):
+        push = _git(root, ["push", sync_remote, "HEAD"], runner=runner)
+        if push.returncode != 0:
+            raise GitSyncError(redact_git_text((push.stderr or "").strip()))
 
     post_head_proc = _git(root, ["rev-parse", "HEAD"], runner=runner)
     post_head = (post_head_proc.stdout or "").strip()

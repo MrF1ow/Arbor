@@ -241,6 +241,57 @@ pub fn join_library(
 }
 
 #[tauri::command]
+pub fn library_show(app: tauri::AppHandle, root: String) -> Result<serde_json::Value, String> {
+    run_worker_json_app(&app, &["library-show", "--root", &root])
+}
+
+#[tauri::command]
+pub fn library_set_members(
+    app: tauri::AppHandle,
+    root: String,
+    members: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let members_json = serde_json::to_string(&members).map_err(|e| e.to_string())?;
+    run_worker_json_app(
+        &app,
+        &[
+            "library-members",
+            "--root",
+            root.as_str(),
+            "--members",
+            members_json.as_str(),
+        ],
+    )
+}
+
+#[tauri::command]
+pub fn library_set_provider(
+    app: tauri::AppHandle,
+    root: String,
+    id: Option<String>,
+    model: Option<String>,
+    clear: bool,
+) -> Result<serde_json::Value, String> {
+    if clear {
+        return run_worker_json_app(&app, &["library-provider", "--root", &root, "--clear"]);
+    }
+    let id = id.ok_or_else(|| "provider id is required".to_string())?;
+    let model = model.ok_or_else(|| "provider model is required".to_string())?;
+    run_worker_json_app(
+        &app,
+        &[
+            "library-provider",
+            "--root",
+            &root,
+            "--id",
+            id.as_str(),
+            "--model",
+            model.as_str(),
+        ],
+    )
+}
+
+#[tauri::command]
 pub fn sync_now(app: tauri::AppHandle, root: String) -> Result<serde_json::Value, String> {
     run_worker_json_app(&app, &["sync", "--root", &root])
 }

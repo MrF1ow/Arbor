@@ -2,11 +2,20 @@
 
 Package version for the worker, desktop, and Tauri app. See [Version numbering](PROJECT.md#version-numbering) in `PROJECT.md`.
 
-**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is complete as package `3.0.0`. **Version 4** is complete as package `4.0.0`. **Version 5** is in progress and will ship as `v4.1.0`, `v4.2.0`, … until `v5.0.0`. **Current package:** `4.3.0`. **Current tag:** `v4.3.0` is cut when this release lands. `v4.2.0` is the previous package and is tagged. `v4.1.0` and `v4.0.0` are tagged. `v3.0.0` through `v3.5.0` are already tagged. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) was retested on the 2026-10-17 Linux live run.
+**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is complete as package `3.0.0`. **Version 4** is complete as package `4.0.0`. **Version 5** is in progress and will ship as `v4.1.0`, `v4.2.0`, … until `v5.0.0`. **Current package:** `4.4.0`. **Current tag:** `v4.4.0` is cut when this release lands. `v4.3.0` is the previous package and is not tagged yet. `v4.2.0` is tagged. `v4.1.0` and `v4.0.0` are tagged. `v3.0.0` through `v3.5.0` are already tagged. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) was retested on the 2026-10-17 Linux live run.
 
 ## Unreleased
 
-Nothing pending above `4.3.0`.
+Nothing pending above `4.4.0`.
+
+## 4.4.0 — 2026-10-18
+
+Git tag `v4.4.0` when this release lands. **Product:** library roles and shared provider profiles. Version 5 continues at `v4.5.0`. Worker, desktop, and Tauri report `4.4.0`, including `arbor-worker --version`.
+
+- `.arbor/library.json` members are `{email, role}` with roles `owner`, `editor`, and `viewer`. A v4.2 string list still loads: `created_by` becomes owner and the other addresses become editor. The signed-in role is the effective git email, the same lookup as per-user progress.
+- Viewers cannot run write jobs (update, generate, study plan, make-card, skill runs that declare a write permission, and commits other than their own progress) or push on sync. Settings and the course actions disable those controls and show the reason. The worker refuses them as well. Viewers can still read, search, chat, and record their own progress. Owners edit members and roles in Settings → Library, which writes `library.json` and commits that file.
+- Arbor's role check is advisory. The git host's permissions are what actually enforce access. Arbor cannot stop someone who pushes with git directly.
+- A library may set `provider` to `{id, model}`. That is the recommended provider for the library. No API keys, tokens, or other credentials are written to `library.json`. When that root is active and the member has no local override, the provider picker selects it and shows "recommended by library". An override is stored in app settings for that root only.
 
 ## 4.3.0 — 2026-10-18
 

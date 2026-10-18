@@ -85,6 +85,20 @@ def git_identity_args(root: Path, runner: _Runner = subprocess.run) -> list[str]
     return ["-c", "user.name=Arbor", "-c", "user.email=arbor@localhost"]
 
 
+def _is_viewer_own_progress_path(user_dir: str, rel_path: Path) -> bool:
+    parts = rel_path.parts
+    if len(parts) != 5:
+        return False
+    if parts[0] != ".arbor" or parts[1] != "users":
+        return False
+    if parts[2].casefold() != user_dir.casefold():
+        return False
+    course = parts[3]
+    if not course or course in (".", "..") or "/" in course or "\\" in course:
+        return False
+    return parts[4] == "progress.json"
+
+
 def commit_batch(
     root: Path,
     rel_paths: list[Path],
@@ -93,6 +107,14 @@ def commit_batch(
 ) -> CommitResult:
     if not rel_paths:
         raise GitStateError("Nothing to commit")
+    from arbor_worker.library import LibraryError, VIEWER_WRITE_DENIED, current_role
+
+    role = current_role(root, runner)
+    if role == "viewer":
+        user_dir = git_user_dirname(root, runner)
+        for rel in rel_paths:
+            if not _is_viewer_own_progress_path(user_dir, rel):
+                raise LibraryError(VIEWER_WRITE_DENIED)
     add = _git(root, ["add", "--", *[str(p) for p in rel_paths]], runner)
     if add.returncode != 0:
         raise GitStateError(f"git add failed: {(add.stderr or '').strip()}")

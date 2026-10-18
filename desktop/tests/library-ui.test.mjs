@@ -31,4 +31,15 @@ test("library chrome exposes add class, add files, and settings appearance", asy
   assert.match(css, /\.notes-layout \{[\s\S]*min-height: 0;/);
   assert.match(css, /\.main-wrap \{[\s\S]*min-height: 0;/);
   assert.match(css, /\.main \{[\s\S]*min-height: 0;/);
+
+  for (const id of [
+    "library-role-note",
+    "library-members",
+    "library-members-save",
+    "library-provider-id",
+    "library-provider-save",
+    "provider-recommendation",
+  ]) {
+    assert.match(html, new RegExp(`id="${id}"`), `missing #${id}`);
+  }
 });

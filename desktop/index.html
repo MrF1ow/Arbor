@@ -321,6 +321,7 @@
                       <span>Provider</span>
                       <select id="provider"></select>
                     </div>
+                    <p id="provider-recommendation" class="sync-status" hidden>recommended by library</p>
                     <div class="setting-row" id="provider-key-row" hidden>
                       <span>API key</span>
                       <input id="provider-key" type="password" autocomplete="off" spellcheck="false">
@@ -366,6 +367,32 @@
                       <button class="btn-secondary" id="create-shared-library" type="button">Create shared library</button>
                       <button class="btn-secondary" id="join-library" type="button">Join a library</button>
                     </div>
+                    <div id="library-settings-block" hidden>
+                      <h3>Library</h3>
+                      <div id="library-members"></div>
+                      <div class="setting-row">
+                        <span>Add member</span>
+                        <input id="library-member-email" type="email" autocomplete="off" spellcheck="false" placeholder="email@example.com">
+                        <select id="library-member-role">
+                          <option value="owner">owner</option>
+                          <option value="editor">editor</option>
+                          <option value="viewer">viewer</option>
+                        </select>
+                        <button class="btn-secondary" id="library-member-add" type="button">Add</button>
+                      </div>
+                      <button class="btn-secondary" id="library-members-save" type="button">Save members</button>
+                      <div class="setting-row">
+                        <span>Library provider</span>
+                        <input id="library-provider-id" type="text" autocomplete="off" spellcheck="false" placeholder="provider id">
+                        <input id="library-provider-model" type="text" autocomplete="off" spellcheck="false" placeholder="model">
+                      </div>
+                      <div class="setting-row">
+                        <button class="btn-secondary" id="library-provider-save" type="button">Save provider</button>
+                        <button class="btn-secondary" id="library-provider-clear" type="button">Clear provider</button>
+                      </div>
+                      <p id="library-settings-note" class="sync-status"></p>
+                    </div>
+                    <p id="library-role-note-settings" class="sync-status" hidden></p>
                     <p id="sync-status" class="sync-status"></p>
                   </div>
                   <div class="settings-group">
@@ -394,6 +421,7 @@
           <footer class="inspector" id="inspector" hidden>
             <div class="inspector-bar">
               <button class="btn-primary" id="update" disabled>Update knowledge</button>
+              <p id="library-role-note" class="sync-status" hidden></p>
               <button class="btn-secondary" id="cancel" disabled>Cancel</button>
               <button class="btn-secondary" id="generate-citations" type="button" disabled>Check citations</button>
               <button class="inspector-expand" id="inspector-toggle" type="button">Show log ▴</button>

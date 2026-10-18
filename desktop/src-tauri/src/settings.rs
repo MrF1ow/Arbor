@@ -49,6 +49,14 @@ pub struct SkillGrant {
     pub permissions: Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProviderOverride {
+    pub path: String,
+    pub provider_id: String,
+    #[serde(default)]
+    pub model_id: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Settings {
     #[serde(default)]
@@ -73,6 +81,8 @@ pub struct Settings {
     pub skill_index_ref: String,
     #[serde(default)]
     pub skill_grants: Vec<SkillGrant>,
+    #[serde(default)]
+    pub provider_overrides: Vec<ProviderOverride>,
 }
 
 impl Default for Settings {
@@ -89,6 +99,7 @@ impl Default for Settings {
             skill_index_source: String::new(),
             skill_index_ref: String::new(),
             skill_grants: vec![],
+            provider_overrides: vec![],
         }
     }
 }
@@ -135,6 +146,28 @@ pub fn normalize_settings(mut s: Settings) -> Settings {
         .cloned();
     s.active_root = active_valid.or_else(|| s.knowledge_roots.first().map(|e| e.path.clone()));
     s.knowledge_root = s.active_root.clone();
+
+    let mut merged_overrides: Vec<ProviderOverride> = Vec::new();
+    let mut index_by_path: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    for entry in s.provider_overrides.drain(..) {
+        let path = entry.path.trim().to_string();
+        let provider_id = entry.provider_id.trim().to_string();
+        if path.is_empty() || provider_id.is_empty() {
+            continue;
+        }
+        let normalized = ProviderOverride {
+            path: path.clone(),
+            provider_id,
+            model_id: entry.model_id,
+        };
+        if let Some(idx) = index_by_path.get(&path) {
+            merged_overrides[*idx] = normalized;
+        } else {
+            index_by_path.insert(path, merged_overrides.len());
+            merged_overrides.push(normalized);
+        }
+    }
+    s.provider_overrides = merged_overrides;
 
     s
 }
@@ -213,6 +246,7 @@ mod tests {
             skill_index_source: String::new(),
             skill_index_ref: String::new(),
             skill_grants: vec![],
+            provider_overrides: vec![],
         };
         let back = from_json(&to_json(&s));
         assert_eq!(s, back);
@@ -235,6 +269,24 @@ mod tests {
         assert!(s.skill_index_source.is_empty());
         assert!(s.skill_index_ref.is_empty());
         assert!(s.skill_grants.is_empty());
+        assert!(s.provider_overrides.is_empty());
+    }
+
+    #[test]
+    fn provider_override_roundtrip_and_duplicate_path() {
+        let json = r#"{
+            "provider_overrides": [
+                {"path":"/a/root","provider_id":"grok","model_id":"old"},
+                {"path":"/a/root","provider_id":"codex","model_id":"new"}
+            ]
+        }"#;
+        let s = from_json(json);
+        assert_eq!(s.provider_overrides.len(), 1);
+        assert_eq!(s.provider_overrides[0].path, "/a/root");
+        assert_eq!(s.provider_overrides[0].provider_id, "codex");
+        assert_eq!(s.provider_overrides[0].model_id.as_deref(), Some("new"));
+        let back = from_json(&to_json(&s));
+        assert_eq!(back.provider_overrides, s.provider_overrides);
     }
 
     #[test]
