@@ -197,6 +197,24 @@ def test_missing_digest_file_regenerates(tmp_path: Path):
     assert _kinds(actions) == [("regenerate", "digests/2026-08-12.md", 1, 10)]
 
 
+def test_create_apply_strips_preamble_before_validation():
+    digest = _marked(11, 20, "New coverage")
+    provider = FakeProvider(f"Sure, here are the notes:\n\n{digest}")
+    prep = PrepareResult("pdf_images", image_paths=_page_images(20))
+    action = DigestAction("create", PageRange(11, 20), digest_file=None)
+    markdown = apply_digest_action(
+        action,
+        provider=provider,
+        model_id="fake-model",
+        source_name="mega.pdf",
+        prep=prep,
+        cwd=Path("."),
+    )
+    assert "Sure" not in markdown
+    assert markdown.lstrip().startswith("<!-- arbor-pages:")
+    validate_digest(markdown)
+
+
 def test_create_apply_uses_marked_digest_generation():
     provider = FakeProvider(_marked(11, 20, "New coverage"))
     prep = PrepareResult("pdf_images", image_paths=_page_images(20))

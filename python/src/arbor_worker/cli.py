@@ -61,6 +61,8 @@ def build_parser() -> argparse.ArgumentParser:
     search.add_argument("--limit", type=int, default=25)
     search.add_argument("--provider", default="hashed", choices=["hashed", "fake"])
 
+    sub.add_parser("chat", help="Grounded course Q&A (JSON on stdin, NDJSON on stdout).")
+
     return parser
 
 
@@ -101,4 +103,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "embed-search":
         from arbor_worker.commands import cmd_embed_search
         return cmd_embed_search(args)
+    if args.command == "chat":
+        from arbor_worker.commands import cmd_chat
+        return cmd_chat(args)
     return 2

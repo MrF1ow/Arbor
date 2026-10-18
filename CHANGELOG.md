@@ -2,15 +2,25 @@
 
 Package version for the worker, desktop, and Tauri app. See [Version numbering](PROJECT.md#version-numbering) in `PROJECT.md`.
 
-**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is complete as package `3.0.0`. **Version 4** is in progress and will ship as `v3.1.0`, `v3.2.0`, … until `v4.0.0`. **Current package:** `3.0.0`. **Current tag:** `v3.0.0` is cut when this release lands. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) was retested on the 2026-10-17 Linux live run.
+**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is complete as package `3.0.0`. **Version 4** is in progress and will ship as `v3.1.0`, `v3.2.0`, … until `v4.0.0`. **Current package:** `3.1.0`. **Current tag:** `v3.1.0` is cut when this release lands. `v3.0.0` is already tagged. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) was retested on the 2026-10-17 Linux live run.
 
 ## Unreleased
 
-Nothing pending above `3.0.0`.
+Nothing pending above `3.1.0`.
+
+## 3.1.0 — 2026-10-17
+
+Git tag: `v3.1.0` when this release lands. **Product:** Version 4 in progress (chat worker), not `v4.0.0`. Worker, desktop, and Tauri report `3.1.0`, including `arbor-worker --version`.
+
+- `arbor-worker chat` answers from course digests (semantic search plus FTS), always includes `course.md`, and keeps a 12k character source budget.
+- Answers cite `[n]`. The worker maps those to digest path, heading id, page range, and source file. Unsupported questions set `supported` false.
+- Modes are ask, explain, and quiz. The command is read-only.
+- Digest output drops model preamble before the first heading ([#71](https://github.com/MrF1ow/Arbor/issues/71)).
+- Grok still uses the tool denylist, and a reported tool call fails the run ([#72](https://github.com/MrF1ow/Arbor/issues/72)).
 
 ## 3.0.0 — 2026-10-17
 
-Git tag: `v3.0.0` when this release lands. **Product:** Version 3 shipped. Version 4 is in progress (not started). Worker, desktop, and Tauri report `3.0.0`, including `arbor-worker --version`.
+Git tag: `v3.0.0` is tagged. **Product:** Version 3 shipped. Version 4 is in progress (not started). Worker, desktop, and Tauri report `3.0.0`, including `arbor-worker --version`.
 
 Linux live run recorded in [linux-live-run.md](docs/superpowers/plans/2026-10-17-roadmap-completion/linux-live-run.md). Boxes 1–3 and 5–15 passed. Box 4 is partial: no live digest contained a table or emphasis.
 

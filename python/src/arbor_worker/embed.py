@@ -233,6 +233,7 @@ def search_chunks(
     query: str,
     limit: int,
     embedder: Embedder,
+    course: str | None = None,
 ) -> list[dict[str, object]]:
     if not query.strip() or limit <= 0:
         return []
@@ -250,7 +251,9 @@ def search_chunks(
         ).fetchall()
 
     scored = []
-    for course, digest_path, heading, text, vector_json in rows:
+    for row_course, digest_path, heading, text, vector_json in rows:
+        if course is not None and row_course != course:
+            continue
         vector = json.loads(vector_json)
         if len(vector) != len(query_vector):
             continue
@@ -263,7 +266,7 @@ def search_chunks(
             (
                 score,
                 {
-                    "course": course,
+                    "course": row_course,
                     "path": digest_path,
                     "kind": "digest",
                     "title": heading or Path(digest_path).stem,

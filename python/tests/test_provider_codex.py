@@ -40,6 +40,28 @@ def test_run_reads_output_file(tmp_path: Path):
     assert res.markdown.startswith("# Title")
 
 
+def test_run_prepends_system_to_stdin(tmp_path: Path):
+    captured: dict[str, str] = {}
+
+    def fake_runner(argv, **kwargs):
+        captured["input"] = kwargs.get("input", "")
+        out_index = argv.index("-o") + 1
+        Path(argv[out_index]).write_text("done")
+        class R: returncode = 0; stdout = ""; stderr = ""
+        return R()
+
+    prov = CodexCliProvider(models=[Model("m", "M")], runner=fake_runner)
+    req = ProviderRequest(
+        prompt="user part",
+        model_id="m",
+        image_paths=[],
+        cwd=tmp_path,
+        system="system part",
+    )
+    prov.run(req)
+    assert captured["input"] == "system part\n\nuser part"
+
+
 def test_run_raises_on_nonzero(tmp_path: Path):
     def fake_runner(argv, **kwargs):
         class R: returncode = 2; stdout = ""; stderr = "boom"

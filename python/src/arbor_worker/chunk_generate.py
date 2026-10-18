@@ -10,6 +10,7 @@ from arbor_worker.chunking import ChunkPlan, plan_chunks
 from arbor_worker.digest import (
     build_chunk_prompt,
     build_synthesis_prompt,
+    strip_preamble_before_heading,
     validate_chunk_digest,
     validate_digest,
 )
@@ -41,8 +42,9 @@ def _run_one_chunk(provider, plan: ChunkPlan, *, source_name, total_pages, model
         cwd=cwd,
     )
     result = provider.run(request)
-    validate_chunk_digest(result.markdown)
-    return result.markdown
+    markdown = strip_preamble_before_heading(result.markdown)
+    validate_chunk_digest(markdown)
+    return markdown
 
 
 def chunked_generate(
@@ -150,7 +152,8 @@ def chunked_generate(
         result = provider.run(
             ProviderRequest(prompt=synth_prompt, model_id=model_id, cwd=cwd)
         )
-        validate_digest(result.markdown, page_range=window)
+        markdown = strip_preamble_before_heading(result.markdown)
+        validate_digest(markdown, page_range=window)
     except Exception as e:
         manifest.set_synthesis("failed", str(e))
         emitter.synthesis_failed(
@@ -161,7 +164,7 @@ def chunked_generate(
     manifest.set_synthesis("ok")
     emitter.synthesis_done(course_dir=course_dir)
     return ChunkedResult(
-        markdown=result.markdown,
+        markdown=markdown,
         chunk_count=len(plans),
         chunk_size=chunk_size,
         page_ranges=manifest.page_ranges(),

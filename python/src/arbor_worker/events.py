@@ -121,3 +121,9 @@ class EventEmitter:
 
     def synthesis_failed(self, **f):
         return self.emit("synthesis_failed", **f)
+
+    def chat_retrieved(self, **f):
+        return self.emit("chat_retrieved", **f)
+
+    def chat_done(self, **f):
+        return self.emit("chat_done", **f)

@@ -3,7 +3,14 @@ from pathlib import Path
 import pytest
 
 from arbor_worker.prepare import PrepareResult
-from arbor_worker.digest import build_prompt, build_synthesis_prompt, validate_digest, DigestError, REQUIRED_SECTIONS
+from arbor_worker.digest import (
+    DigestError,
+    REQUIRED_SECTIONS,
+    build_prompt,
+    build_synthesis_prompt,
+    strip_preamble_before_heading,
+    validate_digest,
+)
 
 
 def test_prompt_includes_sections_and_text():
@@ -48,6 +55,19 @@ def _marked_digest(start: int, end: int, body: str | None = None) -> str:
         f"{inner}\n"
         f"<!-- /arbor-pages:{start}-{end} -->\n"
     )
+
+
+def test_strip_preamble_before_heading_removes_leading_prose():
+    body = _complete_digest_body()
+    raw = f"Sure, here are the notes:\n\n{body}"
+    stripped = strip_preamble_before_heading(raw)
+    assert stripped.startswith("# ")
+    assert stripped == body
+
+
+def test_strip_preamble_before_heading_unchanged_without_heading():
+    text = "Just some conversational text with no markdown heading.\n"
+    assert strip_preamble_before_heading(text) == text
 
 
 def test_validate_accepts_complete_digest():

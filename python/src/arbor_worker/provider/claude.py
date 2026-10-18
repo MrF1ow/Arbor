@@ -77,6 +77,8 @@ class ClaudeCliProvider:
         if request.image_paths:
             argv.append("--input-format")
             argv.append("stream-json")
+        if request.system is not None:
+            argv.extend(["--system-prompt", request.system])
         return argv
 
     def _stdin_payload(self, request: ProviderRequest) -> str:

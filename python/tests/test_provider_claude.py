@@ -32,6 +32,19 @@ def test_build_argv_text(tmp_path: Path):
     assert "--input-format" not in argv
 
 
+def test_build_argv_system_prompt(tmp_path: Path):
+    prov = ClaudeCliProvider(models=[Model("m", "M")], which=lambda name: "/usr/bin/claude")
+    req = ProviderRequest(
+        prompt="hello",
+        model_id="claude-sonnet-5-5",
+        cwd=tmp_path,
+        system="System text here.",
+    )
+    argv = prov.build_argv(req)
+    idx = argv.index("--system-prompt")
+    assert argv[idx + 1] == "System text here."
+
+
 def test_build_argv_image(tmp_path: Path):
     img = tmp_path / "scan.png"
     img.write_bytes(b"\x89PNG\r\n\x1a\n")

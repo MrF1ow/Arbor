@@ -32,6 +32,20 @@ def test_build_argv_text_uses_prompt_file(tmp_path: Path):
     assert "--tools" not in argv
 
 
+def test_build_argv_system_prompt_override(tmp_path: Path):
+    prov = GrokCliProvider(models=[Model("m", "M")], which=lambda name: "/usr/bin/grok")
+    req = ProviderRequest(
+        prompt="digest this",
+        model_id="grok-4.7",
+        cwd=tmp_path,
+        system="Stay grounded.",
+    )
+    prompt_file = tmp_path / "prompt.txt"
+    argv = prov.build_argv(req, prompt_file=prompt_file)
+    idx = argv.index("--system-prompt-override")
+    assert argv[idx + 1] == "Stay grounded."
+
+
 def test_grok_disallowed_tools_list():
     expected = [
         "run_terminal_cmd",
@@ -144,6 +158,37 @@ def test_run_parses_fixture(tmp_path: Path):
     res = prov.run(ProviderRequest(prompt="go", model_id="grok-4.7", cwd=tmp_path))
     assert res.markdown == "arbor-ok"
     assert captured["argv"][1] == "--prompt-file"
+
+
+@pytest.mark.parametrize("returncode", [0, 1])
+def test_run_raises_on_max_turn_tool_call(tmp_path: Path, returncode: int):
+    stdout = json.dumps(
+        {
+            "text": "",
+            "stopReason": "max_turn_requests",
+            "thought": "I will read /etc/hostname using the read_file tool.",
+        }
+    )
+
+    def runner(*a, **k):
+        return type("R", (), {"returncode": returncode, "stdout": stdout, "stderr": ""})()
+
+    prov = GrokCliProvider(models=[Model("m", "M")], runner=runner, which=lambda name: "/usr/bin/grok")
+    with pytest.raises(ProviderError, match="tool call") as exc:
+        prov.run(ProviderRequest(prompt="p", model_id="grok-4.7", cwd=tmp_path))
+    assert "max_turn_requests" in str(exc.value)
+    assert "read /etc/hostname" in str(exc.value)
+
+
+def test_run_raises_on_reported_tool_name(tmp_path: Path):
+    stdout = json.dumps({"text": "", "type": "tool_call", "toolName": "some_future_tool"})
+
+    def runner(*a, **k):
+        return type("R", (), {"returncode": 0, "stdout": stdout, "stderr": ""})()
+
+    prov = GrokCliProvider(models=[Model("m", "M")], runner=runner, which=lambda name: "/usr/bin/grok")
+    with pytest.raises(ProviderError, match="some_future_tool"):
+        prov.run(ProviderRequest(prompt="p", model_id="grok-4.7", cwd=tmp_path))
 
 
 def test_run_raises_on_error_json(tmp_path: Path):

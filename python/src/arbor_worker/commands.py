@@ -578,3 +578,45 @@ def cmd_embed_search(args) -> int:
     )
     print(json.dumps(hits))
     return 0
+
+
+def cmd_chat(_args) -> int:
+    from arbor_worker.chat import answer
+    from arbor_worker.provider.base import ProviderError
+    from arbor_worker.provider.registry import make_provider
+
+    emitter = EventEmitter(sys.stdout)
+    try:
+        payload = json.load(sys.stdin)
+        root = Path(payload["root"])
+        course = payload["course"]
+        question = payload["question"]
+        mode = payload["mode"]
+        provider_name = payload["provider"]
+        model = payload["model"]
+        history = payload.get("history", [])
+        budget_chars = int(payload.get("budget_chars", 12_000))
+        if mode not in {"ask", "explain", "quiz"}:
+            raise ValueError(f"invalid mode: {mode!r}")
+        provider = make_provider(provider_name, root)
+        answer(
+            root,
+            course,
+            history,
+            question,
+            mode,
+            provider,
+            model,
+            budget_chars=budget_chars,
+            emitter=emitter,
+        )
+    except ProviderError as error:
+        emitter.error(message=str(error))
+        return 1
+    except (KeyError, TypeError, ValueError, FileNotFoundError) as error:
+        emitter.error(message=str(error))
+        return 1
+    except Exception as error:
+        emitter.error(message=str(error))
+        return 1
+    return 0
