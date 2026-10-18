@@ -24,6 +24,10 @@ pub struct Settings {
     pub provider_id: String,
     #[serde(default)]
     pub appearance: Appearance,
+    #[serde(default)]
+    pub ollama_base_url: Option<String>,
+    #[serde(default)]
+    pub lmstudio_base_url: Option<String>,
 }
 
 impl Default for Settings {
@@ -33,6 +37,8 @@ impl Default for Settings {
             model_id: None,
             provider_id: default_provider_id(),
             appearance: Appearance::default(),
+            ollama_base_url: None,
+            lmstudio_base_url: None,
         }
     }
 }
@@ -43,6 +49,10 @@ pub fn provider_label(id: &str) -> String {
         "claude" => "Claude".to_string(),
         "grok" => "Grok".to_string(),
         "fake" => "Fake".to_string(),
+        "ollama" => "Ollama".to_string(),
+        "lmstudio" => "LM Studio".to_string(),
+        "openai_api" => "OpenAI API".to_string(),
+        "anthropic_api" => "Anthropic API".to_string(),
         other => other.to_string(),
     }
 }
@@ -94,6 +104,8 @@ mod tests {
             model_id: Some("gpt-5.6-sol".into()),
             provider_id: "grok".into(),
             appearance: Appearance::Dark,
+            ollama_base_url: None,
+            lmstudio_base_url: None,
         };
         let back = from_json(&to_json(&s));
         assert_eq!(s, back);
@@ -117,6 +129,10 @@ mod tests {
     fn provider_label_maps_known_ids() {
         assert_eq!(provider_label("codex"), "Codex");
         assert_eq!(provider_label("grok"), "Grok");
+        assert_eq!(provider_label("ollama"), "Ollama");
+        assert_eq!(provider_label("lmstudio"), "LM Studio");
+        assert_eq!(provider_label("openai_api"), "OpenAI API");
+        assert_eq!(provider_label("anthropic_api"), "Anthropic API");
         assert_eq!(provider_label("custom-cli"), "custom-cli");
     }
 }

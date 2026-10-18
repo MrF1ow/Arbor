@@ -1,18 +1,18 @@
 # arbor-worker
 
-Python worker for Arbor (package **3.4.0**). Turns new or changed course sources (`.pdf`, `.pptx`, `.docx`) in a
-git-tracked Knowledge library into structured markdown digests using the selected CLI provider (Codex, Claude, or Grok).
+Python worker for Arbor (package **3.5.0**). Turns new or changed course sources (`.pdf`, `.pptx`, `.docx`) in a
+git-tracked Knowledge library into structured markdown digests using the selected provider (CLI, local, or API).
 
-`uv run arbor-worker --version` prints `3.4.0`.
+`uv run arbor-worker --version` prints `3.5.0`.
 
 ## Requirements
 
 - Python >= 3.11, [uv](https://docs.astral.sh/uv/)
-- One of Codex CLI, Claude Code, or Grok CLI installed and signed in
+- One provider: Codex CLI, Claude Code, Grok CLI, Ollama, LM Studio, OpenAI API (`ARBOR_OPENAI_API_KEY`), or Anthropic API (`ARBOR_ANTHROPIC_API_KEY`)
 
 ## Providers
 
-Registry ids: `codex` (default), `claude`, `grok`, and `fake` (tests).
+Registry ids: `codex` (default), `claude`, `grok`, `ollama`, `lmstudio`, `openai_api`, `anthropic_api`, and `fake` (tests).
 
 ```bash
 uv run arbor-worker list-providers

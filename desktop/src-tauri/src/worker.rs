@@ -174,7 +174,11 @@ pub fn uv_project_missing_error(argv: &[String]) -> Option<String> {
 }
 
 #[cfg(feature = "desktop-runtime")]
-pub fn run_worker_json(app_dir: &Path, sub_args: &[&str]) -> Result<serde_json::Value, String> {
+pub fn run_worker_json(
+    app_dir: &Path,
+    sub_args: &[&str],
+    extra_env: &[(&str, &str)],
+) -> Result<serde_json::Value, String> {
     use std::process::Command;
 
     let sidecar = packaged_sidecar();
@@ -187,9 +191,12 @@ pub fn run_worker_json(app_dir: &Path, sub_args: &[&str]) -> Result<serde_json::
     if let Some(err) = uv_project_missing_error(&argv) {
         return Err(err);
     }
-    let output = Command::new(&argv[0])
+    let mut command = Command::new(&argv[0]);
+    command
         .args(&argv[1..])
-        .env("PATH", process_path())
+        .env("PATH", process_path());
+    crate::secrets::apply_env_pairs(&mut command, extra_env);
+    let output = command
         .output()
         .map_err(|e| format!("failed to launch worker: {e}"))?;
     parse_worker_json_output(
@@ -306,6 +313,13 @@ pub fn spawn_update_stream(
     let plan_str = plan_file.to_string_lossy().into_owned();
     let sub_args = update_sub_args(&root, &model, &provider_id, &cancel_str, &plan_str);
     let label = crate::settings::provider_label(effective_provider_id(&provider_id));
+    let settings = crate::settings::load(&app);
+    let store = crate::secrets::OsSecretStore;
+    let env_pairs = crate::secrets::worker_env_for_provider_id(
+        effective_provider_id(&provider_id),
+        &store,
+        &settings,
+    );
     spawn_worker_stream(
         app,
         app_dir,
@@ -314,6 +328,7 @@ pub fn spawn_update_stream(
         job_id,
         "update",
         label,
+        env_pairs,
     );
 }
 
@@ -331,6 +346,13 @@ pub fn spawn_generate_stream(
 ) {
     let sub_args = generate_sub_args(&root, &course, &skill, force, model, &provider_id);
     let label = crate::settings::provider_label(effective_provider_id(&provider_id));
+    let settings = crate::settings::load(&app);
+    let store = crate::secrets::OsSecretStore;
+    let env_pairs = crate::secrets::worker_env_for_provider_id(
+        effective_provider_id(&provider_id),
+        &store,
+        &settings,
+    );
     spawn_worker_stream(
         app,
         app_dir,
@@ -339,6 +361,7 @@ pub fn spawn_generate_stream(
         job_id,
         "generate",
         label,
+        env_pairs,
     );
 }
 
@@ -351,6 +374,9 @@ pub fn spawn_embed_stream(
     job_id: String,
 ) {
     let sub_args = embed_sub_args(&root, force);
+    let settings = crate::settings::load(&app);
+    let store = crate::secrets::OsSecretStore;
+    let env_pairs = crate::secrets::worker_env_for_provider_id("hashed", &store, &settings);
     spawn_worker_stream(
         app,
         app_dir,
@@ -359,6 +385,7 @@ pub fn spawn_embed_stream(
         job_id,
         "embed",
         "Provider".to_string(),
+        env_pairs,
     );
 }
 
@@ -371,6 +398,7 @@ fn spawn_worker_stream(
     job_id: String,
     operation: &'static str,
     provider_label: String,
+    env_pairs: Vec<(String, String)>,
 ) {
     use crate::jobs::{self, SharedCoordinator};
     use tauri::{Emitter, Manager};
@@ -408,12 +436,18 @@ fn spawn_worker_stream(
             return;
         }
 
-        let mut child = match Command::new(&argv[0])
+        let env_refs: Vec<(&str, &str)> = env_pairs
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+        let mut command = Command::new(&argv[0]);
+        command
             .args(&argv[1..])
             .env("PATH", process_path())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
+            .stderr(Stdio::piped());
+        crate::secrets::apply_env_pairs(&mut command, &env_refs);
+        let mut child = match command.spawn()
         {
             Ok(c) => c,
             Err(e) => {

@@ -56,10 +56,32 @@ def cmd_check_auth(args) -> int:
     return 0 if res.ok else 1
 
 
+def _models_json_override(root: Path, provider_id: str) -> bool:
+    cfg = root / ".arbor" / "models.json"
+    if not cfg.is_file():
+        return False
+    data = json.loads(cfg.read_text())
+    providers_map = data.get("providers")
+    if isinstance(providers_map, dict) and provider_id in providers_map:
+        return True
+    if provider_id == "codex" and "models" in data:
+        return True
+    return False
+
+
+def _models_for_listing(root: Path, provider_id: str, provider) -> list:
+    if provider_id in ("ollama", "lmstudio") and not _models_json_override(
+        root, provider_id
+    ):
+        return provider.list_models()
+    return load_models(root, provider_id)
+
+
 def cmd_list_models(args) -> int:
     root = Path(getattr(args, "root", None) or ".")
     provider_id = getattr(args, "provider", "codex") or "codex"
-    models = load_models(root, provider_id)
+    provider = make_provider(provider_id, root)
+    models = _models_for_listing(root, provider_id, provider)
     print(json.dumps({"models": [{"id": m.id, "label": m.label} for m in models]}))
     return 0
 
@@ -71,7 +93,7 @@ def cmd_list_providers(args) -> int:
         entry = PROVIDERS[provider_id]
         provider = make_provider(provider_id, root)
         status = provider.status()
-        models = load_models(root, provider_id)
+        models = _models_for_listing(root, provider_id, provider)
         payload.append(
             {
                 "id": provider_id,

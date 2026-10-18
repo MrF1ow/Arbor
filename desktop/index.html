@@ -321,6 +321,17 @@
                       <span>Provider</span>
                       <select id="provider"></select>
                     </div>
+                    <div class="setting-row" id="provider-key-row" hidden>
+                      <span>API key</span>
+                      <input id="provider-key" type="password" autocomplete="off" spellcheck="false">
+                      <button class="btn-secondary" id="provider-key-save" type="button">Save key</button>
+                      <button class="btn-secondary" id="provider-key-clear" type="button">Clear key</button>
+                      <span id="provider-key-status"></span>
+                    </div>
+                    <div class="setting-row" id="provider-base-url-row" hidden>
+                      <span>Base URL</span>
+                      <input id="provider-base-url" type="text" autocomplete="off" spellcheck="false">
+                    </div>
                     <div class="setting-row">
                       <span>Model</span>
                       <select id="model"></select>

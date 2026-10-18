@@ -2,11 +2,23 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from arbor_worker.provider.anthropic_api import (
+    ANTHROPIC_API_DOCS_URL,
+    DEFAULT_ANTHROPIC_API_MODELS,
+    AnthropicApiProvider,
+)
 from arbor_worker.provider.base import Model, ProviderError
 from arbor_worker.provider.claude import CLAUDE_DOCS_URL, DEFAULT_CLAUDE_MODELS, ClaudeCliProvider
 from arbor_worker.provider.codex import CodexCliProvider
 from arbor_worker.provider.fake import DEFAULT_FAKE_MARKDOWN, FakeProvider
 from arbor_worker.provider.grok import DEFAULT_GROK_MODELS, GROK_DOCS_URL, GrokCliProvider
+from arbor_worker.provider.lmstudio import LMSTUDIO_DOCS_URL, LmStudioProvider
+from arbor_worker.provider.ollama import OLLAMA_DOCS_URL, OllamaProvider
+from arbor_worker.provider.openai_api import (
+    DEFAULT_OPENAI_API_MODELS,
+    OPENAI_API_DOCS_URL,
+    OpenAiApiProvider,
+)
 from arbor_worker.settings import DEFAULT_MODELS, DOCS_URL
 
 
@@ -18,7 +30,16 @@ class ProviderEntry:
     default_models: list[Model]
 
 
-PROVIDER_ORDER = ("codex", "claude", "grok", "fake")
+PROVIDER_ORDER = (
+    "codex",
+    "claude",
+    "grok",
+    "ollama",
+    "lmstudio",
+    "openai_api",
+    "anthropic_api",
+    "fake",
+)
 
 PROVIDERS: dict[str, ProviderEntry] = {
     "codex": ProviderEntry(
@@ -39,6 +60,30 @@ PROVIDERS: dict[str, ProviderEntry] = {
         docs_url=GROK_DOCS_URL,
         default_models=list(DEFAULT_GROK_MODELS),
     ),
+    "ollama": ProviderEntry(
+        cls=OllamaProvider,
+        label="Ollama",
+        docs_url=OLLAMA_DOCS_URL,
+        default_models=[],
+    ),
+    "lmstudio": ProviderEntry(
+        cls=LmStudioProvider,
+        label="LM Studio",
+        docs_url=LMSTUDIO_DOCS_URL,
+        default_models=[],
+    ),
+    "openai_api": ProviderEntry(
+        cls=OpenAiApiProvider,
+        label="OpenAI API",
+        docs_url=OPENAI_API_DOCS_URL,
+        default_models=list(DEFAULT_OPENAI_API_MODELS),
+    ),
+    "anthropic_api": ProviderEntry(
+        cls=AnthropicApiProvider,
+        label="Anthropic API",
+        docs_url=ANTHROPIC_API_DOCS_URL,
+        default_models=list(DEFAULT_ANTHROPIC_API_MODELS),
+    ),
     "fake": ProviderEntry(
         cls=FakeProvider,
         label="Fake",
@@ -46,6 +91,8 @@ PROVIDERS: dict[str, ProviderEntry] = {
         default_models=[Model("fake-model", "Fake Model")],
     ),
 }
+
+_CLI_PROVIDERS = frozenset({"codex", "claude", "grok"})
 
 
 def provider_choices() -> list[str]:
@@ -74,8 +121,9 @@ def make_provider(
             markdown = os.environ.get("ARBOR_FAKE_MD", DEFAULT_FAKE_MARKDOWN)
         return FakeProvider(markdown=markdown, models=models)
     kwargs: dict = {"models": models}
-    if runner is not None:
-        kwargs["runner"] = runner
-    if which is not None:
-        kwargs["which"] = which
+    if name in _CLI_PROVIDERS:
+        if runner is not None:
+            kwargs["runner"] = runner
+        if which is not None:
+            kwargs["which"] = which
     return entry.cls(**kwargs)

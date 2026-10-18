@@ -24,6 +24,8 @@ export interface Settings {
   model_id: string | null;
   provider_id: string;
   appearance: Appearance;
+  ollama_base_url?: string | null;
+  lmstudio_base_url?: string | null;
 }
 
 export interface ProviderInfo {

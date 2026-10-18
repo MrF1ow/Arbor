@@ -49,7 +49,7 @@ def image_media_type(path: Path) -> str:
 
 
 @runtime_checkable
-class CliProvider(Protocol):
+class Provider(Protocol):
     name: str
 
     def status(self) -> ProviderStatus: ...
@@ -59,3 +59,6 @@ class CliProvider(Protocol):
     def list_models(self) -> list[Model]: ...
 
     def run(self, request: ProviderRequest) -> ProviderResult: ...
+
+
+CliProvider = Provider

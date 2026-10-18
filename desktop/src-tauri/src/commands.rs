@@ -1,5 +1,6 @@
 use crate::jobs::{self, JobTrigger, SharedCoordinator};
 use crate::search::{self, SearchHit};
+use crate::secrets::{self, OsSecretStore};
 use crate::settings::{self, Settings};
 use crate::watch::WatchState;
 use crate::worker;
@@ -20,6 +21,24 @@ fn non_empty_provider(provider: Option<String>) -> Option<String> {
 
 fn default_provider_id(provider: Option<String>) -> String {
     non_empty_provider(provider).unwrap_or_else(|| "codex".to_string())
+}
+
+fn worker_env_pairs(app: &tauri::AppHandle, sub_args: &[&str]) -> Vec<(String, String)> {
+    let settings = settings::load(app);
+    let store = OsSecretStore;
+    secrets::worker_env_for_sub_args(sub_args, &store, &settings)
+}
+
+fn run_worker_json_app(
+    app: &tauri::AppHandle,
+    sub_args: &[&str],
+) -> Result<serde_json::Value, String> {
+    let pairs = worker_env_pairs(app, sub_args);
+    let refs: Vec<(&str, &str)> = pairs
+        .iter()
+        .map(|(key, value)| (key.as_str(), value.as_str()))
+        .collect();
+    worker::run_worker_json(&repo_dir(app), sub_args, &refs)
 }
 
 fn repo_dir(app: &tauri::AppHandle) -> PathBuf {
@@ -44,10 +63,9 @@ pub fn check_auth(
     app: tauri::AppHandle,
     provider: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    let repo = repo_dir(&app);
     match non_empty_provider(provider) {
-        Some(id) => worker::run_worker_json(&repo, &["check-auth", "--provider", &id]),
-        None => worker::run_worker_json(&repo, &["check-auth"]),
+        Some(id) => run_worker_json_app(&app, &["check-auth", "--provider", &id]),
+        None => run_worker_json_app(&app, &["check-auth"]),
     }
 }
 
@@ -67,7 +85,7 @@ pub fn list_models(
         args.push("--provider");
         args.push(id);
     }
-    worker::run_worker_json(&repo_dir(&app), &args)
+    run_worker_json_app(&app, &args)
 }
 
 #[tauri::command]
@@ -80,12 +98,12 @@ pub fn list_providers(
         args.push("--root");
         args.push(r);
     }
-    worker::run_worker_json(&repo_dir(&app), &args)
+    run_worker_json_app(&app, &args)
 }
 
 #[tauri::command]
 pub fn plan_update(app: tauri::AppHandle, root: String) -> Result<serde_json::Value, String> {
-    worker::run_worker_json(&repo_dir(&app), &["plan-update", "--root", &root])
+    run_worker_json_app(&app, &["plan-update", "--root", &root])
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Clone)]
@@ -102,6 +120,24 @@ pub fn get_settings(app: tauri::AppHandle) -> Settings {
 #[tauri::command]
 pub fn save_settings(app: tauri::AppHandle, settings: Settings) -> Result<(), String> {
     settings::save(&app, &settings)
+}
+
+#[tauri::command]
+pub fn set_provider_secret(provider_id: String, secret: String) -> Result<(), String> {
+    let store = OsSecretStore;
+    secrets::set_provider_secret_logic(&store, &provider_id, &secret)
+}
+
+#[tauri::command]
+pub fn clear_provider_secret(provider_id: String) -> Result<(), String> {
+    let store = OsSecretStore;
+    secrets::clear_provider_secret_logic(&store, &provider_id)
+}
+
+#[tauri::command]
+pub fn provider_secret_status(provider_id: String) -> Result<String, String> {
+    let store = OsSecretStore;
+    secrets::provider_secret_status_logic(&store, &provider_id)
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Clone)]
@@ -565,7 +601,7 @@ pub fn study_progress(
         heading.as_deref(),
     )?;
     let refs = study_progress_argv_refs(&argv);
-    worker::run_worker_json(&repo_dir(&app), &refs)
+    run_worker_json_app(&app, &refs)
 }
 
 fn validate_exam_date(value: &str) -> Result<String, String> {
@@ -638,7 +674,7 @@ pub fn study_plan(
         exam_date.as_deref(),
     )?;
     let refs = study_progress_argv_refs(&argv);
-    worker::run_worker_json(&repo_dir(&app), &refs)
+    run_worker_json_app(&app, &refs)
 }
 
 pub fn build_append_card_argv(
@@ -710,7 +746,7 @@ pub fn append_card(
         page.as_deref(),
     )?;
     let refs = study_progress_argv_refs(&argv);
-    worker::run_worker_json(&repo_dir(&app), &refs)
+    run_worker_json_app(&app, &refs)
 }
 
 #[tauri::command]
@@ -921,8 +957,8 @@ pub fn start_chat(
     }
     let provider_id = default_provider_id(provider);
     let label = settings::provider_label(&provider_id);
-    let auth = worker::run_worker_json(
-        &repo_dir(&app),
+    let auth = run_worker_json_app(
+        &app,
         &["check-auth", "--provider", &provider_id],
     )?;
     let authenticated = auth
@@ -940,6 +976,11 @@ pub fn start_chat(
     }
 
     let app_dir = repo_dir(&app);
+    let chat_env_pairs = {
+        let settings = settings::load(&app);
+        let store = OsSecretStore;
+        secrets::worker_env_for_provider_id(&provider_id, &store, &settings)
+    };
     let sidecar = worker::packaged_sidecar();
     let argv = worker::resolve_worker_argv(
         &|key| std::env::var(key).ok(),
@@ -977,7 +1018,12 @@ pub fn start_chat(
             send_exit(-1);
             return;
         }
-        let mut child = match Command::new(&argv[0])
+        let env_refs: Vec<(&str, &str)> = chat_env_pairs
+            .iter()
+            .map(|(key, value)| (key.as_str(), value.as_str()))
+            .collect();
+        let mut command = Command::new(&argv[0]);
+        command
             .args(&argv[1..])
             .env(
                 "PATH",
@@ -988,9 +1034,9 @@ pub fn start_chat(
             )
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-        {
+            .stderr(Stdio::piped());
+        secrets::apply_env_pairs(&mut command, &env_refs);
+        let mut child = match command.spawn() {
             Ok(child) => child,
             Err(error) => {
                 let _ = on_event.send(serde_json::json!({
@@ -1846,17 +1892,35 @@ pub fn search_semantic(
     query: String,
     limit: Option<u32>,
 ) -> Result<Vec<SearchHit>, String> {
+    let limit_value = limit.unwrap_or(25).to_string();
+    let sub_args = [
+        "embed-search",
+        "--root",
+        root.as_str(),
+        "--query",
+        query.as_str(),
+        "--limit",
+        limit_value.as_str(),
+        "--provider",
+        "hashed",
+    ];
+    let pairs = worker_env_pairs(&app, &sub_args);
+    let refs: Vec<(&str, &str)> = pairs
+        .iter()
+        .map(|(key, value)| (key.as_str(), value.as_str()))
+        .collect();
     search::search_semantic_documents(
         &repo_dir(&app),
         Path::new(&root),
         &query,
         limit.unwrap_or(25),
+        &refs,
     )
 }
 
 #[tauri::command]
 pub fn reindex_knowledge(app: tauri::AppHandle, root: String) -> Result<serde_json::Value, String> {
-    worker::run_worker_json(&repo_dir(&app), &["reindex", "--root", &root])
+    run_worker_json_app(&app, &["reindex", "--root", &root])
 }
 
 #[tauri::command]
@@ -1893,8 +1957,8 @@ pub fn start_update(
 ) -> Result<String, String> {
     let provider_id = default_provider_id(provider);
     let label = settings::provider_label(&provider_id);
-    let auth = worker::run_worker_json(
-        &repo_dir(&app),
+    let auth = run_worker_json_app(
+        &app,
         &["check-auth", "--provider", &provider_id],
     )?;
     let authenticated = auth
@@ -1970,8 +2034,8 @@ pub fn start_study_job(
     let provider_id = default_provider_id(provider);
     let label = settings::provider_label(&provider_id);
     if model.is_some() {
-        let auth = worker::run_worker_json(
-            &repo_dir(&app),
+        let auth = run_worker_json_app(
+            &app,
             &["check-auth", "--provider", &provider_id],
         )?;
         let authenticated = auth

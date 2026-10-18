@@ -60,6 +60,7 @@ pub fn search_semantic_documents(
     knowledge_root: &Path,
     query: &str,
     limit: u32,
+    extra_env: &[(&str, &str)],
 ) -> Result<Vec<SearchHit>, String> {
     if query.trim().is_empty() {
         return Ok(Vec::new());
@@ -79,6 +80,7 @@ pub fn search_semantic_documents(
             "--provider",
             "hashed",
         ],
+        extra_env,
     )?;
     serde_json::from_value(value).map_err(|error| error.to_string())
 }
@@ -106,6 +108,7 @@ mod tests {
             Path::new("/missing/knowledge"),
             "   ",
             10,
+            &[],
         )
         .unwrap();
 
