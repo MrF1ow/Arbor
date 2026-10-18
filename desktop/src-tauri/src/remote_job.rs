@@ -403,6 +403,15 @@ pub fn cancel_active_remote() {
     }
 }
 
+fn insert_ssh_tty_force(mut argv: Vec<String>) -> Vec<String> {
+    argv.insert(1, "-tt".to_string());
+    argv
+}
+
+fn strip_tty_cr(line: &str) -> &str {
+    line.strip_suffix('\r').unwrap_or(line)
+}
+
 pub struct SystemRemoteOps {
     endpoint: ValidatedSsh,
     known_hosts: PathBuf,
@@ -533,7 +542,11 @@ impl RemoteOps for SystemRemoteOps {
             *flag_guard = Some(cancelled.clone());
         }
 
-        let argv = ssh_argv(&self.endpoint, &self.known_hosts, remote_tokens)?;
+        let argv = insert_ssh_tty_force(ssh_argv(
+            &self.endpoint,
+            &self.known_hosts,
+            remote_tokens,
+        )?);
         let mut child = Command::new(&argv[0]);
         child.args(&argv[1..]);
         child.stdout(Stdio::piped()).stderr(Stdio::piped());
@@ -574,7 +587,7 @@ impl RemoteOps for SystemRemoteOps {
                 break;
             }
             let line = line.map_err(|e| e.to_string())?;
-            on_line(&line);
+            on_line(strip_tty_cr(&line));
             if interrupt.is_some_and(|f| f.load(Ordering::SeqCst)) {
                 let _ = self.kill();
                 break;
@@ -789,6 +802,39 @@ mod tests {
         let paths = committed_paths.unwrap();
         assert_eq!(paths.len(), 3);
         assert_eq!(commit_index, Some(true));
+    }
+
+    #[test]
+    fn insert_ssh_tty_force_places_tt_after_program() {
+        let argv = vec![
+            "ssh".to_string(),
+            "-o".to_string(),
+            "BatchMode=yes".to_string(),
+            "--".to_string(),
+            "host".to_string(),
+            "cmd".to_string(),
+        ];
+        assert_eq!(
+            insert_ssh_tty_force(argv),
+            vec![
+                "ssh".to_string(),
+                "-tt".to_string(),
+                "-o".to_string(),
+                "BatchMode=yes".to_string(),
+                "--".to_string(),
+                "host".to_string(),
+                "cmd".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn strip_tty_cr_strips_one_trailing_cr() {
+        assert_eq!(
+            strip_tty_cr(&format!(r#"{{"type":"run_done"}}{}"#, '\r')),
+            r#"{"type":"run_done"}"#
+        );
+        assert_eq!(strip_tty_cr("plain line"), "plain line");
     }
 
     #[test]
