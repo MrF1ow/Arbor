@@ -146,6 +146,7 @@ def test_due_list_order_and_timing(git_repo: Path):
     _course_dir(git_repo)
     _write_deck(git_repo, ["fc_due", "fc_later", "fc_soon", "fc_none", "fc_noentry"])
     path = progress_path(git_repo, "Biology")
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps(
             {
@@ -295,6 +296,7 @@ def test_weak_topics_ranking(git_repo: Path):
         encoding="utf-8",
     )
     path = progress_path(git_repo, "Biology")
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps(
             {
@@ -400,13 +402,14 @@ def test_grade_only_touches_progress_json(git_repo: Path, git):
         digest="digests/a.md", heading="Cells",
     )
     status = g("status", "--porcelain", "-uall")
-    assert status.strip() == "?? Biology/study/progress.json"
+    assert status.strip() == "?? .arbor/users/test@arbor.local/Biology/progress.json"
     assert g("log", "--oneline", "-1").strip().endswith("biology course")
 
 
 def test_invalid_progress_not_overwritten(git_repo: Path):
     _course_dir(git_repo)
     path = progress_path(git_repo, "Biology")
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text('{"schema_version": 99, "course": "Biology", "cards": {}, "questions": {}}\n')
     with pytest.raises(StudyProgressError):
         study_progress_show(git_repo, "Biology")
@@ -416,6 +419,7 @@ def test_invalid_progress_not_overwritten(git_repo: Path):
 def test_invalid_due_at_not_overwritten(git_repo: Path):
     _course_dir(git_repo)
     path = progress_path(git_repo, "Biology")
+    path.parent.mkdir(parents=True, exist_ok=True)
     body = json.dumps(
         {
             "schema_version": 1,
@@ -515,8 +519,8 @@ def test_cli_study_progress_grade_commits_then_show_is_noop(git_repo: Path, git)
     json.loads(out.strip())
     assert g("log", "-1", "--format=%s").strip() == "study: Biology progress"
     assert (
-        g("ls-files", "Biology/study/progress.json").strip()
-        == "Biology/study/progress.json"
+        g("ls-files", ".arbor/users/test@arbor.local/Biology/progress.json").strip()
+        == ".arbor/users/test@arbor.local/Biology/progress.json"
     )
     after_grade = len(g("log", "--oneline").splitlines())
     code, out, err = _run_cli(

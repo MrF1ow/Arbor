@@ -24,6 +24,9 @@ DERIVED_GITIGNORE_ENTRIES: tuple[str, ...] = (
     ".arbor/vectors.sqlite",
     ".arbor/vectors.sqlite-*",
     ".arbor/chat/",
+    ".arbor/users/*/chat/",
+    ".arbor/users/*/local/",
+    "progress.json.bak",
     ".arbor/sync-conflict.json",
 )
 
@@ -185,6 +188,18 @@ def set_shared(root: Path, shared: bool) -> None:
 
 
 def _is_derived_tracked(rel: str) -> bool:
+    if rel == ".arbor/library.json":
+        return False
+    parts = PurePosixPath(rel).parts
+    if len(parts) >= 5 and parts[0] == ".arbor" and parts[1] == "users":
+        if parts[3] == "chat":
+            return True
+        if parts[3] == "local":
+            return True
+        if parts[-1] == "progress.json":
+            return False
+    if PurePosixPath(rel).name == "progress.json.bak":
+        return True
     if rel.startswith("_arbor_cache/"):
         return True
     if rel.startswith(".arbor/chat/"):

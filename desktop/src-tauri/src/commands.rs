@@ -557,6 +557,53 @@ fn validate_path_component(value: &str, label: &str) -> Result<(), String> {
     Ok(())
 }
 
+fn is_safe_user_dir(email: &str) -> bool {
+    !email.is_empty()
+        && email != "."
+        && email != ".."
+        && !email.contains('/')
+        && !email.contains('\\')
+        && !email.contains("..")
+}
+
+fn git_user_dirname(root: &str) -> Result<String, String> {
+    let output = Command::new("git")
+        .args(["-C", root, "config", "--local", "--get", "user.email"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .output()
+        .map_err(|e| e.to_string())?;
+    let email = if output.status.success() {
+        String::from_utf8_lossy(&output.stdout).trim().to_string()
+    } else {
+        String::new()
+    };
+    Ok(if is_safe_user_dir(&email) {
+        email
+    } else {
+        "arbor@localhost".to_string()
+    })
+}
+
+fn migrate_derived_file(old: &Path, new: &Path, bak: &Path) -> Result<(), String> {
+    if new.is_file() {
+        return Ok(());
+    }
+    if !old.is_file() {
+        return Ok(());
+    }
+    if let Some(parent) = new.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::copy(old, new).map_err(|e| e.to_string())?;
+    if !bak.is_file() {
+        std::fs::rename(old, bak).map_err(|e| e.to_string())?;
+    } else {
+        std::fs::remove_file(old).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub fn read_study_json(
     root: String,
@@ -572,10 +619,20 @@ pub fn read_study_json(
 
 fn flashcard_progress_path(root: &str, course: &str) -> Result<PathBuf, String> {
     validate_path_component(course, "course name")?;
-    Ok(Path::new(root)
+    let dirname = git_user_dirname(root)?;
+    let new_path = Path::new(root)
+        .join(".arbor")
+        .join("users")
+        .join(&dirname)
+        .join("local")
+        .join(format!("{course}.flashcards.json"));
+    let old_path = Path::new(root)
         .join(".arbor")
         .join("progress")
-        .join(format!("{course}.flashcards.json")))
+        .join(format!("{course}.flashcards.json"));
+    let bak_path = old_path.with_extension("json.bak");
+    migrate_derived_file(&old_path, &new_path, &bak_path)?;
+    Ok(new_path)
 }
 
 #[tauri::command]
@@ -615,10 +672,20 @@ pub fn write_flashcard_progress(
 
 fn quiz_progress_path(root: &str, course: &str) -> Result<PathBuf, String> {
     validate_path_component(course, "course name")?;
-    Ok(Path::new(root)
+    let dirname = git_user_dirname(root)?;
+    let new_path = Path::new(root)
+        .join(".arbor")
+        .join("users")
+        .join(&dirname)
+        .join("local")
+        .join(format!("{course}.quiz.json"));
+    let old_path = Path::new(root)
         .join(".arbor")
         .join("progress")
-        .join(format!("{course}.quiz.json")))
+        .join(format!("{course}.quiz.json"));
+    let bak_path = old_path.with_extension("json.bak");
+    migrate_derived_file(&old_path, &new_path, &bak_path)?;
+    Ok(new_path)
 }
 
 #[tauri::command]
@@ -928,15 +995,26 @@ fn validate_chat_course(course: &str) -> Result<(), String> {
 
 fn chat_history_path(root: &str, course: &str) -> Result<PathBuf, String> {
     validate_chat_course(course)?;
-    let chat_dir = Path::new(root).join(".arbor").join("chat");
-    let path = chat_dir.join(format!("{course}.jsonl"));
-    if path
+    let dirname = git_user_dirname(root)?;
+    let new_path = Path::new(root)
+        .join(".arbor")
+        .join("users")
+        .join(&dirname)
+        .join("chat")
+        .join(format!("{course}.jsonl"));
+    if new_path
         .components()
         .any(|component| matches!(component, Component::ParentDir))
     {
         return Err("Invalid course name".into());
     }
-    Ok(path)
+    let old_path = Path::new(root)
+        .join(".arbor")
+        .join("chat")
+        .join(format!("{course}.jsonl"));
+    let bak_path = old_path.with_file_name(format!("{course}.jsonl.bak"));
+    migrate_derived_file(&old_path, &new_path, &bak_path)?;
+    Ok(new_path)
 }
 
 fn kill_and_reap_child(child: &mut Child) {
@@ -1520,7 +1598,9 @@ mod tests {
         );
         assert!(root
             .join(".arbor")
-            .join("progress")
+            .join("users")
+            .join("arbor@localhost")
+            .join("local")
             .join("Biology.flashcards.json")
             .is_file());
     }
@@ -1543,9 +1623,32 @@ mod tests {
         );
         assert!(root
             .join(".arbor")
-            .join("progress")
+            .join("users")
+            .join("arbor@localhost")
+            .join("local")
             .join("Biology.quiz.json")
             .is_file());
+    }
+
+    #[test]
+    fn chat_history_uses_fallback_user_dir_without_git_email() {
+        let root = temp_root("chat-fallback-user");
+        let root_string = root.to_string_lossy().into_owned();
+        let line = serde_json::json!({
+            "ts": "2026-10-17T12:00:00Z",
+            "role": "user",
+            "mode": "ask",
+            "content": "Hello"
+        });
+        append_chat_lines(root_string.clone(), "Biology".into(), vec![line.clone()]).unwrap();
+        let expected = root
+            .join(".arbor")
+            .join("users")
+            .join("arbor@localhost")
+            .join("chat")
+            .join("Biology.jsonl");
+        assert!(expected.is_file());
+        assert_eq!(read_chat_history(root_string, "Biology".into()).unwrap().len(), 1);
     }
 
     #[test]

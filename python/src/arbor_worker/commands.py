@@ -627,12 +627,34 @@ def _commit_study_file_if_dirty(
         maybe_sync_after_commit(root, emitter)
 
 
+def _commit_study_progress_if_dirty(
+    root: Path,
+    course: str,
+    message: str,
+    emitter: EventEmitter,
+) -> None:
+    from arbor_worker.study_progress import progress_path
+
+    progress_rel = progress_path(root, course).relative_to(root)
+    legacy_rel = Path(course) / "study" / "progress.json"
+    rel_paths: list[Path] = []
+    if path_has_pending_changes(root, progress_rel):
+        rel_paths.append(progress_rel)
+    if path_has_pending_changes(root, legacy_rel):
+        rel_paths.append(legacy_rel)
+    if not rel_paths:
+        return
+    commit_and_note(root, rel_paths, message, emitter)
+    from arbor_worker.sync import maybe_sync_after_commit
+
+    maybe_sync_after_commit(root, emitter)
+
+
 def cmd_study_progress(args) -> int:
     from arbor_worker.study_progress import (
         StudyProgressError,
         emit_json_line,
         parse_utc_now,
-        progress_path,
         study_progress_due,
         study_progress_grade,
         study_progress_quiz,
@@ -650,9 +672,9 @@ def cmd_study_progress(args) -> int:
 
     def finish(doc: dict) -> int:
         try:
-            _commit_study_file_if_dirty(
+            _commit_study_progress_if_dirty(
                 root,
-                progress_rel,
+                course,
                 f"study: {course} progress",
                 emitter,
             )
@@ -663,7 +685,6 @@ def cmd_study_progress(args) -> int:
         return 0
 
     try:
-        progress_rel = progress_path(root, course).relative_to(root)
         if action == "show":
             return finish(study_progress_show(root, course))
         if action == "weak":

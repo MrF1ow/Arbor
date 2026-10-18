@@ -61,6 +61,21 @@ def effective_git_email(root: Path, runner: _Runner = subprocess.run) -> str:
     return _effective_user_email(root, runner) or "arbor@localhost"
 
 
+def _is_safe_user_dir_component(email: str) -> bool:
+    if not email or email in (".", ".."):
+        return False
+    if "/" in email or "\\" in email or ".." in email:
+        return False
+    return True
+
+
+def git_user_dirname(root: Path, runner: _Runner = subprocess.run) -> str:
+    email = _effective_user_email(root, runner)
+    if email is None or not _is_safe_user_dir_component(email):
+        return "arbor@localhost"
+    return email
+
+
 def git_identity_args(root: Path, runner: _Runner = subprocess.run) -> list[str]:
     config_email = _effective_user_email(root, runner)
     author_covered = bool(config_email) or _env_author_email_set()

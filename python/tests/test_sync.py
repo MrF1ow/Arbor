@@ -236,6 +236,9 @@ def test_migrate_derived_files_untracks_and_commits(tmp_path: Path):
         ".arbor/progress/",
         ".arbor/*.db",
         ".arbor/chat/",
+        ".arbor/users/*/chat/",
+        ".arbor/users/*/local/",
+        "progress.json.bak",
         ".arbor/sync-conflict.json",
     ):
         assert entry in gi
