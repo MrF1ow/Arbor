@@ -7,15 +7,17 @@ import {
 import { hasTauriInvoke, TAURI_UNAVAILABLE } from "./tauri";
 import {
   advanceAfterGrade,
+  applyGradeToDueIds,
+  cardsForIds,
   createReview,
   currentCard,
+  dropCurrentCard,
   flashcardJobArgs,
   flipReview,
-  gradeFlashcard,
   nextReview,
   parseFlashcardDeck,
-  parseFlashcardProgress,
   previousReview,
+  requeueCurrentCard,
   shouldAutoGenerateFlashcards,
   shuffleCards,
 } from "./flashcards";
@@ -68,7 +70,7 @@ import type {
   AuthStatus,
   ConceptGraph,
   DigestInfo,
-  FlashcardProgress,
+  FlashcardDeck,
   FlashcardReview,
   JobEventRow,
   JobFinished,
@@ -161,6 +163,10 @@ const flashcardWrongBtn = $("flashcard-wrong") as HTMLButtonElement;
 const flashcardMasteredBtn = $("flashcard-mastered") as HTMLButtonElement;
 const flashcardNextBtn = $("flashcard-next");
 const flashcardShuffleBtn = $("flashcard-shuffle");
+const flashcardDueBtn = $("flashcard-due") as HTMLButtonElement;
+const flashcardAllBtn = $("flashcard-all") as HTMLButtonElement;
+const weakTopicsEl = $("weak-topics");
+const weakTopicListEl = $("weak-topic-list");
 const quizCopyEl = $("quiz-copy");
 const quizEmptyEl = $("quiz-empty");
 const quizPackEl = $("quiz-pack");
@@ -251,7 +257,10 @@ let currentCourse: string | null = null;
 let currentMode: Mode = "notes";
 let courses: string[] = [];
 let flashcardReview: FlashcardReview | null = null;
-let flashcardProgress: FlashcardProgress = {};
+let flashcardFullDeck: FlashcardDeck | null = null;
+let flashcardDueIds: string[] = [];
+let flashcardDeckCount = 0;
+let flashcardDeckMode: "due" | "full" = "due";
 let flashcardCourse: string | null = null;
 let quizReview: QuizReview | null = null;
 let quizProgress: QuizProgress = {};
@@ -722,6 +731,57 @@ async function loadDigestPreview(
     });
   });
   await renderNotesConceptChips(course, relativePath);
+  const isCourseOverview = relativePath.endsWith("/course.md");
+  if (!isCourseOverview) {
+    weakTopicsEl.hidden = true;
+  } else if (knowledgeRoot) {
+    weakTopicsEl.hidden = false;
+    weakTopicListEl.replaceChildren();
+    try {
+      const weak = await invoke<{
+        topics: Array<{
+          label: string;
+          digest?: string;
+          heading?: string | null;
+        }>;
+      }>("study_progress", { root: knowledgeRoot, course, action: "weak" });
+      if (currentNotesPath !== relativePath) {
+        scrollNotesToHeading(heading);
+        return;
+      }
+      if (weak.topics.length === 0) {
+        const empty = document.createElement("p");
+        empty.className = "weak-topic-empty";
+        empty.textContent = "No weak topics yet.";
+        weakTopicListEl.append(empty);
+      } else {
+        for (const topic of weak.topics) {
+          if (!topic.digest) continue;
+          const li = document.createElement("li");
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "weak-topic-btn";
+          btn.textContent = topic.label;
+          btn.addEventListener("click", () => {
+            setCourseView(
+              course,
+              "notes",
+              notePathForStudyDigest(course, topic.digest!),
+              topic.heading ?? null,
+            );
+          });
+          li.append(btn);
+          weakTopicListEl.append(li);
+        }
+      }
+    } catch (error) {
+      logLine(`Could not load weak topics: ${error}`);
+      const failed = document.createElement("p");
+      failed.className = "weak-topic-empty";
+      failed.textContent = "Could not load weak topics.";
+      weakTopicListEl.append(failed);
+    }
+  }
   scrollNotesToHeading(heading);
 }
 
@@ -759,8 +819,44 @@ async function loadCourseContent(
   }
 }
 
+function refreshFlashcardDueLabel() {
+  flashcardDueBtn.textContent = `Due today (${flashcardDueIds.length})`;
+  flashcardAllBtn.textContent = `Full deck (${flashcardDeckCount})`;
+}
+
+function setFlashcardDeckToggle(mode: "due" | "full") {
+  flashcardDeckMode = mode;
+  flashcardDueBtn.setAttribute("aria-pressed", mode === "due" ? "true" : "false");
+  flashcardAllBtn.setAttribute("aria-pressed", mode === "full" ? "true" : "false");
+}
+
+function flashcardSessionForMode(deck: FlashcardDeck): FlashcardReview {
+  if (flashcardDeckMode === "full") {
+    return createReview(deck);
+  }
+  return {
+    cards: cardsForIds(deck, flashcardDueIds),
+    index: 0,
+    flipped: false,
+  };
+}
+
 function renderCurrentFlashcard() {
   if (!flashcardReview) return;
+  if (flashcardReview.cards.length === 0) {
+    flashcardCountEl.textContent = "";
+    flashcardFaceEl.textContent =
+      flashcardDeckMode === "due" ? "No cards due today." : "No cards in deck.";
+    flashcardFaceEl.classList.remove("flipped");
+    flashcardFlipBtn.textContent = "Flip";
+    flashcardSourceBtn.textContent = "";
+    flashcardTagsEl.textContent = "";
+    flashcardCitationEl.hidden = true;
+    flashcardAgainBtn.hidden = true;
+    flashcardWrongBtn.hidden = true;
+    flashcardMasteredBtn.hidden = true;
+    return;
+  }
   const card = currentCard(flashcardReview);
   flashcardCountEl.textContent = `${flashcardReview.index + 1} of ${flashcardReview.cards.length}`;
   flashcardFaceEl.textContent = flashcardReview.flipped ? card.back : card.front;
@@ -793,18 +889,24 @@ async function loadFlashcards(course: string) {
     });
     const deck = parseFlashcardDeck(deckValue);
     if (deck.course !== course) throw new Error(`Deck course is ${deck.course}`);
-    const progressValue = await invoke<unknown>("read_flashcard_progress", {
-      root,
-      course,
-    });
+    const dueValue = await invoke<{
+      due_ids: string[];
+      count: number;
+      deck_count: number;
+    }>("study_progress", { root, course, action: "due" });
     const stale = await invoke<boolean>("study_artifact_stale", {
       root,
       course,
       skill: "flashcards",
     });
     if (currentCourse !== course) return;
-    flashcardReview = createReview(deck);
-    flashcardProgress = parseFlashcardProgress(progressValue);
+    flashcardFullDeck = deck;
+    flashcardDueIds = [...dueValue.due_ids];
+    flashcardDeckCount = dueValue.deck_count;
+    flashcardDeckMode = "due";
+    setFlashcardDeckToggle("due");
+    refreshFlashcardDueLabel();
+    flashcardReview = flashcardSessionForMode(deck);
     flashcardCourse = course;
     flashcardsEmptyEl.hidden = true;
     flashcardsDeckEl.hidden = false;
@@ -813,7 +915,9 @@ async function loadFlashcards(course: string) {
   } catch {
     if (currentCourse !== course) return;
     flashcardReview = null;
-    flashcardProgress = {};
+    flashcardFullDeck = null;
+    flashcardDueIds = [];
+    flashcardDeckCount = 0;
     flashcardCourse = course;
     flashcardsEmptyEl.hidden = false;
     flashcardsDeckEl.hidden = true;
@@ -822,25 +926,38 @@ async function loadFlashcards(course: string) {
   refreshStudyEnabled();
 }
 
-function persistFlashcardProgress() {
+async function gradeCurrentFlashcard(grade: "again" | "wrong" | "mastered") {
+  if (!flashcardReview || !flashcardReview.flipped || flashcardReview.cards.length === 0) {
+    return;
+  }
   if (!knowledgeRoot || !flashcardCourse) return;
-  const root = knowledgeRoot;
-  const course = flashcardCourse;
-  const data = flashcardProgress;
-  progressWrite = progressWrite
-    .then(() => invoke<void>("write_flashcard_progress", { root, course, data }))
-    .catch((error) => logLine(`Could not save flashcard progress: ${error}`));
-}
-
-function gradeCurrentFlashcard(grade: "again" | "wrong" | "mastered") {
-  if (!flashcardReview || !flashcardReview.flipped) return;
-  flashcardProgress = gradeFlashcard(
-    flashcardProgress,
-    currentCard(flashcardReview).id,
-    grade,
-  );
-  persistFlashcardProgress();
-  flashcardReview = advanceAfterGrade(flashcardReview);
+  const card = currentCard(flashcardReview);
+  try {
+    await invoke("study_progress", {
+      root: knowledgeRoot,
+      course: flashcardCourse,
+      action: "grade",
+      id: card.id,
+      result: grade,
+      digest: card.source.digest,
+      heading: card.source.heading ?? "",
+    });
+  } catch (error) {
+    logLine(`Could not save flashcard grade: ${error}`);
+    return;
+  }
+  flashcardDueIds = applyGradeToDueIds(flashcardDueIds, card.id, grade);
+  refreshFlashcardDueLabel();
+  if (flashcardDeckMode === "due") {
+    flashcardReview =
+      grade === "again"
+        ? requeueCurrentCard(flashcardReview)
+        : dropCurrentCard(flashcardReview);
+  } else if (grade === "again") {
+    flashcardReview = requeueCurrentCard(flashcardReview);
+  } else {
+    flashcardReview = advanceAfterGrade(flashcardReview);
+  }
   renderCurrentFlashcard();
 }
 
@@ -1078,16 +1195,6 @@ async function loadGraph(course: string) {
     conceptsCopyEl.textContent = `No concept graph yet for ${course}. Generate concepts from your digests.`;
   }
   refreshStudyEnabled();
-}
-
-function persistQuizProgress() {
-  if (!knowledgeRoot || !quizCourse) return;
-  const root = knowledgeRoot;
-  const course = quizCourse;
-  const data = quizProgress;
-  progressWrite = progressWrite
-    .then(() => invoke<void>("write_quiz_progress", { root, course, data }))
-    .catch((error) => logLine(`Could not save quiz progress: ${error}`));
 }
 
 async function startQuizJob(force: boolean) {
@@ -1945,16 +2052,30 @@ flashcardFlipBtn.addEventListener("click", () => {
   renderCurrentFlashcard();
 });
 
+flashcardDueBtn.addEventListener("click", () => {
+  if (!flashcardFullDeck || flashcardDeckMode === "due") return;
+  setFlashcardDeckToggle("due");
+  flashcardReview = flashcardSessionForMode(flashcardFullDeck);
+  renderCurrentFlashcard();
+});
+
+flashcardAllBtn.addEventListener("click", () => {
+  if (!flashcardFullDeck || flashcardDeckMode === "full") return;
+  setFlashcardDeckToggle("full");
+  flashcardReview = flashcardSessionForMode(flashcardFullDeck);
+  renderCurrentFlashcard();
+});
+
 flashcardAgainBtn.addEventListener("click", () => {
-  gradeCurrentFlashcard("again");
+  void gradeCurrentFlashcard("again");
 });
 
 flashcardWrongBtn.addEventListener("click", () => {
-  gradeCurrentFlashcard("wrong");
+  void gradeCurrentFlashcard("wrong");
 });
 
 flashcardMasteredBtn.addEventListener("click", () => {
-  gradeCurrentFlashcard("mastered");
+  void gradeCurrentFlashcard("mastered");
 });
 
 flashcardNextBtn.addEventListener("click", () => {
@@ -2000,11 +2121,29 @@ quizChoiceBtns.forEach((button) => {
 });
 
 quizSubmitBtn.addEventListener("click", () => {
-  if (!quizReview || quizReview.selected === null) return;
+  if (!quizReview || quizReview.selected === null || !knowledgeRoot || !quizCourse) return;
+  const question = currentQuestion(quizReview);
+  const wasSubmitted = quizReview.submitted;
   const result = submitChoice(quizReview, quizReview.selected, quizProgress);
   quizReview = result.review;
   quizProgress = result.progress;
-  persistQuizProgress();
+  if (!wasSubmitted && quizReview.submitted) {
+    const correct = quizReview.selected === question.answer_index;
+    const root = knowledgeRoot;
+    const course = quizCourse;
+    const payload = {
+      root,
+      course,
+      action: "quiz" as const,
+      id: question.id,
+      result: correct ? ("correct" as const) : ("wrong" as const),
+      digest: question.source.digest,
+      heading: question.source.heading ?? "",
+    };
+    progressWrite = progressWrite
+      .then(() => invoke("study_progress", payload))
+      .catch((error) => logLine(`Could not save quiz answer: ${error}`));
+  }
   renderCurrentQuiz();
 });
 

@@ -760,6 +760,68 @@ html[data-theme="dark"] .welcome-mark {
   font-size: 13px;
 }
 
+.flashcards-deck-toggle {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.flashcards-deck-toggle .btn-secondary[aria-pressed="true"] {
+  background: var(--sage-tint-strong);
+  border-color: var(--sage-muted);
+  color: var(--sage-deep);
+  font-weight: 550;
+}
+
+.weak-topics {
+  font-family: var(--font-ui);
+  padding: 0 0 20px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--cream-border);
+}
+
+.weak-topics h2 {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-muted);
+  margin: 0 0 10px;
+  letter-spacing: 0.02em;
+}
+
+.weak-topics ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.weak-topics .weak-topic-empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-faint);
+}
+
+.weak-topics .weak-topic-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  background: var(--sage-tint);
+  color: var(--sage-deep);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.weak-topics .weak-topic-btn:hover {
+  background: var(--sage-tint-strong);
+}
+
 .stale-badge {
   display: block;
   margin-top: 6px;

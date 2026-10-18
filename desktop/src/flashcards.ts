@@ -151,6 +151,54 @@ export function advanceAfterGrade(review: FlashcardReview): FlashcardReview {
   return nextReview(review);
 }
 
+export function cardsForIds(
+  deck: FlashcardDeck,
+  ids: readonly string[],
+): Flashcard[] {
+  const idSet = new Set(ids);
+  return deck.cards.filter((card) => idSet.has(card.id));
+}
+
+export function requeueCurrentCard(review: FlashcardReview): FlashcardReview {
+  if (review.cards.length === 0) {
+    return { cards: [], index: 0, flipped: false };
+  }
+  const current = review.cards[review.index];
+  const rest = [
+    ...review.cards.slice(0, review.index),
+    ...review.cards.slice(review.index + 1),
+    current,
+  ];
+  return {
+    cards: rest,
+    index: rest.length === 1 ? 0 : review.index,
+    flipped: false,
+  };
+}
+
+export function dropCurrentCard(review: FlashcardReview): FlashcardReview {
+  if (review.cards.length === 0) {
+    return { cards: [], index: 0, flipped: false };
+  }
+  const rest = review.cards.filter((_, index) => index !== review.index);
+  if (rest.length === 0) {
+    return { cards: [], index: 0, flipped: false };
+  }
+  const nextIndex = review.index >= rest.length ? 0 : review.index;
+  return { cards: rest, index: nextIndex, flipped: false };
+}
+
+export function applyGradeToDueIds(
+  dueIds: readonly string[],
+  cardId: string,
+  grade: FlashcardGrade,
+): string[] {
+  if (grade === "again") {
+    return [...dueIds];
+  }
+  return dueIds.filter((id) => id !== cardId);
+}
+
 export function previousReview(review: FlashcardReview): FlashcardReview {
   return {
     ...review,

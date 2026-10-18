@@ -8,6 +8,9 @@ test("flashcard panel exposes generation, deck controls, and settings", async ()
   for (const id of [
     "flashcards-empty",
     "generate-flashcards",
+    "flashcard-due",
+    "flashcard-all",
+    "weak-topics",
     "flashcards-deck",
     "flashcard-stale",
     "refresh-flashcards",
