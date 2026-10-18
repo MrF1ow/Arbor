@@ -634,7 +634,6 @@ def cmd_study_progress(args) -> int:
     root = Path(args.root)
     course = args.course
     emitter = EventEmitter(sys.stderr)
-    progress_rel = progress_path(root, course).relative_to(root)
 
     def finish(doc: dict) -> int:
         try:
@@ -651,6 +650,7 @@ def cmd_study_progress(args) -> int:
         return 0
 
     try:
+        progress_rel = progress_path(root, course).relative_to(root)
         if action == "show":
             return finish(study_progress_show(root, course))
         if action == "weak":

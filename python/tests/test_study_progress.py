@@ -450,6 +450,25 @@ def test_due_without_progress_does_not_create_file(git_repo: Path):
     assert not progress_path(git_repo, "Biology").exists()
 
 
+def test_cli_study_progress_invalid_course_no_commit(git_repo: Path, git):
+    g = git(git_repo)
+    log_before = g("log", "--oneline")
+    code, out, err = _run_cli(
+        [
+            "study-progress",
+            "--root",
+            str(git_repo),
+            "--course",
+            "../etc",
+            "show",
+        ]
+    )
+    assert code == 1
+    assert "invalid course name" in err
+    assert out == ""
+    assert g("log", "--oneline") == log_before
+
+
 def test_cli_study_progress_show(git_repo: Path):
     _course_dir(git_repo)
     code, out, err = _run_cli(
