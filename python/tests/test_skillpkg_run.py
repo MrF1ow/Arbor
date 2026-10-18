@@ -416,6 +416,213 @@ def test_setup_py_not_executed(tmp_path: Path) -> None:
     assert (export_dir / "ok.txt").read_bytes() == b"1"
 
 
+def test_export_dir_symlink_rejected_before_spawn(tmp_path: Path) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    link = tmp_path / "export-link"
+    os.symlink(outside, link)
+    bare, sha = _bare_repo(
+        tmp_path,
+        permissions=["write_export_dir"],
+        module_body="def run(ctx):\n    ctx.write_export('out.json', b'{}')\n",
+    )
+    data_home = tmp_path / "data"
+    knowledge, _export_dir = _knowledge_layout(tmp_path)
+    _install(bare, sha, data_home)
+
+    with pytest.raises(SkillPackageError, match="symlink"):
+        _run(
+            sha,
+            data_home=data_home,
+            knowledge=knowledge,
+            export_dir=link,
+            grants=["write_export_dir"],
+            confirmed=True,
+        )
+    assert not (outside / "out.json").exists()
+
+
+def test_knowledge_root_symlink_rejected(tmp_path: Path) -> None:
+    real_knowledge = tmp_path / "real-knowledge"
+    real_knowledge.mkdir()
+    link = tmp_path / "knowledge-link"
+    os.symlink(real_knowledge, link)
+    bare, sha = _bare_repo(
+        tmp_path,
+        permissions=["write_export_dir"],
+        module_body="def run(ctx):\n    ctx.write_export('x.txt', b'1')\n",
+    )
+    data_home = tmp_path / "data"
+    export_dir = tmp_path / "export"
+    export_dir.mkdir()
+    _install(bare, sha, data_home)
+
+    with pytest.raises(SkillPackageError, match="symlink"):
+        _run(
+            sha,
+            data_home=data_home,
+            knowledge=link,
+            export_dir=export_dir,
+            grants=["write_export_dir"],
+            confirmed=True,
+        )
+
+
+def test_course_dir_symlink_rejected(tmp_path: Path) -> None:
+    outside_course = tmp_path / "outside-course"
+    study = outside_course / "study"
+    study.mkdir(parents=True)
+    deck = {
+        "schema_version": 1,
+        "course": "Biology",
+        "cards": [{"id": "c1", "front": "x", "back": "y", "source": {}}],
+    }
+    (study / "flashcards.json").write_text(json.dumps(deck), encoding="utf-8")
+    knowledge = tmp_path / "knowledge"
+    knowledge.mkdir()
+    os.symlink(outside_course, knowledge / "Biology")
+    export_dir = tmp_path / "export"
+    export_dir.mkdir()
+    bare, sha = _bare_repo(
+        tmp_path,
+        permissions=["read_course", "write_export_dir"],
+        module_body=_EXPORT_SKILL,
+    )
+    data_home = tmp_path / "data"
+    _install(bare, sha, data_home)
+
+    with pytest.raises(SkillPackageError, match="symlink"):
+        _run(
+            sha,
+            data_home=data_home,
+            knowledge=knowledge,
+            export_dir=export_dir,
+            grants=["read_course", "write_export_dir"],
+            confirmed=True,
+        )
+
+
+def test_install_path_symlink_ancestor_rejected(tmp_path: Path) -> None:
+    bare, sha = _bare_repo(
+        tmp_path,
+        permissions=["write_export_dir"],
+        module_body="def run(ctx):\n    ctx.write_export('x.txt', b'1')\n",
+    )
+    data_home = tmp_path / "data"
+    knowledge, export_dir = _knowledge_layout(tmp_path)
+    _install(bare, sha, data_home)
+    skills = data_home / "arbor" / "skills"
+    real_id_dir = skills / "demo-skill"
+    backed_up = skills / "demo-skill-real"
+    real_id_dir.rename(backed_up)
+    os.symlink(backed_up.name, real_id_dir)
+
+    with pytest.raises(SkillPackageError, match="symlink"):
+        _run(
+            sha,
+            data_home=data_home,
+            knowledge=knowledge,
+            export_dir=export_dir,
+            grants=["write_export_dir"],
+            confirmed=True,
+        )
+
+
+_DIR_CTX_SKILL = """
+def run(ctx):
+    names = repr(sorted(n for n in dir(ctx) if not n.startswith("__")))
+    ctx.write_export("dir.txt", names.encode("utf-8"))
+"""
+
+
+def test_context_dir_hides_host_paths(tmp_path: Path) -> None:
+    bare, sha = _bare_repo(
+        tmp_path,
+        permissions=["write_export_dir"],
+        module_body=_DIR_CTX_SKILL,
+    )
+    data_home = tmp_path / "data"
+    knowledge, export_dir = _knowledge_layout(tmp_path)
+    _install(bare, sha, data_home)
+
+    _run(
+        sha,
+        data_home=data_home,
+        knowledge=knowledge,
+        export_dir=export_dir,
+        grants=["write_export_dir"],
+        confirmed=True,
+    )
+
+    names = eval((export_dir / "dir.txt").read_text(encoding="utf-8"))  # noqa: S307
+    assert names == ["read_course_file", "write_export", "write_study_file"]
+    names_blob = repr(names).lower()
+    for forbidden in ("course_dir", "export_dir", "knowledge_root", "package_dir"):
+        assert forbidden not in names_blob
+
+
+_CWD_SKILL = """
+def run(ctx):
+    import os
+    listing = repr(sorted(os.listdir(".")))
+    ctx.write_export("cwd.txt", listing.encode("utf-8"))
+    try:
+        open("request.json")
+        ctx.write_export("leaked.txt", b"yes")
+    except OSError:
+        ctx.write_export("leaked.txt", b"no")
+"""
+
+
+def test_child_cwd_has_no_request_json(tmp_path: Path) -> None:
+    bare, sha = _bare_repo(
+        tmp_path,
+        permissions=["write_export_dir"],
+        module_body=_CWD_SKILL,
+    )
+    data_home = tmp_path / "data"
+    knowledge, export_dir = _knowledge_layout(tmp_path)
+    _install(bare, sha, data_home)
+
+    _run(
+        sha,
+        data_home=data_home,
+        knowledge=knowledge,
+        export_dir=export_dir,
+        grants=["write_export_dir"],
+        confirmed=True,
+    )
+
+    assert (export_dir / "cwd.txt").read_text(encoding="utf-8") == "[]"
+    assert (export_dir / "leaked.txt").read_bytes() == b"no"
+
+
+def test_entry_module_symlink_rejected(tmp_path: Path) -> None:
+    bare, sha = _bare_repo(
+        tmp_path,
+        permissions=["write_export_dir"],
+        module_body="def run(ctx):\n    ctx.write_export('x.txt', b'1')\n",
+    )
+    data_home = tmp_path / "data"
+    knowledge, export_dir = _knowledge_layout(tmp_path)
+    _install(bare, sha, data_home)
+    install_dir = data_home / "arbor" / "skills" / "demo-skill" / sha
+    real_module = install_dir / "demo_skill.py"
+    backup = install_dir / "demo_skill_real.py"
+    real_module.rename(backup)
+    os.symlink(backup.name, real_module)
+
+    with pytest.raises(SkillPackageError, match="symlink"):
+        _run(
+            sha,
+            data_home=data_home,
+            knowledge=knowledge,
+            export_dir=export_dir,
+            grants=["write_export_dir"],
+            confirmed=True,
+        )
+
+
 def test_cli_skill_run(tmp_path: Path) -> None:
     bare, sha = _bare_repo(
         tmp_path,

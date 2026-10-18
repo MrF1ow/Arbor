@@ -28,7 +28,7 @@ Packages in v4.3.0 are pure Python and use the standard library only. Arbor does
 
 Before a package is trusted, Arbor inspects the directory tree: paths must stay inside the package root, directory symlinks are forbidden, and file symlinks must not point outside the package. Inspection reads files and parses JSON; it does not import, execute, or install package code. Execution happens only at run time, after the user confirms the declared permissions for that package id and commit.
 
-The worker passes a **context object** that enforces what the skill is allowed to do according to its permissions. This is not an OS sandbox. A package that ignores the context and calls `open()` or the network on its own is outside what Arbor can stop in this release.
+The worker passes a **context object** that enforces what the skill is allowed to do according to its permissions. Host paths are not exposed as attributes on that object (only the context methods are visible to the skill). This is not an OS sandbox. A package that already knows a path can still call `open()` on it, or use the network on its own, outside what Arbor can stop in this release.
 
 ## Install
 
@@ -50,7 +50,7 @@ Reinstalling the same id and pin replaces that directory atomically. Different p
 
 **Uninstall** deletes `skills/<id>/` entirely (every pinned commit for that id). Permission confirmations stored in app settings are a later step and are **not** removed by uninstall in this release.
 
-The worker passes a **context object** at run time that enforces declared permissions. This is not an OS sandbox.
+The worker passes a **context object** at run time that enforces declared permissions. Host paths are not exposed as attributes on that object. This is not an OS sandbox.
 
 The marketplace index and Settings UI for skills are specified in the v4.3.0 plan and are not part of install itself.
 
@@ -68,4 +68,4 @@ At run time the worker loads the entry module with **`importlib`** (fixed module
 - **`write_export(relative, data)`** — writes bytes under the export directory (requires **`write_export_dir`**). Creates parent directories only inside that directory; writes use **`O_NOFOLLOW`** so symlinks are not followed.
 - **`write_study_file(relative, data)`** — writes bytes under `<course>/study` (requires **`write_course_study`**), creating **`study`** when missing if the path is not reached through a symlink.
 
-Missing permissions raise even when the relative path would otherwise be safe. This is the worker API, **not an OS sandbox**: a skill that calls **`open()`** or the network on its own is outside what Arbor can stop in this release.
+Missing permissions raise even when the relative path would otherwise be safe. This is the worker API, **not an OS sandbox**: a skill that already knows a path can still call **`open()`** on it, or use the network on its own, outside what Arbor can stop in this release.

@@ -37,27 +37,63 @@ def _walk_lstat(root: Path, relative: Path) -> Path:
     return current
 
 
-class SkillRunContext:
-    __slots__ = ("_course_dir", "_export_dir", "_grants", "_knowledge_root")
+def _write_confined(root: Path, rel: Path, data: bytes) -> None:
+    root_res = root.resolve()
+    current = root_res
+    parts = rel.parts
+    for index, part in enumerate(parts):
+        current = current / part
+        is_last = index == len(parts) - 1
+        try:
+            st = os.lstat(current)
+        except FileNotFoundError:
+            if is_last:
+                fd = os.open(
+                    str(current),
+                    os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW,
+                    0o644,
+                )
+                try:
+                    os.write(fd, data)
+                finally:
+                    os.close(fd)
+                return
+            current.mkdir(mode=0o755)
+            continue
+        if stat.S_ISLNK(st.st_mode):
+            raise SkillPermissionError("symlinks are not allowed")
+        if is_last:
+            if not stat.S_ISREG(st.st_mode):
+                raise SkillPermissionError("export path is not a regular file")
+            fd = os.open(
+                str(current),
+                os.O_WRONLY | os.O_TRUNC | os.O_NOFOLLOW,
+                0o644,
+            )
+            try:
+                os.write(fd, data)
+            finally:
+                os.close(fd)
+            return
+        if not stat.S_ISDIR(st.st_mode):
+            raise SkillPermissionError("invalid path component")
 
-    def __init__(
-        self,
-        *,
-        knowledge_root: Path,
-        course: str,
-        export_dir: Path,
-        grants: set[str],
-    ) -> None:
-        self._knowledge_root = knowledge_root.resolve()
-        self._course_dir = (knowledge_root / course).resolve()
-        self._export_dir = export_dir.resolve()
-        self._grants = grants
 
-    def read_course_file(self, relative: str) -> bytes:
-        if "read_course" not in self._grants:
+def make_skill_run_context(
+    *,
+    knowledge_root: Path,
+    course: str,
+    export_dir: Path,
+    grants: set[str],
+) -> Any:
+    course_dir = (knowledge_root / course).resolve()
+    export_dir_res = export_dir.resolve()
+
+    def read_course_file(relative: str) -> bytes:
+        if "read_course" not in grants:
             raise SkillPermissionError("read_course permission required")
         rel = _reject_relative(relative)
-        target = _walk_lstat(self._course_dir, rel)
+        target = _walk_lstat(course_dir, rel)
         if not target.is_file():
             raise SkillPermissionError("course file not found")
         if target.is_symlink():
@@ -67,22 +103,22 @@ class SkillRunContext:
         except OSError as error:
             raise SkillPermissionError("unable to read course file") from error
 
-    def write_export(self, relative: str, data: bytes) -> None:
-        if "write_export_dir" not in self._grants:
+    def write_export(relative: str, data: bytes) -> None:
+        if "write_export_dir" not in grants:
             raise SkillPermissionError("write_export_dir permission required")
         if not isinstance(data, bytes):
             raise SkillPermissionError("export data must be bytes")
         rel = _reject_relative(relative)
-        self._write_confined(self._export_dir, rel, data)
+        _write_confined(export_dir_res, rel, data)
 
-    def write_study_file(self, relative: str, data: bytes) -> None:
-        if "write_course_study" not in self._grants:
+    def write_study_file(relative: str, data: bytes) -> None:
+        if "write_course_study" not in grants:
             raise SkillPermissionError("write_course_study permission required")
         if not isinstance(data, bytes):
             raise SkillPermissionError("study data must be bytes")
-        study_dir = self._course_dir / "study"
+        study_dir = course_dir / "study"
         if not study_dir.exists():
-            parent_st = os.lstat(self._course_dir)
+            parent_st = os.lstat(course_dir)
             if stat.S_ISLNK(parent_st.st_mode):
                 raise SkillPermissionError("symlinks are not allowed")
             study_dir.mkdir(mode=0o755)
@@ -93,48 +129,16 @@ class SkillRunContext:
             if not stat.S_ISDIR(st.st_mode):
                 raise SkillPermissionError("study path is not a directory")
         rel = _reject_relative(relative)
-        self._write_confined(study_dir.resolve(), rel, data)
+        _write_confined(study_dir.resolve(), rel, data)
 
-    def _write_confined(self, root: Path, rel: Path, data: bytes) -> None:
-        root_res = root.resolve()
-        current = root_res
-        parts = rel.parts
-        for index, part in enumerate(parts):
-            current = current / part
-            is_last = index == len(parts) - 1
-            try:
-                st = os.lstat(current)
-            except FileNotFoundError:
-                if is_last:
-                    fd = os.open(
-                        str(current),
-                        os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW,
-                        0o644,
-                    )
-                    try:
-                        os.write(fd, data)
-                    finally:
-                        os.close(fd)
-                    return
-                current.mkdir(mode=0o755)
-                continue
-            if stat.S_ISLNK(st.st_mode):
-                raise SkillPermissionError("symlinks are not allowed")
-            if is_last:
-                if not stat.S_ISREG(st.st_mode):
-                    raise SkillPermissionError("export path is not a regular file")
-                fd = os.open(
-                    str(current),
-                    os.O_WRONLY | os.O_TRUNC | os.O_NOFOLLOW,
-                    0o644,
-                )
-                try:
-                    os.write(fd, data)
-                finally:
-                    os.close(fd)
-                return
-            if not stat.S_ISDIR(st.st_mode):
-                raise SkillPermissionError("invalid path component")
+    class SkillRunContext:
+        __slots__ = ("read_course_file", "write_export", "write_study_file")
+
+    ctx = SkillRunContext()
+    ctx.read_course_file = read_course_file
+    ctx.write_export = write_export
+    ctx.write_study_file = write_study_file
+    return ctx
 
 
 def _load_request(path: Path) -> dict[str, Any]:
@@ -159,7 +163,13 @@ def _run_from_request(request: dict[str, Any]) -> None:
 
     module_rel = entry_module_path(entry)
     module_path = package_dir / module_rel
-    if not module_path.is_file():
+    try:
+        entry_st = os.lstat(module_path)
+    except OSError as error:
+        raise SkillPackageError("entry module missing") from error
+    if stat.S_ISLNK(entry_st.st_mode):
+        raise SkillPackageError("entry module must not be a symlink")
+    if not stat.S_ISREG(entry_st.st_mode):
         raise SkillPackageError("entry module missing")
 
     module_name, function_name = entry.split(":", 1)
@@ -172,7 +182,7 @@ def _run_from_request(request: dict[str, Any]) -> None:
     if not callable(func):
         raise SkillPackageError("entry function missing")
 
-    context = SkillRunContext(
+    context = make_skill_run_context(
         knowledge_root=knowledge_root,
         course=course,
         export_dir=export_dir,
@@ -187,7 +197,13 @@ def main(argv: list[str] | None = None) -> int:
         print("usage: arbor_worker.skillpkg.child REQUEST.json", file=sys.stderr)
         return 2
     try:
-        request = _load_request(Path(args[0]))
+        request_path = Path(args[0])
+        request = _load_request(request_path)
+        scratch = request_path.parent
+        request_path.unlink()
+        work_dir = scratch / "work"
+        work_dir.mkdir(mode=0o700)
+        os.chdir(work_dir)
         _run_from_request(request)
     except SkillPermissionError as error:
         print(str(error), file=sys.stderr)

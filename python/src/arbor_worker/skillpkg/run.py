@@ -42,14 +42,33 @@ def _stderr_tail(text: str, *, limit: int = 800) -> str:
     return stripped[-limit:]
 
 
-def _require_real_directory(path: Path, label: str) -> Path:
+def _reject_symlink(path: Path, label: str) -> None:
     try:
         st = os.lstat(path)
     except OSError as error:
         raise SkillPackageError(f"{label} is not available") from error
-    if os.path.islink(path) or not stat.S_ISDIR(st.st_mode):
+    if stat.S_ISLNK(st.st_mode):
+        raise SkillPackageError(f"{label} must not be a symlink")
+
+
+def _reject_symlink_ancestors(path: Path, label: str) -> None:
+    current = Path(path.anchor)
+    for part in path.parts:
+        if part in ("", "/"):
+            continue
+        current = current / part
+        _reject_symlink(current, label)
+
+
+def _require_real_directory(path: Path, label: str) -> Path:
+    _reject_symlink(path, label)
+    try:
+        st = os.lstat(path)
+    except OSError as error:
+        raise SkillPackageError(f"{label} is not available") from error
+    if not stat.S_ISDIR(st.st_mode):
         raise SkillPackageError(f"{label} must be a directory")
-    return path
+    return path.resolve()
 
 
 def _load_installed_tree(
@@ -62,7 +81,8 @@ def _load_installed_tree(
     install_dir = root / skill_id / commit
     if not install_dir.exists():
         raise SkillPackageError("skill is not installed at this commit")
-    if install_dir.is_symlink() or not install_dir.is_dir():
+    _reject_symlink_ancestors(install_dir, "skill install path")
+    if not install_dir.is_dir():
         raise SkillPackageError("invalid skill install path")
     if install_dir.name != commit:
         raise SkillPackageError("install path does not match commit")
@@ -138,22 +158,22 @@ def run_installed_skill(
     if grant_set != manifest_perms:
         raise SkillPermissionError("permission grants do not match manifest")
 
-    _require_real_directory(export_dir.resolve(), "export_dir")
-    _require_real_directory(knowledge_root.resolve(), "knowledge_root")
+    export_resolved = _require_real_directory(export_dir, "export_dir")
+    knowledge_resolved = _require_real_directory(knowledge_root, "knowledge_root")
 
     validate_course_name(course)
     course_dir = knowledge_root / course
-    _require_real_directory(course_dir.resolve(), "course directory")
+    course_resolved = _require_real_directory(course_dir, "course directory")
     try:
-        course_dir.resolve().relative_to(knowledge_root.resolve())
+        course_resolved.relative_to(knowledge_resolved)
     except ValueError as error:
         raise SkillPackageError("course directory escapes knowledge root") from error
 
     request = {
         "package_dir": str(install_dir.resolve()),
-        "knowledge_root": str(knowledge_root.resolve()),
+        "knowledge_root": str(knowledge_resolved),
         "course": course,
-        "export_dir": str(export_dir.resolve()),
+        "export_dir": str(export_resolved),
         "grants": sorted(grant_set),
         "entry": manifest.entry,
     }
