@@ -820,6 +820,7 @@ name = "desktop"
 version = "5.0.1"
 dependencies = [
  "keyring",
+ "libc",
  "notify",
  "rusqlite",
  "serde",

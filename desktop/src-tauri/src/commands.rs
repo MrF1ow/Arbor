@@ -15,7 +15,6 @@ use std::sync::Arc;
 use tauri::ipc::Channel;
 use tauri::Manager;
 
-
 async fn spawn_blocking_cmd<T, F>(f: F) -> Result<T, String>
 where
     F: FnOnce() -> Result<T, String> + Send + 'static,
@@ -157,177 +156,165 @@ fn repo_dir(app: &tauri::AppHandle) -> PathBuf {
     )
 }
 
-
 #[tauri::command]
 pub async fn check_auth(
     app: tauri::AppHandle,
     provider: Option<String>,
-) -> Result<serde_json::Value, String>  {
+) -> Result<serde_json::Value, String> {
     spawn_blocking_cmd(move || {
-
-    match non_empty_provider(provider) {
-        Some(id) => run_worker_json_app(&app, &["check-auth", "--provider", &id]),
-        None => run_worker_json_app(&app, &["check-auth"]),
-    }
-    }).await
+        match non_empty_provider(provider) {
+            Some(id) => run_worker_json_app(&app, &["check-auth", "--provider", &id]),
+            None => run_worker_json_app(&app, &["check-auth"]),
+        }
+    })
+    .await
 }
-
 
 #[tauri::command]
 pub async fn list_models(
     app: tauri::AppHandle,
     root: Option<String>,
     provider: Option<String>,
-) -> Result<serde_json::Value, String>  {
+) -> Result<serde_json::Value, String> {
     spawn_blocking_cmd(move || {
-
-    let provider_id = non_empty_provider(provider);
-    let mut args: Vec<&str> = vec!["list-models"];
-    if let Some(r) = root.as_deref() {
-        args.push("--root");
-        args.push(r);
-    }
-    if let Some(id) = provider_id.as_deref() {
-        args.push("--provider");
-        args.push(id);
-    }
-    run_worker_json_app(&app, &args)
-    }).await
+        let provider_id = non_empty_provider(provider);
+        let mut args: Vec<&str> = vec!["list-models"];
+        if let Some(r) = root.as_deref() {
+            args.push("--root");
+            args.push(r);
+        }
+        if let Some(id) = provider_id.as_deref() {
+            args.push("--provider");
+            args.push(id);
+        }
+        run_worker_json_app(&app, &args)
+    })
+    .await
 }
-
 
 #[tauri::command]
 pub async fn list_providers(
     app: tauri::AppHandle,
     root: Option<String>,
-) -> Result<serde_json::Value, String>  {
+) -> Result<serde_json::Value, String> {
     spawn_blocking_cmd(move || {
-
-    let mut args: Vec<&str> = vec!["list-providers"];
-    if let Some(r) = root.as_deref() {
-        args.push("--root");
-        args.push(r);
-    }
-    run_worker_json_app(&app, &args)
-    }).await
+        let mut args: Vec<&str> = vec!["list-providers"];
+        if let Some(r) = root.as_deref() {
+            args.push("--root");
+            args.push(r);
+        }
+        run_worker_json_app(&app, &args)
+    })
+    .await
 }
-
 
 #[tauri::command]
-pub async fn plan_update(app: tauri::AppHandle, root: String) -> Result<serde_json::Value, String>  {
+pub async fn plan_update(app: tauri::AppHandle, root: String) -> Result<serde_json::Value, String> {
     spawn_blocking_cmd(move || {
-
-    run_worker_json_app(&app, &["plan-update", "--root", &root])
-    }).await
+        run_worker_json_app(&app, &["plan-update", "--root", &root])
+    })
+    .await
 }
-
 
 #[tauri::command]
-pub async fn sync_show(app: tauri::AppHandle, root: String) -> Result<serde_json::Value, String>  {
+pub async fn sync_show(app: tauri::AppHandle, root: String) -> Result<serde_json::Value, String> {
     spawn_blocking_cmd(move || {
-
-    run_worker_json_app(&app, &["sync", "--root", &root, "--show"])
-    }).await
+        run_worker_json_app(&app, &["sync", "--root", &root, "--show"])
+    })
+    .await
 }
-
 
 #[tauri::command]
 pub async fn sync_set_remote(
     app: tauri::AppHandle,
     root: String,
     url: String,
-) -> Result<serde_json::Value, String>  {
+) -> Result<serde_json::Value, String> {
     spawn_blocking_cmd(move || {
-
-    run_worker_json_app(
-        &app,
-        &["sync", "--root", &root, "--set-remote", url.as_str()],
-    )
-    }).await
+        run_worker_json_app(
+            &app,
+            &["sync", "--root", &root, "--set-remote", url.as_str()],
+        )
+    })
+    .await
 }
-
 
 #[tauri::command]
 pub async fn sync_set_shared(
     app: tauri::AppHandle,
     root: String,
     shared: bool,
-) -> Result<serde_json::Value, String>  {
+) -> Result<serde_json::Value, String> {
     spawn_blocking_cmd(move || {
-
-    let flag = if shared { "--shared" } else { "--no-shared" };
-    run_worker_json_app(&app, &["sync", "--root", &root, flag])
-    }).await
+        let flag = if shared { "--shared" } else { "--no-shared" };
+        run_worker_json_app(&app, &["sync", "--root", &root, flag])
+    })
+    .await
 }
-
 
 #[tauri::command]
 pub async fn create_shared_library(
     app: tauri::AppHandle,
     root: String,
     name: Option<String>,
-) -> Result<serde_json::Value, String>  {
+) -> Result<serde_json::Value, String> {
     spawn_blocking_cmd(move || {
-
-    let mut args = vec!["library-create", "--root", root.as_str()];
-    let name_arg;
-    if let Some(ref n) = name {
-        name_arg = n.as_str();
-        args.push("--name");
-        args.push(name_arg);
-    }
-    run_worker_json_app(&app, &args)
-    }).await
+        let mut args = vec!["library-create", "--root", root.as_str()];
+        let name_arg;
+        if let Some(ref n) = name {
+            name_arg = n.as_str();
+            args.push("--name");
+            args.push(name_arg);
+        }
+        run_worker_json_app(&app, &args)
+    })
+    .await
 }
-
 
 #[tauri::command]
 pub async fn join_library(
     app: tauri::AppHandle,
     url: String,
     dest: String,
-) -> Result<serde_json::Value, String>  {
+) -> Result<serde_json::Value, String> {
     spawn_blocking_cmd(move || {
-
-    run_worker_json_app(
-        &app,
-        &["library-join", "--url", url.as_str(), "--dest", dest.as_str()],
-    )
-    }).await
+        run_worker_json_app(
+            &app,
+            &["library-join", "--url", url.as_str(), "--dest", dest.as_str()],
+        )
+    })
+    .await
 }
-
 
 #[tauri::command]
-pub async fn library_show(app: tauri::AppHandle, root: String) -> Result<serde_json::Value, String>  {
+pub async fn library_show(app: tauri::AppHandle, root: String) -> Result<serde_json::Value, String> {
     spawn_blocking_cmd(move || {
-
-    run_worker_json_app(&app, &["library-show", "--root", &root])
-    }).await
+        run_worker_json_app(&app, &["library-show", "--root", &root])
+    })
+    .await
 }
-
 
 #[tauri::command]
 pub async fn library_set_members(
     app: tauri::AppHandle,
     root: String,
     members: serde_json::Value,
-) -> Result<serde_json::Value, String>  {
+) -> Result<serde_json::Value, String> {
     spawn_blocking_cmd(move || {
-
-    let members_json = serde_json::to_string(&members).map_err(|e| e.to_string())?;
-    run_worker_json_app(
-        &app,
-        &[
-            "library-members",
-            "--root",
-            root.as_str(),
-            "--members",
-            members_json.as_str(),
-        ],
-    )
-    }).await
+        let members_json = serde_json::to_string(&members).map_err(|e| e.to_string())?;
+        run_worker_json_app(
+            &app,
+            &[
+                "library-members",
+                "--root",
+                root.as_str(),
+                "--members",
+                members_json.as_str(),
+            ],
+        )
+    })
+    .await
 }
-
 
 #[tauri::command]
 pub async fn library_set_provider(
@@ -336,38 +323,36 @@ pub async fn library_set_provider(
     id: Option<String>,
     model: Option<String>,
     clear: bool,
-) -> Result<serde_json::Value, String>  {
+) -> Result<serde_json::Value, String> {
     spawn_blocking_cmd(move || {
-
-    if clear {
-        return run_worker_json_app(&app, &["library-provider", "--root", &root, "--clear"]);
-    }
-    let id = id.ok_or_else(|| "provider id is required".to_string())?;
-    let model = model.ok_or_else(|| "provider model is required".to_string())?;
-    run_worker_json_app(
-        &app,
-        &[
-            "library-provider",
-            "--root",
-            &root,
-            "--id",
-            id.as_str(),
-            "--model",
-            model.as_str(),
-        ],
-    )
-    }).await
+        if clear {
+            return run_worker_json_app(&app, &["library-provider", "--root", &root, "--clear"]);
+        }
+        let id = id.ok_or_else(|| "provider id is required".to_string())?;
+        let model = model.ok_or_else(|| "provider model is required".to_string())?;
+        run_worker_json_app(
+            &app,
+            &[
+                "library-provider",
+                "--root",
+                &root,
+                "--id",
+                id.as_str(),
+                "--model",
+                model.as_str(),
+            ],
+        )
+    })
+    .await
 }
-
 
 #[tauri::command]
-pub async fn sync_now(app: tauri::AppHandle, root: String) -> Result<serde_json::Value, String>  {
+pub async fn sync_now(app: tauri::AppHandle, root: String) -> Result<serde_json::Value, String> {
     spawn_blocking_cmd(move || {
-
-    run_worker_json_app(&app, &["sync", "--root", &root])
-    }).await
+        run_worker_json_app(&app, &["sync", "--root", &root])
+    })
+    .await
 }
-
 
 #[tauri::command]
 pub async fn sync_resolve(
@@ -376,99 +361,94 @@ pub async fn sync_resolve(
     path: String,
     side: String,
     content: Option<String>,
-) -> Result<serde_json::Value, String>  {
+) -> Result<serde_json::Value, String> {
     spawn_blocking_cmd(move || {
-
-    let mut owned = vec![
-        "sync-resolve".to_string(),
-        "--root".to_string(),
-        root,
-        "--path".to_string(),
-        path,
-        "--side".to_string(),
-        side,
-    ];
-    if let Some(text) = content {
-        owned.push("--content".to_string());
-        owned.push(text);
-    }
-    let refs: Vec<&str> = owned.iter().map(String::as_str).collect();
-    run_worker_json_app(&app, &refs)
-    }).await
-}
-
-
-#[tauri::command]
-pub async fn sync_continue(app: tauri::AppHandle, root: String) -> Result<serde_json::Value, String>  {
-    spawn_blocking_cmd(move || {
-
-    run_worker_json_app(&app, &["sync-continue", "--root", &root])
-    }).await
-}
-
-
-#[tauri::command]
-pub async fn skill_index(app: tauri::AppHandle) -> Result<serde_json::Value, String>  {
-    spawn_blocking_cmd(move || {
-
-    fetch_skill_index(&app)
-    }).await
-}
-
-
-#[tauri::command]
-pub async fn skill_install(app: tauri::AppHandle, id: String) -> Result<serde_json::Value, String>  {
-    spawn_blocking_cmd(move || {
-
-    let index = fetch_skill_index(&app)?;
-    let entry = index_package_by_id(&index, &id)?;
-    let kind = entry
-        .get("kind")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| "invalid skill index entry".to_string())?;
-    if kind != "skill" {
-        return Err("provider packages are not installed".to_string());
-    }
-    let git = entry
-        .get("git")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| "invalid skill index entry".to_string())?;
-    let commit = entry
-        .get("commit")
-        .and_then(|v| v.as_str())
-        .ok_or_else(|| "invalid skill index entry".to_string())?;
-    let mut owned = vec![
-        "skill-install".to_string(),
-        "--git".to_string(),
-        git.to_string(),
-        "--commit".to_string(),
-        commit.to_string(),
-        "--id".to_string(),
-        id,
-    ];
-    if let Some(subdir) = entry.get("subdir").and_then(|v| v.as_str()) {
-        if !subdir.is_empty() {
-            owned.push("--subdir".to_string());
-            owned.push(subdir.to_string());
+        let mut owned = vec![
+            "sync-resolve".to_string(),
+            "--root".to_string(),
+            root,
+            "--path".to_string(),
+            path,
+            "--side".to_string(),
+            side,
+        ];
+        if let Some(text) = content {
+            owned.push("--content".to_string());
+            owned.push(text);
         }
-    }
-    let refs: Vec<&str> = owned.iter().map(String::as_str).collect();
-    run_worker_json_inherit(&app, &refs)
-    }).await
+        let refs: Vec<&str> = owned.iter().map(String::as_str).collect();
+        run_worker_json_app(&app, &refs)
+    })
+    .await
 }
-
 
 #[tauri::command]
-pub async fn skill_uninstall(app: tauri::AppHandle, id: String) -> Result<serde_json::Value, String>  {
+pub async fn sync_continue(app: tauri::AppHandle, root: String) -> Result<serde_json::Value, String> {
     spawn_blocking_cmd(move || {
-
-    run_worker_json_inherit(
-        &app,
-        &["skill-uninstall", "--id", id.as_str()],
-    )
-    }).await
+        run_worker_json_app(&app, &["sync-continue", "--root", &root])
+    })
+    .await
 }
 
+#[tauri::command]
+pub async fn skill_index(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    spawn_blocking_cmd(move || {
+        fetch_skill_index(&app)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn skill_install(app: tauri::AppHandle, id: String) -> Result<serde_json::Value, String> {
+    spawn_blocking_cmd(move || {
+        let index = fetch_skill_index(&app)?;
+        let entry = index_package_by_id(&index, &id)?;
+        let kind = entry
+            .get("kind")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| "invalid skill index entry".to_string())?;
+        if kind != "skill" {
+            return Err("provider packages are not installed".to_string());
+        }
+        let git = entry
+            .get("git")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| "invalid skill index entry".to_string())?;
+        let commit = entry
+            .get("commit")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| "invalid skill index entry".to_string())?;
+        let mut owned = vec![
+            "skill-install".to_string(),
+            "--git".to_string(),
+            git.to_string(),
+            "--commit".to_string(),
+            commit.to_string(),
+            "--id".to_string(),
+            id,
+        ];
+        if let Some(subdir) = entry.get("subdir").and_then(|v| v.as_str()) {
+            if !subdir.is_empty() {
+                owned.push("--subdir".to_string());
+                owned.push(subdir.to_string());
+            }
+        }
+        let refs: Vec<&str> = owned.iter().map(String::as_str).collect();
+        run_worker_json_inherit(&app, &refs)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn skill_uninstall(app: tauri::AppHandle, id: String) -> Result<serde_json::Value, String> {
+    spawn_blocking_cmd(move || {
+        run_worker_json_inherit(
+            &app,
+            &["skill-uninstall", "--id", id.as_str()],
+        )
+    })
+    .await
+}
 
 #[tauri::command]
 pub async fn skill_run(
@@ -479,60 +459,59 @@ pub async fn skill_run(
     course: String,
     export_dir: String,
     confirmed: bool,
-) -> Result<serde_json::Value, String>  {
+) -> Result<serde_json::Value, String> {
     spawn_blocking_cmd(move || {
-
-    if !confirmed {
-        return Err("permissions not confirmed".to_string());
-    }
-    let settings = settings::load(&app);
-    let grant = settings
-        .skill_grants
-        .iter()
-        .find(|g| g.id == id && g.commit == commit)
-        .ok_or_else(|| "permissions not confirmed".to_string())?;
-    let index = fetch_skill_index(&app)?;
-    let entry = index_package_by_id(&index, &id)?;
-    let index_perms = entry
-        .get("permissions")
-        .and_then(|v| v.as_array())
-        .ok_or_else(|| "invalid skill index entry".to_string())?;
-    if !permission_sets_equal(&grant.permissions, index_perms) {
-        return Err("permissions not confirmed".to_string());
-    }
-    let mut owned = vec![
-        "skill-run".to_string(),
-        "--root".to_string(),
-        root,
-        "--course".to_string(),
-        course,
-        "--export-dir".to_string(),
-        export_dir,
-        "--id".to_string(),
-        id,
-        "--commit".to_string(),
-        commit,
-        "--confirmed".to_string(),
-    ];
-    for perm in &grant.permissions {
-        owned.push("--grant".to_string());
-        owned.push(perm.clone());
-    }
-    let refs: Vec<&str> = owned.iter().map(String::as_str).collect();
-    run_worker_json_inherit(&app, &refs)
-    }).await
+        if !confirmed {
+            return Err("permissions not confirmed".to_string());
+        }
+        let settings = settings::load(&app);
+        let grant = settings
+            .skill_grants
+            .iter()
+            .find(|g| g.id == id && g.commit == commit)
+            .ok_or_else(|| "permissions not confirmed".to_string())?;
+        let index = fetch_skill_index(&app)?;
+        let entry = index_package_by_id(&index, &id)?;
+        let index_perms = entry
+            .get("permissions")
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| "invalid skill index entry".to_string())?;
+        if !permission_sets_equal(&grant.permissions, index_perms) {
+            return Err("permissions not confirmed".to_string());
+        }
+        let mut owned = vec![
+            "skill-run".to_string(),
+            "--root".to_string(),
+            root,
+            "--course".to_string(),
+            course,
+            "--export-dir".to_string(),
+            export_dir,
+            "--id".to_string(),
+            id,
+            "--commit".to_string(),
+            commit,
+            "--confirmed".to_string(),
+        ];
+        for perm in &grant.permissions {
+            owned.push("--grant".to_string());
+            owned.push(perm.clone());
+        }
+        let refs: Vec<&str> = owned.iter().map(String::as_str).collect();
+        run_worker_json_inherit(&app, &refs)
+    })
+    .await
 }
 
-
 #[tauri::command]
-pub async fn read_sync_conflict(root: String) -> Result<serde_json::Value, String>  {
+pub async fn read_sync_conflict(root: String) -> Result<serde_json::Value, String> {
     spawn_blocking_cmd(move || {
-
-    let relative = ".arbor/sync-conflict.json";
-    let path = resolve_in_root(&root, relative)?;
-    let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
-    serde_json::from_str(&text).map_err(|e| e.to_string())
-    }).await
+        let relative = ".arbor/sync-conflict.json";
+        let path = resolve_in_root(&root, relative)?;
+        let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+        serde_json::from_str(&text).map_err(|e| e.to_string())
+    })
+    .await
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Clone)]
@@ -541,74 +520,68 @@ pub struct Selection {
     pub ranges: Option<Vec<[u32; 2]>>,
 }
 
-
 #[tauri::command]
 pub fn get_settings(app: tauri::AppHandle) -> Settings {
     settings::load(&app)
 }
 
-
 #[tauri::command]
-pub async fn save_settings(app: tauri::AppHandle, settings: Settings) -> Result<(), String>  {
+pub async fn save_settings(app: tauri::AppHandle, settings: Settings) -> Result<(), String> {
     spawn_blocking_cmd_unit(move || {
-
-    settings::save(&app, &settings)
-    }).await
+        settings::save(&app, &settings)
+    })
+    .await
 }
 
-
 #[tauri::command]
-pub async fn test_worker_connection(app: tauri::AppHandle, worker: SshWorker) -> Result<String, String>  {
+pub async fn test_worker_connection(app: tauri::AppHandle, worker: SshWorker) -> Result<String, String> {
     spawn_blocking_cmd(move || {
-
-    settings::validate_workers(&Settings {
-        workers: vec![worker.clone()],
-        ..Settings::default()
-    })?;
-    let transport = worker.to_transport();
-    let endpoint = validate_ssh(&transport)?;
-    let app_data = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    let mut ops = crate::remote_job::SystemRemoteOps::new(endpoint.clone(), &app_data)?;
-    let mut tokens = endpoint.worker_tokens;
-    tokens.push("--version".to_string());
-    let mut version = String::new();
-    match ops.run(&tokens, &mut |line| version = line.trim().to_string(), None) {
-        Ok(0) if !version.is_empty() => Ok(version),
-        Ok(0) => Err("worker produced no version".to_string()),
-        Ok(code) => Err(map_ssh_error("", code)),
-        Err(stderr) => Err(map_ssh_error(&stderr, 255)),
-    }
-    }).await
+        settings::validate_workers(&Settings {
+            workers: vec![worker.clone()],
+            ..Settings::default()
+        })?;
+        let transport = worker.to_transport();
+        let endpoint = validate_ssh(&transport)?;
+        let app_data = app.path().app_data_dir().map_err(|e| e.to_string())?;
+        let mut ops = crate::remote_job::SystemRemoteOps::new(endpoint.clone(), &app_data)?;
+        let mut tokens = endpoint.worker_tokens;
+        tokens.push("--version".to_string());
+        let mut version = String::new();
+        match ops.run(&tokens, &mut |line| version = line.trim().to_string(), None) {
+            Ok(0) if !version.is_empty() => Ok(version),
+            Ok(0) => Err("worker produced no version".to_string()),
+            Ok(code) => Err(map_ssh_error("", code)),
+            Err(stderr) => Err(map_ssh_error(&stderr, 255)),
+        }
+    })
+    .await
 }
 
-
 #[tauri::command]
-pub async fn set_provider_secret(provider_id: String, secret: String) -> Result<(), String>  {
+pub async fn set_provider_secret(provider_id: String, secret: String) -> Result<(), String> {
     spawn_blocking_cmd_unit(move || {
-
-    let store = OsSecretStore;
-    secrets::set_provider_secret_logic(&store, &provider_id, &secret)
-    }).await
+        let store = OsSecretStore;
+        secrets::set_provider_secret_logic(&store, &provider_id, &secret)
+    })
+    .await
 }
 
-
 #[tauri::command]
-pub async fn clear_provider_secret(provider_id: String) -> Result<(), String>  {
+pub async fn clear_provider_secret(provider_id: String) -> Result<(), String> {
     spawn_blocking_cmd_unit(move || {
-
-    let store = OsSecretStore;
-    secrets::clear_provider_secret_logic(&store, &provider_id)
-    }).await
+        let store = OsSecretStore;
+        secrets::clear_provider_secret_logic(&store, &provider_id)
+    })
+    .await
 }
 
-
 #[tauri::command]
-pub async fn provider_secret_status(provider_id: String) -> Result<String, String>  {
+pub async fn provider_secret_status(provider_id: String) -> Result<String, String> {
     spawn_blocking_cmd(move || {
-
-    let store = OsSecretStore;
-    secrets::provider_secret_status_logic(&store, &provider_id)
-    }).await
+        let store = OsSecretStore;
+        secrets::provider_secret_status_logic(&store, &provider_id)
+    })
+    .await
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Clone)]
@@ -706,30 +679,29 @@ fn date_from_stem(stem: &str) -> String {
     stem.to_string()
 }
 
-
 #[tauri::command]
-pub async fn list_courses(root: String) -> Result<Vec<String>, String>  {
+pub async fn list_courses(root: String) -> Result<Vec<String>, String> {
     spawn_blocking_cmd(move || {
-
-    let root_path = Path::new(&root);
-    if !root_path.is_dir() {
-        return Err(format!("Not a folder: {root}"));
-    }
-    let mut courses = Vec::new();
-    for entry in std::fs::read_dir(root_path).map_err(|e| e.to_string())? {
-        let entry = entry.map_err(|e| e.to_string())?;
-        if !entry.file_type().map_err(|e| e.to_string())?.is_dir() {
-            continue;
+        let root_path = Path::new(&root);
+        if !root_path.is_dir() {
+            return Err(format!("Not a folder: {root}"));
         }
-        let name = entry.file_name().to_string_lossy().into_owned();
-        if !is_course_dir_name(&name) {
-            continue;
+        let mut courses = Vec::new();
+        for entry in std::fs::read_dir(root_path).map_err(|e| e.to_string())? {
+            let entry = entry.map_err(|e| e.to_string())?;
+            if !entry.file_type().map_err(|e| e.to_string())?.is_dir() {
+                continue;
+            }
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if !is_course_dir_name(&name) {
+                continue;
+            }
+            courses.push(name);
         }
-        courses.push(name);
-    }
-    courses.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
-    Ok(courses)
-    }).await
+        courses.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+        Ok(courses)
+    })
+    .await
 }
 
 const SOURCE_EXTENSIONS: &[&str] = &["pdf", "pptx", "docx"];
@@ -769,120 +741,117 @@ fn dest_file_name(path: &Path) -> Result<String, String> {
         .ok_or_else(|| format!("Invalid path: {}", path.display()))
 }
 
-
 #[tauri::command]
-pub async fn create_course(root: String, name: String) -> Result<String, String>  {
+pub async fn create_course(root: String, name: String) -> Result<String, String> {
     spawn_blocking_cmd(move || {
-
-    let name = name.trim();
-    if name.is_empty() {
-        return Err("Class name cannot be empty".into());
-    }
-    validate_path_component(name, "course name")?;
-    if is_reserved_course_name(name) {
-        return Err(format!(
-            "\"{name}\" is reserved. Choose a different class name."
-        ));
-    }
-    let path = Path::new(&root).join(name);
-    if path.exists() {
-        return Err(format!("A class named {name} already exists"));
-    }
-    std::fs::create_dir(&path).map_err(|e| e.to_string())?;
-    Ok(name.to_string())
-    }).await
+        let name = name.trim();
+        if name.is_empty() {
+            return Err("Class name cannot be empty".into());
+        }
+        validate_path_component(name, "course name")?;
+        if is_reserved_course_name(name) {
+            return Err(format!(
+                "\"{name}\" is reserved. Choose a different class name."
+            ));
+        }
+        let path = Path::new(&root).join(name);
+        if path.exists() {
+            return Err(format!("A class named {name} already exists"));
+        }
+        std::fs::create_dir(&path).map_err(|e| e.to_string())?;
+        Ok(name.to_string())
+    })
+    .await
 }
-
 
 #[tauri::command]
 pub async fn import_sources(
     root: String,
     course: String,
     paths: Vec<String>,
-) -> Result<Vec<String>, String>  {
+) -> Result<Vec<String>, String> {
     spawn_blocking_cmd(move || {
-
-    validate_path_component(&course, "course name")?;
-    let dest_dir = Path::new(&root).join(&course);
-    if !dest_dir.is_dir() {
-        return Err(format!("Class not found: {course}"));
-    }
-    let mut imported = Vec::new();
-    let mut used_names: HashSet<String> = HashSet::new();
-    for src in paths {
-        let src_path = Path::new(&src);
-        if !src_path.is_file() {
-            return Err(format!("File not found: {src}"));
+        validate_path_component(&course, "course name")?;
+        let dest_dir = Path::new(&root).join(&course);
+        if !dest_dir.is_dir() {
+            return Err(format!("Class not found: {course}"));
         }
-        let ext = src_path
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("")
-            .to_ascii_lowercase();
-        if !SOURCE_EXTENSIONS.contains(&ext.as_str()) {
-            return Err(format!("Unsupported file type: {src}"));
-        }
-        let file_name = src_path
-            .file_name()
-            .ok_or_else(|| format!("Invalid path: {src}"))?;
-        let name_key = file_name.to_string_lossy().to_ascii_lowercase();
-        if path_is_under(src_path, &dest_dir) {
-            imported.push(file_name.to_string_lossy().into_owned());
+        let mut imported = Vec::new();
+        let mut used_names: HashSet<String> = HashSet::new();
+        for src in paths {
+            let src_path = Path::new(&src);
+            if !src_path.is_file() {
+                return Err(format!("File not found: {src}"));
+            }
+            let ext = src_path
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("")
+                .to_ascii_lowercase();
+            if !SOURCE_EXTENSIONS.contains(&ext.as_str()) {
+                return Err(format!("Unsupported file type: {src}"));
+            }
+            let file_name = src_path
+                .file_name()
+                .ok_or_else(|| format!("Invalid path: {src}"))?;
+            let name_key = file_name.to_string_lossy().to_ascii_lowercase();
+            if path_is_under(src_path, &dest_dir) {
+                imported.push(file_name.to_string_lossy().into_owned());
+                used_names.insert(name_key);
+                continue;
+            }
+            let dest = if used_names.contains(&name_key) {
+                unique_dest(&dest_dir, file_name)
+            } else {
+                dest_dir.join(file_name)
+            };
+            std::fs::copy(src_path, &dest).map_err(|e| e.to_string())?;
+            let out_name = dest_file_name(&dest)?;
             used_names.insert(name_key);
-            continue;
+            imported.push(out_name);
         }
-        let dest = if used_names.contains(&name_key) {
-            unique_dest(&dest_dir, file_name)
-        } else {
-            dest_dir.join(file_name)
-        };
-        std::fs::copy(src_path, &dest).map_err(|e| e.to_string())?;
-        let out_name = dest_file_name(&dest)?;
-        used_names.insert(name_key);
-        imported.push(out_name);
-    }
-    Ok(imported)
-    }).await
+        Ok(imported)
+    })
+    .await
 }
 
-
 #[tauri::command]
-pub async fn list_digests(root: String, course: String) -> Result<Vec<DigestInfo>, String>  {
+pub async fn list_digests(root: String, course: String) -> Result<Vec<DigestInfo>, String> {
     spawn_blocking_cmd(move || {
-
-    if course.contains('/') || course.contains('\\') || course.contains("..") {
-        return Err("Invalid course name".into());
-    }
-    let digests_dir = Path::new(&root).join(&course).join("digests");
-    if !digests_dir.is_dir() {
-        return Ok(vec![]);
-    }
-    let mut digests = Vec::new();
-    for entry in std::fs::read_dir(&digests_dir).map_err(|e| e.to_string())? {
-        let entry = entry.map_err(|e| e.to_string())?;
-        if entry.file_type().map_err(|e| e.to_string())?.is_file()
-            && entry.path().extension().and_then(|e| e.to_str()) == Some("md")
-        {
-            let file_name = entry.file_name().to_string_lossy().into_owned();
-            let stem = file_name
-                .strip_suffix(".md")
-                .unwrap_or(&file_name)
-                .to_string();
-            let date = date_from_stem(&stem);
-            let title = std::fs::read_to_string(entry.path())
-                .ok()
-                .and_then(|text| markdown_title(&text))
-                .unwrap_or_else(|| date.clone());
-            digests.push(DigestInfo {
-                title,
-                date,
-                path: format!("{course}/digests/{file_name}"),
-            });
+        if course.contains('/') || course.contains('\\') || course.contains("..") {
+            return Err("Invalid course name".into());
         }
-    }
-    digests.sort_by(|a, b| b.path.cmp(&a.path));
-    Ok(digests)
-    }).await
+        let digests_dir = Path::new(&root).join(&course).join("digests");
+        if !digests_dir.is_dir() {
+            return Ok(vec![]);
+        }
+        let mut digests = Vec::new();
+        for entry in std::fs::read_dir(&digests_dir).map_err(|e| e.to_string())? {
+            let entry = entry.map_err(|e| e.to_string())?;
+            if entry.file_type().map_err(|e| e.to_string())?.is_file()
+                && entry.path().extension().and_then(|e| e.to_str()) == Some("md")
+            {
+                let file_name = entry.file_name().to_string_lossy().into_owned();
+                let stem = file_name
+                    .strip_suffix(".md")
+                    .unwrap_or(&file_name)
+                    .to_string();
+                let date = date_from_stem(&stem);
+                let title = std::fs::read_to_string(entry.path())
+                    .ok()
+                    .and_then(|text| markdown_title(&text))
+                    .unwrap_or_else(|| date.clone());
+                digests.push(DigestInfo {
+                    title,
+                    date,
+                    path: format!("{course}/digests/{file_name}"),
+                });
+            }
+        }
+        digests.sort_by(|a, b| b.path.cmp(&a.path));
+        Ok(digests)
+    })
+    .await
 }
 
 fn resolve_in_root(root: &str, relative: &str) -> Result<PathBuf, String> {
@@ -912,43 +881,40 @@ fn resolve_in_root(root: &str, relative: &str) -> Result<PathBuf, String> {
     Ok(canon_joined)
 }
 
-
 #[tauri::command]
-pub async fn read_markdown(root: String, relative_path: String) -> Result<String, String>  {
+pub async fn read_markdown(root: String, relative_path: String) -> Result<String, String> {
     spawn_blocking_cmd(move || {
-
-    let path = resolve_in_root(&root, &relative_path)?;
-    if !path.is_file() {
-        return Err(format!("File not found: {relative_path}"));
-    }
-    std::fs::read_to_string(&path).map_err(|e| e.to_string())
-    }).await
+        let path = resolve_in_root(&root, &relative_path)?;
+        if !path.is_file() {
+            return Err(format!("File not found: {relative_path}"));
+        }
+        std::fs::read_to_string(&path).map_err(|e| e.to_string())
+    })
+    .await
 }
 
-
 #[tauri::command]
-pub async fn save_knowledge_settings(root: String, settings: KnowledgeSettings) -> Result<(), String>  {
+pub async fn save_knowledge_settings(root: String, settings: KnowledgeSettings) -> Result<(), String> {
     spawn_blocking_cmd_unit(move || {
-
-    let arbor_dir = Path::new(&root).join(".arbor");
-    std::fs::create_dir_all(&arbor_dir).map_err(|e| e.to_string())?;
-    let text = serde_json::to_string_pretty(&settings).map_err(|e| e.to_string())?;
-    std::fs::write(arbor_dir.join("settings.json"), text).map_err(|e| e.to_string())
-    }).await
+        let arbor_dir = Path::new(&root).join(".arbor");
+        std::fs::create_dir_all(&arbor_dir).map_err(|e| e.to_string())?;
+        let text = serde_json::to_string_pretty(&settings).map_err(|e| e.to_string())?;
+        std::fs::write(arbor_dir.join("settings.json"), text).map_err(|e| e.to_string())
+    })
+    .await
 }
 
-
 #[tauri::command]
-pub async fn get_knowledge_settings(root: String) -> Result<KnowledgeSettings, String>  {
+pub async fn get_knowledge_settings(root: String) -> Result<KnowledgeSettings, String> {
     spawn_blocking_cmd(move || {
-
-    let path = Path::new(&root).join(".arbor").join("settings.json");
-    if !path.is_file() {
-        return Ok(KnowledgeSettings::default());
-    }
-    let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
-    serde_json::from_str(&text).map_err(|e| e.to_string())
-    }).await
+        let path = Path::new(&root).join(".arbor").join("settings.json");
+        if !path.is_file() {
+            return Ok(KnowledgeSettings::default());
+        }
+        let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+        serde_json::from_str(&text).map_err(|e| e.to_string())
+    })
+    .await
 }
 
 fn validate_path_component(value: &str, label: &str) -> Result<(), String> {
@@ -1005,21 +971,20 @@ fn migrate_derived_file(old: &Path, new: &Path, bak: &Path) -> Result<(), String
     Ok(())
 }
 
-
 #[tauri::command]
 pub async fn read_study_json(
     root: String,
     course: String,
     file: String,
-) -> Result<serde_json::Value, String>  {
+) -> Result<serde_json::Value, String> {
     spawn_blocking_cmd(move || {
-
-    validate_path_component(&course, "course name")?;
-    validate_path_component(&file, "study file")?;
-    let path = Path::new(&root).join(course).join("study").join(file);
-    let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
-    serde_json::from_slice(&bytes).map_err(|e| e.to_string())
-    }).await
+        validate_path_component(&course, "course name")?;
+        validate_path_component(&file, "study file")?;
+        let path = Path::new(&root).join(course).join("study").join(file);
+        let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+        serde_json::from_slice(&bytes).map_err(|e| e.to_string())
+    })
+    .await
 }
 
 fn flashcard_progress_path(root: &str, course: &str) -> Result<PathBuf, String> {
@@ -1040,47 +1005,45 @@ fn flashcard_progress_path(root: &str, course: &str) -> Result<PathBuf, String> 
     Ok(new_path)
 }
 
-
 #[tauri::command]
-pub async fn read_flashcard_progress(root: String, course: String) -> Result<serde_json::Value, String>  {
+pub async fn read_flashcard_progress(root: String, course: String) -> Result<serde_json::Value, String> {
     spawn_blocking_cmd(move || {
-
-    let path = flashcard_progress_path(&root, &course)?;
-    if !path.is_file() {
-        return Ok(serde_json::json!({}));
-    }
-    let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
-    let value: serde_json::Value = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
-    if !value.is_object() {
-        return Err("Flashcard progress must be a JSON object".into());
-    }
-    Ok(value)
-    }).await
+        let path = flashcard_progress_path(&root, &course)?;
+        if !path.is_file() {
+            return Ok(serde_json::json!({}));
+        }
+        let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+        let value: serde_json::Value = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+        if !value.is_object() {
+            return Err("Flashcard progress must be a JSON object".into());
+        }
+        Ok(value)
+    })
+    .await
 }
-
 
 #[tauri::command]
 pub async fn write_flashcard_progress(
     root: String,
     course: String,
     data: serde_json::Value,
-) -> Result<(), String>  {
+) -> Result<(), String> {
     spawn_blocking_cmd_unit(move || {
-
-    if !data.is_object() {
-        return Err("Flashcard progress must be a JSON object".into());
-    }
-    let path = flashcard_progress_path(&root, &course)?;
-    let parent = path
-        .parent()
-        .ok_or_else(|| "Invalid progress path".to_string())?;
-    std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    let mut bytes = serde_json::to_vec_pretty(&data).map_err(|e| e.to_string())?;
-    bytes.push(b'\n');
-    let temp = path.with_extension("json.tmp");
-    std::fs::write(&temp, bytes).map_err(|e| e.to_string())?;
-    std::fs::rename(temp, path).map_err(|e| e.to_string())
-    }).await
+        if !data.is_object() {
+            return Err("Flashcard progress must be a JSON object".into());
+        }
+        let path = flashcard_progress_path(&root, &course)?;
+        let parent = path
+            .parent()
+            .ok_or_else(|| "Invalid progress path".to_string())?;
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        let mut bytes = serde_json::to_vec_pretty(&data).map_err(|e| e.to_string())?;
+        bytes.push(b'\n');
+        let temp = path.with_extension("json.tmp");
+        std::fs::write(&temp, bytes).map_err(|e| e.to_string())?;
+        std::fs::rename(temp, path).map_err(|e| e.to_string())
+    })
+    .await
 }
 
 fn quiz_progress_path(root: &str, course: &str) -> Result<PathBuf, String> {
@@ -1101,22 +1064,21 @@ fn quiz_progress_path(root: &str, course: &str) -> Result<PathBuf, String> {
     Ok(new_path)
 }
 
-
 #[tauri::command]
-pub async fn read_quiz_progress(root: String, course: String) -> Result<serde_json::Value, String>  {
+pub async fn read_quiz_progress(root: String, course: String) -> Result<serde_json::Value, String> {
     spawn_blocking_cmd(move || {
-
-    let path = quiz_progress_path(&root, &course)?;
-    if !path.is_file() {
-        return Ok(serde_json::json!({}));
-    }
-    let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
-    let value: serde_json::Value = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
-    if !value.is_object() {
-        return Err("Quiz progress must be a JSON object".into());
-    }
-    Ok(value)
-    }).await
+        let path = quiz_progress_path(&root, &course)?;
+        if !path.is_file() {
+            return Ok(serde_json::json!({}));
+        }
+        let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+        let value: serde_json::Value = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+        if !value.is_object() {
+            return Err("Quiz progress must be a JSON object".into());
+        }
+        Ok(value)
+    })
+    .await
 }
 
 pub fn build_study_progress_argv(
@@ -1165,7 +1127,6 @@ fn study_progress_argv_refs(argv: &[String]) -> Vec<&str> {
     argv.iter().map(String::as_str).collect()
 }
 
-
 #[tauri::command]
 pub async fn study_progress(
     app: tauri::AppHandle,
@@ -1176,21 +1137,21 @@ pub async fn study_progress(
     result: Option<String>,
     digest: Option<String>,
     heading: Option<String>,
-) -> Result<serde_json::Value, String>  {
+) -> Result<serde_json::Value, String> {
     spawn_blocking_cmd(move || {
-
-    let argv = build_study_progress_argv(
-        &root,
-        &course,
-        &action,
-        id.as_deref(),
-        result.as_deref(),
-        digest.as_deref(),
-        heading.as_deref(),
-    )?;
-    let refs = study_progress_argv_refs(&argv);
-    run_worker_json_app(&app, &refs)
-    }).await
+        let argv = build_study_progress_argv(
+            &root,
+            &course,
+            &action,
+            id.as_deref(),
+            result.as_deref(),
+            digest.as_deref(),
+            heading.as_deref(),
+        )?;
+        let refs = study_progress_argv_refs(&argv);
+        run_worker_json_app(&app, &refs)
+    })
+    .await
 }
 
 fn validate_exam_date(value: &str) -> Result<String, String> {
@@ -1245,7 +1206,6 @@ pub fn build_study_plan_argv(
     Ok(argv)
 }
 
-
 #[tauri::command]
 pub async fn study_plan(
     app: tauri::AppHandle,
@@ -1254,20 +1214,20 @@ pub async fn study_plan(
     provider: Option<String>,
     model: String,
     exam_date: Option<String>,
-) -> Result<serde_json::Value, String>  {
+) -> Result<serde_json::Value, String> {
     spawn_blocking_cmd(move || {
-
-    let provider_id = default_provider_id(provider);
-    let argv = build_study_plan_argv(
-        &root,
-        &course,
-        &provider_id,
-        &model,
-        exam_date.as_deref(),
-    )?;
-    let refs = study_progress_argv_refs(&argv);
-    run_worker_json_app(&app, &refs)
-    }).await
+        let provider_id = default_provider_id(provider);
+        let argv = build_study_plan_argv(
+            &root,
+            &course,
+            &provider_id,
+            &model,
+            exam_date.as_deref(),
+        )?;
+        let refs = study_progress_argv_refs(&argv);
+        run_worker_json_app(&app, &refs)
+    })
+    .await
 }
 
 pub fn build_append_card_argv(
@@ -1318,7 +1278,6 @@ pub fn build_append_card_argv(
     Ok(argv)
 }
 
-
 #[tauri::command]
 pub async fn append_card(
     app: tauri::AppHandle,
@@ -1329,46 +1288,45 @@ pub async fn append_card(
     digest: String,
     heading: Option<String>,
     page: Option<String>,
-) -> Result<serde_json::Value, String>  {
+) -> Result<serde_json::Value, String> {
     spawn_blocking_cmd(move || {
-
-    let argv = build_append_card_argv(
-        &root,
-        &course,
-        &front,
-        &back,
-        &digest,
-        heading.as_deref(),
-        page.as_deref(),
-    )?;
-    let refs = study_progress_argv_refs(&argv);
-    run_worker_json_app(&app, &refs)
-    }).await
+        let argv = build_append_card_argv(
+            &root,
+            &course,
+            &front,
+            &back,
+            &digest,
+            heading.as_deref(),
+            page.as_deref(),
+        )?;
+        let refs = study_progress_argv_refs(&argv);
+        run_worker_json_app(&app, &refs)
+    })
+    .await
 }
-
 
 #[tauri::command]
 pub async fn write_quiz_progress(
     root: String,
     course: String,
     data: serde_json::Value,
-) -> Result<(), String>  {
+) -> Result<(), String> {
     spawn_blocking_cmd_unit(move || {
-
-    if !data.is_object() {
-        return Err("Quiz progress must be a JSON object".into());
-    }
-    let path = quiz_progress_path(&root, &course)?;
-    let parent = path
-        .parent()
-        .ok_or_else(|| "Invalid progress path".to_string())?;
-    std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    let mut bytes = serde_json::to_vec_pretty(&data).map_err(|e| e.to_string())?;
-    bytes.push(b'\n');
-    let temp = path.with_extension("json.tmp");
-    std::fs::write(&temp, bytes).map_err(|e| e.to_string())?;
-    std::fs::rename(temp, path).map_err(|e| e.to_string())
-    }).await
+        if !data.is_object() {
+            return Err("Quiz progress must be a JSON object".into());
+        }
+        let path = quiz_progress_path(&root, &course)?;
+        let parent = path
+            .parent()
+            .ok_or_else(|| "Invalid progress path".to_string())?;
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        let mut bytes = serde_json::to_vec_pretty(&data).map_err(|e| e.to_string())?;
+        bytes.push(b'\n');
+        let temp = path.with_extension("json.tmp");
+        std::fs::write(&temp, bytes).map_err(|e| e.to_string())?;
+        std::fs::rename(temp, path).map_err(|e| e.to_string())
+    })
+    .await
 }
 
 #[derive(serde::Deserialize)]
@@ -1381,43 +1339,42 @@ struct StaleArtifact {
     content_sha256: String,
 }
 
-
 #[tauri::command]
-pub async fn study_artifact_stale(root: String, course: String, skill: String) -> Result<bool, String>  {
+pub async fn study_artifact_stale(root: String, course: String, skill: String) -> Result<bool, String> {
     spawn_blocking_cmd(move || {
-
-    validate_path_component(&course, "course name")?;
-    validate_path_component(&skill, "skill name")?;
-    let course_dir = Path::new(&root).join(course);
-    let manifest_path = course_dir.join("study").join("manifest.json");
-    if !manifest_path.is_file() {
-        return Ok(false);
-    }
-    let manifest: StaleManifest =
-        serde_json::from_slice(&std::fs::read(manifest_path).map_err(|e| e.to_string())?)
-            .map_err(|e| e.to_string())?;
-    let Some(artifact) = manifest.artifacts.get(&skill) else {
-        return Ok(false);
-    };
-    let digests_dir = course_dir.join("digests");
-    let mut paths = std::fs::read_dir(digests_dir)
-        .map_err(|e| e.to_string())?
-        .filter_map(Result::ok)
-        .map(|entry| entry.path())
-        .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("md"))
-        .collect::<Vec<_>>();
-    paths.sort();
-    let mut hasher = Sha256::new();
-    for path in paths {
-        hasher.update(std::fs::read(path).map_err(|e| e.to_string())?);
-    }
-    let current = hasher
-        .finalize()
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<String>();
-    Ok(current != artifact.content_sha256)
-    }).await
+        validate_path_component(&course, "course name")?;
+        validate_path_component(&skill, "skill name")?;
+        let course_dir = Path::new(&root).join(course);
+        let manifest_path = course_dir.join("study").join("manifest.json");
+        if !manifest_path.is_file() {
+            return Ok(false);
+        }
+        let manifest: StaleManifest =
+            serde_json::from_slice(&std::fs::read(manifest_path).map_err(|e| e.to_string())?)
+                .map_err(|e| e.to_string())?;
+        let Some(artifact) = manifest.artifacts.get(&skill) else {
+            return Ok(false);
+        };
+        let digests_dir = course_dir.join("digests");
+        let mut paths = std::fs::read_dir(digests_dir)
+            .map_err(|e| e.to_string())?
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("md"))
+            .collect::<Vec<_>>();
+        paths.sort();
+        let mut hasher = Sha256::new();
+        for path in paths {
+            hasher.update(std::fs::read(path).map_err(|e| e.to_string())?);
+        }
+        let current = hasher
+            .finalize()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        Ok(current != artifact.content_sha256)
+    })
+    .await
 }
 
 fn validate_chat_course(course: &str) -> Result<(), String> {
@@ -1499,73 +1456,69 @@ pub(crate) fn chat_worker_stdin_payload(
     })
 }
 
-
 #[tauri::command]
-pub async fn read_chat_history(root: String, course: String) -> Result<Vec<serde_json::Value>, String>  {
+pub async fn read_chat_history(root: String, course: String) -> Result<Vec<serde_json::Value>, String> {
     spawn_blocking_cmd(move || {
-
-    let path = chat_history_path(&root, &course)?;
-    if !path.is_file() {
-        return Ok(Vec::new());
-    }
-    let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
-    let mut lines = Vec::new();
-    for line in text.lines() {
-        if line.trim().is_empty() {
-            continue;
+        let path = chat_history_path(&root, &course)?;
+        if !path.is_file() {
+            return Ok(Vec::new());
         }
-        if let Ok(value) = serde_json::from_str(line) {
-            lines.push(value);
+        let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+        let mut lines = Vec::new();
+        for line in text.lines() {
+            if line.trim().is_empty() {
+                continue;
+            }
+            if let Ok(value) = serde_json::from_str(line) {
+                lines.push(value);
+            }
         }
-    }
-    Ok(lines)
-    }).await
+        Ok(lines)
+    })
+    .await
 }
-
 
 #[tauri::command]
 pub async fn append_chat_lines(
     root: String,
     course: String,
     lines: Vec<serde_json::Value>,
-) -> Result<(), String>  {
+) -> Result<(), String> {
     spawn_blocking_cmd_unit(move || {
-
-    let path = chat_history_path(&root, &course)?;
-    for line in &lines {
-        validate_chat_line_role(line)?;
-    }
-    let parent = path
-        .parent()
-        .ok_or_else(|| "Invalid chat history path".to_string())?;
-    std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    let mut file = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&path)
-        .map_err(|e| e.to_string())?;
-    for line in lines {
-        let mut bytes = serde_json::to_vec(&line).map_err(|e| e.to_string())?;
-        bytes.push(b'\n');
-        file.write_all(&bytes).map_err(|e| e.to_string())?;
-    }
-    Ok(())
-    }).await
+        let path = chat_history_path(&root, &course)?;
+        for line in &lines {
+            validate_chat_line_role(line)?;
+        }
+        let parent = path
+            .parent()
+            .ok_or_else(|| "Invalid chat history path".to_string())?;
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+            .map_err(|e| e.to_string())?;
+        for line in lines {
+            let mut bytes = serde_json::to_vec(&line).map_err(|e| e.to_string())?;
+            bytes.push(b'\n');
+            file.write_all(&bytes).map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    })
+    .await
 }
-
 
 #[tauri::command]
-pub async fn clear_chat_history(root: String, course: String) -> Result<(), String>  {
+pub async fn clear_chat_history(root: String, course: String) -> Result<(), String> {
     spawn_blocking_cmd_unit(move || {
-
-    let path = chat_history_path(&root, &course)?;
-    if path.is_file() {
-        std::fs::remove_file(&path).map_err(|e| e.to_string())?;
-    }
-    Ok(())
-    }).await
+        let path = chat_history_path(&root, &course)?;
+        if path.is_file() {
+            std::fs::remove_file(&path).map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    })
+    .await
 }
-
 
 #[tauri::command]
 pub async fn start_chat(
@@ -1578,126 +1531,126 @@ pub async fn start_chat(
     provider: Option<String>,
     model: String,
     history: Vec<serde_json::Value>,
-) -> Result<(), String>  {
+) -> Result<(), String> {
     spawn_blocking_cmd_unit(move || {
+        validate_chat_course(&course)?;
+        validate_chat_mode(&mode)?;
+        if model.trim().is_empty() {
+            return Err("Model is required".into());
+        }
+        let provider_id = default_provider_id(provider);
+        let label = settings::provider_label(&provider_id);
+        let auth = run_worker_json_app(
+            &app,
+            &["check-auth", "--provider", &provider_id],
+        )?;
+        let authenticated = auth
+            .get("authenticated")
+            .and_then(|value| value.as_bool())
+            .unwrap_or(false);
+        if !authenticated {
+            return Err(
+                auth
+                    .get("reason")
+                    .and_then(|value| value.as_str())
+                    .map(str::to_string)
+                    .unwrap_or_else(|| format!("{label} is not authenticated")),
+            );
+        }
 
-    validate_chat_course(&course)?;
-    validate_chat_mode(&mode)?;
-    if model.trim().is_empty() {
-        return Err("Model is required".into());
-    }
-    let provider_id = default_provider_id(provider);
-    let label = settings::provider_label(&provider_id);
-    let auth = run_worker_json_app(
-        &app,
-        &["check-auth", "--provider", &provider_id],
-    )?;
-    let authenticated = auth
-        .get("authenticated")
-        .and_then(|value| value.as_bool())
-        .unwrap_or(false);
-    if !authenticated {
-        return Err(
-            auth
-                .get("reason")
-                .and_then(|value| value.as_str())
-                .map(str::to_string)
-                .unwrap_or_else(|| format!("{label} is not authenticated")),
+        let app_dir = repo_dir(&app);
+        let chat_env_pairs = {
+            let settings = settings::load(&app);
+            let store = OsSecretStore;
+            secrets::worker_env_for_provider_id(&provider_id, &store, &settings)
+        };
+        let sidecar = worker::packaged_sidecar();
+        let argv = worker::resolve_worker_argv(
+            &|key| std::env::var(key).ok(),
+            &worker::default_python_dir(&app_dir),
+            &["chat"],
+            sidecar.as_deref(),
         );
-    }
-
-    let app_dir = repo_dir(&app);
-    let chat_env_pairs = {
-        let settings = settings::load(&app);
-        let store = OsSecretStore;
-        secrets::worker_env_for_provider_id(&provider_id, &store, &settings)
-    };
-    let sidecar = worker::packaged_sidecar();
-    let argv = worker::resolve_worker_argv(
-        &|key| std::env::var(key).ok(),
-        &worker::default_python_dir(&app_dir),
-        &["chat"],
-        sidecar.as_deref(),
-    );
-    if let Some(err) = worker::uv_project_missing_error(&argv) {
-        return Err(err);
-    }
-
-    let payload = chat_worker_stdin_payload(
-        &root,
-        &course,
-        &question,
-        &mode,
-        &provider_id,
-        model.trim(),
-        &history,
-    );
-    let stdin_body = serde_json::to_string(&payload).map_err(|e| e.to_string())?;
-
-    std::thread::spawn(move || {
-        let send_exit = |code: i32| {
-            let _ = on_event.send(serde_json::json!({
-                "type": "worker_exit",
-                "code": code,
-            }));
-        };
         if let Some(err) = worker::uv_project_missing_error(&argv) {
-            let _ = on_event.send(serde_json::json!({
-                "type": "error",
-                "message": err,
-            }));
-            send_exit(-1);
-            return;
+            return Err(err);
         }
-        let env_refs: Vec<(&str, &str)> = chat_env_pairs
-            .iter()
-            .map(|(key, value)| (key.as_str(), value.as_str()))
-            .collect();
-        let mut command = Command::new(&argv[0]);
-        command
-            .args(&argv[1..])
-            .env("PATH", worker::process_path_for_spawn())
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
-        secrets::apply_env_pairs(&mut command, &env_refs);
-        let mut child = match command.spawn() {
-            Ok(child) => child,
-            Err(error) => {
+
+        let payload = chat_worker_stdin_payload(
+            &root,
+            &course,
+            &question,
+            &mode,
+            &provider_id,
+            model.trim(),
+            &history,
+        );
+        let stdin_body = serde_json::to_string(&payload).map_err(|e| e.to_string())?;
+
+        std::thread::spawn(move || {
+            let send_exit = |code: i32| {
+                let _ = on_event.send(serde_json::json!({
+                    "type": "worker_exit",
+                    "code": code,
+                }));
+            };
+            if let Some(err) = worker::uv_project_missing_error(&argv) {
                 let _ = on_event.send(serde_json::json!({
                     "type": "error",
-                    "message": format!("failed to launch worker: {error}"),
+                    "message": err,
                 }));
                 send_exit(-1);
                 return;
             }
-        };
-        if let Some(mut stdin) = child.stdin.take() {
-            if stdin.write_all(stdin_body.as_bytes()).is_err() {
-                let _ = on_event.send(serde_json::json!({
-                    "type": "error",
-                    "message": "failed to write chat request to worker",
-                }));
-                kill_and_reap_child(&mut child);
-                send_exit(-1);
-                return;
-            }
-        }
-        if let Some(stdout) = child.stdout.take() {
-            use std::io::BufRead;
-            let reader = std::io::BufReader::new(stdout);
-            for line in reader.lines().map_while(Result::ok) {
-                if let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) {
-                    let _ = on_event.send(value);
+            let env_refs: Vec<(&str, &str)> = chat_env_pairs
+                .iter()
+                .map(|(key, value)| (key.as_str(), value.as_str()))
+                .collect();
+            let mut command = Command::new(&argv[0]);
+            command
+                .args(&argv[1..])
+                .env("PATH", worker::process_path_for_spawn())
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped());
+            secrets::apply_env_pairs(&mut command, &env_refs);
+            let mut child = match command.spawn() {
+                Ok(child) => child,
+                Err(error) => {
+                    let _ = on_event.send(serde_json::json!({
+                        "type": "error",
+                        "message": format!("failed to launch worker: {error}"),
+                    }));
+                    send_exit(-1);
+                    return;
+                }
+            };
+            if let Some(mut stdin) = child.stdin.take() {
+                if stdin.write_all(stdin_body.as_bytes()).is_err() {
+                    let _ = on_event.send(serde_json::json!({
+                        "type": "error",
+                        "message": "failed to write chat request to worker",
+                    }));
+                    kill_and_reap_child(&mut child);
+                    send_exit(-1);
+                    return;
                 }
             }
-        }
-        let code = child.wait().ok().and_then(|status| status.code()).unwrap_or(-1);
-        send_exit(code);
-    });
+            if let Some(stdout) = child.stdout.take() {
+                use std::io::BufRead;
+                let reader = std::io::BufReader::new(stdout);
+                for line in reader.lines().map_while(Result::ok) {
+                    if let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) {
+                        let _ = on_event.send(value);
+                    }
+                }
+            }
+            let code = child.wait().ok().and_then(|status| status.code()).unwrap_or(-1);
+            send_exit(code);
+        });
 
-    Ok(())
-    }).await
+        Ok(())
+    })
+    .await
 }
 
 #[cfg(test)]
@@ -2659,19 +2612,17 @@ mod tests {
     }
 }
 
-
 #[tauri::command]
 pub async fn search_knowledge(
     root: String,
     query: String,
     limit: Option<u32>,
-) -> Result<Vec<SearchHit>, String>  {
+) -> Result<Vec<SearchHit>, String> {
     spawn_blocking_cmd(move || {
-
-    search::search_documents(Path::new(&root), &query, limit.unwrap_or(25))
-    }).await
+        search::search_documents(Path::new(&root), &query, limit.unwrap_or(25))
+    })
+    .await
 }
-
 
 #[tauri::command]
 pub async fn search_semantic(
@@ -2679,83 +2630,77 @@ pub async fn search_semantic(
     root: String,
     query: String,
     limit: Option<u32>,
-) -> Result<Vec<SearchHit>, String>  {
+) -> Result<Vec<SearchHit>, String> {
     spawn_blocking_cmd(move || {
-
-    let limit_value = limit.unwrap_or(25).to_string();
-    let sub_args = [
-        "embed-search",
-        "--root",
-        root.as_str(),
-        "--query",
-        query.as_str(),
-        "--limit",
-        limit_value.as_str(),
-        "--provider",
-        "hashed",
-    ];
-    let pairs = worker_env_pairs(&app, &sub_args);
-    let refs: Vec<(&str, &str)> = pairs
-        .iter()
-        .map(|(key, value)| (key.as_str(), value.as_str()))
-        .collect();
-    search::search_semantic_documents(
-        &repo_dir(&app),
-        Path::new(&root),
-        &query,
-        limit.unwrap_or(25),
-        &refs,
-    )
-    }).await
+        let limit_value = limit.unwrap_or(25).to_string();
+        let sub_args = [
+            "embed-search",
+            "--root",
+            root.as_str(),
+            "--query",
+            query.as_str(),
+            "--limit",
+            limit_value.as_str(),
+            "--provider",
+            "hashed",
+        ];
+        let pairs = worker_env_pairs(&app, &sub_args);
+        let refs: Vec<(&str, &str)> = pairs
+            .iter()
+            .map(|(key, value)| (key.as_str(), value.as_str()))
+            .collect();
+        search::search_semantic_documents(
+            &repo_dir(&app),
+            Path::new(&root),
+            &query,
+            limit.unwrap_or(25),
+            &refs,
+        )
+    })
+    .await
 }
 
-
 #[tauri::command]
-pub async fn reindex_knowledge(app: tauri::AppHandle, root: String) -> Result<serde_json::Value, String>  {
+pub async fn reindex_knowledge(app: tauri::AppHandle, root: String) -> Result<serde_json::Value, String> {
     spawn_blocking_cmd(move || {
-
-    run_worker_json_app(&app, &["reindex", "--root", &root])
-    }).await
+        run_worker_json_app(&app, &["reindex", "--root", &root])
+    })
+    .await
 }
 
-
 #[tauri::command]
-pub async fn start_folder_watch(app: tauri::AppHandle, root: String) -> Result<(), String>  {
+pub async fn start_folder_watch(app: tauri::AppHandle, root: String) -> Result<(), String> {
     spawn_blocking_cmd_unit(move || {
-
-    let watch = app.state::<Arc<WatchState>>();
-    watch.start(app.clone(), PathBuf::from(root));
-    Ok(())
-    }).await
+        let watch = app.state::<Arc<WatchState>>();
+        watch.start(app.clone(), PathBuf::from(root));
+        Ok(())
+    })
+    .await
 }
 
-
 #[tauri::command]
-pub async fn init_arbor_db(root: String) -> Result<(), String>  {
+pub async fn init_arbor_db(root: String) -> Result<(), String> {
     spawn_blocking_cmd_unit(move || {
-
-    jobs::ensure_db(Path::new(&root))
-    }).await
+        jobs::ensure_db(Path::new(&root))
+    })
+    .await
 }
-
 
 #[tauri::command]
-pub async fn list_jobs(root: String, limit: Option<u32>) -> Result<Vec<jobs::JobSummary>, String>  {
+pub async fn list_jobs(root: String, limit: Option<u32>) -> Result<Vec<jobs::JobSummary>, String> {
     spawn_blocking_cmd(move || {
-
-    jobs::list_jobs(Path::new(&root), limit.unwrap_or(20))
-    }).await
+        jobs::list_jobs(Path::new(&root), limit.unwrap_or(20))
+    })
+    .await
 }
-
 
 #[tauri::command]
-pub async fn get_job_events(root: String, job_id: String) -> Result<Vec<jobs::JobEventRow>, String>  {
+pub async fn get_job_events(root: String, job_id: String) -> Result<Vec<jobs::JobEventRow>, String> {
     spawn_blocking_cmd(move || {
-
-    jobs::job_events(Path::new(&root), &job_id)
-    }).await
+        jobs::job_events(Path::new(&root), &job_id)
+    })
+    .await
 }
-
 
 #[tauri::command]
 pub async fn start_update(
@@ -2765,148 +2710,12 @@ pub async fn start_update(
     selections: Vec<Selection>,
     trigger: Option<String>,
     provider: Option<String>,
-) -> Result<String, String>  {
+) -> Result<String, String> {
     spawn_blocking_cmd(move || {
-
-    let settings = settings::load(&app);
-    let transport = settings::transport_for_root(&settings, &root)?;
-    let provider_id = default_provider_id(provider);
-    let label = settings::provider_label(&provider_id);
-    let auth = match &transport {
-        WorkerTransport::Local => run_worker_json_app(
-            &app,
-            &["check-auth", "--provider", &provider_id],
-        )?,
-        WorkerTransport::Ssh { .. } => {
-            worker::run_remote_check_auth(&app, &transport, &provider_id)?
-        }
-    };
-    let authenticated = auth
-        .get("authenticated")
-        .and_then(|v| v.as_bool())
-        .unwrap_or(false);
-    if !authenticated {
-        let reason = auth
-            .get("reason")
-            .and_then(|v| v.as_str())
-            .map(str::to_string)
-            .unwrap_or_else(|| format!("{label} is not authenticated"));
-        return Err(reason);
-    }
-
-    let plan_json = serde_json::to_string(&serde_json::json!({ "selections": selections }))
-        .map_err(|e| e.to_string())?;
-    let knowledge_root = Path::new(&root);
-    let job_id = jobs::create_job(
-        knowledge_root,
-        JobTrigger::from_arg(trigger.as_deref()),
-        &model,
-        &plan_json,
-    )?;
-
-    {
-        let mut guard = app
-            .state::<SharedCoordinator>()
-            .inner()
-            .lock()
-            .map_err(|e| e.to_string())?;
-        if let Err(e) = guard.try_begin(&job_id, &root) {
-            let _ = jobs::finish_job(
-                knowledge_root,
-                &job_id,
-                jobs::JobStatus::Failed,
-                -1,
-                Some(e.clone()),
-            );
-            return Err(e);
-        }
-    }
-
-    let cancel = worker::cancel_file_path();
-    let _ = std::fs::remove_file(&cancel);
-
-    let plan_path = worker::plan_file_path();
-    std::fs::write(&plan_path, plan_json.as_bytes()).map_err(|e| e.to_string())?;
-
-    let app_dir = repo_dir(&app);
-    match &transport {
-        WorkerTransport::Local => {
-            worker::spawn_update_stream(
-                app,
-                app_dir,
-                root.clone(),
-                model,
-                provider_id,
-                cancel,
-                plan_path,
-                job_id.clone(),
-            );
-        }
-        WorkerTransport::Ssh { .. } => {
-            let paths: Vec<&str> = selections.iter().map(|s| s.path.as_str()).collect();
-            let courses = crate::remote_job::courses_from_selection_paths(&paths).map_err(|e| {
-                let _ = jobs::finish_job(
-                    knowledge_root,
-                    &job_id,
-                    jobs::JobStatus::Failed,
-                    -1,
-                    Some(e.clone()),
-                );
-                if let Ok(mut guard) = app.state::<SharedCoordinator>().inner().lock() {
-                    guard.finish(&job_id);
-                }
-                e
-            })?;
-            let app_data = app.path().app_data_dir().map_err(|e| e.to_string())?;
-            let plan_str = plan_path.to_string_lossy().into_owned();
-            let cancel_str = cancel.to_string_lossy().into_owned();
-            let remote_tokens = worker::update_sub_args(
-                &root,
-                &model,
-                &provider_id,
-                &cancel_str,
-                &plan_str,
-            );
-            let message = format!("digest: {}", courses.join(", "));
-            worker::spawn_remote_update_stream(
-                app,
-                app_dir,
-                app_data,
-                root,
-                provider_id,
-                job_id.clone(),
-                transport.clone(),
-                courses,
-                remote_tokens,
-                plan_path,
-                message,
-            );
-        }
-    }
-    Ok(job_id)
-    }).await
-}
-
-
-#[tauri::command]
-pub async fn start_study_job(
-    app: tauri::AppHandle,
-    root: String,
-    course: String,
-    skill: String,
-    force: Option<bool>,
-    model: Option<String>,
-    provider: Option<String>,
-) -> Result<String, String>  {
-    spawn_blocking_cmd(move || {
-
-    let force = force.unwrap_or(false);
-    let model = worker::normalize_study_model(model);
-    let settings = settings::load(&app);
-    let transport = settings::transport_for_root(&settings, &root)?;
-    let provider_id = default_provider_id(provider);
-    let label = settings::provider_label(&provider_id);
-    if model.is_some() {
+        let settings = settings::load(&app);
+        let transport = settings::transport_for_root(&settings, &root)?;
+        let provider_id = default_provider_id(provider);
+        let label = settings::provider_label(&provider_id);
         let auth = match &transport {
             WorkerTransport::Local => run_worker_json_app(
                 &app,
@@ -2918,200 +2727,331 @@ pub async fn start_study_job(
         };
         let authenticated = auth
             .get("authenticated")
-            .and_then(|value| value.as_bool())
+            .and_then(|v| v.as_bool())
             .unwrap_or(false);
         if !authenticated {
-            return Err(auth
+            let reason = auth
                 .get("reason")
-                .and_then(|value| value.as_str())
+                .and_then(|v| v.as_str())
                 .map(str::to_string)
-                .unwrap_or_else(|| format!("{label} is not authenticated")));
+                .unwrap_or_else(|| format!("{label} is not authenticated"));
+            return Err(reason);
         }
-    }
-    let plan_json = serde_json::to_string(&serde_json::json!({
-        "course": course,
-        "skill": skill,
-        "force": force,
-    }))
-    .map_err(|e| e.to_string())?;
-    let knowledge_root = Path::new(&root);
-    let job_id = jobs::create_job(
-        knowledge_root,
-        JobTrigger::Study,
-        model.as_deref().unwrap_or("fake"),
-        &plan_json,
-    )?;
 
-    {
-        let mut guard = app
-            .state::<SharedCoordinator>()
-            .inner()
-            .lock()
+        let plan_json = serde_json::to_string(&serde_json::json!({ "selections": selections }))
             .map_err(|e| e.to_string())?;
-        if let Err(e) = guard.try_begin(&job_id, &root) {
-            let _ = jobs::finish_job(
-                knowledge_root,
-                &job_id,
-                jobs::JobStatus::Failed,
-                -1,
-                Some(e.clone()),
-            );
-            return Err(e);
-        }
-    }
+        let knowledge_root = Path::new(&root);
+        let job_id = jobs::create_job(
+            knowledge_root,
+            JobTrigger::from_arg(trigger.as_deref()),
+            &model,
+            &plan_json,
+        )?;
 
-    let cancel = worker::cancel_file_path();
-    let _ = std::fs::remove_file(&cancel);
+        {
+            let mut guard = app
+                .state::<SharedCoordinator>()
+                .inner()
+                .lock()
+                .map_err(|e| e.to_string())?;
+            if let Err(e) = guard.try_begin(&job_id, &root) {
+                let _ = jobs::finish_job(
+                    knowledge_root,
+                    &job_id,
+                    jobs::JobStatus::Failed,
+                    -1,
+                    Some(e.clone()),
+                );
+                return Err(e);
+            }
+        }
 
-    let app_dir = repo_dir(&app);
-    match &transport {
-        WorkerTransport::Local => {
-            worker::spawn_generate_stream(
-                app,
-                app_dir,
-                root,
-                course.clone(),
-                skill.clone(),
-                force,
-                model,
-                provider_id,
-                job_id.clone(),
-            );
+        let cancel = worker::cancel_file_path();
+        let _ = std::fs::remove_file(&cancel);
+
+        let plan_path = worker::plan_file_path();
+        std::fs::write(&plan_path, plan_json.as_bytes()).map_err(|e| e.to_string())?;
+
+        let app_dir = repo_dir(&app);
+        match &transport {
+            WorkerTransport::Local => {
+                worker::spawn_update_stream(
+                    app,
+                    app_dir,
+                    root.clone(),
+                    model,
+                    provider_id,
+                    cancel,
+                    plan_path,
+                    job_id.clone(),
+                );
+            }
+            WorkerTransport::Ssh { .. } => {
+                let paths: Vec<&str> = selections.iter().map(|s| s.path.as_str()).collect();
+                let courses = crate::remote_job::courses_from_selection_paths(&paths).map_err(|e| {
+                    let _ = jobs::finish_job(
+                        knowledge_root,
+                        &job_id,
+                        jobs::JobStatus::Failed,
+                        -1,
+                        Some(e.clone()),
+                    );
+                    if let Ok(mut guard) = app.state::<SharedCoordinator>().inner().lock() {
+                        guard.finish(&job_id);
+                    }
+                    e
+                })?;
+                let app_data = app.path().app_data_dir().map_err(|e| e.to_string())?;
+                let plan_str = plan_path.to_string_lossy().into_owned();
+                let cancel_str = cancel.to_string_lossy().into_owned();
+                let remote_tokens = worker::update_sub_args(
+                    &root,
+                    &model,
+                    &provider_id,
+                    &cancel_str,
+                    &plan_str,
+                );
+                let message = format!("digest: {}", courses.join(", "));
+                worker::spawn_remote_update_stream(
+                    app,
+                    app_dir,
+                    app_data,
+                    root,
+                    provider_id,
+                    job_id.clone(),
+                    transport.clone(),
+                    courses,
+                    remote_tokens,
+                    plan_path,
+                    message,
+                );
+            }
         }
-        WorkerTransport::Ssh { .. } => {
-            let app_data = app.path().app_data_dir().map_err(|e| e.to_string())?;
-            let remote_tokens = worker::generate_sub_args(
-                &root,
-                &course,
-                &skill,
-                force,
-                model.clone(),
-                &provider_id,
-            );
-            worker::spawn_remote_generate_stream(
-                app,
-                app_dir,
-                app_data,
-                root,
-                provider_id,
-                job_id.clone(),
-                transport.clone(),
-                course,
-                skill,
-                remote_tokens,
-            );
-        }
-    }
-    Ok(job_id)
-    }).await
+        Ok(job_id)
+    })
+    .await
 }
 
+#[tauri::command]
+pub async fn start_study_job(
+    app: tauri::AppHandle,
+    root: String,
+    course: String,
+    skill: String,
+    force: Option<bool>,
+    model: Option<String>,
+    provider: Option<String>,
+) -> Result<String, String> {
+    spawn_blocking_cmd(move || {
+        let force = force.unwrap_or(false);
+        let model = worker::normalize_study_model(model);
+        let settings = settings::load(&app);
+        let transport = settings::transport_for_root(&settings, &root)?;
+        let provider_id = default_provider_id(provider);
+        let label = settings::provider_label(&provider_id);
+        if model.is_some() {
+            let auth = match &transport {
+                WorkerTransport::Local => run_worker_json_app(
+                    &app,
+                    &["check-auth", "--provider", &provider_id],
+                )?,
+                WorkerTransport::Ssh { .. } => {
+                    worker::run_remote_check_auth(&app, &transport, &provider_id)?
+                }
+            };
+            let authenticated = auth
+                .get("authenticated")
+                .and_then(|value| value.as_bool())
+                .unwrap_or(false);
+            if !authenticated {
+                return Err(auth
+                    .get("reason")
+                    .and_then(|value| value.as_str())
+                    .map(str::to_string)
+                    .unwrap_or_else(|| format!("{label} is not authenticated")));
+            }
+        }
+        let plan_json = serde_json::to_string(&serde_json::json!({
+            "course": course,
+            "skill": skill,
+            "force": force,
+        }))
+        .map_err(|e| e.to_string())?;
+        let knowledge_root = Path::new(&root);
+        let job_id = jobs::create_job(
+            knowledge_root,
+            JobTrigger::Study,
+            model.as_deref().unwrap_or("fake"),
+            &plan_json,
+        )?;
+
+        {
+            let mut guard = app
+                .state::<SharedCoordinator>()
+                .inner()
+                .lock()
+                .map_err(|e| e.to_string())?;
+            if let Err(e) = guard.try_begin(&job_id, &root) {
+                let _ = jobs::finish_job(
+                    knowledge_root,
+                    &job_id,
+                    jobs::JobStatus::Failed,
+                    -1,
+                    Some(e.clone()),
+                );
+                return Err(e);
+            }
+        }
+
+        let cancel = worker::cancel_file_path();
+        let _ = std::fs::remove_file(&cancel);
+
+        let app_dir = repo_dir(&app);
+        match &transport {
+            WorkerTransport::Local => {
+                worker::spawn_generate_stream(
+                    app,
+                    app_dir,
+                    root,
+                    course.clone(),
+                    skill.clone(),
+                    force,
+                    model,
+                    provider_id,
+                    job_id.clone(),
+                );
+            }
+            WorkerTransport::Ssh { .. } => {
+                let app_data = app.path().app_data_dir().map_err(|e| e.to_string())?;
+                let remote_tokens = worker::generate_sub_args(
+                    &root,
+                    &course,
+                    &skill,
+                    force,
+                    model.clone(),
+                    &provider_id,
+                );
+                worker::spawn_remote_generate_stream(
+                    app,
+                    app_dir,
+                    app_data,
+                    root,
+                    provider_id,
+                    job_id.clone(),
+                    transport.clone(),
+                    course,
+                    skill,
+                    remote_tokens,
+                );
+            }
+        }
+        Ok(job_id)
+    })
+    .await
+}
 
 #[tauri::command]
 pub async fn start_embed_job(
     app: tauri::AppHandle,
     root: String,
     force: Option<bool>,
-) -> Result<String, String>  {
+) -> Result<String, String> {
     spawn_blocking_cmd(move || {
+        let force = force.unwrap_or(false);
+        let plan_json = serde_json::to_string(&serde_json::json!({
+            "op": "embed",
+            "force": force,
+        }))
+        .map_err(|error| error.to_string())?;
+        let knowledge_root = Path::new(&root);
+        let job_id = jobs::create_job(knowledge_root, JobTrigger::Manual, "hashed", &plan_json)?;
 
-    let force = force.unwrap_or(false);
-    let plan_json = serde_json::to_string(&serde_json::json!({
-        "op": "embed",
-        "force": force,
-    }))
-    .map_err(|error| error.to_string())?;
-    let knowledge_root = Path::new(&root);
-    let job_id = jobs::create_job(knowledge_root, JobTrigger::Manual, "hashed", &plan_json)?;
-
-    {
-        let mut guard = app
-            .state::<SharedCoordinator>()
-            .inner()
-            .lock()
-            .map_err(|error| error.to_string())?;
-        if let Err(error) = guard.try_begin(&job_id, &root) {
-            let _ = jobs::finish_job(
-                knowledge_root,
-                &job_id,
-                jobs::JobStatus::Failed,
-                -1,
-                Some(error.clone()),
-            );
-            return Err(error);
+        {
+            let mut guard = app
+                .state::<SharedCoordinator>()
+                .inner()
+                .lock()
+                .map_err(|error| error.to_string())?;
+            if let Err(error) = guard.try_begin(&job_id, &root) {
+                let _ = jobs::finish_job(
+                    knowledge_root,
+                    &job_id,
+                    jobs::JobStatus::Failed,
+                    -1,
+                    Some(error.clone()),
+                );
+                return Err(error);
+            }
         }
-    }
 
-    worker::spawn_embed_stream(app.clone(), repo_dir(&app), root, force, job_id.clone());
-    Ok(job_id)
-    }).await
+        worker::spawn_embed_stream(app.clone(), repo_dir(&app), root, force, job_id.clone());
+        Ok(job_id)
+    })
+    .await
 }
 
-
 #[tauri::command]
-pub async fn cancel_update(_app: tauri::AppHandle) -> Result<(), String>  {
+pub async fn cancel_update(_app: tauri::AppHandle) -> Result<(), String> {
     spawn_blocking_cmd_unit(move || {
-
-    let cancel = worker::cancel_file_path();
-    std::fs::write(&cancel, b"stop").map_err(|e| e.to_string())?;
-    crate::remote_job::cancel_active_remote();
-    Ok(())
-    }).await
+        let cancel = worker::cancel_file_path();
+        std::fs::write(&cancel, b"stop").map_err(|e| e.to_string())?;
+        crate::remote_job::cancel_active_remote();
+        Ok(())
+    })
+    .await
 }
 
-
 #[tauri::command]
-pub async fn open_folder(path: String) -> Result<(), String>  {
+pub async fn open_folder(path: String) -> Result<(), String> {
     spawn_blocking_cmd_unit(move || {
+        #[cfg(target_os = "macos")]
+        let program = "open";
+        #[cfg(target_os = "linux")]
+        let program = "xdg-open";
+        #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+        return Err("open_folder not supported on this platform".into());
 
-    #[cfg(target_os = "macos")]
-    let program = "open";
-    #[cfg(target_os = "linux")]
-    let program = "xdg-open";
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-    return Err("open_folder not supported on this platform".into());
-
-    Command::new(program)
-        .arg(&path)
-        .spawn()
-        .map(|_| ())
-        .map_err(|e| e.to_string())
-    }).await
-}
-
-
-#[tauri::command]
-pub async fn init_knowledge_repo(path: String) -> Result<bool, String>  {
-    spawn_blocking_cmd(move || {
-
-    let root = Path::new(&path);
-    if !root.is_dir() {
-        return Err(format!("Not a folder: {path}"));
-    }
-    jobs::ensure_db(root)?;
-    if root.join(".git").exists() {
-        return Ok(false);
-    }
-    let run = |args: &[&str]| -> Result<(), String> {
-        let out = Command::new("git")
-            .arg("-C")
+        Command::new(program)
             .arg(&path)
-            .args(args)
-            .output()
-            .map_err(|e| e.to_string())?;
-        if out.status.success() {
-            Ok(())
-        } else {
-            Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn init_knowledge_repo(path: String) -> Result<bool, String> {
+    spawn_blocking_cmd(move || {
+        let root = Path::new(&path);
+        if !root.is_dir() {
+            return Err(format!("Not a folder: {path}"));
         }
-    };
-    run(&["init"])?;
-    run(&[
-        "commit",
-        "--allow-empty",
-        "-m",
-        "Initialize Arbor knowledge library",
-    ])?;
-    Ok(true)
-    }).await
+        jobs::ensure_db(root)?;
+        if root.join(".git").exists() {
+            return Ok(false);
+        }
+        let run = |args: &[&str]| -> Result<(), String> {
+            let out = Command::new("git")
+                .arg("-C")
+                .arg(&path)
+                .args(args)
+                .output()
+                .map_err(|e| e.to_string())?;
+            if out.status.success() {
+                Ok(())
+            } else {
+                Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+            }
+        };
+        run(&["init"])?;
+        run(&[
+            "commit",
+            "--allow-empty",
+            "-m",
+            "Initialize Arbor knowledge library",
+        ])?;
+        Ok(true)
+    })
+    .await
 }

@@ -137,9 +137,13 @@ def progress_lock(root: Path, course: str):
     except ImportError:
         yield
         return
-    locks_dir = root / ".arbor" / "locks"
+    # Inside .git when possible: never tracked, so the library stays clean.
+    if (root / ".git").is_dir():
+        locks_dir = root / ".git" / "arbor-locks"
+    else:
+        locks_dir = root / ".arbor" / "locks"
+        ensure_gitignored(root, ".arbor/locks")
     locks_dir.mkdir(parents=True, exist_ok=True)
-    ensure_gitignored(root, ".arbor/locks")
     lock_path = locks_dir / f"progress-{course}.lock"
     with open(lock_path, "a+b") as handle:
         fcntl.flock(handle.fileno(), fcntl.LOCK_EX)

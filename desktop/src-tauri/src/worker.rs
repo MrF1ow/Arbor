@@ -394,6 +394,18 @@ fn acquire_worker_spawn_slot() -> WorkerSpawnSlot {
     WorkerSpawnSlot
 }
 
+fn kill_worker_tree(child: &mut std::process::Child) {
+    #[cfg(unix)]
+    {
+        // The child leads its own process group (process_group(0) above).
+        let pgid = child.id() as libc::pid_t;
+        unsafe {
+            libc::kill(-pgid, libc::SIGKILL);
+        }
+    }
+    let _ = child.kill();
+}
+
 #[cfg(feature = "desktop-runtime")]
 pub fn run_worker_json_with_deadline(
     app_dir: &Path,
@@ -426,6 +438,13 @@ pub fn run_worker_json_with_deadline(
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    // Own process group, so a timeout also kills grandchildren (uv's python,
+    // the onefile bootloader's child) that would otherwise hold the pipes open.
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+    }
     crate::secrets::apply_env_pairs(&mut command, extra_env);
     let mut child = command
         .spawn()
@@ -460,10 +479,12 @@ pub fn run_worker_json_with_deadline(
             Ok(Some(status)) => break status,
             Ok(None) => {
                 if Instant::now() >= deadline_at {
-                    let _ = child.kill();
+                    kill_worker_tree(&mut child);
                     let _ = child.wait();
-                    let _ = stdout_handle.join();
-                    let _ = stderr_handle.join();
+                    // Don't join the readers: a surviving grandchild could keep
+                    // the pipes open. They exit on EOF by themselves.
+                    drop(stdout_handle);
+                    drop(stderr_handle);
                     if std::env::var("ARBOR_PERF").as_deref() == Ok("1") {
                         eprintln!(
                             "[arbor-perf] {sub0} {}ms exit=timeout",
@@ -1618,6 +1639,29 @@ mod tests {
         let _guard = WORKER_ENV_TEST_LOCK.lock().unwrap();
         let start = Instant::now();
         let script = fake_worker_script("slow", "exec sleep 30");
+        std::env::set_var("ARBOR_WORKER_CMD", script.to_string_lossy().as_ref());
+        std::env::set_var("ARBOR_WORKER_NO_SIDECAR", "1");
+        let err = run_worker_json_with_deadline(
+            Path::new("/tmp"),
+            &["probe"],
+            &[],
+            Duration::from_secs(1),
+        )
+        .unwrap_err();
+        std::env::remove_var("ARBOR_WORKER_CMD");
+        std::env::remove_var("ARBOR_WORKER_NO_SIDECAR");
+        let _ = std::fs::remove_file(script);
+        assert!(err.contains("worker timed out after 1s"));
+        assert!(start.elapsed() < Duration::from_secs(3));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_worker_json_timeout_kills_grandchild_holding_pipes() {
+        let _guard = WORKER_ENV_TEST_LOCK.lock().unwrap();
+        let start = Instant::now();
+        // The shell forks a grandchild that inherits stdout, then waits on it.
+        let script = fake_worker_script("grandchild", "sleep 30 &\nwait");
         std::env::set_var("ARBOR_WORKER_CMD", script.to_string_lossy().as_ref());
         std::env::set_var("ARBOR_WORKER_NO_SIDECAR", "1");
         let err = run_worker_json_with_deadline(
