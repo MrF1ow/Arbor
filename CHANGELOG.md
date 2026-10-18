@@ -2,15 +2,25 @@
 
 Package version for the worker, desktop, and Tauri app. See [Version numbering](PROJECT.md#version-numbering) in `PROJECT.md`.
 
-**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is complete as package `3.0.0`. **Version 4** is complete as package `4.0.0`. **Version 5** is in progress and will ship as `v4.1.0`, `v4.2.0`, … until `v5.0.0`. **Current package:** `4.4.0`. **Current tag:** `v4.4.0` is cut when this release lands. `v4.3.0` is the previous package and is not tagged yet. `v4.2.0` is tagged. `v4.1.0` and `v4.0.0` are tagged. `v3.0.0` through `v3.5.0` are already tagged. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) was retested on the 2026-10-17 Linux live run.
+**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is complete as package `3.0.0`. **Version 4** is complete as package `4.0.0`. **Version 5** is in progress and will ship as `v4.1.0`, `v4.2.0`, … until `v5.0.0`. **Current package:** `4.5.0`. **Current tag:** `v4.5.0` is cut when this release lands. `v4.4.0` is the previous package and is tagged. `v4.3.0` is not tagged yet. `v4.2.0` is tagged. `v4.1.0` and `v4.0.0` are tagged. `v3.0.0` through `v3.5.0` are already tagged. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) was retested on the 2026-10-17 Linux live run.
 
 ## Unreleased
 
-Nothing pending above `4.4.0`.
+Nothing pending above `4.5.0`.
+
+## 4.5.0 — 2026-10-18
+
+Git tag `v4.5.0` when this release lands. **Product:** remote workers over SSH. Version 5 continues at `v4.6.0`. Worker, desktop, and Tauri report `4.5.0`, including `arbor-worker --version`.
+
+- Course jobs use **Local** or **SSH** transport. Local runs `arbor-worker` on this machine as before. SSH rsyncs course sources up, runs the same worker remotely with `--no-commit`, streams NDJSON events over `ssh`, rsyncs digests and study artifacts back, then Arbor commits on the local Knowledge tree.
+- Settings → **Workers** lists saved SSH hosts (id, label, host, port, user, identity file, remote worker command, remote Knowledge root). **Test connection** runs `arbor-worker --version` on the host.
+- Each knowledge root picks **Local** (default) or one saved worker. Provider overrides and library roles from `4.4.0` stay independent of worker choice.
+- Host keys are stored in an Arbor-managed `known_hosts` file under app data (`StrictHostKeyChecking accept-new`). A changed key is refused with a clear error instead of updating silently.
+- Cancel on an SSH job uses `ssh -tt` so a hang-up reaches the remote session.
 
 ## 4.4.0 — 2026-10-18
 
-Git tag `v4.4.0` when this release lands. **Product:** library roles and shared provider profiles. Version 5 continues at `v4.5.0`. Worker, desktop, and Tauri report `4.4.0`, including `arbor-worker --version`.
+Git tag `v4.4.0` is tagged. **Product:** library roles and shared provider profiles. Version 5 continues at `v4.5.0`. Worker, desktop, and Tauri report `4.4.0`, including `arbor-worker --version`.
 
 - `.arbor/library.json` members are `{email, role}` with roles `owner`, `editor`, and `viewer`. A v4.2 string list still loads: `created_by` becomes owner and the other addresses become editor. The signed-in role is the effective git email, the same lookup as per-user progress.
 - Viewers cannot run write jobs (update, generate, study plan, make-card, skill runs that declare a write permission, and commits other than their own progress) or push on sync. Settings and the course actions disable those controls and show the reason. The worker refuses them as well. Viewers can still read, search, chat, and record their own progress. Owners edit members and roles in Settings → Library, which writes `library.json` and commits that file.

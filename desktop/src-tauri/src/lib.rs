@@ -6,6 +6,8 @@ pub mod linux_graphics;
 mod search;
 mod settings;
 mod watch;
+mod transport;
+mod remote_job;
 mod worker;
 
 use jobs::JobCoordinator;
@@ -26,6 +28,7 @@ pub fn run() {
             commands::plan_update,
             commands::get_settings,
             commands::save_settings,
+            commands::test_worker_connection,
             commands::set_provider_secret,
             commands::clear_provider_secret,
             commands::provider_secret_status,

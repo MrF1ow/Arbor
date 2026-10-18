@@ -1443,6 +1443,13 @@ html[data-theme="dark"] .welcome-mark {
   font-style: italic;
 }
 
+.worker-list-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
 .setting-row {
   display: flex;
   align-items: center;

@@ -21,10 +21,22 @@ export interface AuthStatus {
 
 export type KnowledgeKind = "personal" | "shared";
 
+export interface SshWorker {
+  id: string;
+  label: string;
+  host: string;
+  port: number;
+  user?: string | null;
+  identity_file?: string | null;
+  worker_cmd: string;
+  remote_root: string;
+}
+
 export interface KnowledgeRootEntry {
   path: string;
   kind: KnowledgeKind;
   name: string;
+  worker_id?: string | null;
 }
 
 export interface SkillGrant {
@@ -52,6 +64,7 @@ export interface Settings {
   skill_index_ref?: string;
   skill_grants?: SkillGrant[];
   provider_overrides?: ProviderOverride[];
+  workers?: SshWorker[];
 }
 
 export type LibraryRole = "owner" | "editor" | "viewer";

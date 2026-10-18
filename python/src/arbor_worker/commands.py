@@ -200,12 +200,57 @@ def cmd_update(args) -> int:
             settings,
             selections=_load_selections(getattr(args, "plan", None)),
             cancel_file=cancel_file,
+            commit=not args.no_commit,
         )
     except Exception as e:
         emitter.error(message=str(e))
         emitter.run_done(processed=0, failed=0, skipped=0)
         return 1
     return 0 if result.failed == 0 else 1
+
+
+def _validate_commit_written_path(root: Path, rel: str) -> Path:
+    if not rel or rel.startswith("/") or rel.startswith("\\"):
+        raise ValueError(f"invalid relative path: {rel!r}")
+    parts = Path(rel).parts
+    if ".." in parts:
+        raise ValueError(f"path must not contain .. segments: {rel!r}")
+    resolved = (root / rel).resolve()
+    root_resolved = root.resolve()
+    if resolved != root_resolved and root_resolved not in resolved.parents:
+        raise ValueError(f"path escapes knowledge root: {rel!r}")
+    return Path(rel)
+
+
+def cmd_commit_written(args) -> int:
+    root = Path(args.root)
+    emitter = EventEmitter(sys.stdout)
+    try:
+        rel_paths = [_validate_commit_written_path(root, rel) for rel in args.paths]
+    except ValueError as error:
+        emitter.error(message=str(error))
+        return 1
+    try:
+        commit_and_note(root, rel_paths, args.message, emitter)
+    except GitStateError as error:
+        emitter.error(message=str(error))
+        return 1
+    from arbor_worker.sync import maybe_sync_after_commit
+
+    maybe_sync_after_commit(root, emitter)
+    if args.index:
+        from arbor_worker.indexer import index_courses
+
+        courses = sorted({p.parts[0] for p in rel_paths if p.parts})
+        if courses:
+            index_courses(root, courses)
+    return 0
+
+
+def _emit_generate_commit_paths(
+    emitter: EventEmitter, paths: list[Path]
+) -> None:
+    emitter.emit("commit_paths", paths=[p.as_posix() for p in paths])
 
 
 def cmd_generate(args) -> int:
@@ -359,33 +404,37 @@ def cmd_generate(args) -> int:
         )
         artifact_rel = artifact_path.relative_to(root)
         manifest_rel = manifest_path.relative_to(root)
-        try:
-            commit = commit_and_note(
-                root,
-                [manifest_rel, artifact_rel],
-                f"study: {args.course} {skill.name}",
-                emitter,
-            )
-        except GitStateError as error:
-            emitter.skill_failed(
-                course=args.course,
+        commit_rels = [manifest_rel, artifact_rel]
+        if args.no_commit:
+            _emit_generate_commit_paths(emitter, commit_rels)
+        else:
+            try:
+                commit = commit_and_note(
+                    root,
+                    commit_rels,
+                    f"study: {args.course} {skill.name}",
+                    emitter,
+                )
+            except GitStateError as error:
+                emitter.skill_failed(
+                    course=args.course,
+                    skill=skill.name,
+                    message=str(error),
+                )
+                return 1
+            emitter.committed(
+                commit=commit,
+                courses=[args.course],
                 skill=skill.name,
-                message=str(error),
             )
-            return 1
+            from arbor_worker.sync import maybe_sync_after_commit
+
+            maybe_sync_after_commit(root, emitter)
         emitter.skill_done(
             course=args.course,
             skill=skill.name,
             file=str(artifact_rel),
         )
-        emitter.committed(
-            commit=commit,
-            courses=[args.course],
-            skill=skill.name,
-        )
-        from arbor_worker.sync import maybe_sync_after_commit
-
-        maybe_sync_after_commit(root, emitter)
         return 0
 
     if args.provider == "fake":
@@ -544,34 +593,38 @@ def cmd_generate(args) -> int:
     )
 
     manifest_rel = manifest_path.relative_to(root)
-    try:
-        commit = commit_and_note(
-            root,
-            [manifest_rel, *written_rels],
-            f"study: {args.course} {skill.name}",
-            emitter,
-        )
-    except GitStateError as error:
-        emitter.skill_failed(
-            course=args.course,
+    commit_rels = [manifest_rel, *written_rels]
+    if args.no_commit:
+        _emit_generate_commit_paths(emitter, commit_rels)
+    else:
+        try:
+            commit = commit_and_note(
+                root,
+                commit_rels,
+                f"study: {args.course} {skill.name}",
+                emitter,
+            )
+        except GitStateError as error:
+            emitter.skill_failed(
+                course=args.course,
+                skill=skill.name,
+                message=str(error),
+            )
+            return 1
+        emitter.committed(
+            commit=commit,
+            courses=[args.course],
             skill=skill.name,
-            message=str(error),
         )
-        return 1
+        from arbor_worker.sync import maybe_sync_after_commit
+
+        maybe_sync_after_commit(root, emitter)
 
     emitter.skill_done(
         course=args.course,
         skill=skill.name,
         file=str(artifact_rel),
     )
-    emitter.committed(
-        commit=commit,
-        courses=[args.course],
-        skill=skill.name,
-    )
-    from arbor_worker.sync import maybe_sync_after_commit
-
-    maybe_sync_after_commit(root, emitter)
     return 0
 
 

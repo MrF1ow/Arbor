@@ -4,7 +4,7 @@
 
 Local-first desktop app that turns course PDFs, PowerPoints, and Word files into structured study digests using CLI providers (Codex CLI, Claude Code, Grok CLI), local models (Ollama, LM Studio), or cloud APIs (OpenAI API, Anthropic API). Your Knowledge library is a normal git repo on disk. Sources and generated notes stay together in history.
 
-**Current release:** [4.4.0](CHANGELOG.md) (package `4.4.0`; tag `v4.4.0` is cut when this release lands). `v4.3.0` is the previous package and is not tagged yet. Package `4.4.0` is library roles and a shared provider profile. Version 4 (the tutor) is closed; see CHANGELOG. The 2026-10-18 Linux live run (boxes T1–T7) is recorded on the [implementation checklist](docs/implementation-checklist.md). Worker, desktop, and Tauri all report this number (`arbor-worker --version`). Arbor's viewer limits are advisory; the git host's permissions are the real control. Tables and emphasis were not in any Version 3 live digest.
+**Current release:** [4.5.0](CHANGELOG.md) (package `4.5.0`; tag `v4.5.0` is cut when this release lands). `v4.4.0` is the previous package and is tagged. Package `4.5.0` is remote workers over SSH; the local git commit stays local. Version 4 (the tutor) is closed; see CHANGELOG. The 2026-10-18 Linux live run (boxes T1–T7) is recorded on the [implementation checklist](docs/implementation-checklist.md). Worker, desktop, and Tauri all report this number (`arbor-worker --version`). Arbor's viewer limits are advisory; the git host's permissions are the real control. Tables and emphasis were not in any Version 3 live digest.
 
 **Version 2** (`v2.0.0`) shipped automation on the old UI. **Version 3** shipped as `3.0.0`. `v2.1.0` added the desktop shell. `2.2.0` adds the study loop. `2.3.0` is the fix release after that. **`2.4.0`** is the brand and gate release (tree mark and Linux live-run tag gate). **`2.5.0`** adds Codex, Claude, and Grok CLI providers with a Settings picker. **Version 4** shipped as `v3.1.0` through `v3.5.0` and closed at the Version 4 completion tag (CHANGELOG). **Version 5** is in progress and ships as `v4.1.0` and later until `v5.0.0`. Mac runs are optional and do not block a tag. See [Version numbering](PROJECT.md#version-numbering).
 
@@ -224,6 +224,26 @@ Knowledge/                          # git repo root
 7. **Recent runs** — Expand a row for that job's log.
 8. **Cancel** — Stops after the current range or digest action finishes. Completed work is kept.
 9. **Open folder** — Opens the Knowledge root in your file manager.
+
+---
+
+## Workers
+
+Settings → Workers stores SSH hosts. Each knowledge root uses **Local** (the default) or one saved host.
+
+A host has a label, host, port, optional user, optional identity file, a worker command (for example `uv run --project /path/to/python arbor-worker`), and a remote root.
+
+**Test connection** runs that command with `--version` and shows the version.
+
+Update and study jobs on a remote root copy the course sources to `remote_root/<root-id>/<course>/`, run the worker with `--no-commit`, stream the same NDJSON events, copy digests and study files back, then commit on the local Knowledge tree. Embed stays on this machine.
+
+**Cancel** stops the remote process.
+
+Host keys are written to an Arbor-managed `known_hosts` file under the app data directory. Arbor does not read or write `~/.ssh/known_hosts`.
+
+The worker command is not passed through a shell. Values that start with `-` are rejected except tokens inside the worker command itself.
+
+Provider API keys are not placed on the SSH command line. The remote worker uses whatever login that machine already has.
 
 ---
 

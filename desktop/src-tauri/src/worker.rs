@@ -1,3 +1,10 @@
+#[allow(unused_imports)]
+pub use crate::transport::{
+    arbor_known_hosts_path, map_ssh_error, quote_remote_command, quote_remote_token,
+    remote_course_dir, remote_knowledge_root, root_id_for, rsync_argv, rsync_remote_spec,
+    rsync_ssh_wrapper, ssh_argv, validate_ssh, ValidatedSsh, WorkerTransport,
+};
+
 use std::ffi::OsString;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -525,6 +532,300 @@ fn spawn_worker_stream(
         );
         notify_terminal(&app, operation, status, summary.as_deref());
     });
+}
+
+#[cfg(feature = "desktop-runtime")]
+pub fn run_remote_worker_lines(
+    app_data_dir: &Path,
+    transport: &WorkerTransport,
+    request_tokens: &[String],
+    on_line: &mut dyn FnMut(&str),
+) -> Result<(), String> {
+    use crate::remote_job::RemoteOps;
+    let endpoint = validate_ssh(transport)?;
+    let mut ops = crate::remote_job::SystemRemoteOps::new(endpoint.clone(), app_data_dir)?;
+    let mut tokens = endpoint.worker_tokens;
+    tokens.extend_from_slice(request_tokens);
+    match ops.run(&tokens, on_line, None) {
+        Ok(0) => Ok(()),
+        Ok(code) => Err(map_ssh_error("", code)),
+        Err(stderr) => Err(map_ssh_error(&stderr, 255)),
+    }
+}
+
+#[cfg(feature = "desktop-runtime")]
+pub fn run_remote_check_auth(
+    app: &tauri::AppHandle,
+    transport: &WorkerTransport,
+    provider_id: &str,
+) -> Result<serde_json::Value, String> {
+    use tauri::Manager;
+    let app_data = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let mut stdout = String::new();
+    run_remote_worker_lines(
+        &app_data,
+        transport,
+        &[
+            "check-auth".to_string(),
+            "--provider".to_string(),
+            effective_provider_id(provider_id).to_string(),
+        ],
+        &mut |line| stdout = line.to_string(),
+    )?;
+    parse_worker_json_output(&stdout, "")
+}
+
+#[cfg(feature = "desktop-runtime")]
+fn run_local_commit_written(
+    app_dir: &Path,
+    knowledge_root: &Path,
+    job_id: &str,
+    root: &str,
+    paths: &[String],
+    message: &str,
+    index: bool,
+    app: &tauri::AppHandle,
+) -> Result<(), String> {
+    use crate::jobs;
+    use tauri::Emitter;
+
+    let mut sub_args = vec![
+        "commit-written".to_string(),
+        "--root".to_string(),
+        root.to_string(),
+        "--message".to_string(),
+        message.to_string(),
+    ];
+    if index {
+        sub_args.push("--index".to_string());
+    }
+    sub_args.push("--".to_string());
+    sub_args.extend(paths.iter().cloned());
+    let sub_refs: Vec<&str> = sub_args.iter().map(String::as_str).collect();
+    let sidecar = packaged_sidecar();
+    let argv = resolve_worker_argv(
+        &|k| std::env::var(k).ok(),
+        &default_python_dir(app_dir),
+        &sub_refs,
+        sidecar.as_deref(),
+    );
+    if let Some(err) = uv_project_missing_error(&argv) {
+        return Err(err);
+    }
+    let output = Command::new(&argv[0])
+        .args(&argv[1..])
+        .env("PATH", process_path())
+        .output()
+        .map_err(|e| format!("commit-written failed: {e}"))?;
+    for line in String::from_utf8_lossy(&output.stdout).lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let _ = jobs::append_event(knowledge_root, job_id, line);
+        let _ = app.emit("arbor://progress", serde_json::json!({ "line": line }));
+    }
+    if output.status.success() {
+        Ok(())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        if stderr.is_empty() {
+            Err(format!(
+                "commit-written exited with {}",
+                output.status.code().unwrap_or(-1)
+            ))
+        } else {
+            Err(stderr)
+        }
+    }
+}
+
+#[cfg(feature = "desktop-runtime")]
+fn spawn_remote_job_stream(
+    app: tauri::AppHandle,
+    app_dir: PathBuf,
+    app_data_dir: PathBuf,
+    root: String,
+    job_id: String,
+    operation: &'static str,
+    _provider_label: String,
+    transport: WorkerTransport,
+    courses: Vec<String>,
+    remote_tokens: Vec<String>,
+    plan_path: Option<PathBuf>,
+    message: String,
+    index: bool,
+) {
+    use crate::jobs::{self, JobStatus, SharedCoordinator};
+    use crate::remote_job::{run_remote_job, RemoteJobRequest, SystemRemoteOps};
+    use tauri::{Emitter, Manager};
+
+    std::thread::spawn(move || {
+        let release = |app: &tauri::AppHandle, job_id: &str| {
+            if let Some(state) = app.try_state::<SharedCoordinator>() {
+                if let Ok(mut guard) = state.lock() {
+                    guard.finish(job_id);
+                }
+            }
+        };
+        let knowledge_root = PathBuf::from(&root);
+        let endpoint = match validate_ssh(&transport) {
+            Ok(e) => e,
+            Err(e) => {
+                let _ = jobs::finish_job(
+                    &knowledge_root,
+                    &job_id,
+                    JobStatus::Failed,
+                    -1,
+                    Some(e.clone()),
+                );
+                release(&app, &job_id);
+                return;
+            }
+        };
+        let mut ops = match SystemRemoteOps::new(endpoint.clone(), &app_data_dir) {
+            Ok(o) => o,
+            Err(e) => {
+                let _ = jobs::finish_job(
+                    &knowledge_root,
+                    &job_id,
+                    JobStatus::Failed,
+                    -1,
+                    Some(e.clone()),
+                );
+                release(&app, &job_id);
+                return;
+            }
+        };
+        let req = RemoteJobRequest {
+            endpoint,
+            local_root: knowledge_root.clone(),
+            courses,
+            remote_tokens,
+            plan_file: plan_path,
+            message,
+            index,
+            cancel_after_first_line: false,
+        };
+        let app_commit = app.clone();
+        let app_dir_commit = app_dir.clone();
+        let job_id_commit = job_id.clone();
+        let root_commit = root.clone();
+        let emit_app = app.clone();
+        let emit_root = knowledge_root.clone();
+        let emit_job = job_id.clone();
+        let mut emit_line = move |line: &str| {
+            let _ = jobs::append_event(&emit_root, &emit_job, line);
+            let _ = emit_app.emit("arbor://progress", serde_json::json!({ "line": line }));
+        };
+        let outcome = run_remote_job(
+            &mut ops,
+            &req,
+            &mut |paths, msg, idx| {
+                run_local_commit_written(
+                    &app_dir_commit,
+                    &knowledge_root,
+                    &job_id_commit,
+                    &root_commit,
+                    paths,
+                    msg,
+                    idx,
+                    &app_commit,
+                )
+            },
+            Some(&mut emit_line),
+        );
+
+        let (status, summary) = if outcome.killed {
+            (JobStatus::Cancelled, None)
+        } else if let Some(err) = outcome.error {
+            (JobStatus::Failed, Some(err))
+        } else {
+            (JobStatus::Succeeded, None)
+        };
+        let code = if status == JobStatus::Failed {
+            -1
+        } else {
+            0
+        };
+        let _ = jobs::finish_job(&knowledge_root, &job_id, status, code, summary.clone());
+        release(&app, &job_id);
+        let _ = app.emit(
+            "arbor://job-finished",
+            serde_json::json!({
+                "job_id": job_id,
+                "status": status.as_str(),
+                "summary": summary,
+                "operation": operation,
+                "root": root,
+            }),
+        );
+        notify_terminal(&app, operation, status, summary.as_deref());
+    });
+}
+
+#[cfg(feature = "desktop-runtime")]
+pub fn spawn_remote_update_stream(
+    app: tauri::AppHandle,
+    app_dir: PathBuf,
+    app_data_dir: PathBuf,
+    root: String,
+    provider_id: String,
+    job_id: String,
+    transport: WorkerTransport,
+    courses: Vec<String>,
+    remote_tokens: Vec<String>,
+    plan_path: PathBuf,
+    message: String,
+) {
+    let label = crate::settings::provider_label(effective_provider_id(&provider_id));
+    spawn_remote_job_stream(
+        app,
+        app_dir,
+        app_data_dir,
+        root,
+        job_id,
+        "update",
+        label,
+        transport,
+        courses,
+        remote_tokens,
+        Some(plan_path),
+        message,
+        true,
+    );
+}
+
+#[cfg(feature = "desktop-runtime")]
+pub fn spawn_remote_generate_stream(
+    app: tauri::AppHandle,
+    app_dir: PathBuf,
+    app_data_dir: PathBuf,
+    root: String,
+    provider_id: String,
+    job_id: String,
+    transport: WorkerTransport,
+    course: String,
+    skill: String,
+    remote_tokens: Vec<String>,
+) {
+    let label = crate::settings::provider_label(effective_provider_id(&provider_id));
+    let message = format!("study: {course} {skill}");
+    spawn_remote_job_stream(
+        app,
+        app_dir,
+        app_data_dir,
+        root,
+        job_id,
+        "generate",
+        label,
+        transport,
+        vec![course],
+        remote_tokens,
+        None,
+        message,
+        false,
+    );
 }
 
 #[cfg(feature = "desktop-runtime")]

@@ -101,6 +101,7 @@ import type {
   LibraryShowResult,
   ProviderOverride,
   Settings,
+  SshWorker,
   SkillGrant,
   UpdatePlan,
   WorkerEvent,
@@ -314,6 +315,18 @@ const skillIndexSaveBtn = $("skill-index-save") as HTMLButtonElement;
 const skillBrowseBtn = $("skill-browse") as HTMLButtonElement;
 const skillStatusEl = $("skill-status");
 const skillPackagesEl = $("skill-packages");
+const workerListEl = $("worker-list");
+const workerLabelInput = $("worker-label") as HTMLInputElement;
+const workerHostInput = $("worker-host") as HTMLInputElement;
+const workerPortInput = $("worker-port") as HTMLInputElement;
+const workerUserInput = $("worker-user") as HTMLInputElement;
+const workerIdentityInput = $("worker-identity") as HTMLInputElement;
+const workerCmdInput = $("worker-cmd") as HTMLInputElement;
+const workerRemoteRootInput = $("worker-remote-root") as HTMLInputElement;
+const workerSaveBtn = $("worker-save") as HTMLButtonElement;
+const workerTestBtn = $("worker-test") as HTMLButtonElement;
+const workerStatusEl = $("worker-status");
+const workerRootsEl = $("worker-roots");
 const syncConflictDialogEl = $("sync-conflict-dialog") as HTMLDialogElement;
 const syncConflictFilesEl = $("sync-conflict-files");
 const syncConflictBinaryEl = $("sync-conflict-binary");
@@ -346,6 +359,8 @@ const searchResultsEl = $("search-results");
 
 let knowledgeRoot: string | null = null;
 let knowledgeRoots: KnowledgeRootEntry[] = [];
+let workers: SshWorker[] = [];
+let editingWorkerId: string | null = null;
 let providerId = "codex";
 let settingsProviderId = "codex";
 let settingsModelId: string | null = null;
@@ -495,6 +510,7 @@ function setPlaceView(place: Place) {
     void loadKnowledgeSettingsUi();
     void refreshSyncUi();
     refreshSkillsUi();
+    refreshWorkersUi();
     return;
   }
 }
@@ -1051,6 +1067,7 @@ async function renderCourseList() {
     courses = [];
     courseListEl.innerHTML = '<p class="nav-empty">No courses yet</p>';
     refreshChatCourseOptions();
+    renderWorkerRoots();
     return;
   }
   for (const entry of knowledgeRoots) {
@@ -1105,6 +1122,7 @@ async function renderCourseList() {
     courseListEl.appendChild(group);
   }
   refreshChatCourseOptions();
+  renderWorkerRoots();
 }
 
 function scrollNotesToHeading(heading: string | null | undefined) {
@@ -2015,6 +2033,227 @@ function refreshSkillsUi() {
   skillIndexRefInput.value = skillIndexRef;
 }
 
+function generateWorkerId(): string {
+  return `w${crypto.randomUUID().replace(/-/g, "").slice(0, 8)}`;
+}
+
+function parseWorkerPort(raw: string): number | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return 22;
+  const port = Number.parseInt(trimmed, 10);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) return null;
+  return port;
+}
+
+function readWorkerFromForm(
+  forId: string,
+): { ok: true; worker: SshWorker } | { ok: false; message: string } {
+  const label = workerLabelInput.value.trim();
+  const host = workerHostInput.value.trim();
+  const worker_cmd = workerCmdInput.value.trim();
+  const remote_root = workerRemoteRootInput.value.trim();
+  if (!label || !host || !worker_cmd || !remote_root) {
+    return {
+      ok: false,
+      message: "Label, host, worker command, and remote root are required.",
+    };
+  }
+  const port = parseWorkerPort(workerPortInput.value);
+  if (port === null) {
+    return { ok: false, message: "Port must be between 1 and 65535." };
+  }
+  const userRaw = workerUserInput.value.trim();
+  const identityRaw = workerIdentityInput.value.trim();
+  return {
+    ok: true,
+    worker: {
+      id: forId,
+      label,
+      host,
+      port,
+      user: userRaw ? userRaw : null,
+      identity_file: identityRaw ? identityRaw : null,
+      worker_cmd,
+      remote_root,
+    },
+  };
+}
+
+function clearWorkerForm() {
+  editingWorkerId = null;
+  workerLabelInput.value = "";
+  workerHostInput.value = "";
+  workerPortInput.value = "";
+  workerUserInput.value = "";
+  workerIdentityInput.value = "";
+  workerCmdInput.value = "";
+  workerRemoteRootInput.value = "";
+  workerSaveBtn.textContent = "Add worker";
+}
+
+function fillWorkerForm(worker: SshWorker) {
+  editingWorkerId = worker.id;
+  workerLabelInput.value = worker.label;
+  workerHostInput.value = worker.host;
+  workerPortInput.value = worker.port === 22 ? "" : String(worker.port);
+  workerUserInput.value = worker.user ?? "";
+  workerIdentityInput.value = worker.identity_file ?? "";
+  workerCmdInput.value = worker.worker_cmd;
+  workerRemoteRootInput.value = worker.remote_root;
+  workerSaveBtn.textContent = "Save worker";
+}
+
+function renderWorkerList() {
+  workerListEl.textContent = "";
+  for (const worker of workers) {
+    const row = document.createElement("div");
+    row.className = "setting-row";
+
+    const info = document.createElement("span");
+    info.textContent = `${worker.label} · ${worker.host}:${worker.port}`;
+
+    const actions = document.createElement("div");
+    actions.className = "worker-list-actions";
+
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "btn-secondary";
+    editBtn.textContent = "Edit";
+    editBtn.addEventListener("click", () => {
+      fillWorkerForm(worker);
+      workerStatusEl.textContent = "";
+    });
+
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "btn-secondary";
+    removeBtn.textContent = "Remove";
+    removeBtn.addEventListener("click", () => void removeWorker(worker.id));
+
+    actions.append(editBtn, removeBtn);
+    row.append(info, actions);
+    workerListEl.appendChild(row);
+  }
+}
+
+function renderWorkerRoots() {
+  workerRootsEl.textContent = "";
+  if (knowledgeRoots.length === 0) {
+    workerRootsEl.textContent = "Add a knowledge folder to choose a worker.";
+    return;
+  }
+  for (const entry of knowledgeRoots) {
+    const row = document.createElement("div");
+    row.className = "setting-row";
+
+    const name = document.createElement("span");
+    name.textContent = entry.name || entry.path;
+
+    const select = document.createElement("select");
+    const localOpt = document.createElement("option");
+    localOpt.value = "";
+    localOpt.textContent = "Local";
+    select.appendChild(localOpt);
+    for (const w of workers) {
+      const opt = document.createElement("option");
+      opt.value = w.id;
+      opt.textContent = w.label;
+      select.appendChild(opt);
+    }
+    select.value = entry.worker_id ?? "";
+    select.addEventListener("change", () => void setRootWorker(entry, select));
+
+    row.append(name, select);
+    workerRootsEl.appendChild(row);
+  }
+}
+
+function refreshWorkersUi() {
+  renderWorkerList();
+  renderWorkerRoots();
+}
+
+async function setRootWorker(entry: KnowledgeRootEntry, select: HTMLSelectElement) {
+  const previous = entry.worker_id ?? null;
+  const next = select.value.trim() || null;
+  entry.worker_id = next;
+  try {
+    await persist();
+    workerStatusEl.textContent = "Saved.";
+  } catch (error) {
+    entry.worker_id = previous;
+    select.value = previous ?? "";
+    workerStatusEl.textContent = String(error);
+  }
+}
+
+async function saveWorkerFromForm() {
+  const id = editingWorkerId ?? generateWorkerId();
+  const parsed = readWorkerFromForm(id);
+  if (!parsed.ok) {
+    workerStatusEl.textContent = parsed.message;
+    return;
+  }
+  const previousWorkers = workers.map((w) => ({ ...w }));
+  if (editingWorkerId) {
+    const idx = workers.findIndex((w) => w.id === editingWorkerId);
+    if (idx < 0) {
+      workerStatusEl.textContent = "Worker not found.";
+      return;
+    }
+    workers[idx] = parsed.worker;
+  } else {
+    workers.push(parsed.worker);
+  }
+  try {
+    await persist();
+    workerStatusEl.textContent = "Saved.";
+    clearWorkerForm();
+    renderWorkerList();
+    renderWorkerRoots();
+  } catch (error) {
+    workers = previousWorkers;
+    workerStatusEl.textContent = String(error);
+  }
+}
+
+async function removeWorker(id: string) {
+  const previousWorkers = workers;
+  const previousRootWorkerIds = knowledgeRoots.map((e) => e.worker_id ?? null);
+  workers = workers.filter((w) => w.id !== id);
+  for (const entry of knowledgeRoots) {
+    if (entry.worker_id === id) entry.worker_id = null;
+  }
+  try {
+    await persist();
+    workerStatusEl.textContent = "Removed.";
+    if (editingWorkerId === id) clearWorkerForm();
+    renderWorkerList();
+    renderWorkerRoots();
+  } catch (error) {
+    workers = previousWorkers;
+    for (let i = 0; i < knowledgeRoots.length; i++) {
+      knowledgeRoots[i].worker_id = previousRootWorkerIds[i];
+    }
+    workerStatusEl.textContent = String(error);
+  }
+}
+
+async function testWorkerConnectionFromForm() {
+  const id = editingWorkerId ?? "preview";
+  const parsed = readWorkerFromForm(id);
+  if (!parsed.ok) {
+    workerStatusEl.textContent = parsed.message;
+    return;
+  }
+  try {
+    const version = await invoke<string>("test_worker_connection", { worker: parsed.worker });
+    workerStatusEl.textContent = version;
+  } catch (error) {
+    workerStatusEl.textContent = String(error);
+  }
+}
+
 function skillPermissionsMatch(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false;
   const set = new Set(a);
@@ -2661,6 +2900,7 @@ async function loadSettings() {
   appearanceSel.value = appearance;
   applyTheme();
   knowledgeRoots = Array.isArray(s.knowledge_roots) ? [...s.knowledge_roots] : [];
+  workers = Array.isArray(s.workers) ? [...s.workers] : [];
   const activePath = s.active_root ?? s.knowledge_root;
   if (activePath) {
     knowledgeRoot = activePath;
@@ -2687,6 +2927,7 @@ async function loadSettings() {
   }
   refreshProviderExtraRows();
   await refreshProviderKeyStatus();
+  refreshWorkersUi();
 }
 
 async function persist() {
@@ -2705,6 +2946,7 @@ async function persist() {
       skill_index_ref: skillIndexRef,
       skill_grants: skillGrants,
       provider_overrides: providerOverrides,
+      workers,
     } satisfies Settings,
   });
 }
@@ -2998,6 +3240,14 @@ skillIndexSaveBtn.addEventListener("click", () => {
 
 skillBrowseBtn.addEventListener("click", () => {
   void browseSkillIndex();
+});
+
+workerSaveBtn.addEventListener("click", () => {
+  void saveWorkerFromForm();
+});
+
+workerTestBtn.addEventListener("click", () => {
+  void testWorkerConnectionFromForm();
 });
 
 function activeRootEntryName(): string {
