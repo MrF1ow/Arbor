@@ -2,11 +2,21 @@
 
 Package version for the worker, desktop, and Tauri app. See [Version numbering](PROJECT.md#version-numbering) in `PROJECT.md`.
 
-**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is complete as package `3.0.0`. **Version 4** is in progress and will ship as `v3.1.0`, `v3.2.0`, … until `v4.0.0`. **Current package:** `3.3.0`. **Current tag:** `v3.3.0` is cut when this release lands. `v3.0.0` and `v3.2.0` are already tagged. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) was retested on the 2026-10-17 Linux live run.
+**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is complete as package `3.0.0`. **Version 4** is in progress and will ship as `v3.1.0`, `v3.2.0`, … until `v4.0.0`. **Current package:** `3.4.0`. **Current tag:** `v3.4.0` is cut when this release lands. `v3.0.0`, `v3.2.0`, and `v3.3.0` are already tagged. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) was retested on the 2026-10-17 Linux live run.
 
 ## Unreleased
 
-Nothing pending above `3.3.0`.
+Nothing pending above `3.4.0`.
+
+## 3.4.0 — 2026-10-17
+
+Git tag: `v3.4.0` when this release lands. **Product:** Version 4 in progress (study plans, recommendations, and make-card-from-selection), not `v4.0.0`. Worker, desktop, and Tauri report `3.4.0`, including `arbor-worker --version`.
+
+- `arbor-worker study-plan` writes `<course>/study/plan.md` from weak topics, due counts, and an optional exam date. The course overview shows that plan and can generate or regenerate it.
+- The course overview lists deterministic recommendations: due cards, the weakest topic, and an unreviewed digest. Each one opens that view.
+- Explain weakest topic opens Chat in Explain with a prompt for that topic.
+- Make card takes a text selection in a digest, edits the front and back, and appends the card to the deck with the digest, heading, and page. The new card is due.
+- Plan markdown and card text stay on the escaped render path. The content security policy is unchanged.
 
 ## 3.3.0 — 2026-10-17
 
