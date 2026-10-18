@@ -4,6 +4,7 @@ from pathlib import Path
 from string import punctuation
 
 from arbor_worker.schemas.study.citations import CitationFailure, CitationsReport
+from arbor_worker.schemas.study.digest import is_bare_digest_filename
 from arbor_worker.schemas.study.concepts import ConceptGraph
 from arbor_worker.schemas.study.flashcards import FlashcardDeck
 from arbor_worker.schemas.study.quiz import QuizPack
@@ -18,9 +19,13 @@ def normalize_claim(text: str) -> str:
 def digest_body(course_dir: Path, digest: str) -> str | None:
     course_root = course_dir.resolve()
     path = (course_dir / digest).resolve()
-    if not path.is_relative_to(course_root) or not path.is_file():
-        return None
-    return path.read_text()
+    if path.is_relative_to(course_root) and path.is_file():
+        return path.read_text()
+    if is_bare_digest_filename(digest):
+        alt = (course_dir / "digests" / digest).resolve()
+        if alt.is_relative_to(course_root) and alt.is_file():
+            return alt.read_text()
+    return None
 
 
 def claim_in_digest(claim: str, body: str) -> bool:

@@ -34,6 +34,7 @@ import {
   diagramJobArgs,
   neighbors,
   nodesForDigest,
+  notePathForStudyDigest,
   parseConceptGraph,
 } from "./concepts";
 import {
@@ -737,7 +738,7 @@ function renderConceptGraph() {
       setCourseView(
         currentCourse,
         "notes",
-        `${currentCourse}/${source.digest}`,
+        notePathForStudyDigest(currentCourse, source.digest),
         source.heading,
       );
     });
@@ -1626,7 +1627,7 @@ flashcardSourceBtn.addEventListener("click", () => {
   setCourseView(
     flashcardCourse,
     "notes",
-    `${flashcardCourse}/${card.source.digest}`,
+    notePathForStudyDigest(flashcardCourse, card.source.digest),
     card.source.heading,
   );
 });
@@ -1667,7 +1668,7 @@ quizSourceBtn.addEventListener("click", () => {
   setCourseView(
     quizCourse,
     "notes",
-    `${quizCourse}/${question.source.digest}`,
+    notePathForStudyDigest(quizCourse, question.source.digest),
     question.source.heading,
   );
 });

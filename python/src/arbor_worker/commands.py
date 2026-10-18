@@ -216,7 +216,7 @@ def cmd_generate(args) -> int:
             source_bytes = digest_path.read_bytes()
             source_hash.update(source_bytes)
             digest_sections.append(
-                f"# {digest_path.name}\n\n{source_bytes.decode('utf-8')}"
+                f"# digests/{digest_path.name}\n\n{source_bytes.decode('utf-8')}"
             )
     except (OSError, UnicodeError) as error:
         emitter.skill_failed(
