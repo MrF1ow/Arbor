@@ -34,6 +34,7 @@ class WorkerSettings:
     auto_update: bool = False
     auto_embed: bool = False
     watch_enabled: bool = True
+    sync_after_commit: bool = False
     auto_generate: AutoGenerate = field(default_factory=AutoGenerate)
     digests_dirname: str = "digests"
     course_file_name: str = "course.md"
@@ -88,6 +89,7 @@ def load_settings(root: Path) -> WorkerSettings:
         auto_update=bool(data.get("auto_update", False)),
         auto_embed=bool(data.get("auto_embed", False)),
         watch_enabled=bool(data.get("watch_enabled", True)),
+        sync_after_commit=bool(data.get("sync_after_commit", False)),
         auto_generate=AutoGenerate(
             flashcards=bool(auto_generate.get("flashcards", False)),
             quiz=bool(auto_generate.get("quiz", False)),

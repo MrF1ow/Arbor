@@ -341,6 +341,27 @@
                       <button class="btn-secondary" id="reindex" type="button">Reindex</button>
                     </div>
                   </div>
+                  <div class="settings-group">
+                    <h3>Sync</h3>
+                    <div class="setting-row">
+                      <span>Arbor remote</span>
+                      <input id="sync-remote" type="text" autocomplete="off" spellcheck="false" placeholder="git@host:repo.git">
+                      <button class="btn-secondary" id="sync-remote-save" type="button">Save remote</button>
+                    </div>
+                    <div class="setting-row">
+                      <span>Shared library (merge on sync)</span>
+                      <button class="toggle off" id="toggle-sync-shared" type="button" aria-label="Shared library"></button>
+                    </div>
+                    <div class="setting-row">
+                      <span>Sync after each committed job</span>
+                      <button class="toggle off" id="toggle-sync-after" type="button" aria-label="Sync after commit"></button>
+                    </div>
+                    <div class="setting-row">
+                      <span>Manual sync</span>
+                      <button class="btn-secondary" id="sync-now" type="button">Sync now</button>
+                    </div>
+                    <p id="sync-status" class="sync-status"></p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -375,6 +396,31 @@
         </div>
       </div>
     </div>
+    <dialog id="sync-conflict-dialog" class="sync-conflict-dialog">
+      <h2>Sync conflict</h2>
+      <ul id="sync-conflict-files" class="sync-conflict-files"></ul>
+      <div id="sync-conflict-binary" class="sync-conflict-binary" hidden>
+        <p>Arbor does not resolve binary conflicts.</p>
+      </div>
+      <div id="sync-conflict-text" class="sync-conflict-text" hidden>
+        <label>Mine</label>
+        <pre id="sync-conflict-mine" class="sync-conflict-side"></pre>
+        <label>Theirs</label>
+        <pre id="sync-conflict-theirs" class="sync-conflict-side"></pre>
+        <label for="sync-conflict-edit">Resolved text</label>
+        <textarea id="sync-conflict-edit" rows="8"></textarea>
+        <div class="sync-conflict-resolve-actions">
+          <button type="button" id="sync-conflict-use-mine" class="btn-secondary">Use mine</button>
+          <button type="button" id="sync-conflict-use-theirs" class="btn-secondary">Use theirs</button>
+          <button type="button" id="sync-conflict-use-edit" class="btn-secondary">Use this text</button>
+        </div>
+      </div>
+      <p id="sync-conflict-error" class="sync-conflict-error"></p>
+      <div class="sync-conflict-actions">
+        <button type="button" id="sync-conflict-close" class="btn-secondary">Close</button>
+        <button type="button" id="sync-conflict-continue" class="btn-primary">Continue sync</button>
+      </div>
+    </dialog>
     <dialog id="make-card-dialog" class="make-card-dialog">
       <h2>Make flashcard</h2>
       <label for="make-card-front">Front</label>

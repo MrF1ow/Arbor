@@ -76,6 +76,10 @@ import type {
   JobFinished,
   JobSummary,
   KnowledgeSettings,
+  SyncConflictFile,
+  SyncConflictSession,
+  SyncShowResult,
+  SyncWorkerResult,
   Mode,
   Model,
   ProviderInfo,
@@ -247,6 +251,25 @@ const toggleEmbed = $("toggle-embed");
 const toggleDelete = $("toggle-delete");
 const toggleAutoFlashcards = $("toggle-auto-flashcards");
 const toggleAutoQuiz = $("toggle-auto-quiz");
+const syncRemoteInput = $("sync-remote") as HTMLInputElement;
+const syncRemoteSaveBtn = $("sync-remote-save") as HTMLButtonElement;
+const toggleSyncShared = $("toggle-sync-shared");
+const toggleSyncAfter = $("toggle-sync-after");
+const syncNowBtn = $("sync-now") as HTMLButtonElement;
+const syncStatusEl = $("sync-status");
+const syncConflictDialogEl = $("sync-conflict-dialog") as HTMLDialogElement;
+const syncConflictFilesEl = $("sync-conflict-files");
+const syncConflictBinaryEl = $("sync-conflict-binary");
+const syncConflictTextEl = $("sync-conflict-text");
+const syncConflictMineEl = $("sync-conflict-mine");
+const syncConflictTheirsEl = $("sync-conflict-theirs");
+const syncConflictEditEl = $("sync-conflict-edit") as HTMLTextAreaElement;
+const syncConflictErrorEl = $("sync-conflict-error");
+const syncConflictUseMineBtn = $("sync-conflict-use-mine") as HTMLButtonElement;
+const syncConflictUseTheirsBtn = $("sync-conflict-use-theirs") as HTMLButtonElement;
+const syncConflictUseEditBtn = $("sync-conflict-use-edit") as HTMLButtonElement;
+const syncConflictContinueBtn = $("sync-conflict-continue") as HTMLButtonElement;
+const syncConflictCloseBtn = $("sync-conflict-close") as HTMLButtonElement;
 const reindexBtn = $("reindex") as HTMLButtonElement;
 const updateBtn = $("update") as HTMLButtonElement;
 const cancelBtn = $("cancel") as HTMLButtonElement;
@@ -389,6 +412,7 @@ function setPlaceView(place: Place) {
     showPanel("settings");
     setNavActive("settings");
     void loadKnowledgeSettingsUi();
+    void refreshSyncUi();
     return;
   }
 }
@@ -673,6 +697,11 @@ function refreshFolderTools() {
   reindexBtn.disabled = !ready;
   addCourseBtn.disabled = !ready;
   addFilesBtn.disabled = !(ready && currentCourse);
+  syncRemoteInput.disabled = !ready;
+  syncRemoteSaveBtn.disabled = !ready;
+  toggleSyncShared.toggleAttribute("disabled", !ready);
+  toggleSyncAfter.toggleAttribute("disabled", !ready);
+  syncNowBtn.disabled = !ready;
   refreshUpdateEnabled();
   refreshStudyEnabled();
 }
@@ -1597,11 +1626,127 @@ async function activateKnowledgeRoot(picked: string) {
   await renderCourseList();
   await loadJobHistory();
   refreshFolderTools();
+  void refreshSyncUi();
   if (courses.length > 0) {
     setCourseView(courses[0], "notes");
   } else {
     setPlaceView("welcome");
     readingArticleEl.innerHTML = '<p class="reading-empty">Add a class with +, then add lecture files to it.</p>';
+  }
+}
+
+async function refreshSyncUi() {
+  if (!knowledgeRoot) {
+    syncRemoteInput.value = "";
+    syncStatusEl.textContent = "";
+    setToggle(toggleSyncShared, false);
+    setToggle(toggleSyncAfter, false);
+    return;
+  }
+  try {
+    const show = await invoke<SyncShowResult>("sync_show", { root: knowledgeRoot });
+    syncRemoteInput.value = show.remote ?? "";
+    setToggle(toggleSyncShared, show.shared);
+    const ks = await invoke<KnowledgeSettings>("get_knowledge_settings", { root: knowledgeRoot });
+    setToggle(toggleSyncAfter, ks.sync_after_commit);
+  } catch {
+    /* sync config may be unreadable before init */
+  }
+}
+
+let syncConflictSelectedPath: string | null = null;
+
+function renderSyncConflictFileDetail(entry: SyncConflictFile) {
+  syncConflictErrorEl.textContent = "";
+  if (entry.binary) {
+    syncConflictBinaryEl.hidden = false;
+    syncConflictTextEl.hidden = true;
+    return;
+  }
+  syncConflictBinaryEl.hidden = true;
+  syncConflictTextEl.hidden = false;
+  syncConflictMineEl.textContent = entry.mine ?? "";
+  syncConflictTheirsEl.textContent = entry.theirs ?? "";
+  const draft =
+    entry.choice === "edit" && entry.edit_content != null
+      ? entry.edit_content
+      : entry.mine ?? "";
+  syncConflictEditEl.value = draft;
+}
+
+function renderSyncConflictSession(session: SyncConflictSession, focusPath?: string) {
+  syncConflictFilesEl.innerHTML = "";
+  const files = session.files ?? [];
+  if (files.length === 0) {
+    syncConflictBinaryEl.hidden = true;
+    syncConflictTextEl.hidden = true;
+    return;
+  }
+  let selected = focusPath && files.some((f) => f.path === focusPath) ? focusPath : files[0].path;
+  syncConflictSelectedPath = selected;
+  for (const entry of files) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = entry.path;
+    btn.classList.toggle("selected", entry.path === selected);
+    btn.addEventListener("click", () => {
+      syncConflictSelectedPath = entry.path;
+      for (const child of syncConflictFilesEl.querySelectorAll("button")) {
+        child.classList.toggle("selected", child === btn);
+      }
+      renderSyncConflictFileDetail(entry);
+    });
+    syncConflictFilesEl.appendChild(btn);
+  }
+  const active = files.find((f) => f.path === selected) ?? files[0];
+  renderSyncConflictFileDetail(active);
+}
+
+async function openSyncConflictDialog(focusPath?: string) {
+  if (!knowledgeRoot) return;
+  syncConflictErrorEl.textContent = "";
+  try {
+    const session = await invoke<SyncConflictSession>("read_sync_conflict", {
+      root: knowledgeRoot,
+    });
+    renderSyncConflictSession(session, focusPath);
+    syncConflictDialogEl.showModal();
+  } catch (error) {
+    syncStatusEl.textContent = String(error);
+  }
+}
+
+async function reloadSyncConflictDialog() {
+  if (!knowledgeRoot) return;
+  const session = await invoke<SyncConflictSession>("read_sync_conflict", {
+    root: knowledgeRoot,
+  });
+  renderSyncConflictSession(session, syncConflictSelectedPath ?? undefined);
+}
+
+function reloadLibraryAfterSync() {
+  void renderCourseList().then(() => {
+    if (currentCourse) void loadCourseContent(currentCourse);
+  });
+  void runSearch(searchInput.value);
+}
+
+async function runSyncNow() {
+  if (!knowledgeRoot) return;
+  syncStatusEl.textContent = "";
+  try {
+    const result = await invoke<SyncWorkerResult>("sync_now", { root: knowledgeRoot });
+    if (!result.ok && result.action === "conflict") {
+      const first = result.files?.[0];
+      await openSyncConflictDialog(first);
+      return;
+    }
+    if (result.ok) {
+      syncStatusEl.textContent = `Synced (${result.action}).`;
+      if (result.head_changed) reloadLibraryAfterSync();
+    }
+  } catch (error) {
+    syncStatusEl.textContent = String(error);
   }
 }
 
@@ -1867,6 +2012,7 @@ async function loadKnowledgeSettingsUi() {
     setToggle(toggleDelete, ks.delete_sources_after_digest);
     setToggle(toggleAutoFlashcards, ks.auto_generate.flashcards);
     setToggle(toggleAutoQuiz, ks.auto_generate.quiz);
+    setToggle(toggleSyncAfter, ks.sync_after_commit);
   } catch {
     /* settings file may not exist yet */
   }
@@ -2258,6 +2404,118 @@ toggleAutoQuiz.addEventListener("click", async () => {
   const on = toggleAutoQuiz.classList.contains("off");
   setToggle(toggleAutoQuiz, on);
   await saveKnowledgeSettings({ auto_generate: { quiz: on } });
+});
+
+toggleSyncShared.addEventListener("click", async () => {
+  if (!knowledgeRoot) return;
+  const on = toggleSyncShared.classList.contains("off");
+  setToggle(toggleSyncShared, on);
+  try {
+    await invoke("sync_set_shared", { root: knowledgeRoot, shared: on });
+  } catch (error) {
+    syncStatusEl.textContent = String(error);
+    setToggle(toggleSyncShared, !on);
+  }
+});
+
+toggleSyncAfter.addEventListener("click", async () => {
+  const on = toggleSyncAfter.classList.contains("off");
+  setToggle(toggleSyncAfter, on);
+  await saveKnowledgeSettings({ sync_after_commit: on });
+});
+
+syncRemoteSaveBtn.addEventListener("click", async () => {
+  if (!knowledgeRoot) return;
+  const url = syncRemoteInput.value.trim();
+  if (!url) {
+    syncStatusEl.textContent = "Enter a remote URL.";
+    return;
+  }
+  syncStatusEl.textContent = "";
+  try {
+    const result = await invoke<{ remote: string }>("sync_set_remote", {
+      root: knowledgeRoot,
+      url,
+    });
+    syncRemoteInput.value = result.remote;
+    syncStatusEl.textContent = "Remote saved.";
+  } catch (error) {
+    syncStatusEl.textContent = String(error);
+  }
+});
+
+syncNowBtn.addEventListener("click", () => {
+  void runSyncNow();
+});
+
+syncConflictCloseBtn.addEventListener("click", () => {
+  syncConflictDialogEl.close();
+});
+
+syncConflictUseMineBtn.addEventListener("click", async () => {
+  if (!knowledgeRoot || !syncConflictSelectedPath) return;
+  syncConflictErrorEl.textContent = "";
+  try {
+    await invoke("sync_resolve", {
+      root: knowledgeRoot,
+      path: syncConflictSelectedPath,
+      side: "mine",
+    });
+    await reloadSyncConflictDialog();
+  } catch (error) {
+    syncConflictErrorEl.textContent = String(error);
+  }
+});
+
+syncConflictUseTheirsBtn.addEventListener("click", async () => {
+  if (!knowledgeRoot || !syncConflictSelectedPath) return;
+  syncConflictErrorEl.textContent = "";
+  try {
+    await invoke("sync_resolve", {
+      root: knowledgeRoot,
+      path: syncConflictSelectedPath,
+      side: "theirs",
+    });
+    await reloadSyncConflictDialog();
+  } catch (error) {
+    syncConflictErrorEl.textContent = String(error);
+  }
+});
+
+syncConflictUseEditBtn.addEventListener("click", async () => {
+  if (!knowledgeRoot || !syncConflictSelectedPath) return;
+  syncConflictErrorEl.textContent = "";
+  try {
+    await invoke("sync_resolve", {
+      root: knowledgeRoot,
+      path: syncConflictSelectedPath,
+      side: "edit",
+      content: syncConflictEditEl.value,
+    });
+    await reloadSyncConflictDialog();
+  } catch (error) {
+    syncConflictErrorEl.textContent = String(error);
+  }
+});
+
+syncConflictContinueBtn.addEventListener("click", async () => {
+  if (!knowledgeRoot) return;
+  syncConflictErrorEl.textContent = "";
+  try {
+    const result = await invoke<SyncWorkerResult>("sync_continue", { root: knowledgeRoot });
+    if (!result.ok && result.action === "conflict") {
+      const first = result.files?.[0];
+      await openSyncConflictDialog(first);
+      return;
+    }
+    if (result.ok) {
+      syncConflictDialogEl.close();
+      syncStatusEl.textContent = "Synced (integrated).";
+      if (result.head_changed) reloadLibraryAfterSync();
+    }
+  } catch (error) {
+    syncConflictErrorEl.textContent = String(error);
+  }
 });
 
 reindexBtn.addEventListener("click", async () => {
@@ -2764,10 +3022,11 @@ function renderEvent(ev: WorkerEvent) {
       break;
     case "committed":
       logLine(`Committed ${ev.commit}: ${(ev.courses ?? []).join(", ")}`);
-      void renderCourseList().then(() => {
-        if (currentCourse) void loadCourseContent(currentCourse);
-      });
-      void runSearch(searchInput.value);
+      reloadLibraryAfterSync();
+      break;
+    case "sync_done":
+      logLine(`Synced (${ev.action ?? "ok"})${ev.commit ? `: ${ev.commit}` : ""}`);
+      reloadLibraryAfterSync();
       break;
     case "run_done":
       logLine(`\nDone. processed=${ev.processed} failed=${ev.failed} skipped=${ev.skipped}`);
@@ -2799,6 +3058,10 @@ function renderEvent(ev: WorkerEvent) {
       logLine(
         `Citation failed ${ev.path ?? "artifact"} ${ev.id ?? ""}: ${ev.reason ?? ""}`,
       );
+      break;
+    case "sync_conflict":
+      logLine(`Sync conflict: ${ev.message ?? ""}`);
+      void openSyncConflictDialog(ev.files?.[0]);
       break;
     case "worker_exit":
       updateBtn.disabled = false;

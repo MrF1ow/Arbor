@@ -2,11 +2,19 @@
 
 Package version for the worker, desktop, and Tauri app. See [Version numbering](PROJECT.md#version-numbering) in `PROJECT.md`.
 
-**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is complete as package `3.0.0`. **Version 4** is complete as package `4.0.0`. **Version 5** is in progress and will ship as `v4.1.0`, `v4.2.0`, … until `v5.0.0`. **Current package:** `4.0.0`. **Current tag:** `v4.0.0` is cut when this release lands. `v3.0.0` through `v3.5.0` are already tagged. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) was retested on the 2026-10-17 Linux live run.
+**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is complete as package `3.0.0`. **Version 4** is complete as package `4.0.0`. **Version 5** is in progress and will ship as `v4.1.0`, `v4.2.0`, … until `v5.0.0`. **Current package:** `4.1.0`. **Current tag:** `v4.1.0` is cut when this release lands. `v4.0.0` is the previous package (tag when that release landed). `v3.0.0` through `v3.5.0` are already tagged. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) was retested on the 2026-10-17 Linux live run.
 
 ## Unreleased
 
-Nothing pending above `4.0.0`.
+Nothing pending above `4.1.0`.
+
+## 4.1.0 — 2026-10-18
+
+Git tag: `v4.1.0` when this release lands. **Product:** First Version 5 slice (git remote sync). Version 5 continues at `v4.2.0`. Worker, desktop, and Tauri report `4.1.0`, including `arbor-worker --version`.
+
+- Knowledge commits use `Arbor <arbor@localhost>` when git has no `user.email`, and the UI says so ([#80](https://github.com/MrF1ow/Arbor/issues/80)).
+- Study plan, make-card, and study progress commit through the same helper ([#81](https://github.com/MrF1ow/Arbor/issues/81)).
+- Settings → Sync: an `arbor` git remote per Knowledge root, **Sync now**, and optional sync after each committed job. Sync fetches, rebases (merge when the root is marked shared), and pushes. Conflicts abort to a clean HEAD and are resolved per file as mine, theirs, or an edit. Markdown and other text only; binary conflicts are refused. Derived files (`_arbor_cache/`, `.arbor/*.db`, the vector DB, `.arbor/chat/`) are gitignored and a pull rebuilds the search index and embeddings when a vector DB already exists. Credentials stay in the user's git/ssh config. Arbor stores none. Git errors are shown with embedded URL passwords redacted.
 
 ## 4.0.0 — 2026-10-18
 

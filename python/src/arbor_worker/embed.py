@@ -157,10 +157,12 @@ def embed_root(
 ) -> EmbedCounts:
     root = Path(root)
     settings = settings or default_settings()
+    from arbor_worker.sync import derived_gitignore_extras
+
     ensure_gitignored(
         root,
         settings.cache_dir_name,
-        [".arbor/progress/", ".arbor/vectors.sqlite"],
+        derived_gitignore_extras(settings.cache_dir_name),
     )
     connection = _open_vector_db(root)
     digest_paths = _digest_paths(root, settings)

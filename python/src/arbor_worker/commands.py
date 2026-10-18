@@ -11,7 +11,7 @@ from arbor_worker.alignment import PageRange
 from arbor_worker.auth import AuthResult, check_codex_auth
 from arbor_worker.cache import ensure_gitignored
 from arbor_worker.events import EventEmitter
-from arbor_worker.gitstate import GitStateError, commit_batch
+from arbor_worker.gitstate import GitStateError, commit_and_note, path_has_pending_changes
 from arbor_worker.provider.base import ProviderRequest
 from arbor_worker.provider.fake import FakeProvider
 from arbor_worker.provider.registry import PROVIDERS, PROVIDER_ORDER, make_provider
@@ -330,18 +330,21 @@ def cmd_generate(args) -> int:
             generated_at=datetime.now(timezone.utc),
         )
         write_manifest(manifest_path, manifest)
+        from arbor_worker.sync import derived_gitignore_extras
+
         ensure_gitignored(
             root,
             settings.cache_dir_name,
-            [".arbor/progress/", ".arbor/vectors.sqlite"],
+            derived_gitignore_extras(settings.cache_dir_name),
         )
         artifact_rel = artifact_path.relative_to(root)
         manifest_rel = manifest_path.relative_to(root)
         try:
-            commit = commit_batch(
+            commit = commit_and_note(
                 root,
                 [manifest_rel, artifact_rel],
                 f"study: {args.course} {skill.name}",
+                emitter,
             )
         except GitStateError as error:
             emitter.skill_failed(
@@ -360,6 +363,9 @@ def cmd_generate(args) -> int:
             courses=[args.course],
             skill=skill.name,
         )
+        from arbor_worker.sync import maybe_sync_after_commit
+
+        maybe_sync_after_commit(root, emitter)
         return 0
 
     if args.provider == "fake":
@@ -509,18 +515,21 @@ def cmd_generate(args) -> int:
             generated_at=datetime.now(timezone.utc),
         )
     write_manifest(manifest_path, manifest)
+    from arbor_worker.sync import derived_gitignore_extras
+
     ensure_gitignored(
         root,
         settings.cache_dir_name,
-        [".arbor/progress/", ".arbor/vectors.sqlite"],
+        derived_gitignore_extras(settings.cache_dir_name),
     )
 
     manifest_rel = manifest_path.relative_to(root)
     try:
-        commit = commit_batch(
+        commit = commit_and_note(
             root,
             [manifest_rel, *written_rels],
             f"study: {args.course} {skill.name}",
+            emitter,
         )
     except GitStateError as error:
         emitter.skill_failed(
@@ -540,6 +549,9 @@ def cmd_generate(args) -> int:
         courses=[args.course],
         skill=skill.name,
     )
+    from arbor_worker.sync import maybe_sync_after_commit
+
+    maybe_sync_after_commit(root, emitter)
     return 0
 
 
@@ -602,11 +614,25 @@ def cmd_embed_search(args) -> int:
     return 0
 
 
+def _commit_study_file_if_dirty(
+    root: Path,
+    rel_path: Path,
+    message: str,
+    emitter: EventEmitter,
+) -> None:
+    if path_has_pending_changes(root, rel_path):
+        commit_and_note(root, [rel_path], message, emitter)
+        from arbor_worker.sync import maybe_sync_after_commit
+
+        maybe_sync_after_commit(root, emitter)
+
+
 def cmd_study_progress(args) -> int:
     from arbor_worker.study_progress import (
         StudyProgressError,
         emit_json_line,
         parse_utc_now,
+        progress_path,
         study_progress_due,
         study_progress_grade,
         study_progress_quiz,
@@ -620,18 +646,31 @@ def cmd_study_progress(args) -> int:
         return 2
     root = Path(args.root)
     course = args.course
+    emitter = EventEmitter(sys.stderr)
+
+    def finish(doc: dict) -> int:
+        try:
+            _commit_study_file_if_dirty(
+                root,
+                progress_rel,
+                f"study: {course} progress",
+                emitter,
+            )
+        except GitStateError as error:
+            print(str(error), file=sys.stderr)
+            return 1
+        emit_json_line(doc)
+        return 0
+
     try:
+        progress_rel = progress_path(root, course).relative_to(root)
         if action == "show":
-            doc = study_progress_show(root, course)
-            emit_json_line(doc)
-            return 0
+            return finish(study_progress_show(root, course))
         if action == "weak":
-            emit_json_line(study_progress_weak(root, course))
-            return 0
+            return finish(study_progress_weak(root, course))
         if action == "due":
             now = parse_utc_now(args.now) if args.now else None
-            emit_json_line(study_progress_due(root, course, now=now))
-            return 0
+            return finish(study_progress_due(root, course, now=now))
         if action == "grade":
             now = parse_utc_now(args.now) if args.now else None
             doc = study_progress_grade(
@@ -643,8 +682,7 @@ def cmd_study_progress(args) -> int:
                 digest=args.digest,
                 heading=args.heading,
             )
-            emit_json_line(doc)
-            return 0
+            return finish(doc)
         if action == "quiz":
             now = parse_utc_now(args.now) if args.now else None
             doc = study_progress_quiz(
@@ -656,14 +694,12 @@ def cmd_study_progress(args) -> int:
                 digest=args.digest,
                 heading=args.heading,
             )
-            emit_json_line(doc)
-            return 0
+            return finish(doc)
         if action == "recommend":
             from arbor_worker.recommendations import study_recommendations
 
             now = parse_utc_now(args.now) if getattr(args, "now", None) else None
-            emit_json_line(study_recommendations(root, course, now=now))
-            return 0
+            return finish(study_recommendations(root, course, now=now))
     except ValueError as error:
         message = str(error)
         print(message, file=sys.stderr)
@@ -729,6 +765,17 @@ def cmd_study_plan(args) -> int:
     except ValueError as error:
         print(str(error), file=sys.stderr)
         return 1
+    plan_rel = Path(result["path"])
+    try:
+        _commit_study_file_if_dirty(
+            root,
+            plan_rel,
+            f"study: {args.course} plan",
+            emitter,
+        )
+    except GitStateError as error:
+        print(str(error), file=sys.stderr)
+        return 1
     emit_json_line(result)
     return 0
 
@@ -738,6 +785,7 @@ def cmd_append_card(args) -> int:
     from arbor_worker.study_progress import emit_json_line
 
     root = Path(args.root)
+    emitter = EventEmitter(sys.stderr)
     try:
         card = append_flashcard(
             root,
@@ -749,6 +797,17 @@ def cmd_append_card(args) -> int:
             page=args.page,
         )
     except ValueError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    deck_rel = Path(args.course) / "study" / "flashcards.json"
+    try:
+        _commit_study_file_if_dirty(
+            root,
+            deck_rel,
+            f"study: {args.course} flashcard",
+            emitter,
+        )
+    except GitStateError as error:
         print(str(error), file=sys.stderr)
         return 1
     emit_json_line(card)
@@ -794,4 +853,89 @@ def cmd_chat(_args) -> int:
     except Exception as error:
         emitter.error(message=str(error))
         return 1
+    return 0
+
+
+def _sync_report_json(report) -> dict:
+    payload: dict = {"ok": report.ok, "action": report.action}
+    if report.commit is not None:
+        payload["commit"] = report.commit
+    if report.files is not None:
+        payload["files"] = report.files
+    if report.head_changed:
+        payload["head_changed"] = True
+    return payload
+
+
+def cmd_sync(args) -> int:
+    from arbor_worker.sync import (
+        GitSyncError,
+        remote_url,
+        set_remote,
+        set_shared,
+        sync_root,
+    )
+
+    root = Path(args.root)
+    if args.set_remote is not None:
+        try:
+            set_remote(root, args.set_remote)
+        except GitSyncError as error:
+            print(str(error), file=sys.stderr)
+            return 1
+        print(json.dumps({"remote": remote_url(root)}))
+        return 0
+    if args.shared is not None:
+        set_shared(root, args.shared)
+        print(json.dumps({"shared": args.shared}))
+        return 0
+    if args.show:
+        from arbor_worker import sync as sync_mod
+
+        print(
+            json.dumps(
+                {"remote": remote_url(root), "shared": sync_mod._read_shared(root)}
+            )
+        )
+        return 0
+    try:
+        report = sync_root(root)
+    except GitSyncError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    print(json.dumps(_sync_report_json(report)))
+    return 2 if not report.ok and report.action == "conflict" else 0
+
+
+def cmd_sync_resolve(args) -> int:
+    from arbor_worker.sync import GitSyncError, SyncConflictError, resolve_conflict
+
+    root = Path(args.root)
+    content = args.content
+    if args.side == "edit" and content is None:
+        content = sys.stdin.read()
+    try:
+        resolve_conflict(root, args.path, args.side, content=content)
+    except (SyncConflictError, GitSyncError) as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    print(json.dumps({"ok": True, "path": args.path}))
+    return 0
+
+
+def cmd_sync_continue(args) -> int:
+    from arbor_worker.sync import GitSyncError, SyncConflictError, continue_sync
+
+    root = Path(args.root)
+    try:
+        report = continue_sync(root)
+    except SyncConflictError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    except GitSyncError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    print(json.dumps(_sync_report_json(report)))
+    if not report.ok and report.action == "conflict":
+        return 2
     return 0

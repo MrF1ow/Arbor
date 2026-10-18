@@ -14,7 +14,7 @@ from arbor_worker.digest_files import next_digest_path
 from arbor_worker.digest_update import apply_digest_action, classify_digest_actions
 from arbor_worker.errors import CourseSynthesisError, PlanError
 from arbor_worker.events import EventEmitter
-from arbor_worker.gitstate import GitStateError, commit_batch
+from arbor_worker.gitstate import GitStateError, commit_and_note
 from arbor_worker.hashing import hash_file
 from arbor_worker.page_fingerprints import fingerprint_source
 from arbor_worker.page_markers import PAGE_MARKERS_VERSION
@@ -418,12 +418,21 @@ def run_update(
 
     commit = None
     if commit_paths:
-        ensure_gitignored(root, settings.cache_dir_name)
+        from arbor_worker.sync import derived_gitignore_extras
+
+        ensure_gitignored(
+            root,
+            settings.cache_dir_name,
+            derived_gitignore_extras(settings.cache_dir_name),
+        )
         commit_paths.append(Path(".gitignore"))
         message = "digest: " + ", ".join(done_courses)
         try:
-            commit = commit_batch(root, commit_paths, message)
+            commit = commit_and_note(root, commit_paths, message, emitter)
             emitter.committed(commit=commit, courses=done_courses)
+            from arbor_worker.sync import maybe_sync_after_commit
+
+            maybe_sync_after_commit(root, emitter)
             if done_courses:
                 from arbor_worker.indexer import index_courses
 

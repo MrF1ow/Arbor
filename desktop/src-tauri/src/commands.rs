@@ -106,6 +106,76 @@ pub fn plan_update(app: tauri::AppHandle, root: String) -> Result<serde_json::Va
     run_worker_json_app(&app, &["plan-update", "--root", &root])
 }
 
+#[tauri::command]
+pub fn sync_show(app: tauri::AppHandle, root: String) -> Result<serde_json::Value, String> {
+    run_worker_json_app(&app, &["sync", "--root", &root, "--show"])
+}
+
+#[tauri::command]
+pub fn sync_set_remote(
+    app: tauri::AppHandle,
+    root: String,
+    url: String,
+) -> Result<serde_json::Value, String> {
+    run_worker_json_app(
+        &app,
+        &["sync", "--root", &root, "--set-remote", url.as_str()],
+    )
+}
+
+#[tauri::command]
+pub fn sync_set_shared(
+    app: tauri::AppHandle,
+    root: String,
+    shared: bool,
+) -> Result<serde_json::Value, String> {
+    let flag = if shared { "--shared" } else { "--no-shared" };
+    run_worker_json_app(&app, &["sync", "--root", &root, flag])
+}
+
+#[tauri::command]
+pub fn sync_now(app: tauri::AppHandle, root: String) -> Result<serde_json::Value, String> {
+    run_worker_json_app(&app, &["sync", "--root", &root])
+}
+
+#[tauri::command]
+pub fn sync_resolve(
+    app: tauri::AppHandle,
+    root: String,
+    path: String,
+    side: String,
+    content: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let mut owned = vec![
+        "sync-resolve".to_string(),
+        "--root".to_string(),
+        root,
+        "--path".to_string(),
+        path,
+        "--side".to_string(),
+        side,
+    ];
+    if let Some(text) = content {
+        owned.push("--content".to_string());
+        owned.push(text);
+    }
+    let refs: Vec<&str> = owned.iter().map(String::as_str).collect();
+    run_worker_json_app(&app, &refs)
+}
+
+#[tauri::command]
+pub fn sync_continue(app: tauri::AppHandle, root: String) -> Result<serde_json::Value, String> {
+    run_worker_json_app(&app, &["sync-continue", "--root", &root])
+}
+
+#[tauri::command]
+pub fn read_sync_conflict(root: String) -> Result<serde_json::Value, String> {
+    let relative = ".arbor/sync-conflict.json";
+    let path = resolve_in_root(&root, relative)?;
+    let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    serde_json::from_str(&text).map_err(|e| e.to_string())
+}
+
 #[derive(serde::Deserialize, serde::Serialize, Clone)]
 pub struct Selection {
     pub path: String,
@@ -169,6 +239,8 @@ pub struct KnowledgeSettings {
     pub watch_enabled: bool,
     #[serde(default)]
     pub auto_generate: AutoGenerate,
+    #[serde(default)]
+    pub sync_after_commit: bool,
 }
 
 impl Default for KnowledgeSettings {
@@ -179,6 +251,7 @@ impl Default for KnowledgeSettings {
             auto_embed: false,
             watch_enabled: default_true(),
             auto_generate: AutoGenerate::default(),
+            sync_after_commit: false,
         }
     }
 }
@@ -1101,6 +1174,7 @@ mod tests {
         assert!(!ks.delete_sources_after_digest);
         assert!(!ks.auto_generate.flashcards);
         assert!(!ks.auto_generate.quiz);
+        assert!(!ks.sync_after_commit);
     }
 
     #[test]
@@ -1119,6 +1193,17 @@ mod tests {
             default.auto_generate.flashcards
         );
         assert_eq!(empty.auto_generate.quiz, default.auto_generate.quiz);
+        assert_eq!(empty.sync_after_commit, default.sync_after_commit);
+    }
+
+    #[test]
+    fn sync_after_commit_round_trips() {
+        let settings: KnowledgeSettings =
+            serde_json::from_str(r#"{"sync_after_commit":true}"#).unwrap();
+        assert!(settings.sync_after_commit);
+        let text = serde_json::to_string(&settings).unwrap();
+        let again: KnowledgeSettings = serde_json::from_str(&text).unwrap();
+        assert!(again.sync_after_commit);
     }
 
     #[test]

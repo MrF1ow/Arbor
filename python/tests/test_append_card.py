@@ -3,11 +3,13 @@ from __future__ import annotations
 import io
 import json
 import contextlib
+import subprocess
 from pathlib import Path
 
 import pytest
 
 from arbor_worker import cli
+from arbor_worker.gitstate import FALLBACK_IDENTITY_NOTICE
 from arbor_worker.append_card import append_flashcard
 from arbor_worker.schemas.study.flashcards import FlashcardDeck
 from arbor_worker.schemas.study.quiz import QuizPack
@@ -173,8 +175,10 @@ def test_legacy_json_without_page_validates():
     assert quiz.questions[0].source.page is None
 
 
-def test_append_card_cli(git_repo: Path):
+def test_append_card_cli(git_repo: Path, git):
     _course(git_repo)
+    stray = git_repo / "stray.txt"
+    stray.write_text("leave untracked\n", encoding="utf-8")
     code, out, err = _run_cli(
         [
             "append-card",
@@ -194,3 +198,70 @@ def test_append_card_cli(git_repo: Path):
     assert err == ""
     payload = json.loads(out.strip())
     assert payload["front"] == "CLI?"
+    g = git(git_repo)
+    assert g("log", "-1", "--format=%s").strip() == "study: Biology flashcard"
+    assert (
+        g("ls-files", "Biology/study/flashcards.json").strip()
+        == "Biology/study/flashcards.json"
+    )
+    assert g("status", "--porcelain", "stray.txt").strip() == "?? stray.txt"
+
+
+def _isolated_git_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    xdg = tmp_path / "xdg"
+    xdg.mkdir()
+    global_cfg = tmp_path / "global.gitconfig"
+    global_cfg.write_text("")
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(global_cfg))
+    for key in (
+        "GIT_AUTHOR_NAME",
+        "GIT_AUTHOR_EMAIL",
+        "GIT_COMMITTER_NAME",
+        "GIT_COMMITTER_EMAIL",
+    ):
+        monkeypatch.delenv(key, raising=False)
+
+
+def test_append_card_cli_fallback_identity(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    _isolated_git_env(monkeypatch, tmp_path)
+    root = tmp_path / "Knowledge"
+    root.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    _course(root)
+    code, out, err = _run_cli(
+        [
+            "append-card",
+            "--root",
+            str(root),
+            "--course",
+            "Biology",
+            "--front",
+            "F?",
+            "--back",
+            "B",
+            "--digest",
+            "digests/a.md",
+        ]
+    )
+    assert code == 0
+    assert FALLBACK_IDENTITY_NOTICE in err
+    payload = json.loads(out.strip())
+    assert payload["front"] == "F?"
+    author = subprocess.run(
+        ["git", "-C", str(root), "log", "-1", "--format=%an <%ae>"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    assert author == "Arbor <arbor@localhost>"
+    email = subprocess.run(
+        ["git", "-C", str(root), "config", "--get", "user.email"],
+        capture_output=True,
+        text=True,
+    )
+    assert email.returncode != 0 or not (email.stdout or "").strip()
