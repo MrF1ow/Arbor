@@ -15,7 +15,7 @@ alwaysApply: true
 
 3. **`v3.0.0` is the Version 3 completion package** — the features listed under Version 3 in `PROJECT.md` (shell, flashcards, quiz, concepts, diagrams, citations, cross-document linking, knowledge graph, embeddings, semantic search) and the 2026-10-17 Linux live run on the [implementation checklist](docs/implementation-checklist.md). Mac proof does not block the tag. The git tag is cut when the release lands. Two Notes constructs (tables, emphasis) were not in any live digest.
 
-4. **Version 4 is in progress at `v3.1.0` (chat worker).** It completes at `v4.0.0`. Until then it ships as **`v3.1.0`, `v3.2.0`, …**. Issue #20 stays open until `v4.0.0`.
+4. **Version 4 is in progress at `v3.2.0` (Chat tab).** It completes at `v4.0.0`. Until then it ships as **`v3.1.0`, `v3.2.0`, …**. Issue #20 stays open until `v4.0.0`.
 
 5. **CHANGELOG and package versions stay aligned** across worker, desktop, and Tauri (`python/src/arbor_worker/__init__.py`, `pyproject.toml`, `desktop/package.json`, `Cargo.toml`, `tauri.conf.json`). `arbor-worker --version` reads `__init__.py`.
 
@@ -32,7 +32,8 @@ alwaysApply: true
 | `v2.4.0` | Version 3 (partial) | Tree mark; Linux live-run gate. |
 | `v2.5.0` | Version 3 (partial) | CLI provider registry. |
 | `v3.0.0` | Version 3 | Shipped, tagged. Linux live run recorded 2026-10-17. |
-| `v3.1.0` | Version 4 in progress | Grounded chat worker. Tag not cut yet. |
-| `v3.2.0`, … | Version 4 in progress | Tutor work until `v4.0.0`. |
+| `v3.1.0` | Version 4 in progress | Grounded chat worker. Tagged. |
+| `v3.2.0` | Version 4 in progress | Chat tab. Tag not cut yet. |
+| `v3.3.0`, … | Version 4 in progress | Tutor work until `v4.0.0`. |
 
-Program: `docs/superpowers/plans/2026-08-22-v3-program/overview.md`. Gates: `docs/implementation-checklist.md`. Version 3 live run: `docs/superpowers/plans/2026-10-17-roadmap-completion/linux-live-run.md`. `mac-e2e.md` is optional. Version 4 is in progress at `v3.1.0`.
+Program: `docs/superpowers/plans/2026-08-22-v3-program/overview.md`. Gates: `docs/implementation-checklist.md`. Version 3 live run: `docs/superpowers/plans/2026-10-17-roadmap-completion/linux-live-run.md`. `mac-e2e.md` is optional. Version 4 is in progress at `v3.2.0`.

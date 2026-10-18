@@ -4,7 +4,7 @@
 
 Local-first desktop app that turns course PDFs, PowerPoints, and Word files into structured study digests using a signed-in CLI provider (Codex CLI, Claude Code, or Grok CLI). Your Knowledge library is a normal git repo on disk. Sources and generated notes stay together in history.
 
-**Current release:** [3.1.0](CHANGELOG.md) (package `3.1.0`; tag `v3.1.0` is cut when this release lands). `v3.0.0` is already tagged. Package `3.1.0` adds the grounded chat worker and does not change the UI. Worker, desktop, and Tauri all report this number (`arbor-worker --version`). The 2026-10-17 Linux live run is recorded on the [implementation checklist](docs/implementation-checklist.md). Tables and emphasis were not in any live digest.
+**Current release:** [3.2.0](CHANGELOG.md) (package `3.2.0`; tag `v3.2.0` is cut when this release lands). `v3.0.0` is already tagged. Package `3.2.0` adds the Chat tab (grounded course Q&A with citations). Worker, desktop, and Tauri all report this number (`arbor-worker --version`). The 2026-10-17 Linux live run is recorded on the [implementation checklist](docs/implementation-checklist.md). Tables and emphasis were not in any live digest.
 
 **Version 2** (`v2.0.0`) shipped automation on the old UI. **Version 3** shipped as `3.0.0`. `v2.1.0` added the desktop shell. `2.2.0` adds the study loop. `2.3.0` is the fix release after that. **`2.4.0`** is the brand and gate release (tree mark and Linux live-run tag gate). **`2.5.0`** adds Codex, Claude, and Grok CLI providers with a Settings picker. **Version 4** is in progress and ships as `v3.1.0` and later until `v4.0.0`. Mac runs are optional and do not block a tag. See [Version numbering](PROJECT.md#version-numbering).
 
@@ -67,7 +67,7 @@ The 2.2.0 study loop, plus the fixes from the 2026-09-20 Mac batch and tighter d
 | Desktop | File reads stay inside the Knowledge root. AI text is escaped. A content security policy is set. |
 | Notify | The default capability includes `notification:default`. |
 
-**`v3.0.0` is tagged.** Package **`3.1.0`** is the chat-worker release. Codex CLI is still a separate install. The gate list is the [implementation checklist](docs/implementation-checklist.md).
+**`v3.0.0` is tagged.** Package **`3.2.0`** is the Chat tab release; **`3.1.0`** is the chat-worker release. Codex CLI is still a separate install. The gate list is the [implementation checklist](docs/implementation-checklist.md).
 
 ---
 

@@ -2,11 +2,21 @@
 
 Package version for the worker, desktop, and Tauri app. See [Version numbering](PROJECT.md#version-numbering) in `PROJECT.md`.
 
-**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is complete as package `3.0.0`. **Version 4** is in progress and will ship as `v3.1.0`, `v3.2.0`, … until `v4.0.0`. **Current package:** `3.1.0`. **Current tag:** `v3.1.0` is cut when this release lands. `v3.0.0` is already tagged. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) was retested on the 2026-10-17 Linux live run.
+**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is complete as package `3.0.0`. **Version 4** is in progress and will ship as `v3.1.0`, `v3.2.0`, … until `v4.0.0`. **Current package:** `3.2.0`. **Current tag:** `v3.2.0` is cut when this release lands. `v3.0.0` is already tagged. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) was retested on the 2026-10-17 Linux live run.
 
 ## Unreleased
 
-Nothing pending above `3.1.0`.
+Nothing pending above `3.2.0`.
+
+## 3.2.0 — 2026-10-17
+
+Git tag: `v3.2.0` when this release lands. **Product:** Version 4 in progress (Chat tab), not `v4.0.0`. Worker, desktop, and Tauri report `3.2.0`, including `arbor-worker --version`.
+
+- Chat tab on each course: Ask, Explain, and Quiz modes with streaming status (retrieving, answering, done).
+- Per-course history in `<root>/.arbor/chat/<course>.jsonl` with New chat session boundaries and Clear history.
+- Citation chips open the digest in Notes at the cited heading; unsupported answers show a **Not supported by this course** banner.
+- Answers render through the escaped markdown path (CSP unchanged).
+- **Generate study artifact** is the only write from chat (existing flashcard or quiz jobs).
 
 ## 3.1.0 — 2026-10-17
 
