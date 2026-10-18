@@ -308,6 +308,9 @@ mod tests {
             appearance: Appearance::System,
             ollama_base_url: Some("http://127.0.0.1:11434".into()),
             lmstudio_base_url: Some("http://127.0.0.1:1234/v1".into()),
+            skill_index_source: String::new(),
+            skill_index_ref: String::new(),
+            skill_grants: vec![],
         };
         let json = crate::settings::to_json(&settings);
         assert!(!json.contains(FAKE_TEST_API_KEY));

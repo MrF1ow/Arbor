@@ -368,6 +368,24 @@
                     </div>
                     <p id="sync-status" class="sync-status"></p>
                   </div>
+                  <div class="settings-group">
+                    <h3>Skills</h3>
+                    <div class="setting-row">
+                      <span>Index source</span>
+                      <input id="skill-index-source" type="text" autocomplete="off" spellcheck="false" placeholder="Default: marketplace/index.json in this repo">
+                    </div>
+                    <div class="setting-row">
+                      <span>Index ref</span>
+                      <input id="skill-index-ref" type="text" autocomplete="off" spellcheck="false" placeholder="Branch, tag, or commit">
+                    </div>
+                    <div class="setting-row">
+                      <span>Marketplace</span>
+                      <button class="btn-secondary" id="skill-index-save" type="button">Save index</button>
+                      <button class="btn-secondary" id="skill-browse" type="button">Browse index</button>
+                    </div>
+                    <p id="skill-status" class="sync-status"></p>
+                    <div id="skill-packages"></div>
+                  </div>
                 </div>
               </div>
             </div>

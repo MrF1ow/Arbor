@@ -41,6 +41,85 @@ fn run_worker_json_app(
     worker::run_worker_json(&repo_dir(app), sub_args, &refs)
 }
 
+fn run_worker_json_inherit(
+    app: &tauri::AppHandle,
+    sub_args: &[&str],
+) -> Result<serde_json::Value, String> {
+    worker::run_worker_json(&repo_dir(app), sub_args, &[])
+}
+
+fn default_skill_index_source(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let mut dir = repo_dir(app);
+    loop {
+        let candidate = dir.join("marketplace").join("index.json");
+        if candidate.is_file() {
+            return Ok(candidate);
+        }
+        if !dir.pop() {
+            break;
+        }
+    }
+    Err("default marketplace index was not found".to_string())
+}
+
+fn skill_index_source_path(app: &tauri::AppHandle, settings: &Settings) -> Result<PathBuf, String> {
+    let explicit = settings.skill_index_source.trim();
+    if explicit.is_empty() {
+        default_skill_index_source(app)
+    } else {
+        Ok(PathBuf::from(explicit))
+    }
+}
+
+fn fetch_skill_index(app: &tauri::AppHandle) -> Result<serde_json::Value, String> {
+    let settings = settings::load(app);
+    let source = skill_index_source_path(app, &settings)?;
+    let source_str = source.to_string_lossy().into_owned();
+    let ref_str = settings.skill_index_ref.trim();
+    if ref_str.is_empty() {
+        run_worker_json_inherit(
+            app,
+            &["skill-index", "--source", source_str.as_str()],
+        )
+    } else {
+        run_worker_json_inherit(
+            app,
+            &[
+                "skill-index",
+                "--source",
+                source_str.as_str(),
+                "--ref",
+                ref_str,
+            ],
+        )
+    }
+}
+
+fn index_package_by_id<'a>(
+    index: &'a serde_json::Value,
+    id: &str,
+) -> Result<&'a serde_json::Value, String> {
+    let packages = index
+        .get("packages")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| "invalid skill index".to_string())?;
+    packages
+        .iter()
+        .find(|p| p.get("id").and_then(|v| v.as_str()) == Some(id))
+        .ok_or_else(|| format!("skill package not in index: {id}"))
+}
+
+fn permission_sets_equal(grant: &[String], index: &[serde_json::Value]) -> bool {
+    let mut a: Vec<&str> = grant.iter().map(String::as_str).collect();
+    let mut b: Vec<&str> = index
+        .iter()
+        .filter_map(|v| v.as_str())
+        .collect();
+    a.sort_unstable();
+    b.sort_unstable();
+    a == b
+}
+
 fn repo_dir(app: &tauri::AppHandle) -> PathBuf {
     let resource_dir = app.path().resource_dir().ok();
     let current_dir = std::env::current_dir().ok();
@@ -194,6 +273,107 @@ pub fn sync_resolve(
 #[tauri::command]
 pub fn sync_continue(app: tauri::AppHandle, root: String) -> Result<serde_json::Value, String> {
     run_worker_json_app(&app, &["sync-continue", "--root", &root])
+}
+
+#[tauri::command]
+pub fn skill_index(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+    fetch_skill_index(&app)
+}
+
+#[tauri::command]
+pub fn skill_install(app: tauri::AppHandle, id: String) -> Result<serde_json::Value, String> {
+    let index = fetch_skill_index(&app)?;
+    let entry = index_package_by_id(&index, &id)?;
+    let kind = entry
+        .get("kind")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "invalid skill index entry".to_string())?;
+    if kind != "skill" {
+        return Err("provider packages are not installed".to_string());
+    }
+    let git = entry
+        .get("git")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "invalid skill index entry".to_string())?;
+    let commit = entry
+        .get("commit")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| "invalid skill index entry".to_string())?;
+    let mut owned = vec![
+        "skill-install".to_string(),
+        "--git".to_string(),
+        git.to_string(),
+        "--commit".to_string(),
+        commit.to_string(),
+        "--id".to_string(),
+        id,
+    ];
+    if let Some(subdir) = entry.get("subdir").and_then(|v| v.as_str()) {
+        if !subdir.is_empty() {
+            owned.push("--subdir".to_string());
+            owned.push(subdir.to_string());
+        }
+    }
+    let refs: Vec<&str> = owned.iter().map(String::as_str).collect();
+    run_worker_json_inherit(&app, &refs)
+}
+
+#[tauri::command]
+pub fn skill_uninstall(app: tauri::AppHandle, id: String) -> Result<serde_json::Value, String> {
+    run_worker_json_inherit(
+        &app,
+        &["skill-uninstall", "--id", id.as_str()],
+    )
+}
+
+#[tauri::command]
+pub fn skill_run(
+    app: tauri::AppHandle,
+    root: String,
+    id: String,
+    commit: String,
+    course: String,
+    export_dir: String,
+    confirmed: bool,
+) -> Result<serde_json::Value, String> {
+    if !confirmed {
+        return Err("permissions not confirmed".to_string());
+    }
+    let settings = settings::load(&app);
+    let grant = settings
+        .skill_grants
+        .iter()
+        .find(|g| g.id == id && g.commit == commit)
+        .ok_or_else(|| "permissions not confirmed".to_string())?;
+    let index = fetch_skill_index(&app)?;
+    let entry = index_package_by_id(&index, &id)?;
+    let index_perms = entry
+        .get("permissions")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| "invalid skill index entry".to_string())?;
+    if !permission_sets_equal(&grant.permissions, index_perms) {
+        return Err("permissions not confirmed".to_string());
+    }
+    let mut owned = vec![
+        "skill-run".to_string(),
+        "--root".to_string(),
+        root,
+        "--course".to_string(),
+        course,
+        "--export-dir".to_string(),
+        export_dir,
+        "--id".to_string(),
+        id,
+        "--commit".to_string(),
+        commit,
+        "--confirmed".to_string(),
+    ];
+    for perm in &grant.permissions {
+        owned.push("--grant".to_string());
+        owned.push(perm.clone());
+    }
+    let refs: Vec<&str> = owned.iter().map(String::as_str).collect();
+    run_worker_json_inherit(&app, &refs)
 }
 
 #[tauri::command]

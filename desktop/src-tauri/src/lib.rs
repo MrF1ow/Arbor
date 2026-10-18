@@ -71,6 +71,10 @@ pub fn run() {
             commands::sync_resolve,
             commands::sync_continue,
             commands::read_sync_conflict,
+            commands::skill_index,
+            commands::skill_install,
+            commands::skill_uninstall,
+            commands::skill_run,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Arbor");

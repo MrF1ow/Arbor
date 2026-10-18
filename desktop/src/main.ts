@@ -91,10 +91,20 @@ import type {
   KnowledgeRootEntry,
   KnowledgeKind,
   Settings,
+  SkillGrant,
   UpdatePlan,
   WorkerEvent,
   CitationsReport,
 } from "./types";
+
+interface SkillIndexPackage {
+  id: string;
+  kind: string;
+  name: string;
+  description: string;
+  commit: string;
+  permissions: string[];
+}
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -274,6 +284,12 @@ const libraryJoinErrorEl = $("library-join-error");
 const libraryJoinConfirmBtn = $("library-join-confirm") as HTMLButtonElement;
 const libraryJoinCancelBtn = $("library-join-cancel") as HTMLButtonElement;
 const syncStatusEl = $("sync-status");
+const skillIndexSourceInput = $("skill-index-source") as HTMLInputElement;
+const skillIndexRefInput = $("skill-index-ref") as HTMLInputElement;
+const skillIndexSaveBtn = $("skill-index-save") as HTMLButtonElement;
+const skillBrowseBtn = $("skill-browse") as HTMLButtonElement;
+const skillStatusEl = $("skill-status");
+const skillPackagesEl = $("skill-packages");
 const syncConflictDialogEl = $("sync-conflict-dialog") as HTMLDialogElement;
 const syncConflictFilesEl = $("sync-conflict-files");
 const syncConflictBinaryEl = $("sync-conflict-binary");
@@ -309,6 +325,9 @@ let knowledgeRoots: KnowledgeRootEntry[] = [];
 let providerId = "codex";
 let ollamaBaseUrl = "";
 let lmstudioBaseUrl = "";
+let skillIndexSource = "";
+let skillIndexRef = "";
+let skillGrants: SkillGrant[] = [];
 let appearance: Appearance = "system";
 let authed = false;
 let authCheckReason = "";
@@ -443,6 +462,7 @@ function setPlaceView(place: Place) {
     setNavActive("settings");
     void loadKnowledgeSettingsUi();
     void refreshSyncUi();
+    refreshSkillsUi();
     return;
   }
 }
@@ -1760,6 +1780,166 @@ async function refreshSyncUi() {
   }
 }
 
+function refreshSkillsUi() {
+  skillIndexSourceInput.value = skillIndexSource;
+  skillIndexRefInput.value = skillIndexRef;
+}
+
+function skillPermissionsMatch(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const set = new Set(a);
+  return b.every((p) => set.has(p));
+}
+
+function skillGrantFor(pkg: SkillIndexPackage): SkillGrant | undefined {
+  return skillGrants.find((g) => g.id === pkg.id && g.commit === pkg.commit);
+}
+
+function renderSkillPackages(packages: SkillIndexPackage[]) {
+  skillPackagesEl.innerHTML = "";
+  for (const pkg of packages) {
+    const row = document.createElement("div");
+    row.className = "skill-package";
+
+    const title = document.createElement("h4");
+    title.textContent = pkg.name;
+    row.appendChild(title);
+
+    const meta = document.createElement("p");
+    meta.className = "skill-package-meta";
+    meta.textContent = `${pkg.description} · id: ${pkg.id} · kind: ${pkg.kind}`;
+    row.appendChild(meta);
+
+    const perms = document.createElement("div");
+    perms.className = "skill-permissions";
+    perms.textContent = `Permissions: ${pkg.permissions.join(", ")}`;
+    row.appendChild(perms);
+
+    const actions = document.createElement("div");
+    actions.className = "skill-package-actions";
+
+    if (pkg.kind === "skill") {
+      const installBtn = document.createElement("button");
+      installBtn.type = "button";
+      installBtn.className = "btn-secondary";
+      installBtn.textContent = "Install";
+      installBtn.addEventListener("click", () => void installSkillPackage(pkg));
+      actions.appendChild(installBtn);
+    } else {
+      const note = document.createElement("span");
+      note.className = "skill-provider-note";
+      note.textContent = "Provider packages are not installed";
+      actions.appendChild(note);
+    }
+
+    const confirmBtn = document.createElement("button");
+    confirmBtn.type = "button";
+    confirmBtn.className = "btn-secondary";
+    confirmBtn.textContent = "Confirm permissions";
+    confirmBtn.addEventListener("click", () => void confirmSkillPermissions(pkg));
+    actions.appendChild(confirmBtn);
+
+    const runBtn = document.createElement("button");
+    runBtn.type = "button";
+    runBtn.className = "btn-secondary";
+    runBtn.textContent = "Run";
+    runBtn.addEventListener("click", () => void runSkillPackage(pkg));
+    actions.appendChild(runBtn);
+
+    const uninstallBtn = document.createElement("button");
+    uninstallBtn.type = "button";
+    uninstallBtn.className = "btn-secondary";
+    uninstallBtn.textContent = "Uninstall";
+    uninstallBtn.addEventListener("click", () => void uninstallSkillPackage(pkg));
+    actions.appendChild(uninstallBtn);
+
+    row.appendChild(actions);
+    skillPackagesEl.appendChild(row);
+  }
+}
+
+async function saveSkillIndexSettings() {
+  skillIndexSource = skillIndexSourceInput.value.trim();
+  skillIndexRef = skillIndexRefInput.value.trim();
+  await persist();
+  skillStatusEl.textContent = "Index settings saved.";
+}
+
+async function browseSkillIndex() {
+  skillStatusEl.textContent = "";
+  try {
+    const index = await invoke<{ packages: SkillIndexPackage[] }>("skill_index");
+    renderSkillPackages(index.packages ?? []);
+  } catch (error) {
+    skillPackagesEl.innerHTML = "";
+    skillStatusEl.textContent = String(error);
+  }
+}
+
+async function installSkillPackage(pkg: SkillIndexPackage) {
+  try {
+    const result = await invoke<{ commit: string }>("skill_install", { id: pkg.id });
+    skillStatusEl.textContent = `Installed ${result.commit}`;
+  } catch (error) {
+    skillStatusEl.textContent = String(error);
+  }
+}
+
+async function confirmSkillPermissions(pkg: SkillIndexPackage) {
+  skillGrants = skillGrants.filter(
+    (g) => !(g.id === pkg.id && g.commit === pkg.commit),
+  );
+  skillGrants.push({
+    id: pkg.id,
+    commit: pkg.commit,
+    permissions: [...pkg.permissions],
+  });
+  await persist();
+  skillStatusEl.textContent = "Permissions confirmed.";
+}
+
+async function runSkillPackage(pkg: SkillIndexPackage) {
+  if (!currentCourse) {
+    skillStatusEl.textContent = "Choose a course first";
+    return;
+  }
+  if (!knowledgeRoot) {
+    skillStatusEl.textContent = "Choose a knowledge folder first";
+    return;
+  }
+  const grant = skillGrantFor(pkg);
+  if (!grant || !skillPermissionsMatch(grant.permissions, pkg.permissions)) {
+    skillStatusEl.textContent = "Run blocked until permissions are confirmed";
+    return;
+  }
+  const exportDir = await open({ directory: true, multiple: false });
+  if (typeof exportDir !== "string") return;
+  try {
+    await invoke("skill_run", {
+      root: knowledgeRoot,
+      id: pkg.id,
+      commit: pkg.commit,
+      course: currentCourse,
+      exportDir,
+      confirmed: true,
+    });
+    skillStatusEl.textContent = "Skill run started.";
+  } catch (error) {
+    skillStatusEl.textContent = String(error);
+  }
+}
+
+async function uninstallSkillPackage(pkg: SkillIndexPackage) {
+  try {
+    await invoke("skill_uninstall", { id: pkg.id });
+    skillGrants = skillGrants.filter((g) => g.id !== pkg.id);
+    await persist();
+    skillStatusEl.textContent = "Uninstalled";
+  } catch (error) {
+    skillStatusEl.textContent = String(error);
+  }
+}
+
 let syncConflictSelectedPath: string | null = null;
 
 function renderSyncConflictFileDetail(entry: SyncConflictFile) {
@@ -2228,6 +2408,9 @@ async function loadSettings() {
   providerId = s.provider_id?.trim() || "codex";
   ollamaBaseUrl = s.ollama_base_url?.trim() ?? "";
   lmstudioBaseUrl = s.lmstudio_base_url?.trim() ?? "";
+  skillIndexSource = s.skill_index_source?.trim() ?? "";
+  skillIndexRef = s.skill_index_ref?.trim() ?? "";
+  skillGrants = Array.isArray(s.skill_grants) ? [...s.skill_grants] : [];
   appearance = s.appearance ?? "system";
   appearanceSel.value = appearance;
   applyTheme();
@@ -2276,6 +2459,9 @@ async function persist() {
       appearance,
       ollama_base_url: ollamaBaseUrl.trim() || null,
       lmstudio_base_url: lmstudioBaseUrl.trim() || null,
+      skill_index_source: skillIndexSource,
+      skill_index_ref: skillIndexRef,
+      skill_grants: skillGrants,
     } satisfies Settings,
   });
 }
@@ -2561,6 +2747,14 @@ syncRemoteSaveBtn.addEventListener("click", async () => {
 
 syncNowBtn.addEventListener("click", () => {
   void runSyncNow();
+});
+
+skillIndexSaveBtn.addEventListener("click", () => {
+  void saveSkillIndexSettings();
+});
+
+skillBrowseBtn.addEventListener("click", () => {
+  void browseSkillIndex();
 });
 
 function activeRootEntryName(): string {
