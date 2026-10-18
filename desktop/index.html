@@ -413,6 +413,45 @@
                     <p id="skill-status" class="sync-status"></p>
                     <div id="skill-packages"></div>
                   </div>
+                  <div class="settings-group">
+                    <h3>Workers</h3>
+                    <div id="worker-list"></div>
+                    <div class="setting-row">
+                      <span>Label</span>
+                      <input id="worker-label" type="text" autocomplete="off" spellcheck="false">
+                    </div>
+                    <div class="setting-row">
+                      <span>Host</span>
+                      <input id="worker-host" type="text" autocomplete="off" spellcheck="false">
+                    </div>
+                    <div class="setting-row">
+                      <span>Port</span>
+                      <input id="worker-port" type="text" autocomplete="off" spellcheck="false" placeholder="22">
+                    </div>
+                    <div class="setting-row">
+                      <span>User</span>
+                      <input id="worker-user" type="text" autocomplete="off" spellcheck="false">
+                    </div>
+                    <div class="setting-row">
+                      <span>Identity file</span>
+                      <input id="worker-identity" type="text" autocomplete="off" spellcheck="false" placeholder="/absolute/path/to/key">
+                    </div>
+                    <div class="setting-row">
+                      <span>Worker command</span>
+                      <input id="worker-cmd" type="text" autocomplete="off" spellcheck="false" placeholder="uv run --project /path/to/python arbor-worker">
+                    </div>
+                    <div class="setting-row">
+                      <span>Remote root</span>
+                      <input id="worker-remote-root" type="text" autocomplete="off" spellcheck="false">
+                    </div>
+                    <div class="setting-row">
+                      <span>Worker</span>
+                      <button class="btn-secondary" id="worker-save" type="button">Add worker</button>
+                      <button class="btn-secondary" id="worker-test" type="button">Test connection</button>
+                    </div>
+                    <p id="worker-status" class="sync-status"></p>
+                    <div id="worker-roots"></div>
+                  </div>
                 </div>
               </div>
             </div>
