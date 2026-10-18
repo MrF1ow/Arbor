@@ -2433,6 +2433,7 @@ function showDesktopOnlyMessage() {
     showDesktopOnlyMessage();
     return;
   }
+  setChatModeButtons("ask");
   window.addEventListener("focus", () => void refreshAuth());
   subscribeWorkerEvents();
   try {

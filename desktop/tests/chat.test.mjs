@@ -125,6 +125,23 @@ test("CSP string in tauri.conf.json is unchanged", async () => {
   );
 });
 
+test("chat Ask mode button is active by default in HTML", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const askMatch = html.match(/<button[^>]*id="chat-mode-ask"[^>]*>/);
+  assert.ok(askMatch, "chat-mode-ask must exist");
+  assert.match(askMatch[0], /\bactive\b/, "Ask button must include active class");
+});
+
+test("chat answers use UI font, not read serif", async () => {
+  const css = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
+  const blockMatch = css.match(
+    /\.chat-turn\.chat-assistant \.chat-answer\s*\{[^}]+\}/,
+  );
+  assert.ok(blockMatch, "chat-answer rule must exist");
+  assert.match(blockMatch[0], /var\(--font-ui\)/);
+  assert.doesNotMatch(blockMatch[0], /var\(--font-read\)/);
+});
+
 test("chat tab and panel ids exist after graph tab", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const graphIndex = html.indexOf('data-mode="graph"');

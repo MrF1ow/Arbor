@@ -1382,10 +1382,11 @@ html[data-theme="dark"] .welcome-mark {
   gap: 6px;
 }
 
-.chat-mode-btn.active {
-  background: var(--sage-tint-strong);
+.btn-secondary.chat-mode-btn.active {
+  background: var(--sage-accent);
   border-color: var(--sage-accent);
-  color: var(--sage-deep);
+  color: var(--cream-elevated);
+  font-weight: 600;
 }
 
 .chat-log {
@@ -1410,7 +1411,12 @@ html[data-theme="dark"] .welcome-mark {
 }
 
 .chat-turn.chat-assistant .chat-answer {
-  font-family: var(--font-read);
+  font-family: var(--font-ui);
+}
+
+.chat-turn.chat-assistant .chat-answer code,
+.chat-turn.chat-assistant .chat-answer pre {
+  font-family: ui-monospace, monospace;
 }
 
 .chat-banner {
