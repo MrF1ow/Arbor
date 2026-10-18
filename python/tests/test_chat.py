@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from arbor_worker import cli
-from arbor_worker.chat import _system_prompt, answer, heading_id
+from arbor_worker.chat import _fts_search, _system_prompt, answer, heading_id
 from arbor_worker.embed import embed_root
 from arbor_worker.embedder.hashed import HashedNgramEmbedder
 from arbor_worker.events import EventEmitter, parse_lines
@@ -235,6 +235,35 @@ def test_budget_truncates_source_text(biology_root: Path):
     total_chars = sum(chunk["chars"] for chunk in retrieved["chunks"])
     assert total_chars <= budget
     assert any(chunk["truncated"] for chunk in retrieved["chunks"])
+
+
+def test_fts_search_with_special_characters_in_knowledge_root(tmp_path: Path):
+    root = tmp_path / "My Notes #1"
+    root.mkdir()
+    _build_course(root)
+    _index(root)
+    course_dir = root / "Biology"
+    before_course = _course_tree_hash(course_dir)
+    db = root / ".arbor" / "arbor.db"
+    db_before = db.read_bytes()
+
+    hits = _fts_search(root, "Biology", "ZXYFACT123", 8)
+    assert hits
+    assert any("lecture.md" in hit["path"] for hit in hits)
+
+    fake = RecordingFake("Chlorophyll [2].\n\nsupported: true")
+    answer(
+        root,
+        "Biology",
+        [],
+        "What absorbs blue light ZXYFACT123?",
+        "ask",
+        fake,
+        "fake-model",
+    )
+
+    assert _course_tree_hash(course_dir) == before_course
+    assert db.read_bytes() == db_before
 
 
 def test_read_only_course_and_arbor(biology_root: Path):

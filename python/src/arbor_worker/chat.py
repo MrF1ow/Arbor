@@ -171,7 +171,7 @@ def _fts_search(root: Path, course: str, question: str, limit: int) -> list[dict
     fts_query = _fts_query(question)
     if fts_query is None:
         return []
-    uri = f"file:{db}?mode=ro"
+    uri = Path(db).resolve().as_uri() + "?mode=ro"
     with sqlite3.connect(uri, uri=True) as conn:
         rows = conn.execute(
             """
