@@ -2,11 +2,21 @@
 
 Package version for the worker, desktop, and Tauri app. See [Version numbering](PROJECT.md#version-numbering) in `PROJECT.md`.
 
-**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is complete as package `3.0.0`. **Version 4** is in progress and will ship as `v3.1.0`, `v3.2.0`, … until `v4.0.0`. **Current package:** `3.2.0`. **Current tag:** `v3.2.0` is cut when this release lands. `v3.0.0` is already tagged. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) was retested on the 2026-10-17 Linux live run.
+**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is complete as package `3.0.0`. **Version 4** is in progress and will ship as `v3.1.0`, `v3.2.0`, … until `v4.0.0`. **Current package:** `3.3.0`. **Current tag:** `v3.3.0` is cut when this release lands. `v3.0.0` and `v3.2.0` are already tagged. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) was retested on the 2026-10-17 Linux live run.
 
 ## Unreleased
 
-Nothing pending above `3.2.0`.
+Nothing pending above `3.3.0`.
+
+## 3.3.0 — 2026-10-17
+
+Git tag: `v3.3.0` when this release lands. **Product:** Version 4 in progress (review scheduling and weak topics), not `v4.0.0`. Worker, desktop, and Tauri report `3.3.0`, including `arbor-worker --version`.
+
+- Flashcard and quiz progress move to `<course>/study/progress.json` (schema 1). Existing `.arbor/progress/<course>.flashcards.json` and `.quiz.json` files migrate once.
+- SM-2-lite: Mastered grows the interval by the stored ease (default 2.5, minimum 1 day). Wrong is due again in 10 minutes. Again stays in the session.
+- Flashcards open on Due today, and the full deck is still available.
+- The course overview lists the top 5 weak topics from concept and digest-heading wrong rates, and each one opens that heading in Notes.
+- Chat answers use the UI font, and the active Ask, Explain, or Quiz button is highlighted ([#75](https://github.com/MrF1ow/Arbor/issues/75)).
 
 ## 3.2.0 — 2026-10-17
 

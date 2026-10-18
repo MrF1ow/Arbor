@@ -4,6 +4,7 @@ import argparse
 
 from arbor_worker import __version__
 from arbor_worker.provider.registry import provider_choices
+from arbor_worker.study_progress import _MISSING
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -63,6 +64,47 @@ def build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("chat", help="Grounded course Q&A (JSON on stdin, NDJSON on stdout).")
 
+    sp = sub.add_parser("study-progress", help="Course review progress (JSON on stdout).")
+    sp.add_argument("--root", required=True, help="Path to the Knowledge git repo.")
+    sp.add_argument("--course", required=True, help="Course directory name.")
+    sp_sub = sp.add_subparsers(dest="study_action")
+
+    sp_sub.add_parser("show", help="Print progress.json (migrate legacy if needed).")
+    sp_sub.add_parser("weak", help="Print weak topic aggregates.")
+
+    sp_due = sp_sub.add_parser("due", help="Print due flashcard ids for the deck.")
+    sp_due.add_argument("--now", default=None, help="UTC instant (ISO-8601).")
+
+    sp_grade = sp_sub.add_parser("grade", help="Record a flashcard review result.")
+    sp_grade.add_argument("--id", required=True, dest="card_id", help="Flashcard id.")
+    sp_grade.add_argument(
+        "--result",
+        required=True,
+        choices=["again", "wrong", "mastered"],
+    )
+    sp_grade.add_argument("--now", default=None, help="UTC instant (ISO-8601).")
+    sp_grade.add_argument("--digest", default=None, help="Source digest path.")
+    sp_grade.add_argument(
+        "--heading",
+        default=_MISSING,
+        nargs="?",
+        const="",
+        help="Source heading.",
+    )
+
+    sp_quiz = sp_sub.add_parser("quiz", help="Record a quiz answer result.")
+    sp_quiz.add_argument("--id", required=True, dest="question_id", help="Question id.")
+    sp_quiz.add_argument("--result", required=True, choices=["correct", "wrong"])
+    sp_quiz.add_argument("--now", default=None, help="UTC instant (ISO-8601).")
+    sp_quiz.add_argument("--digest", default=None, help="Source digest path.")
+    sp_quiz.add_argument(
+        "--heading",
+        default=_MISSING,
+        nargs="?",
+        const="",
+        help="Source heading.",
+    )
+
     return parser
 
 
@@ -106,4 +148,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "chat":
         from arbor_worker.commands import cmd_chat
         return cmd_chat(args)
+    if args.command == "study-progress":
+        from arbor_worker.commands import cmd_study_progress
+        return cmd_study_progress(args)
     return 2

@@ -156,6 +156,73 @@ test("auto-generates only after the matching successful update", async () => {
   );
 });
 
+test("cardsForIds preserves deck order and skips unknown ids", async () => {
+  const { cardsForIds } = await subject();
+  assert.deepEqual(
+    cardsForIds(deck, ["fc_22222222", "fc_missing", "fc_11111111"]).map((c) => c.id),
+    ["fc_11111111", "fc_22222222"],
+  );
+});
+
+test("requeueCurrentCard moves the current card to the end face down", async () => {
+  const { createReview, requeueCurrentCard, currentCard } = await subject();
+  const review = createReview(deck);
+  assert.equal(currentCard(review).id, "fc_11111111");
+  const requeued = requeueCurrentCard({ ...review, flipped: true });
+  assert.equal(requeued.flipped, false);
+  assert.equal(currentCard(requeued).id, "fc_22222222");
+  assert.equal(requeued.cards[requeued.cards.length - 1].id, "fc_11111111");
+  const solo = requeueCurrentCard(createReview({ ...deck, cards: [deck.cards[0]] }));
+  assert.equal(solo.cards.length, 1);
+  assert.equal(solo.flipped, false);
+});
+
+test("requeueCurrentCard on the last of three cards wraps to the first", async () => {
+  const { createReview, requeueCurrentCard, currentCard } = await subject();
+  const threeCardDeck = {
+    ...deck,
+    cards: [
+      deck.cards[0],
+      deck.cards[1],
+      {
+        id: "fc_33333333",
+        front: "What is meiosis?",
+        back: "Gamete formation.",
+        tags: [],
+        source: { digest: "digests/2026-08-15.md", heading: null },
+      },
+    ],
+  };
+  const review = {
+    ...createReview(threeCardDeck),
+    index: 2,
+    flipped: true,
+  };
+  const requeued = requeueCurrentCard(review);
+  assert.equal(currentCard(requeued).id, "fc_11111111");
+  assert.equal(requeued.cards[requeued.cards.length - 1].id, "fc_33333333");
+  assert.equal(requeued.flipped, false);
+});
+
+test("dropCurrentCard removes the current card and keeps the following index", async () => {
+  const { createReview, dropCurrentCard, currentCard } = await subject();
+  const review = createReview(deck);
+  const dropped = dropCurrentCard(review);
+  assert.equal(dropped.cards.length, 1);
+  assert.equal(currentCard(dropped).id, "fc_22222222");
+  assert.equal(dropped.flipped, false);
+  const empty = dropCurrentCard({ cards: [deck.cards[0]], index: 0, flipped: true });
+  assert.deepEqual(empty, { cards: [], index: 0, flipped: false });
+});
+
+test("applyGradeToDueIds keeps again and removes wrong or mastered", async () => {
+  const { applyGradeToDueIds } = await subject();
+  const ids = ["a", "b", "c"];
+  assert.deepEqual(applyGradeToDueIds(ids, "b", "again"), ids);
+  assert.deepEqual(applyGradeToDueIds(ids, "b", "wrong"), ["a", "c"]);
+  assert.deepEqual(applyGradeToDueIds(ids, "b", "mastered"), ["a", "c"]);
+});
+
 test("moves through and flips the current card", async () => {
   const {
     createReview,

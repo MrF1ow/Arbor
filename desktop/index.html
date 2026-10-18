@@ -101,6 +101,10 @@
                   </nav>
                   <div class="reading-pane">
                     <div id="notes-concept-chips" class="concept-chips" hidden></div>
+                    <section id="weak-topics" class="weak-topics" hidden>
+                      <h2>Weak topics</h2>
+                      <ol id="weak-topic-list"></ol>
+                    </section>
                     <article id="reading-article"></article>
                   </div>
                 </div>
@@ -118,6 +122,10 @@
                     <div>
                       <span id="flashcard-count"></span>
                       <span class="stale-badge" id="flashcard-stale" hidden>Digests updated since last generation.</span>
+                    </div>
+                    <div class="flashcards-deck-toggle">
+                      <button type="button" class="btn-secondary" id="flashcard-due" aria-pressed="true">Due today (0)</button>
+                      <button type="button" class="btn-secondary" id="flashcard-all" aria-pressed="false">Full deck</button>
                     </div>
                     <button type="button" class="btn-primary" id="refresh-flashcards">Refresh from digests</button>
                   </div>
@@ -224,7 +232,7 @@
                       <span id="chat-root" class="chat-root"></span>
                     </div>
                     <div class="chat-mode-row">
-                      <button type="button" class="btn-secondary chat-mode-btn" id="chat-mode-ask" data-chat-mode="ask" aria-pressed="true">Ask</button>
+                      <button type="button" class="btn-secondary chat-mode-btn active" id="chat-mode-ask" data-chat-mode="ask" aria-pressed="true">Ask</button>
                       <button type="button" class="btn-secondary chat-mode-btn" id="chat-mode-explain" data-chat-mode="explain" aria-pressed="false">Explain</button>
                       <button type="button" class="btn-secondary chat-mode-btn" id="chat-mode-quiz" data-chat-mode="quiz" aria-pressed="false">Quiz</button>
                     </div>

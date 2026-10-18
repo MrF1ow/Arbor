@@ -498,6 +498,76 @@ pub fn read_quiz_progress(root: String, course: String) -> Result<serde_json::Va
     Ok(value)
 }
 
+pub fn build_study_progress_argv(
+    root: &str,
+    course: &str,
+    action: &str,
+    id: Option<&str>,
+    result: Option<&str>,
+    digest: Option<&str>,
+    heading: Option<&str>,
+) -> Result<Vec<String>, String> {
+    let mut argv = vec![
+        "study-progress".to_string(),
+        "--root".to_string(),
+        root.to_string(),
+        "--course".to_string(),
+        course.to_string(),
+    ];
+    match action {
+        "due" | "weak" => {
+            argv.push(action.to_string());
+        }
+        "grade" | "quiz" => {
+            let card_id = id.ok_or_else(|| format!("{action} requires id"))?;
+            let outcome = result.ok_or_else(|| format!("{action} requires result"))?;
+            argv.push(action.to_string());
+            argv.push("--id".to_string());
+            argv.push(card_id.to_string());
+            argv.push("--result".to_string());
+            argv.push(outcome.to_string());
+            if let Some(d) = digest {
+                if !d.is_empty() {
+                    argv.push("--digest".to_string());
+                    argv.push(d.to_string());
+                }
+            }
+            argv.push("--heading".to_string());
+            argv.push(heading.unwrap_or("").to_string());
+        }
+        _ => return Err(format!("unknown study-progress action: {action}")),
+    }
+    Ok(argv)
+}
+
+fn study_progress_argv_refs(argv: &[String]) -> Vec<&str> {
+    argv.iter().map(String::as_str).collect()
+}
+
+#[tauri::command]
+pub fn study_progress(
+    app: tauri::AppHandle,
+    root: String,
+    course: String,
+    action: String,
+    id: Option<String>,
+    result: Option<String>,
+    digest: Option<String>,
+    heading: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let argv = build_study_progress_argv(
+        &root,
+        &course,
+        &action,
+        id.as_deref(),
+        result.as_deref(),
+        digest.as_deref(),
+        heading.as_deref(),
+    )?;
+    let refs = study_progress_argv_refs(&argv);
+    worker::run_worker_json(&repo_dir(&app), &refs)
+}
+
 #[tauri::command]
 pub fn write_quiz_progress(
     root: String,
@@ -935,6 +1005,95 @@ mod tests {
             "../course.md".into(),
         )
         .is_err());
+    }
+
+    #[test]
+    fn study_progress_argv_due_and_weak() {
+        assert_eq!(
+            build_study_progress_argv("/root", "Bio", "due", None, None, None, None).unwrap(),
+            vec![
+                "study-progress",
+                "--root",
+                "/root",
+                "--course",
+                "Bio",
+                "due",
+            ]
+            .into_iter()
+            .map(str::to_string)
+            .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            build_study_progress_argv("/root", "Bio", "weak", None, None, None, None).unwrap()[5],
+            "weak"
+        );
+    }
+
+    #[test]
+    fn study_progress_argv_grade_and_quiz() {
+        assert_eq!(
+            build_study_progress_argv(
+                "/root",
+                "Bio",
+                "grade",
+                Some("fc_1"),
+                Some("mastered"),
+                Some("digests/a.md"),
+                Some("Cells"),
+            )
+            .unwrap(),
+            vec![
+                "study-progress",
+                "--root",
+                "/root",
+                "--course",
+                "Bio",
+                "grade",
+                "--id",
+                "fc_1",
+                "--result",
+                "mastered",
+                "--digest",
+                "digests/a.md",
+                "--heading",
+                "Cells",
+            ]
+            .into_iter()
+            .map(str::to_string)
+            .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            build_study_progress_argv(
+                "/root",
+                "Bio",
+                "quiz",
+                Some("q_1"),
+                Some("wrong"),
+                None,
+                None,
+            )
+            .unwrap(),
+            vec![
+                "study-progress",
+                "--root",
+                "/root",
+                "--course",
+                "Bio",
+                "quiz",
+                "--id",
+                "q_1",
+                "--result",
+                "wrong",
+                "--heading",
+                "",
+            ]
+            .into_iter()
+            .map(str::to_string)
+            .collect::<Vec<_>>()
+        );
+        assert!(build_study_progress_argv("/r", "C", "nope", None, None, None, None).is_err());
+        assert!(build_study_progress_argv("/r", "C", "grade", None, Some("x"), None, None).is_err());
+        assert!(build_study_progress_argv("/r", "C", "grade", Some("id"), None, None, None).is_err());
     }
 
     #[test]
