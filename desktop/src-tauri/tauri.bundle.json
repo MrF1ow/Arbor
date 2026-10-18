@@ -1,6 +1,9 @@
 {
   "bundle": {
     "externalBin": ["binaries/arbor-worker"],
-    "targets": ["dmg"]
+    "targets": ["dmg"],
+    "macOS": {
+      "hardenedRuntime": false
+    }
   }
 }

@@ -46,6 +46,9 @@ jobs:
           APPLE_SIGNING_IDENTITY: "-"
         run: npx tauri build --bundles dmg --config src-tauri/tauri.bundle.json
 
+      - name: Smoke test DMG bundle
+        run: bash scripts/smoke-macos-bundle.sh desktop/src-tauri/target/release/bundle/dmg/*.dmg
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
