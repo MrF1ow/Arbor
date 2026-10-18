@@ -253,6 +253,7 @@ const toggleAutoFlashcards = $("toggle-auto-flashcards");
 const toggleAutoQuiz = $("toggle-auto-quiz");
 const syncRemoteInput = $("sync-remote") as HTMLInputElement;
 const syncRemoteSaveBtn = $("sync-remote-save") as HTMLButtonElement;
+const syncRemoteNoteEl = $("sync-remote-note");
 const toggleSyncShared = $("toggle-sync-shared");
 const toggleSyncAfter = $("toggle-sync-after");
 const syncNowBtn = $("sync-now") as HTMLButtonElement;
@@ -1638,6 +1639,7 @@ async function activateKnowledgeRoot(picked: string) {
 async function refreshSyncUi() {
   if (!knowledgeRoot) {
     syncRemoteInput.value = "";
+    syncRemoteNoteEl.textContent = "";
     syncStatusEl.textContent = "";
     setToggle(toggleSyncShared, false);
     setToggle(toggleSyncAfter, false);
@@ -1646,6 +1648,7 @@ async function refreshSyncUi() {
   try {
     const show = await invoke<SyncShowResult>("sync_show", { root: knowledgeRoot });
     syncRemoteInput.value = show.remote ?? "";
+    syncRemoteNoteEl.textContent = show.remote_note ?? "";
     setToggle(toggleSyncShared, show.shared);
     const ks = await invoke<KnowledgeSettings>("get_knowledge_settings", { root: knowledgeRoot });
     setToggle(toggleSyncAfter, ks.sync_after_commit);
@@ -1687,8 +1690,11 @@ function renderSyncConflictSession(session: SyncConflictSession, focusPath?: str
   for (const entry of files) {
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.textContent = entry.path;
+    const resolved =
+      entry.choice === "mine" || entry.choice === "theirs" || entry.choice === "edit";
+    btn.textContent = resolved ? `${entry.path} (resolved)` : entry.path;
     btn.classList.toggle("selected", entry.path === selected);
+    btn.classList.toggle("resolved", resolved);
     btn.addEventListener("click", () => {
       syncConflictSelectedPath = entry.path;
       for (const child of syncConflictFilesEl.querySelectorAll("button")) {

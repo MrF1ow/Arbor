@@ -73,6 +73,8 @@ export interface KnowledgeSettings {
 export interface SyncShowResult {
   remote: string | null;
   shared: boolean;
+  sync_remote?: "origin" | "arbor" | null;
+  remote_note?: string | null;
 }
 
 export interface SyncWorkerResult {

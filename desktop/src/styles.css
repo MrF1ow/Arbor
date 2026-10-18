@@ -884,6 +884,12 @@ html[data-theme="dark"] .welcome-mark {
   background: var(--cream-elevated);
 }
 
+.sync-conflict-files button.resolved {
+  border-color: var(--sage-muted);
+  background: var(--sage-tint);
+  color: var(--sage-deep);
+}
+
 .sync-conflict-dialog label {
   display: block;
   font-family: var(--font-ui);

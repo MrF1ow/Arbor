@@ -32,6 +32,7 @@ BINARY_SUFFIXES = frozenset(
 )
 
 REMOTE_NAME = "arbor"
+ORIGIN_NAME = "origin"
 SYNC_CONFIG = ".arbor/sync.json"
 CONFLICT_SESSION = ".arbor/sync-conflict.json"
 
@@ -94,6 +95,48 @@ def _remote_has_embedded_password(url: str) -> bool:
     return bool(parsed.password)
 
 
+def _normalize_remote_url(url: str) -> str:
+    normalized = url.strip()
+    if normalized.endswith("/"):
+        normalized = normalized[:-1]
+    if normalized.endswith(".git"):
+        normalized = normalized[:-4]
+    return normalized
+
+
+def _remote_get_url(root: Path, name: str, runner=subprocess.run) -> str | None:
+    proc = _git(root, ["remote", "get-url", name], runner=runner)
+    if proc.returncode != 0:
+        return None
+    url = (proc.stdout or "").strip()
+    return url if url else None
+
+
+def sync_remote_name(root: Path, runner=subprocess.run) -> str | None:
+    arbor_url = _remote_get_url(root, REMOTE_NAME, runner)
+    if arbor_url is None:
+        return None
+    origin_url = _remote_get_url(root, ORIGIN_NAME, runner)
+    if origin_url is not None:
+        if _normalize_remote_url(arbor_url) == _normalize_remote_url(origin_url):
+            return ORIGIN_NAME
+    return REMOTE_NAME
+
+
+def remote_note(root: Path, runner=subprocess.run) -> str | None:
+    arbor_url = _remote_get_url(root, REMOTE_NAME, runner)
+    if arbor_url is None:
+        return None
+    origin_url = _remote_get_url(root, ORIGIN_NAME, runner)
+    if origin_url is None:
+        return None
+    if _normalize_remote_url(arbor_url) == _normalize_remote_url(origin_url):
+        return None
+    return (
+        "Arbor syncs the arbor remote; origin points at a different URL."
+    )
+
+
 def set_remote(root: Path, url: str, runner=subprocess.run) -> None:
     if _remote_has_embedded_password(url):
         raise GitSyncError(_CREDENTIAL_URL_MSG)
@@ -110,11 +153,10 @@ def set_remote(root: Path, url: str, runner=subprocess.run) -> None:
 
 
 def remote_url(root: Path, runner=subprocess.run) -> str | None:
-    proc = _git(root, ["remote", "get-url", REMOTE_NAME], runner=runner)
-    if proc.returncode != 0:
+    remote = sync_remote_name(root, runner)
+    if remote is None:
         return None
-    url = (proc.stdout or "").strip()
-    return url if url else None
+    return _remote_get_url(root, remote, runner)
 
 
 def _read_shared(root: Path) -> bool:
@@ -403,15 +445,18 @@ def sync_root(root: Path, runner=subprocess.run) -> SyncReport:
     pre_fetch_head_proc = _git(root, ["rev-parse", "HEAD"], runner=runner)
     pre_fetch_head = (pre_fetch_head_proc.stdout or "").strip()
 
-    fetch = _git(root, ["fetch", REMOTE_NAME], runner=runner)
+    sync_remote = sync_remote_name(root, runner)
+    assert sync_remote is not None
+
+    fetch = _git(root, ["fetch", sync_remote], runner=runner)
     if fetch.returncode != 0:
         raise GitSyncError(redact_git_text((fetch.stderr or "").strip()))
 
     branch = _current_branch(root, runner)
-    upstream_ref = f"{REMOTE_NAME}/{branch}"
+    upstream_ref = f"{sync_remote}/{branch}"
 
     if not _ref_exists(root, upstream_ref, runner):
-        push = _git(root, ["push", "-u", REMOTE_NAME, "HEAD"], runner=runner)
+        push = _git(root, ["push", "-u", sync_remote, "HEAD"], runner=runner)
         if push.returncode != 0:
             raise GitSyncError(redact_git_text((push.stderr or "").strip()))
         return SyncReport(ok=True, action="pushed", commit=_short_head(root, runner))
@@ -422,7 +467,7 @@ def sync_root(root: Path, runner=subprocess.run) -> SyncReport:
     if behind == 0:
         if ahead == 0:
             return SyncReport(ok=True, action="up_to_date", commit=_short_head(root, runner))
-        push = _git(root, ["push", REMOTE_NAME, "HEAD"], runner=runner)
+        push = _git(root, ["push", sync_remote, "HEAD"], runner=runner)
         if push.returncode != 0:
             raise GitSyncError(redact_git_text((push.stderr or "").strip()))
         return SyncReport(ok=True, action="pushed", commit=_short_head(root, runner))
@@ -486,7 +531,7 @@ def sync_root(root: Path, runner=subprocess.run) -> SyncReport:
     finally:
         _cleanup_incomplete_integration(root, runner)
 
-    push = _git(root, ["push", REMOTE_NAME, "HEAD"], runner=runner)
+    push = _git(root, ["push", sync_remote, "HEAD"], runner=runner)
     if push.returncode != 0:
         raise GitSyncError(redact_git_text((push.stderr or "").strip()))
 
@@ -656,7 +701,9 @@ def continue_sync(root: Path, runner=subprocess.run) -> SyncReport:
     finally:
         _cleanup_incomplete_integration(root, runner)
 
-    push = _git(root, ["push", REMOTE_NAME, "HEAD"], runner=runner)
+    sync_remote = sync_remote_name(root, runner)
+    assert sync_remote is not None
+    push = _git(root, ["push", sync_remote, "HEAD"], runner=runner)
     if push.returncode != 0:
         raise GitSyncError(redact_git_text((push.stderr or "").strip()))
 

@@ -894,7 +894,12 @@ def cmd_sync(args) -> int:
 
         print(
             json.dumps(
-                {"remote": remote_url(root), "shared": sync_mod._read_shared(root)}
+                {
+                    "remote": remote_url(root),
+                    "shared": sync_mod._read_shared(root),
+                    "sync_remote": sync_mod.sync_remote_name(root),
+                    "remote_note": sync_mod.remote_note(root),
+                }
             )
         )
         return 0

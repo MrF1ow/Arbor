@@ -18,9 +18,12 @@ from arbor_worker.sync import (
     continue_sync,
     migrate_derived_files,
     redact_git_text,
+    remote_note,
+    remote_url,
     resolve_conflict,
     set_remote,
     set_shared,
+    sync_remote_name,
     sync_root,
 )
 
@@ -61,6 +64,20 @@ def _bare_and_clones(tmp_path: Path) -> tuple[Path, Path, Path]:
 def _commit_all(root: Path, message: str) -> None:
     _run_git(root, "add", "-A")
     _run_git(root, "commit", "-m", message)
+
+
+def _git_push_targets(args: list[str]) -> list[str]:
+    if not args or args[0] != "push":
+        return []
+    remotes: list[str] = []
+    for arg in args[1:]:
+        if arg in ("-u", "--set-upstream", "HEAD"):
+            continue
+        if arg.startswith("-"):
+            continue
+        remotes.append(arg)
+        break
+    return remotes
 
 
 def test_clean_push(tmp_path: Path):
@@ -351,7 +368,11 @@ def test_rebase_failure_keeps_original_error_when_abort_fails(
     abort_calls = {"n": 0}
 
     def fake_git(root: Path, args, *, runner=subprocess.run, identity=False, check=False):
-        if len(args) == 2 and args[0] == "rebase" and args[1].startswith("arbor/"):
+        if (
+            len(args) == 2
+            and args[0] == "rebase"
+            and args[1].split("/", 1)[0] in ("arbor", "origin")
+        ):
             rebase_dir = root / ".git" / "rebase-merge"
             rebase_dir.mkdir(parents=True, exist_ok=True)
             return subprocess.CompletedProcess(
@@ -389,6 +410,113 @@ def test_rebase_failure_keeps_original_error_when_abort_fails(
     assert abort_calls["n"] >= 1
     assert not (b / ".git" / "rebase-merge").exists()
     assert not (b / ".git" / "rebase-apply").exists()
+
+
+def test_same_url_origin_is_the_sync_remote(tmp_path: Path, monkeypatch):
+    bare = tmp_path / "remote.git"
+    subprocess.run(["git", "init", "--bare", "-q", str(bare)], check=True)
+    root = tmp_path / "solo"
+    subprocess.run(["git", "clone", "-q", str(bare), str(root)], check=True)
+    _run_git(root, "config", "user.email", "solo@test.local")
+    _run_git(root, "config", "user.name", "Solo")
+    set_remote(root, str(bare))
+
+    assert sync_remote_name(root) == "origin"
+    assert remote_note(root) is None
+
+    invocations: list[list[str]] = []
+    real_git = sync_mod._git
+
+    def spy_git(root_path, args, **kwargs):
+        invocations.append(list(args))
+        return real_git(root_path, args, **kwargs)
+
+    monkeypatch.setattr(sync_mod, "_git", spy_git)
+
+    (root / "note.md").write_text("# Hello\n")
+    _commit_all(root, "add note")
+    report = sync_root(root)
+    assert report.ok and report.action == "pushed"
+
+    assert any(a[:2] == ["fetch", "origin"] for a in invocations)
+    assert any("origin" in _git_push_targets(a) for a in invocations)
+    assert not any(a[:2] == ["fetch", "arbor"] for a in invocations)
+    assert not any("arbor" in _git_push_targets(a) for a in invocations)
+    log = _run_git(bare, "log", "--oneline").stdout
+    assert "add note" in log
+
+
+def test_different_origin_url_syncs_arbor_and_notes(tmp_path: Path, monkeypatch):
+    bare_a = tmp_path / "remote-a.git"
+    bare_b = tmp_path / "remote-b.git"
+    subprocess.run(["git", "init", "--bare", "-q", str(bare_a)], check=True)
+    subprocess.run(["git", "init", "--bare", "-q", str(bare_b)], check=True)
+    root = tmp_path / "solo"
+    subprocess.run(["git", "clone", "-q", str(bare_a), str(root)], check=True)
+    _run_git(root, "config", "user.email", "solo@test.local")
+    _run_git(root, "config", "user.name", "Solo")
+    set_remote(root, str(bare_b))
+
+    assert sync_remote_name(root) == "arbor"
+    note = remote_note(root)
+    assert note is not None
+    assert "arbor" in note
+    assert "origin" in note
+
+    import contextlib
+
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        code = cli.main(["sync", "--root", str(root), "--show"])
+    assert code == 0
+    data = json.loads(buf.getvalue().strip())
+    assert data["sync_remote"] == "arbor"
+    assert data["remote_note"]
+
+    invocations: list[list[str]] = []
+    real_git = sync_mod._git
+
+    def spy_git(root_path, args, **kwargs):
+        invocations.append(list(args))
+        return real_git(root_path, args, **kwargs)
+
+    monkeypatch.setattr(sync_mod, "_git", spy_git)
+
+    (root / "note.md").write_text("# On B\n")
+    _commit_all(root, "push to b")
+    report = sync_root(root)
+    assert report.ok and report.action == "pushed"
+
+    assert any(a[:2] == ["fetch", "arbor"] for a in invocations)
+    assert any("arbor" in _git_push_targets(a) for a in invocations)
+    assert not any(a[:2] == ["fetch", "origin"] for a in invocations)
+    assert not any("origin" in _git_push_targets(a) for a in invocations)
+    log_b = _run_git(bare_b, "log", "--oneline").stdout
+    assert "push to b" in log_b
+    log_a = _run_git(bare_a, "log", "--oneline", check=False)
+    assert log_a.returncode != 0 or "push to b" not in (log_a.stdout or "")
+
+
+def test_origin_alone_is_not_an_arbor_remote(tmp_path: Path):
+    bare = tmp_path / "remote.git"
+    subprocess.run(["git", "init", "--bare", "-q", str(bare)], check=True)
+    root = tmp_path / "solo"
+    subprocess.run(["git", "clone", "-q", str(bare), str(root)], check=True)
+    _run_git(root, "config", "user.email", "solo@test.local")
+    _run_git(root, "config", "user.name", "Solo")
+
+    assert sync_remote_name(root) is None
+    assert remote_url(root) is None
+    assert remote_note(root) is None
+
+
+def test_normalize_remote_url_treats_git_suffix_as_equal(tmp_path: Path):
+    root = tmp_path / "repo"
+    subprocess.run(["git", "init", "-q", str(root)], check=True)
+    _run_git(root, "remote", "add", "origin", "https://example.com/lib")
+    _run_git(root, "remote", "add", "arbor", "https://example.com/lib.git")
+    assert sync_remote_name(root) == "origin"
+    assert remote_note(root) is None
 
 
 def test_sync_show(tmp_path: Path):

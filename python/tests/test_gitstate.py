@@ -159,6 +159,119 @@ class _RecordingEmitter:
         self.warnings.append(fields)
 
 
+def test_commit_batch_does_not_commit_hand_staged_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    _isolated_git_env(monkeypatch, tmp_path)
+    root = tmp_path / "repo"
+    root.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    subprocess.run(
+        ["git", "-C", str(root), "config", "user.name", "Path Test"],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(root), "config", "user.email", "path@test.local"],
+        check=True,
+    )
+    (root / "initial.txt").write_text("init\n")
+    subprocess.run(["git", "-C", str(root), "add", "initial.txt"], check=True)
+    subprocess.run(["git", "-C", str(root), "commit", "-m", "init"], check=True)
+
+    (root / "unrelated.txt").write_text("staged only\n")
+    subprocess.run(["git", "-C", str(root), "add", "unrelated.txt"], check=True)
+    (root / "note.txt").write_text("job\n")
+
+    commit_batch(root, [Path("note.txt")], "digest: note")
+
+    head_files = subprocess.run(
+        ["git", "-C", str(root), "show", "--name-only", "--pretty=format:", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.splitlines()
+    assert "note.txt" in head_files
+    assert "unrelated.txt" not in head_files
+
+    staged = subprocess.run(
+        ["git", "-C", str(root), "diff", "--cached", "--name-only"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.splitlines()
+    assert "unrelated.txt" in staged
+
+    tree_files = subprocess.run(
+        ["git", "-C", str(root), "ls-tree", "-r", "--name-only", "HEAD"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.splitlines()
+    assert "unrelated.txt" not in tree_files
+
+
+def test_commit_batch_fallback_committer_when_only_author_env_set(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    _isolated_git_env(monkeypatch, tmp_path)
+    monkeypatch.setenv("GIT_AUTHOR_NAME", "Author Only")
+    monkeypatch.setenv("GIT_AUTHOR_EMAIL", "author@example.test")
+
+    root = tmp_path / "repo"
+    root.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    (root / "note.txt").write_text("hello\n")
+
+    result = commit_batch(root, [Path("note.txt")], "digest: author only env")
+
+    assert result.notice == FALLBACK_IDENTITY_NOTICE
+    author = subprocess.run(
+        ["git", "-C", str(root), "log", "-1", "--format=%an <%ae>"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    assert author == "Author Only <author@example.test>"
+    committer = subprocess.run(
+        ["git", "-C", str(root), "log", "-1", "--format=%cn <%ce>"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    assert committer == "Arbor <arbor@localhost>"
+
+
+def test_commit_batch_fallback_author_when_only_committer_env_set(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    _isolated_git_env(monkeypatch, tmp_path)
+    monkeypatch.setenv("GIT_COMMITTER_NAME", "Committer Only")
+    monkeypatch.setenv("GIT_COMMITTER_EMAIL", "committer@example.test")
+
+    root = tmp_path / "repo"
+    root.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    (root / "note.txt").write_text("hello\n")
+
+    result = commit_batch(root, [Path("note.txt")], "digest: committer only env")
+
+    assert result.notice == FALLBACK_IDENTITY_NOTICE
+    author = subprocess.run(
+        ["git", "-C", str(root), "log", "-1", "--format=%an <%ae>"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    assert author == "Arbor <arbor@localhost>"
+    committer = subprocess.run(
+        ["git", "-C", str(root), "log", "-1", "--format=%cn <%ce>"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    assert committer == "Committer Only <committer@example.test>"
+
+
 def test_commit_and_note_emits_warning_when_fallback_used(tmp_path: Path, monkeypatch):
     _isolated_git_env(monkeypatch, tmp_path)
     root = tmp_path / "repo"
