@@ -526,7 +526,9 @@ function setViewerWriteButtonState(btn: HTMLButtonElement, baseEnabled: boolean)
 }
 
 function refreshUpdateEnabled() {
-  const base = authed && knowledgeRoot && currentPlace === "course";
+  const base = Boolean(
+    authed && knowledgeRoot && currentPlace === "course",
+  );
   setViewerWriteButtonState(updateBtn, base);
   setViewerWriteButtonState(confirmUpdateBtn, base);
 }
