@@ -990,3 +990,118 @@ def cmd_library_join(args) -> int:
         return 1
     print(json.dumps(result))
     return 0
+
+
+def cmd_library_show(args) -> int:
+    from arbor_worker.library import LibraryError, current_role, load_library
+
+    root = Path(args.root)
+    try:
+        doc = load_library(root)
+    except LibraryError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    if doc is None:
+        print(json.dumps({"present": False}))
+        return 0
+    role = current_role(root)
+    payload = {
+        "present": True,
+        "name": doc["name"],
+        "created_by": doc["created_by"],
+        "members": doc["members"],
+        "provider": doc.get("provider"),
+        "role": role,
+    }
+    print(json.dumps(payload))
+    return 0
+
+
+def cmd_library_members(args) -> int:
+    from arbor_worker.library import LibraryError, set_library_members
+
+    root = Path(args.root)
+    try:
+        members = json.loads(args.members)
+    except json.JSONDecodeError:
+        print("Invalid --members JSON", file=sys.stderr)
+        return 1
+    if not isinstance(members, list):
+        print("Invalid --members JSON", file=sys.stderr)
+        return 1
+    try:
+        doc = set_library_members(root, members)
+    except LibraryError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    print(json.dumps(doc))
+    return 0
+
+
+def cmd_library_provider(args) -> int:
+    from arbor_worker.library import LibraryError, set_library_provider
+
+    root = Path(args.root)
+    if args.clear and (args.id is not None or args.model is not None):
+        print("--clear is mutually exclusive with --id and --model", file=sys.stderr)
+        return 1
+    if not args.clear:
+        if not args.id or not args.model:
+            print("--id and --model are required unless --clear", file=sys.stderr)
+            return 1
+    try:
+        if args.clear:
+            doc = set_library_provider(root, None)
+        else:
+            doc = set_library_provider(root, {"id": args.id, "model": args.model})
+    except LibraryError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    print(json.dumps(doc))
+    return 0
+
+
+def cmd_library_migrate(args) -> int:
+    from arbor_worker.gitstate import commit_batch
+    from arbor_worker.library import (
+        LIBRARY_REL,
+        LibraryError,
+        assert_can_write,
+        library_needs_member_migration,
+        load_library,
+        migrate_library_file,
+    )
+
+    root = Path(args.root)
+    path = root / LIBRARY_REL
+    if not path.is_file():
+        print("No shared library at this folder.", file=sys.stderr)
+        return 1
+    needs = library_needs_member_migration(root)
+    if needs:
+        try:
+            assert_can_write(root)
+        except LibraryError as error:
+            print(str(error), file=sys.stderr)
+            return 1
+        before = path.read_bytes()
+        try:
+            doc = migrate_library_file(root)
+        except LibraryError as error:
+            print(str(error), file=sys.stderr)
+            return 1
+        after = path.read_bytes()
+        if before != after:
+            commit_batch(root, [Path(LIBRARY_REL)], "library: migrate members")
+        print(json.dumps(doc))
+        return 0
+    try:
+        doc = load_library(root)
+    except LibraryError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    if doc is None:
+        print("No shared library at this folder.", file=sys.stderr)
+        return 1
+    print(json.dumps(doc))
+    return 0
