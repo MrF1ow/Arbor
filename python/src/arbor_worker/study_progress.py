@@ -205,6 +205,11 @@ def _validate_card_entry(card_id: str, entry: Any) -> dict[str, Any]:
     due_at = entry.get("due_at")
     if due_at is not None and not isinstance(due_at, str):
         raise StudyProgressError(f"invalid due_at for {card_id!r}")
+    if isinstance(due_at, str) and due_at.strip():
+        try:
+            parse_utc_now(due_at)
+        except ValueError:
+            raise StudyProgressError(f"invalid due_at for {card_id!r}") from None
     interval_days = entry.get("interval_days")
     if not isinstance(interval_days, (int, float)):
         raise StudyProgressError(f"invalid interval_days for {card_id!r}")
@@ -743,7 +748,7 @@ def study_progress_weak(root: Path, course: str) -> dict[str, Any]:
         rate = wrong / (correct + wrong)
         topics.append(
             {
-                "kind": "concept",
+                "kind": "heading",
                 "label": stats["label"],
                 "concept_id": None,
                 "digest": stats["digest"],

@@ -377,9 +377,14 @@ def test_weak_topics_ranking(git_repo: Path):
     assert "Orphan" in labels
     assert "Perfect" not in labels
     light = next(t for t in topics if t["concept_id"] == "light")
+    assert light["kind"] == "concept"
+    assert light["concept_id"] == "light"
     assert light["wrong"] == 4
     assert light["correct"] == 0
     assert light["wrong_rate"] == 1.0
+    orphan = next(t for t in topics if t["label"] == "Orphan")
+    assert orphan["kind"] == "heading"
+    assert orphan["concept_id"] is None
     rates = [t["wrong_rate"] for t in topics]
     assert rates == sorted(rates, reverse=True)
 
@@ -406,6 +411,36 @@ def test_invalid_progress_not_overwritten(git_repo: Path):
     with pytest.raises(StudyProgressError):
         study_progress_show(git_repo, "Biology")
     assert "99" in path.read_text()
+
+
+def test_invalid_due_at_not_overwritten(git_repo: Path):
+    _course_dir(git_repo)
+    path = progress_path(git_repo, "Biology")
+    body = json.dumps(
+        {
+            "schema_version": 1,
+            "course": "Biology",
+            "cards": {
+                "c1": {
+                    "seen": 0,
+                    "correct": 0,
+                    "wrong": 0,
+                    "due_at": "not-a-date",
+                    "interval_days": 0,
+                    "ease": 2.5,
+                }
+            },
+            "questions": {},
+        }
+    )
+    path.write_text(body + "\n", encoding="utf-8")
+    original = path.read_bytes()
+    with pytest.raises(StudyProgressError):
+        study_progress_show(git_repo, "Biology")
+    assert path.read_bytes() == original
+    with pytest.raises(StudyProgressError):
+        study_progress_due(git_repo, "Biology", now=CLOCK)
+    assert path.read_bytes() == original
 
 
 def test_due_without_progress_does_not_create_file(git_repo: Path):
