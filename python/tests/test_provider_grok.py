@@ -32,6 +32,20 @@ def test_build_argv_text_uses_prompt_file(tmp_path: Path):
     assert "--tools" not in argv
 
 
+def test_build_argv_system_prompt_override(tmp_path: Path):
+    prov = GrokCliProvider(models=[Model("m", "M")], which=lambda name: "/usr/bin/grok")
+    req = ProviderRequest(
+        prompt="digest this",
+        model_id="grok-4.7",
+        cwd=tmp_path,
+        system="Stay grounded.",
+    )
+    prompt_file = tmp_path / "prompt.txt"
+    argv = prov.build_argv(req, prompt_file=prompt_file)
+    idx = argv.index("--system-prompt-override")
+    assert argv[idx + 1] == "Stay grounded."
+
+
 def test_grok_disallowed_tools_list():
     expected = [
         "run_terminal_cmd",

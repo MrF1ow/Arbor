@@ -54,9 +54,12 @@ class CodexCliProvider:
             argv = self.build_argv(request, out_file)
             env = os.environ.copy()
             env["PATH"] = gui_path()
+            stdin_prompt = request.prompt
+            if request.system is not None:
+                stdin_prompt = f"{request.system}\n\n{request.prompt}"
             proc = self._runner(
                 argv,
-                input=request.prompt,
+                input=stdin_prompt,
                 capture_output=True,
                 text=True,
                 env=env,

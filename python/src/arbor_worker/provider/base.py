@@ -27,6 +27,7 @@ class ProviderRequest:
     model_id: str
     image_paths: list[Path] = field(default_factory=list)
     cwd: Path = field(default_factory=lambda: Path("."))
+    system: str | None = None
 
 
 @dataclass(frozen=True)

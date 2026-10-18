@@ -119,6 +119,8 @@ class GrokCliProvider:
                 GROK_DISALLOWED_TOOLS,
             ]
         )
+        if request.system is not None:
+            argv.extend(["--system-prompt-override", request.system])
         return argv
 
     def _parse_stdout(self, stdout: str) -> ProviderResult:

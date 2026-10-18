@@ -13,6 +13,20 @@ def test_fake_records_calls_and_returns_markdown():
     assert p.calls == [req]
 
 
+def test_fake_records_system_without_copying_to_markdown():
+    p = FakeProvider(markdown="# out\n")
+    req = ProviderRequest(
+        prompt="user",
+        model_id="m",
+        cwd=Path("."),
+        system="system instructions",
+    )
+    res = p.run(req)
+    assert p.calls[0].system == "system instructions"
+    assert res.markdown == "# out\n"
+    assert "system instructions" not in res.markdown
+
+
 def test_fake_returns_unmarked_markdown_when_prompt_asks_for_page_markers():
     p = FakeProvider(markdown="# T\n## Overview\nx")
     prompt = (
