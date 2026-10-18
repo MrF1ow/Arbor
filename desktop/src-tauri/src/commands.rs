@@ -5,9 +5,11 @@ use crate::watch::WatchState;
 use crate::worker;
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
+use std::io::Write;
 use std::path::{Component, Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::sync::Arc;
+use tauri::ipc::Channel;
 use tauri::Manager;
 
 fn non_empty_provider(provider: Option<String>) -> Option<String> {
@@ -562,6 +564,252 @@ pub fn study_artifact_stale(root: String, course: String, skill: String) -> Resu
     Ok(current != artifact.content_sha256)
 }
 
+fn validate_chat_course(course: &str) -> Result<(), String> {
+    validate_path_component(course, "course name")?;
+    if is_reserved_course_name(course) {
+        return Err(format!(
+            "{course} is a reserved name and cannot be used as a class"
+        ));
+    }
+    Ok(())
+}
+
+fn chat_history_path(root: &str, course: &str) -> Result<PathBuf, String> {
+    validate_chat_course(course)?;
+    let chat_dir = Path::new(root).join(".arbor").join("chat");
+    let path = chat_dir.join(format!("{course}.jsonl"));
+    let chat_dir = path
+        .parent()
+        .ok_or_else(|| "Invalid chat history path".to_string())?;
+    if path
+        .components()
+        .any(|component| matches!(component, Component::ParentDir))
+    {
+        return Err("Invalid course name".into());
+    }
+    Ok(path)
+}
+
+fn validate_chat_line_role(line: &serde_json::Value) -> Result<(), String> {
+    let role = line
+        .get("role")
+        .and_then(|value| value.as_str())
+        .ok_or_else(|| "Chat line must have a role".to_string())?;
+    if role == "user" || role == "assistant" || role == "session" {
+        Ok(())
+    } else {
+        Err(format!("Invalid chat line role: {role}"))
+    }
+}
+
+fn validate_chat_mode(mode: &str) -> Result<(), String> {
+    if mode == "ask" || mode == "explain" || mode == "quiz" {
+        Ok(())
+    } else {
+        Err(format!("Invalid chat mode: {mode}"))
+    }
+}
+
+pub(crate) fn chat_worker_stdin_payload(
+    root: &str,
+    course: &str,
+    question: &str,
+    mode: &str,
+    provider: &str,
+    model: &str,
+    history: &[serde_json::Value],
+) -> serde_json::Value {
+    serde_json::json!({
+        "root": root,
+        "course": course,
+        "question": question,
+        "mode": mode,
+        "provider": provider,
+        "model": model,
+        "history": history,
+    })
+}
+
+#[tauri::command]
+pub fn read_chat_history(root: String, course: String) -> Result<Vec<serde_json::Value>, String> {
+    let path = chat_history_path(&root, &course)?;
+    if !path.is_file() {
+        return Ok(Vec::new());
+    }
+    let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let mut lines = Vec::new();
+    for line in text.lines() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        if let Ok(value) = serde_json::from_str(line) {
+            lines.push(value);
+        }
+    }
+    Ok(lines)
+}
+
+#[tauri::command]
+pub fn append_chat_lines(
+    root: String,
+    course: String,
+    lines: Vec<serde_json::Value>,
+) -> Result<(), String> {
+    let path = chat_history_path(&root, &course)?;
+    for line in &lines {
+        validate_chat_line_role(line)?;
+    }
+    let parent = path
+        .parent()
+        .ok_or_else(|| "Invalid chat history path".to_string())?;
+    std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .map_err(|e| e.to_string())?;
+    for line in lines {
+        let mut bytes = serde_json::to_vec(&line).map_err(|e| e.to_string())?;
+        bytes.push(b'\n');
+        file.write_all(&bytes).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn clear_chat_history(root: String, course: String) -> Result<(), String> {
+    let path = chat_history_path(&root, &course)?;
+    if path.is_file() {
+        std::fs::remove_file(&path).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn start_chat(
+    app: tauri::AppHandle,
+    on_event: Channel<serde_json::Value>,
+    root: String,
+    course: String,
+    question: String,
+    mode: String,
+    provider: Option<String>,
+    model: String,
+    history: Vec<serde_json::Value>,
+) -> Result<(), String> {
+    validate_chat_course(&course)?;
+    validate_chat_mode(&mode)?;
+    if model.trim().is_empty() {
+        return Err("Model is required".into());
+    }
+    let provider_id = default_provider_id(provider);
+    let label = settings::provider_label(&provider_id);
+    let auth = worker::run_worker_json(
+        &repo_dir(&app),
+        &["check-auth", "--provider", &provider_id],
+    )?;
+    let authenticated = auth
+        .get("authenticated")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false);
+    if !authenticated {
+        return Err(
+            auth
+                .get("reason")
+                .and_then(|value| value.as_str())
+                .map(str::to_string)
+                .unwrap_or_else(|| format!("{label} is not authenticated")),
+        );
+    }
+
+    let app_dir = repo_dir(&app);
+    let sidecar = worker::packaged_sidecar();
+    let argv = worker::resolve_worker_argv(
+        &|key| std::env::var(key).ok(),
+        &worker::default_python_dir(&app_dir),
+        &["chat"],
+        sidecar.as_deref(),
+    );
+    if let Some(err) = worker::uv_project_missing_error(&argv) {
+        return Err(err);
+    }
+
+    let payload = chat_worker_stdin_payload(
+        &root,
+        &course,
+        &question,
+        &mode,
+        &provider_id,
+        model.trim(),
+        &history,
+    );
+    let stdin_body = serde_json::to_string(&payload).map_err(|e| e.to_string())?;
+
+    std::thread::spawn(move || {
+        let send_exit = |code: i32| {
+            let _ = on_event.send(serde_json::json!({
+                "type": "worker_exit",
+                "code": code,
+            }));
+        };
+        if let Some(err) = worker::uv_project_missing_error(&argv) {
+            let _ = on_event.send(serde_json::json!({
+                "type": "error",
+                "message": err,
+            }));
+            send_exit(-1);
+            return;
+        }
+        let mut child = match Command::new(&argv[0])
+            .args(&argv[1..])
+            .env(
+                "PATH",
+                worker::augmented_path_from(
+                    std::env::var("HOME").ok().as_deref(),
+                    std::env::var("PATH").ok().as_deref(),
+                ),
+            )
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+        {
+            Ok(child) => child,
+            Err(error) => {
+                let _ = on_event.send(serde_json::json!({
+                    "type": "error",
+                    "message": format!("failed to launch worker: {error}"),
+                }));
+                send_exit(-1);
+                return;
+            }
+        };
+        if let Some(mut stdin) = child.stdin.take() {
+            if stdin.write_all(stdin_body.as_bytes()).is_err() {
+                let _ = on_event.send(serde_json::json!({
+                    "type": "error",
+                    "message": "failed to write chat request to worker",
+                }));
+                send_exit(-1);
+                return;
+            }
+        }
+        if let Some(stdout) = child.stdout.take() {
+            use std::io::BufRead;
+            let reader = std::io::BufReader::new(stdout);
+            for line in reader.lines().map_while(Result::ok) {
+                if let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) {
+                    let _ = on_event.send(value);
+                }
+            }
+        }
+        let code = child.wait().ok().and_then(|status| status.code()).unwrap_or(-1);
+        send_exit(code);
+    });
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1049,6 +1297,115 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(missing, "File not found: Biology/digests/missing.md");
+    }
+
+    #[test]
+    fn chat_history_round_trips_and_keeps_session_line() {
+        let root = temp_root("chat-history");
+        let root_string = root.to_string_lossy().into_owned();
+        let empty = read_chat_history(root_string.clone(), "Biology".into()).unwrap();
+        assert!(empty.is_empty());
+
+        let user = serde_json::json!({
+            "ts": "2026-10-17T12:00:00Z",
+            "role": "user",
+            "mode": "ask",
+            "content": "What is ATP?"
+        });
+        let assistant = serde_json::json!({
+            "ts": "2026-10-17T12:00:01Z",
+            "role": "assistant",
+            "mode": "ask",
+            "content": "Energy currency.",
+            "supported": true,
+            "citations": []
+        });
+        let session = serde_json::json!({
+            "ts": "2026-10-17T12:01:00Z",
+            "role": "session",
+            "content": ""
+        });
+        append_chat_lines(
+            root_string.clone(),
+            "Biology".into(),
+            vec![user.clone(), assistant.clone()],
+        )
+        .unwrap();
+        append_chat_lines(root_string.clone(), "Biology".into(), vec![session.clone()]).unwrap();
+
+        let read_back = read_chat_history(root_string.clone(), "Biology".into()).unwrap();
+        assert_eq!(read_back.len(), 3);
+        assert_eq!(read_back[2]["role"], "session");
+
+        clear_chat_history(root_string.clone(), "Biology".into()).unwrap();
+        assert!(read_chat_history(root_string.clone(), "Biology".into())
+            .unwrap()
+            .is_empty());
+        assert!(root
+            .join(".arbor")
+            .join("chat")
+            .join("Chemistry.jsonl")
+            .exists()
+            == false);
+    }
+
+    #[test]
+    fn chat_history_clear_only_removes_one_course() {
+        let root = temp_root("chat-clear");
+        let root_string = root.to_string_lossy().into_owned();
+        let line = serde_json::json!({
+            "ts": "2026-10-17T12:00:00Z",
+            "role": "user",
+            "mode": "ask",
+            "content": "Hi"
+        });
+        append_chat_lines(root_string.clone(), "Biology".into(), vec![line.clone()]).unwrap();
+        append_chat_lines(root_string.clone(), "Chemistry".into(), vec![line.clone()]).unwrap();
+        clear_chat_history(root_string.clone(), "Biology".into()).unwrap();
+        assert!(read_chat_history(root_string.clone(), "Biology".into())
+            .unwrap()
+            .is_empty());
+        assert_eq!(read_chat_history(root_string.clone(), "Chemistry".into()).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn chat_history_rejects_invalid_course_names() {
+        let root = temp_root("chat-reject");
+        let root_string = root.to_string_lossy().into_owned();
+        let line = serde_json::json!({
+            "ts": "2026-10-17T12:00:00Z",
+            "role": "user",
+            "mode": "ask",
+            "content": "Hi"
+        });
+        for bad in ["../x", "foo/bar", "/abs", "study"] {
+            assert!(read_chat_history(root_string.clone(), bad.into()).is_err());
+            assert!(append_chat_lines(root_string.clone(), bad.into(), vec![line.clone()]).is_err());
+            assert!(clear_chat_history(root_string.clone(), bad.into()).is_err());
+        }
+    }
+
+    #[test]
+    fn chat_worker_stdin_has_required_keys_without_write_paths() {
+        let payload = chat_worker_stdin_payload(
+            "/knowledge",
+            "Biology",
+            "What is DNA?",
+            "ask",
+            "fake",
+            "fake-model",
+            &[serde_json::json!({"role": "user", "content": "Hi"})],
+        );
+        assert_eq!(payload["root"], "/knowledge");
+        assert_eq!(payload["course"], "Biology");
+        assert_eq!(payload["question"], "What is DNA?");
+        assert_eq!(payload["mode"], "ask");
+        assert_eq!(payload["provider"], "fake");
+        assert_eq!(payload["model"], "fake-model");
+        assert!(payload.get("budget_chars").is_none());
+        let text = payload.to_string();
+        assert!(!text.contains("plan"));
+        assert!(!text.contains(".arbor/chat"));
     }
 }
 
