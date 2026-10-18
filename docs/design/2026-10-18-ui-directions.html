@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Arbor 6.0 — UI directions</title>
+<style>
+  /* ───────── Mockup chrome (not part of the app) ───────── */
+  .mock { font-family: var(--font-sans, system-ui, sans-serif); color: var(--foreground, #222); }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; margin-bottom: 10px; }
+  .ctl { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted-foreground, #666); }
+  .seg { display: inline-flex; padding: 2px; gap: 2px; border: 1px solid var(--border, #ddd); border-radius: 8px; background: var(--muted, #f4f4f5); }
+  .seg button { font: inherit; font-size: 12px; border: 0; background: transparent; color: var(--muted-foreground, #666); padding: 4px 10px; border-radius: 6px; cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--card, #fff); color: var(--foreground, #111); box-shadow: 0 1px 2px rgb(0 0 0 / .12); }
+  .caption { font-size: 13px; line-height: 1.5; color: var(--muted-foreground, #666); margin: 0 0 12px; max-width: 70ch; }
+  .caption b { color: var(--foreground, #111); font-weight: 600; }
+  .stage { width: 100%; position: relative; overflow: hidden; border-radius: 12px; }
+  .frame { width: 1200px; height: 760px; transform-origin: top left; position: absolute; top: 0; left: 0; }
+
+  /* ───────── Tokens: the only place raw values live ───────── */
+  .app {
+    --sidebar-w: 232px; --rail-w: 56px; --index-w: 236px;
+    --ease: cubic-bezier(.2,.7,.2,1); --dur: 180ms;
+  }
+  /* A — Refined Arbor */
+  .app[data-dir="a"] {
+    --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    --font-read: "Iowan Old Style", "Palatino Linotype", Palatino, Charter, Georgia, serif;
+    --font-title: var(--font-ui); --font-meta: var(--font-ui);
+    --text-ui: 13px; --row-h: 32px; --radius: 8px; --radius-ctl: 7px;
+    --read-size: 16.5px; --read-lh: 1.72; --read-max: 660px; --title-size: 18px;
+    --icon-stroke: 1.85; --header-surface: var(--surface);
+  }
+  .app[data-dir="a"][data-theme="light"] {
+    --bg: #FAF7F1; --surface: #FFFDF9; --sidebar: #F3EEE5; --fg: #2A3028; --muted-fg: #687064; --faint: #9A9F96;
+    --border: #E6DFD3; --primary: #4F6F55; --primary-fg: #FFFFFF; --hover: #ECE7DC; --row-active: #E1EAE1; --row-active-fg: #2F4535;
+    --soft: #E8EFE9; --soft-fg: #3D5243; --success: #4F8A5B; --danger: #B85C4A; --shadow: 0 1px 2px rgb(42 48 40 / .06), 0 6px 24px rgb(42 48 40 / .06);
+  }
+  .app[data-dir="a"][data-theme="dark"] {
+    --bg: #1C1F1B; --surface: #222620; --sidebar: #191C18; --fg: #E7E3DA; --muted-fg: #A3A69B; --faint: #767C72;
+    --border: #31372F; --primary: #7FA383; --primary-fg: #132015; --hover: #262B24; --row-active: #2B3529; --row-active-fg: #CFE3D1;
+    --soft: #26302A; --soft-fg: #B9D3BC; --success: #7FBF8A; --danger: #D48474; --shadow: 0 1px 2px rgb(0 0 0 / .3), 0 8px 28px rgb(0 0 0 / .25);
+  }
+  /* B — Tool neutral (T3 Code-like) */
+  .app[data-dir="b"] {
+    --font-ui: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    --font-read: var(--font-ui); --font-title: var(--font-ui);
+    --font-meta: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+    --text-ui: 13px; --row-h: 28px; --radius: 10px; --radius-ctl: 8px;
+    --read-size: 15px; --read-lh: 1.66; --read-max: 720px; --title-size: 15px;
+    --icon-stroke: 1.75; --header-surface: var(--bg);
+  }
+  .app[data-dir="b"][data-theme="light"] {
+    --bg: #FCFCFD; --surface: #FFFFFF; --sidebar: #F6F6F7; --fg: #18181B; --muted-fg: #71717A; --faint: #A1A1AA;
+    --border: #E4E4E7; --primary: #4353E0; --primary-fg: #FFFFFF; --hover: #EFEFF1; --row-active: #E9E9EC; --row-active-fg: #18181B;
+    --soft: #EEF0FD; --soft-fg: #3341B8; --success: #10A36E; --danger: #E5484D; --shadow: 0 1px 2px rgb(0 0 0 / .05), 0 4px 16px rgb(0 0 0 / .05);
+  }
+  .app[data-dir="b"][data-theme="dark"] {
+    --bg: #0B0B0D; --surface: #131316; --sidebar: #0E0E10; --fg: #EDEDEF; --muted-fg: #9C9CA6; --faint: #6B6B74;
+    --border: #232327; --primary: #6D7CFF; --primary-fg: #FFFFFF; --hover: #18181C; --row-active: #1E1E23; --row-active-fg: #FFFFFF;
+    --soft: #1A1D33; --soft-fg: #A9B2FF; --success: #3DD68C; --danger: #FF6369; --shadow: 0 1px 2px rgb(0 0 0 / .5), 0 8px 24px rgb(0 0 0 / .4);
+  }
+  /* C — Paper / reading-first */
+  .app[data-dir="c"] {
+    --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    --font-read: "Iowan Old Style", Charter, "Palatino Linotype", Palatino, Georgia, serif;
+    --font-title: var(--font-read); --font-meta: var(--font-ui);
+    --text-ui: 13px; --row-h: 30px; --radius: 4px; --radius-ctl: 4px;
+    --read-size: 18px; --read-lh: 1.78; --read-max: 620px; --title-size: 21px;
+    --icon-stroke: 1.5; --header-surface: var(--bg);
+  }
+  .app[data-dir="c"][data-theme="light"] {
+    --bg: #F6F1E7; --surface: #FBF8F1; --sidebar: #F6F1E7; --fg: #2B2420; --muted-fg: #7A6E63; --faint: #A89C8F;
+    --border: #E2D8C8; --primary: #A4482A; --primary-fg: #FFFFFF; --hover: #EFE8DB; --row-active: #EDE4D4; --row-active-fg: #2B2420;
+    --soft: #F1E2D8; --soft-fg: #8A3B22; --success: #5E7F4A; --danger: #B03A2E; --shadow: 0 1px 0 rgb(43 36 32 / .04);
+  }
+  .app[data-dir="c"][data-theme="dark"] {
+    --bg: #1A1714; --surface: #201C18; --sidebar: #1A1714; --fg: #ECE3D6; --muted-fg: #ADA08F; --faint: #7D7266;
+    --border: #332D27; --primary: #D9805C; --primary-fg: #1A1714; --hover: #241F1A; --row-active: #2A241E; --row-active-fg: #F3EADC;
+    --soft: #33251E; --soft-fg: #E9A585; --success: #9DBB84; --danger: #E2806F; --shadow: 0 1px 0 rgb(0 0 0 / .2);
+  }
+
+  /* ───────── App (consumes tokens only) ───────── */
+  .app, .app * { box-sizing: border-box; }
+  .app { display: flex; width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--fg);
+    font-family: var(--font-ui); font-size: var(--text-ui); line-height: 1.4; border: 1px solid var(--border); border-radius: 12px; }
+  .i { width: 16px; height: 16px; flex: none; display: block; fill: none; stroke: currentColor; stroke-width: var(--icon-stroke); stroke-linecap: round; stroke-linejoin: round; }
+  .i.sm { width: 14px; height: 14px; }
+  button { font: inherit; color: inherit; }
+
+  /* Buttons — one component, variants + sizes; icon size fixed by size */
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 30px; padding: 0 12px;
+    border-radius: var(--radius-ctl); border: 1px solid transparent; background: transparent; cursor: pointer; white-space: nowrap; font-weight: 500;
+    transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease); }
+  .btn.sm { height: 26px; padding: 0 8px; font-size: 12px; }
+  .btn.primary { background: var(--primary); color: var(--primary-fg); }
+  .btn.primary:hover { background: color-mix(in srgb, var(--primary) 88%, var(--fg)); }
+  .btn.outline { border-color: var(--border); background: var(--surface); }
+  .btn.outline:hover, .btn.ghost:hover { background: var(--hover); }
+  .btn.ghost { color: var(--muted-fg); }
+  .btn.ghost:hover { color: var(--fg); }
+  .ib { width: 30px; height: 30px; padding: 0; display: inline-grid; place-items: center; border: 0; border-radius: var(--radius-ctl); background: transparent; color: var(--muted-fg); cursor: pointer; position: relative; }
+  .ib:hover { background: var(--hover); color: var(--fg); }
+  .ib.sm { width: 22px; height: 22px; }
+  .kbd { font-family: var(--font-meta); font-size: 10.5px; color: var(--faint); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; line-height: 16px; }
+
+  /* Sidebar */
+  .sb { width: var(--sidebar-w); flex: none; display: flex; flex-direction: column; background: var(--sidebar); border-right: 1px solid var(--border);
+    transition: width var(--dur) var(--ease); overflow: hidden; }
+  .app[data-sidebar="rail"] .sb { width: var(--rail-w); }
+  .app[data-sidebar="hidden"] .sb { width: 0; border-right-width: 0; }
+  .sb-head { height: 52px; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; flex: none; }
+  .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .mark { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: var(--primary); color: var(--primary-fg); flex: none; }
+  .app[data-dir="c"] .mark { background: transparent; color: var(--primary); border: 1px solid var(--border); border-radius: 50%; }
+  .brand-name { font-family: var(--font-title); font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
+  .app[data-dir="c"] .brand-name { font-weight: 500; font-size: 18px; letter-spacing: 0; }
+  .sb-scroll { flex: 1; min-height: 0; overflow: auto; padding: 4px 8px; }
+  .label-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 6px 4px 8px; }
+  .label { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
+  .app[data-dir="b"] .label { text-transform: none; letter-spacing: 0; font-size: 12px; font-weight: 500; }
+  .app[data-dir="c"] .label { font-family: var(--font-read); text-transform: none; letter-spacing: 0; font-size: 13px; font-style: italic; font-weight: 400; }
+  .row { display: flex; align-items: center; gap: 10px; height: var(--row-h); padding: 0 8px; border-radius: var(--radius-ctl); color: var(--fg); cursor: pointer; white-space: nowrap; position: relative; }
+  .row:hover { background: var(--hover); }
+  .row.active { background: var(--row-active); color: var(--row-active-fg); font-weight: 500; }
+  .app[data-dir="c"] .row.active { background: transparent; }
+  .app[data-dir="c"] .row.active::before { content: ""; position: absolute; left: 0; top: 7px; bottom: 7px; width: 2px; border-radius: 2px; background: var(--primary); }
+  .row .txt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .row .count { font-family: var(--font-meta); font-size: 11px; color: var(--faint); }
+  .row .lead { width: 20px; height: 20px; flex: none; display: grid; place-items: center; color: var(--muted-fg); }
+  .avatar { width: 20px; height: 20px; flex: none; border-radius: 6px; display: grid; place-items: center; font-size: 10px; font-weight: 600; background: var(--soft); color: var(--soft-fg); }
+  .app[data-dir="c"] .avatar { border-radius: 50%; font-family: var(--font-read); font-weight: 500; font-size: 11px; }
+  .root-row { color: var(--muted-fg); font-size: 12px; font-weight: 500; }
+  .indent { padding-left: 14px; }
+  .sb-bottom { flex: none; border-top: 1px solid var(--border); padding: 8px; }
+  .provider { display: flex; align-items: center; gap: 8px; padding: 8px; font-size: 12px; color: var(--muted-fg); white-space: nowrap; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--success); flex: none; }
+  .app[data-sidebar="rail"] .sb :is(.txt, .count, .label-row, .brand-name, .sb-collapse, .root-row),
+  .app[data-sidebar="rail"] .sb .provider span:not(.dot) { display: none; }
+  .app[data-sidebar="rail"] .sb .row { justify-content: center; padding: 0; }
+  .app[data-sidebar="rail"] .sb .indent { padding-left: 0; }
+  .app[data-sidebar="rail"] .sb-head { justify-content: center; padding: 0; }
+  .app[data-sidebar="rail"] .provider { justify-content: center; }
+
+  /* Main column */
+  .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .hd { height: 52px; flex: none; display: flex; align-items: center; gap: 12px; padding: 0 16px; background: var(--header-surface); border-bottom: 1px solid var(--border); }
+  .hd .open-sb { display: none; }
+  .app:not([data-sidebar="expanded"]) .hd .open-sb { display: inline-grid; }
+  .title { display: flex; align-items: baseline; gap: 10px; margin-right: auto; min-width: 0; }
+  .title h1 { margin: 0; font-family: var(--font-title); font-size: var(--title-size); font-weight: 600; letter-spacing: -.015em; white-space: nowrap; }
+  .app[data-dir="c"] .title h1 { font-weight: 500; letter-spacing: 0; }
+  .title .sub { font-family: var(--font-meta); font-size: 12px; color: var(--faint); white-space: nowrap; }
+
+  .tabs { display: flex; gap: 2px; padding: 2px; border-radius: calc(var(--radius-ctl) + 2px); background: var(--hover); }
+  .tab { height: 26px; padding: 0 12px; border: 0; border-radius: var(--radius-ctl); background: transparent; color: var(--muted-fg); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-weight: 500; }
+  .tab:hover { color: var(--fg); }
+  .tab[aria-selected="true"] { background: var(--surface); color: var(--fg); box-shadow: var(--shadow); }
+  .app[data-dir="b"] .tabs { background: transparent; border: 1px solid var(--border); }
+  .app[data-dir="b"] .tab[aria-selected="true"] { background: var(--row-active); box-shadow: none; }
+  .app[data-dir="c"] .tabs { background: transparent; padding: 0; gap: 18px; height: 52px; align-items: stretch; }
+  .app[data-dir="c"] .tab { height: auto; padding: 0 2px; border-radius: 0; border-bottom: 2px solid transparent; font-weight: 400; }
+  .app[data-dir="c"] .tab[aria-selected="true"] { background: transparent; box-shadow: none; border-bottom-color: var(--primary); color: var(--fg); }
+  .app[data-dir] .cards-bar .tabs { height: auto; align-items: center; }
+  .app[data-dir="c"] .cards-bar .tab { height: 28px; }
+  .tab .i { display: none; }
+  .app[data-dir="b"] .tab .i { display: block; }
+
+  .actionbar { height: 44px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--border); background: var(--header-surface); }
+  .app[data-dir="c"] .actionbar { border-bottom-style: dashed; }
+  .spacer { flex: 1; }
+  .pill { display: inline-flex; align-items: center; gap: 8px; height: 26px; padding: 0 10px; border-radius: 999px; background: var(--soft); color: var(--soft-fg); font-size: 12px; font-weight: 500; }
+  .app[data-dir="b"] .pill { font-family: var(--font-meta); font-weight: 400; font-size: 11.5px; background: transparent; border: 1px solid var(--border); color: var(--muted-fg); }
+  .badge-dot { position: absolute; top: 4px; right: 4px; width: 7px; height: 7px; border-radius: 50%; background: var(--primary); box-shadow: 0 0 0 2px var(--header-surface); }
+
+  .body { flex: 1; min-height: 0; display: flex; position: relative; }
+  .view { flex: 1; min-width: 0; display: none; }
+  .app[data-view="notes"] .view.notes, .app[data-view="cards"] .view.cards { display: flex; }
+
+  /* Notes */
+  .index { width: var(--index-w); flex: none; border-right: 1px solid var(--border); padding: 8px; overflow: auto; background: var(--bg); }
+  .app[data-dir="a"] .index { background: var(--surface); }
+  .digest { display: block; padding: 8px 10px; border-radius: var(--radius-ctl); cursor: pointer; }
+  .digest:hover { background: var(--hover); }
+  .digest.active { background: var(--row-active); }
+  .app[data-dir="c"] .digest.active { background: transparent; box-shadow: inset 2px 0 0 var(--primary); border-radius: 0; }
+  .digest .n { display: block; font-weight: 500; color: var(--fg); }
+  .digest .d { display: block; font-family: var(--font-meta); font-size: 11px; color: var(--faint); margin-top: 2px; }
+  .read { flex: 1; min-width: 0; overflow: auto; padding: 36px 48px 64px; }
+  .read article { max-width: var(--read-max); margin: 0 auto; font-family: var(--font-read); font-size: var(--read-size); line-height: var(--read-lh); }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 18px; font-family: var(--font-ui); }
+  .chip { display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 999px; background: var(--soft); color: var(--soft-fg); font-size: 12px; font-weight: 500; cursor: pointer; }
+  .chip.plain { background: transparent; border: 1px solid var(--border); color: var(--muted-fg); font-family: var(--font-meta); font-weight: 400; }
+  .app[data-dir="c"] .chip { border-radius: 3px; background: transparent; border: 1px solid var(--border); color: var(--soft-fg); font-weight: 400; }
+  .read h2.doc { font-size: 2em; line-height: 1.15; margin: 0 0 8px; font-weight: 600; letter-spacing: -.02em; }
+  .app[data-dir="c"] .read h2.doc { font-weight: 500; font-size: 2.3em; letter-spacing: -.01em; }
+  .read .lede { color: var(--muted-fg); margin: 0 0 24px; }
+  .read h3 { font-size: 1.2em; margin: 30px 0 8px; font-weight: 600; color: var(--fg); }
+  .app[data-dir="a"] .read h3 { color: var(--primary); }
+  .app[data-dir="c"] .read h3 { font-weight: 500; font-style: italic; }
+  .read p { margin: 0 0 14px; }
+  .read ul { margin: 0 0 14px; padding-left: 1.2em; }
+  .read li { margin-bottom: 6px; }
+  .read li::marker { color: var(--faint); }
+  .read strong { font-weight: 650; }
+  .read .callout { font-family: var(--font-ui); font-size: 13px; line-height: 1.5; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); padding: 12px 14px; display: flex; gap: 10px; margin: 20px 0; color: var(--muted-fg); }
+  .read .callout .i { color: var(--primary); margin-top: 1px; }
+
+  /* Flashcards */
+  .view.cards { flex-direction: column; align-items: center; overflow: auto; padding: 32px 48px; }
+  .cards-bar { width: min(680px, 100%); display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+  .progress { flex: 1; height: 4px; border-radius: 999px; background: var(--hover); overflow: hidden; }
+  .progress > span { display: block; width: 36%; height: 100%; background: var(--primary); }
+  .count-txt { font-family: var(--font-meta); font-size: 12px; color: var(--muted-fg); white-space: nowrap; }
+  .card { width: min(680px, 100%); min-height: 330px; background: var(--surface); border: 1px solid var(--border); border-radius: calc(var(--radius) + 4px); box-shadow: var(--shadow);
+    padding: 28px 32px; display: flex; flex-direction: column; cursor: pointer; }
+  .app[data-dir="c"] .card { border-radius: var(--radius); }
+  .card .side { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); }
+  .card .q { font-family: var(--font-read); font-size: calc(var(--read-size) + 5px); line-height: 1.4; margin: 14px 0 0; font-weight: 500; }
+  .app[data-dir="b"] .card .q { font-weight: 600; letter-spacing: -.01em; }
+  .card .a { display: none; font-family: var(--font-read); font-size: var(--read-size); line-height: var(--read-lh); color: var(--muted-fg); margin-top: 18px; padding-top: 18px; border-top: 1px dashed var(--border); }
+  .card.flipped .a { display: block; }
+  .card .foot { margin-top: auto; padding-top: 20px; display: flex; align-items: center; justify-content: space-between; color: var(--faint); font-size: 12px; }
+  .grades { width: min(680px, 100%); display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 14px; }
+  .grades .btn { height: 38px; justify-content: space-between; padding: 0 14px; }
+  .grades .btn.again { border-color: var(--border); background: var(--surface); }
+  .grades .btn.again .lbl { color: var(--danger); }
+  .grades .btn.mastered .lbl { color: var(--success); }
+
+  /* Log drawer — closed by default */
+  .log { position: absolute; left: 0; right: 0; bottom: 0; height: 0; overflow: hidden; background: var(--surface); border-top: 0 solid var(--border);
+    transition: height var(--dur) var(--ease); display: flex; flex-direction: column; }
+  .app[data-log="open"] .log { height: 210px; border-top-width: 1px; box-shadow: 0 -8px 24px rgb(0 0 0 / .08); }
+  .log-hd { height: 36px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 16px; border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 600; }
+  .log pre { margin: 0; padding: 10px 16px; overflow: auto; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11.5px; line-height: 1.6; color: var(--muted-fg); }
+  .log pre .ok { color: var(--success); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-tree" viewBox="0 0 24 24"><path d="M8 19a4 4 0 0 1-2.24-7.32A3.5 3.5 0 0 1 9 6.03V6a3 3 0 1 1 6 0v.04a3.5 3.5 0 0 1 3.24 5.65A4 4 0 0 1 16 19Z"/><path d="M12 19v3"/></symbol>
+  <symbol id="i-panel" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></symbol>
+  <symbol id="i-activity" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></symbol>
+  <symbol id="i-terminal" viewBox="0 0 24 24"><path d="m4 17 6-6-6-6"/><path d="M12 19h8"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></symbol>
+  <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></symbol>
+  <symbol id="i-share" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.59 13.51 6.83 3.98"/><path d="m15.41 6.51-6.82 3.98"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/></symbol>
+</svg>
+
+<div class="mock">
+  <div class="controls">
+    <div class="ctl">Direction <div class="seg" data-ctl="dir"><button data-v="a" aria-pressed="true">A · Refined Arbor</button><button data-v="b">B · Tool neutral</button><button data-v="c">C · Paper</button></div></div>
+    <div class="ctl">Theme <div class="seg" data-ctl="theme"><button data-v="light" aria-pressed="true">Light</button><button data-v="dark">Dark</button></div></div>
+    <div class="ctl">View <div class="seg" data-ctl="view"><button data-v="notes" aria-pressed="true">Notes</button><button data-v="cards">Flashcards</button></div></div>
+    <div class="ctl">Sidebar <div class="seg" data-ctl="sidebar"><button data-v="expanded" aria-pressed="true">Expanded</button><button data-v="rail">Rail</button><button data-v="hidden">Hidden</button></div></div>
+    <div class="ctl">Log <div class="seg" data-ctl="log"><button data-v="closed" aria-pressed="true">Closed</button><button data-v="open">Open</button></div></div>
+  </div>
+  <p class="caption" id="caption"></p>
+
+  <div class="stage" id="stage">
+    <div class="frame" id="frame">
+      <div class="app" id="app" data-dir="a" data-theme="light" data-view="notes" data-sidebar="expanded" data-log="closed">
+        <aside class="sb">
+          <div class="sb-head">
+            <div class="brand"><span class="mark"><svg class="i"><use href="#i-tree"/></svg></span><span class="brand-name">Arbor</span></div>
+            <button class="ib sb-collapse" data-act="rail" title="Collapse sidebar (⌘B)"><svg class="i"><use href="#i-panel"/></svg></button>
+          </div>
+          <div class="sb-scroll">
+            <div class="label-row"><span class="label">Library</span><button class="ib sm" title="Add class"><svg class="i sm"><use href="#i-plus"/></svg></button></div>
+            <div class="row root-row"><span class="lead"><svg class="i sm"><use href="#i-down"/></svg></span><span class="txt">Fall 2026</span></div>
+            <div class="row indent active" title="Cell Biology"><span class="avatar">CB</span><span class="txt">Cell Biology</span><span class="count">12</span></div>
+            <div class="row indent" title="Organic Chemistry II"><span class="avatar">OC</span><span class="txt">Organic Chemistry II</span><span class="count">9</span></div>
+            <div class="row indent" title="Linear Algebra"><span class="avatar">LA</span><span class="txt">Linear Algebra</span><span class="count">14</span></div>
+            <div class="row indent" title="Medieval Europe"><span class="avatar">ME</span><span class="txt">Medieval Europe</span><span class="count">6</span></div>
+            <div class="row root-row"><span class="lead"><svg class="i sm"><use href="#i-right"/></svg></span><span class="txt">Shared · Study group</span></div>
+          </div>
+          <div class="sb-bottom">
+            <div class="row" title="Jobs"><span class="lead"><svg class="i"><use href="#i-activity"/></svg></span><span class="txt">Jobs</span></div>
+            <div class="row" title="Settings"><span class="lead"><svg class="i"><use href="#i-settings"/></svg></span><span class="txt">Settings</span></div>
+            <div class="provider" title="Grok · grok-4.7"><span class="dot"></span><span>Grok · grok-4.7</span></div>
+          </div>
+        </aside>
+
+        <div class="main">
+          <header class="hd">
+            <button class="ib open-sb" data-act="expand" title="Expand sidebar (⌘B)"><svg class="i"><use href="#i-panel"/></svg></button>
+            <div class="title"><h1>Cell Biology</h1><span class="sub">Fall 2026 · 12 digests</span></div>
+            <div class="tabs" role="tablist">
+              <button class="tab" role="tab" data-tab="notes" aria-selected="true"><svg class="i sm"><use href="#i-book"/></svg>Notes</button>
+              <button class="tab" role="tab" data-tab="cards" aria-selected="false"><svg class="i sm"><use href="#i-layers"/></svg>Flashcards</button>
+              <button class="tab" role="tab" aria-selected="false"><svg class="i sm"><use href="#i-help"/></svg>Quiz</button>
+              <button class="tab" role="tab" aria-selected="false"><svg class="i sm"><use href="#i-share"/></svg>Graph</button>
+              <button class="tab" role="tab" aria-selected="false"><svg class="i sm"><use href="#i-chat"/></svg>Chat</button>
+            </div>
+            <button class="btn outline sm"><svg class="i sm"><use href="#i-plus"/></svg>Add files</button>
+            <button class="btn outline sm" title="Search (⌘K)"><svg class="i sm"><use href="#i-search"/></svg><span class="kbd">⌘K</span></button>
+          </header>
+
+          <div class="actionbar">
+            <button class="btn primary sm"><svg class="i sm"><use href="#i-refresh"/></svg>Update knowledge</button>
+            <button class="btn ghost sm"><svg class="i sm"><use href="#i-check"/></svg>Check citations</button>
+            <div class="spacer"></div>
+            <span class="pill"><span class="dot"></span>Up to date · 2h ago</span>
+            <button class="ib" data-act="log" title="Toggle log (⌘`)"><svg class="i"><use href="#i-terminal"/></svg><span class="badge-dot"></span></button>
+          </div>
+
+          <div class="body">
+            <section class="view notes">
+              <nav class="index">
+                <div class="label-row"><span class="label">Course</span><button class="ib sm" title="Hide index"><svg class="i sm"><use href="#i-list"/></svg></button></div>
+                <a class="digest"><span class="n">Overview</span><span class="d">course.md</span></a>
+                <div class="label-row"><span class="label">Digests</span></div>
+                <a class="digest active"><span class="n">07 · Membrane transport</span><span class="d">Oct 14 · pp. 151–188</span></a>
+                <a class="digest"><span class="n">06 · The cytoskeleton</span><span class="d">Oct 9 · pp. 120–150</span></a>
+                <a class="digest"><span class="n">05 · Protein sorting</span><span class="d">Oct 7 · pp. 96–119</span></a>
+                <a class="digest"><span class="n">04 · Endomembrane system</span><span class="d">Oct 2 · pp. 71–95</span></a>
+                <a class="digest"><span class="n">03 · Lipid bilayers</span><span class="d">Sep 30 · pp. 48–70</span></a>
+                <a class="digest"><span class="n">02 · Cell chemistry</span><span class="d">Sep 25 · pp. 22–47</span></a>
+              </nav>
+              <div class="read">
+                <article>
+                  <div class="meta-row"><span class="chip plain">pp. 151–188</span><span class="chip">Facilitated diffusion</span><span class="chip">Na⁺/K⁺ ATPase</span><span class="chip">Electrochemical gradient</span><span class="chip">Aquaporins</span></div>
+                  <h2 class="doc">Membrane transport</h2>
+                  <p class="lede">How cells move ions and small molecules across a bilayer that is, by design, almost impermeable to them.</p>
+                  <h3>Passive transport</h3>
+                  <p>Solutes move <strong>down their electrochemical gradient</strong> without an energy input. Small nonpolar molecules diffuse straight through the bilayer; ions and polar molecules need a protein path.</p>
+                  <ul>
+                    <li><strong>Channels</strong> form gated pores and are fast, up to 10⁸ ions per second.</li>
+                    <li><strong>Carriers</strong> bind the solute and change shape. They are slower and can saturate.</li>
+                  </ul>
+                  <div class="callout"><svg class="i"><use href="#i-info"/></svg><span>Exam focus: the lecturer flagged the difference between channel and carrier kinetics twice (slides 12 and 31).</span></div>
+                  <h3>Active transport</h3>
+                  <p>The <strong>Na⁺/K⁺ ATPase</strong> pumps 3 Na⁺ out and 2 K⁺ in per ATP. That makes it electrogenic: it contributes directly to the resting membrane potential.</p>
+                </article>
+              </div>
+            </section>
+
+            <section class="view cards">
+              <div class="cards-bar">
+                <div class="tabs"><button class="tab" aria-selected="true">Due today · 14</button><button class="tab" aria-selected="false">Full deck · 86</button></div>
+                <div class="progress"><span></span></div>
+                <span class="count-txt">5 / 14</span>
+              </div>
+              <div class="card" id="card">
+                <span class="side">Question</span>
+                <p class="q">Why does the Na⁺/K⁺ ATPase count as electrogenic?</p>
+                <p class="a">Each cycle moves three positive charges out and only two in, so there is a net outward current that adds directly to the membrane potential.</p>
+                <div class="foot"><span>07 · Membrane transport · p. 163</span><span>Click or press <span class="kbd">Space</span> to flip</span></div>
+              </div>
+              <div class="grades">
+                <button class="btn again"><span class="lbl">Again</span><span class="kbd">1</span></button>
+                <button class="btn outline"><span class="lbl">Wrong</span><span class="kbd">2</span></button>
+                <button class="btn outline mastered"><span class="lbl">Mastered</span><span class="kbd">3</span></button>
+              </div>
+            </section>
+
+            <div class="log">
+              <div class="log-hd"><svg class="i sm"><use href="#i-terminal"/></svg>Log<span class="spacer"></span><button class="ib sm" data-act="log" title="Close log"><svg class="i sm"><use href="#i-x"/></svg></button></div>
+<pre>14:02:11  plan_update  Cell Biology · 1 new source
+14:02:12  prepare      lecture-07.pdf · 38 pages
+14:02:40  digest       07 · Membrane transport · chunk 3/3
+14:03:05  embed        112 chunks
+14:03:06  <span class="ok">done</span>         Update finished in 55s</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const app = document.getElementById("app");
+  const captions = {
+    a: "<b>Refined Arbor.</b> Keeps the cream and sage identity, tightened: one accent, a quieter sidebar, soft cards, uppercase section labels, and serif only for reading. The closest to today, done properly.",
+    b: "<b>Tool neutral.</b> T3 Code-like: zinc greys, a single blue accent, dense 28px rows, icon tabs, and monospace metadata, with near-black dark mode. Feels like a fast tool rather than a study app.",
+    c: "<b>Paper.</b> Reading-first: warm off-white, terracotta accent, serif titles and a large 18px reading column. The chrome recedes into hairlines, underline tabs, and an active-row bar. Feels like a book."
+  };
+  function set(key, v) {
+    if (key === "dir") app.dataset.dir = v;
+    if (key === "theme") app.dataset.theme = v;
+    if (key === "view") app.dataset.view = v;
+    if (key === "sidebar") app.dataset.sidebar = v;
+    if (key === "log") app.dataset.log = v;
+    document.querySelectorAll(`[data-ctl="${key}"] button`).forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === v)));
+    if (key === "view") document.querySelectorAll(".tab[data-tab]").forEach(t => t.setAttribute("aria-selected", String(t.dataset.tab === v)));
+    if (key === "dir") document.getElementById("caption").innerHTML = captions[v];
+  }
+  document.querySelectorAll("[data-ctl] button").forEach(b => b.addEventListener("click", () => set(b.parentElement.dataset.ctl, b.dataset.v)));
+  document.querySelectorAll(".tab[data-tab]").forEach(t => t.addEventListener("click", () => set("view", t.dataset.tab)));
+  app.addEventListener("click", e => {
+    const act = e.target.closest("[data-act]")?.dataset.act;
+    if (act === "rail") set("sidebar", "rail");
+    if (act === "expand") set("sidebar", "expanded");
+    if (act === "log") set("log", app.dataset.log === "open" ? "closed" : "open");
+  });
+  document.getElementById("card").addEventListener("click", e => e.currentTarget.classList.toggle("flipped"));
+  if (document.documentElement.classList.contains("dark") || matchMedia("(prefers-color-scheme: dark)").matches) set("theme", "dark");
+  set("dir", "a");
+  const stage = document.getElementById("stage"), frame = document.getElementById("frame");
+  function fit() { const s = Math.min(1, stage.clientWidth / 1200); frame.style.transform = `scale(${s})`; stage.style.height = `${760 * s}px`; }
+  new ResizeObserver(fit).observe(stage); fit();
+</script>
+</body>
+</html>
