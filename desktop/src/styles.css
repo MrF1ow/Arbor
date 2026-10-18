@@ -1041,6 +1041,67 @@ html[data-theme="dark"] .welcome-mark {
   margin-top: 16px;
 }
 
+.library-dialog {
+  border: 1px solid var(--cream-border);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  max-width: 520px;
+  width: calc(100% - 32px);
+  background: var(--cream-elevated);
+  color: var(--ink);
+  box-shadow: var(--shadow-md);
+}
+
+.library-dialog::backdrop {
+  background: rgba(42, 48, 40, 0.35);
+}
+
+.library-dialog h2 {
+  font-family: var(--font-ui);
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 14px;
+}
+
+.library-dialog label {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 550;
+  color: var(--ink-muted);
+  margin: 10px 0 4px;
+}
+
+.library-dialog input[type="text"] {
+  width: 100%;
+  font: inherit;
+  font-size: 14px;
+  padding: 8px 10px;
+  border: 1px solid var(--cream-border);
+  border-radius: var(--radius);
+  background: var(--cream-bg);
+  color: var(--ink);
+}
+
+.library-dialog-error {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  color: var(--danger);
+  margin: 8px 0 0;
+  min-height: 1.2em;
+}
+
+.library-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+#library-join-pick {
+  margin-top: 8px;
+}
+
 .weak-topics {
   font-family: var(--font-ui);
   max-width: 640px;

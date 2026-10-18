@@ -35,4 +35,10 @@ test("shared library sync UI and success paths", async () => {
   const joinEnd = source.indexOf("\nsyncConflictCloseBtn.addEventListener", joinConfirm);
   const joinBody = source.slice(joinConfirm, joinEnd === -1 ? undefined : joinEnd);
   assert.match(joinBody, /switchKnowledgeRoot\(result\.path\)/);
+
+  const css = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
+  assert.match(css, /\.library-dialog\s*\{[\s\S]*background:\s*var\(--cream-elevated\)/);
+  assert.match(css, /\.library-dialog\s*\{[\s\S]*color:\s*var\(--ink\)/);
+  assert.match(css, /\.library-dialog::backdrop/);
+  assert.match(css, /\.library-dialog-actions/);
 });
