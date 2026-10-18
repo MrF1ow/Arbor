@@ -1,3 +1,10 @@
+#[allow(unused_imports)]
+pub use crate::transport::{
+    arbor_known_hosts_path, map_ssh_error, quote_remote_command, quote_remote_token,
+    remote_course_dir, remote_knowledge_root, root_id_for, rsync_argv, rsync_remote_spec,
+    rsync_ssh_wrapper, ssh_argv, validate_ssh, ValidatedSsh, WorkerTransport,
+};
+
 use std::ffi::OsString;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};

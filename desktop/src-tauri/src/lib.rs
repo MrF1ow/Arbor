@@ -6,6 +6,7 @@ pub mod linux_graphics;
 mod search;
 mod settings;
 mod watch;
+mod transport;
 mod worker;
 
 use jobs::JobCoordinator;
