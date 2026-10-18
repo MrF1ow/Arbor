@@ -12,7 +12,7 @@ Living tracker for **implemented / locally tested / live-run tested**. Capabilit
 
 **Current era:** Version 5 is in progress. Version 4’s Linux live run is recorded (2026-10-18). A Mac run does not close a version.
 
-**Current package:** `4.2.0`. **`v4.2.0` is cut when this release lands** (not tagged in this commit). **`v4.0.0` and `v4.1.0` are already tagged.** Version 3’s two Notes rows stay open: markdown tables, and bold/italic, because no live digest contained them. The 2026-09-20 Mac blockers were retested on the 2026-10-17 run.
+**Current package:** `4.3.0`. **`v4.3.0` is cut when this release lands** (not tagged in this commit). **`v4.2.0`, `v4.1.0`, and `v4.0.0` are already tagged.** Version 3’s two Notes rows stay open: markdown tables, and bold/italic, because no live digest contained them. The 2026-09-20 Mac blockers were retested on the 2026-10-17 run.
 
 | Marker | Meaning |
 |--------|---------|
@@ -30,7 +30,7 @@ Living tracker for **implemented / locally tested / live-run tested**. Capabilit
 | Version 2 | Version 3 shell | Version 2 features implemented + locally tested. **Passed** (`v2.0.0` tagged; shell is `v2.1.0`). Leftover proof rides the Version 3 Linux live run. Mac proof is optional. |
 | Version 3 work | **`v3.0.0` tag** | Linux live run recorded 2026-10-17. Package `3.0.0` is tagged. Tables and emphasis were not in any live digest, so those two checklist rows stay open. Mac does not block the tag. |
 | Version 3 | Version 4 | **Passed.** Linux live run recorded 2026-10-18. Package `4.0.0`. Tag `v4.0.0` when this release lands. |
-| Version 4 | Version 5 | **In progress.** Package `4.2.0` is this release (shared libraries and team workspaces). `v4.1.0` git sync is tagged. Next package is `v4.3.0`. |
+| Version 4 | Version 5 | **In progress.** Package `4.3.0` is this release (skill packages and the in-repo marketplace). `v4.2.0` shared libraries are tagged. Next package is `v4.4.0`. |
 
 Local commands (every change):
 
@@ -141,14 +141,15 @@ Also Version 4 (not extra GitHub issues): review scheduling, weak-topic detectio
 
 ## Version 5 — collaboration (in progress)
 
-No current GitHub issue. Cloud sync, shared libraries, marketplaces, permissions, remote workers. Version 4 is closed at `v4.0.0`. Next package is `v4.3.0`.
+No current GitHub issue. Cloud sync, shared libraries, marketplaces, permissions, remote workers. Version 4 is closed at `v4.0.0`. Next package is `v4.4.0`.
 
 | Item | Implemented | Local/VM | Live run | Mac (optional) |
 |------|-------------|----------|----------|----------------|
 | Git remote sync (`v4.1.0`) | [x] | [x] | [ ] | [ ] |
 | Shared libraries and team workspaces (`v4.2.0`) | [x] | [x] | [ ] | [ ] |
+| Skill packages and marketplace (`v4.3.0`) | [x] | [x] | [ ] | [ ] |
 
-Git remote sync: tagged package 4.1.0. Shared libraries and team workspaces: sidebar groups roots, join/create library, per-user study progress. Live run is not recorded yet.
+Git remote sync: tagged package 4.1.0. Shared libraries and team workspaces: sidebar groups roots, join/create library, per-user study progress. Live run is not recorded yet. Skill packages and marketplace: `marketplace/index.json` in this repo, Settings → Skills, first-party `anki-export` TSV. Live run is not recorded yet.
 
 ---
 

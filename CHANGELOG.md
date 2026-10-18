@@ -2,15 +2,25 @@
 
 Package version for the worker, desktop, and Tauri app. See [Version numbering](PROJECT.md#version-numbering) in `PROJECT.md`.
 
-**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is complete as package `3.0.0`. **Version 4** is complete as package `4.0.0`. **Version 5** is in progress and will ship as `v4.1.0`, `v4.2.0`, … until `v5.0.0`. **Current package:** `4.2.0`. **Current tag:** `v4.2.0` is cut when this release lands. `v4.1.0` is the previous package and is tagged. `v4.0.0` is tagged. `v3.0.0` through `v3.5.0` are already tagged. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) was retested on the 2026-10-17 Linux live run.
+**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is complete as package `3.0.0`. **Version 4** is complete as package `4.0.0`. **Version 5** is in progress and will ship as `v4.1.0`, `v4.2.0`, … until `v5.0.0`. **Current package:** `4.3.0`. **Current tag:** `v4.3.0` is cut when this release lands. `v4.2.0` is the previous package and is tagged. `v4.1.0` and `v4.0.0` are tagged. `v3.0.0` through `v3.5.0` are already tagged. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) was retested on the 2026-10-17 Linux live run.
 
 ## Unreleased
 
-Nothing pending above `4.2.0`.
+Nothing pending above `4.3.0`.
+
+## 4.3.0 — 2026-10-18
+
+Git tag `v4.3.0` when this release lands. **Product:** skill packages and marketplace. Version 5 continues at `v4.4.0`. Worker, desktop, and Tauri report `4.3.0`, including `arbor-worker --version`.
+
+- A skill package is `arbor-skill.json` (`id`, `version`, `kind: "skill"`, `entry`, `inputs`, `outputs`, `permissions`) plus a pure-Python module. Permissions are the closed set `read_course`, `write_course_study`, `write_export_dir`, `provider`, `network`. Unknown keys or permissions are rejected. v4.3.0 packages are stdlib-only. Install does not import the package and does not run setup.py or pip.
+- Install takes a git URL and a full 40-hex commit (branch names are refused), with an optional `subdir`, into `$XDG_DATA_HOME/arbor/skills/<id>/<commit>/`. The id matches `^[a-z0-9][a-z0-9-]{0,63}$`. Path traversal and symlinks that leave the package directory are refused. The checked-out commit must equal the pin.
+- A skill runs only after the user confirms its declared permissions for that id and commit. A new commit needs a new confirmation. The worker starts a child process with a temp home and no API keys unless the grant includes `provider`. The skill receives `read_course_file`, `write_export`, and `write_study_file`. Those methods refuse paths outside the granted dirs. This is not an OS sandbox: `open()`, sockets, and the `network` permission are not blocked by the operating system. Uninstall removes the install directory and the desktop confirmation.
+- The marketplace is the static `marketplace/index.json` in this repo (`packages[]` with `kind` `skill` or `provider`). No separate marketplace repo. Settings → Skills stores an index source and ref, browses the index, shows permissions before install, installs, confirms, runs against the current course, and uninstalls. Provider rows are listed and are not installed. The index ref may be a branch. Each package `commit` is still a full SHA.
+- First-party package `anki-export` writes an Anki-importable TSV (`anki-export.tsv`) of the shared deck `study/flashcards.json`. There is no `.apkg`. Permissions are `read_course` and `write_export_dir`. The index pins commit `429d15dc5a6fde7c61559fc787a737cd0c94414d` (the commit that added the package). The index row’s `git` URL is `https://github.com/MrF1ow/Arbor.git`. Offline installs use a local bare repo whose index `git` field is a `file://` URL.
 
 ## 4.2.0 — 2026-10-18
 
-Git tag `v4.2.0` when this release lands. **Product:** shared libraries and team workspaces. Version 5 continues at `v4.3.0`. Worker, desktop, and Tauri report `4.2.0`, including `arbor-worker --version`.
+Git tag: `v4.2.0` is tagged. **Product:** shared libraries and team workspaces. Version 5 continues at `v4.3.0`. Worker, desktop, and Tauri report `4.2.0`, including `arbor-worker --version`.
 
 - Sync hardening: a job commit includes only the paths that job wrote, so a file the user staged by hand stays staged. The fallback identity Arbor <arbor@localhost> applies to the committer even when only an author email is set. The conflict list marks a file resolved after Mine or Theirs. When origin and arbor have the same URL, Arbor syncs origin; when both exist and the URLs differ, Settings says Arbor syncs the arbor remote.
 - Team workspaces: app settings hold a list of Knowledge roots, each personal or shared, plus the active root, migrated from the old single knowledge_root. The sidebar groups courses by root and switching is one click. Watcher, search, jobs, and chat follow the active root.

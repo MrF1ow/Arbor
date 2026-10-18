@@ -505,8 +505,9 @@ Package releases (`0.1.0`, `0.2.0`, `1.0.0`, `2.0.0`, …) are in [`CHANGELOG.md
 | `v3.1.0` … `v3.5.0` | Version 4 | Incremental tutor releases. Shipped and tagged. |
 | `v4.0.0` | Version 4 | **Shipped** as package `4.0.0` on 2026-10-18. Linux live run recorded. Tagged. |
 | `v4.1.0` | Version 5 (partial) | **Shipped** as package `4.1.0` on 2026-10-18. Git remote sync. Tagged. |
-| `v4.2.0` | Version 5 (partial) | **Shipped** as package `4.2.0` on 2026-10-18. Shared libraries and team workspaces. Tag when this release lands. |
-| `v4.3.0`, … | Version 5 **in progress** | Collaboration work until `v5.0.0`. |
+| `v4.2.0` | Version 5 (partial) | **Shipped** as package `4.2.0` on 2026-10-18. Shared libraries and team workspaces. Tagged. |
+| `v4.3.0` | Version 5 (partial) | **Shipped** as package `4.3.0` on 2026-10-18. Skill packages and marketplace (the in-repo index). Tag when this release lands. |
+| `v4.4.0`, … | Version 5 **in progress** | Collaboration work until `v5.0.0`. |
 | `v5.0.0` | Version 5 | Collaboration milestone complete |
 
 Do not tag `v3.0.0` for the shell alone, a fix release, or partial delivery. The desktop shell shipped in **`v2.1.0`**. The study loop shipped in **`v2.2.0`**. Mac-batch fixes ship in **`v2.3.0`**. Version 4 shipped as `v3.1.0` through `v3.5.0`, then closed at **`v4.0.0`**. Version 5 ships as `v4.1.0` and later until `v5.0.0`.
@@ -780,7 +781,7 @@ Original acceptance criteria:
 
 - A user selects Behavioral Medicine, asks a question grounded in its imported lecture, receives a concise answer with a digest/source citation, and can see when the selected course does not support an answer.
 
-Also deferred to Version 4 (from Version 3 specs, not extra GitHub issues): review scheduling / due dates, make-card-from-selection, multiple AI providers as a tutor companion. Anki export and a force-directed graph canvas stay out unless a later spec pulls them in.
+Also deferred to Version 4 (from Version 3 specs, not extra GitHub issues): review scheduling / due dates, make-card-from-selection, multiple AI providers as a tutor companion. Anki export shipped in `v4.3.0` as the first-party skill package (TSV, not `.apkg`). The force-directed graph canvas stays out unless a later spec pulls it in.
 
 ---
 
@@ -790,15 +791,15 @@ Goal:
 
 Collaboration.
 
-**Status:** In progress. Package `4.2.0` shipped shared libraries and team workspaces. Next package is `v4.3.0`. Version 4 is closed at `v4.0.0` (tutor implemented, locally tested, Linux live run recorded 2026-10-18). Tag `v4.0.0` exists. Mac proof is optional.
+**Status:** In progress. Package `4.3.0` shipped skill packages and the marketplace as `marketplace/index.json` in this repo (`kind` `skill` or `provider`). Next package is `v4.4.0`. Version 4 is closed at `v4.0.0` (tutor implemented, locally tested, Linux live run recorded 2026-10-18). Tag `v4.0.0` exists. Mac proof is optional.
 
 Features
 
 * Cloud sync — git remote sync; shipped in `v4.1.0`
 * Shared libraries — shipped in `v4.2.0`
 * Team workspaces — shipped in `v4.2.0`
-* Plugin marketplace
-* Skill marketplace
+* Plugin marketplace — shipped in `v4.3.0` as the same in-repo index (`kind: provider`). Provider rows are listed and are not installed in this package.
+* Skill marketplace — shipped in `v4.3.0` as `marketplace/index.json` in this repo.
 * Shared AI providers
 * Permissions
 * Remote workers
