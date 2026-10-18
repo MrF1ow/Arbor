@@ -36,6 +36,43 @@ pub struct KnowledgeRootEntry {
     #[serde(default, deserialize_with = "deserialize_knowledge_kind")]
     pub kind: KnowledgeKind,
     pub name: String,
+    #[serde(default)]
+    pub worker_id: Option<String>,
+}
+
+fn default_ssh_port() -> u16 {
+    22
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SshWorker {
+    pub id: String,
+    pub label: String,
+    pub host: String,
+    #[serde(default = "default_ssh_port")]
+    pub port: u16,
+    #[serde(default)]
+    pub user: Option<String>,
+    #[serde(default)]
+    pub identity_file: Option<String>,
+    pub worker_cmd: String,
+    pub remote_root: String,
+}
+
+impl SshWorker {
+    pub fn to_transport(&self) -> crate::transport::WorkerTransport {
+        crate::transport::WorkerTransport::Ssh {
+            host: self.host.clone(),
+            port: self.port,
+            user: self.user.clone(),
+            identity_file: self
+                .identity_file
+                .as_ref()
+                .map(std::path::PathBuf::from),
+            worker_cmd: self.worker_cmd.clone(),
+            remote_root: self.remote_root.clone(),
+        }
+    }
 }
 
 fn default_provider_id() -> String {
@@ -83,6 +120,8 @@ pub struct Settings {
     pub skill_grants: Vec<SkillGrant>,
     #[serde(default)]
     pub provider_overrides: Vec<ProviderOverride>,
+    #[serde(default)]
+    pub workers: Vec<SshWorker>,
 }
 
 impl Default for Settings {
@@ -100,7 +139,84 @@ impl Default for Settings {
             skill_index_ref: String::new(),
             skill_grants: vec![],
             provider_overrides: vec![],
+            workers: vec![],
         }
+    }
+}
+
+fn normalize_worker_id(raw: Option<String>) -> Option<String> {
+    let id = raw.map(|s| s.trim().to_string()).filter(|s| !s.is_empty())?;
+    if id.eq_ignore_ascii_case("local") {
+        None
+    } else {
+        Some(id)
+    }
+}
+
+fn worker_id_valid(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= 64
+        && !id.starts_with('-')
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+}
+
+pub fn validate_workers(settings: &Settings) -> Result<(), String> {
+    let mut seen_ids = HashSet::new();
+    for worker in &settings.workers {
+        let id = worker.id.trim();
+        if id.is_empty() {
+            return Err("worker id: required".to_string());
+        }
+        if id.eq_ignore_ascii_case("local") {
+            return Err("worker id: must not be `local`".to_string());
+        }
+        if id.starts_with('-') {
+            return Err(format!("worker id: must not start with `-`: `{id}`"));
+        }
+        if !worker_id_valid(id) {
+            return Err(format!("worker id: invalid `{id}`"));
+        }
+        if !seen_ids.insert(id.to_string()) {
+            return Err(format!("worker id: duplicate `{id}`"));
+        }
+        if worker.label.trim().is_empty() {
+            return Err(format!("worker `{id}`: label required"));
+        }
+        crate::transport::validate_ssh(&worker.to_transport())?;
+    }
+
+    for entry in &settings.knowledge_roots {
+        if let Some(wid) = entry.worker_id.as_deref() {
+            if !settings.workers.iter().any(|w| w.id == wid) {
+                return Err(format!(
+                    "knowledge root `{}`: unknown worker id `{wid}`",
+                    entry.path
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+pub fn transport_for_root(
+    settings: &Settings,
+    root: &str,
+) -> Result<crate::transport::WorkerTransport, String> {
+    let worker_id = settings
+        .knowledge_roots
+        .iter()
+        .find(|e| e.path == root)
+        .and_then(|e| e.worker_id.as_deref());
+    match worker_id {
+        None => Ok(crate::transport::WorkerTransport::Local),
+        Some(id) => settings
+            .workers
+            .iter()
+            .find(|w| w.id == id)
+            .map(SshWorker::to_transport)
+            .ok_or_else(|| format!("unknown worker id `{id}`")),
     }
 }
 
@@ -122,6 +238,7 @@ pub fn normalize_settings(mut s: Settings) -> Settings {
                     path: trimmed.to_string(),
                     kind: KnowledgeKind::Personal,
                     name: path_basename(trimmed),
+                    worker_id: None,
                 });
             }
         }
@@ -146,6 +263,22 @@ pub fn normalize_settings(mut s: Settings) -> Settings {
         .cloned();
     s.active_root = active_valid.or_else(|| s.knowledge_roots.first().map(|e| e.path.clone()));
     s.knowledge_root = s.active_root.clone();
+
+    for entry in &mut s.knowledge_roots {
+        entry.worker_id = normalize_worker_id(entry.worker_id.take());
+    }
+
+    let mut seen_worker_ids = HashSet::new();
+    s.workers.retain_mut(|worker| {
+        worker.id = worker.id.trim().to_string();
+        if worker.id.is_empty() || worker.id.eq_ignore_ascii_case("local") {
+            return false;
+        }
+        if !seen_worker_ids.insert(worker.id.clone()) {
+            return false;
+        }
+        true
+    });
 
     let mut merged_overrides: Vec<ProviderOverride> = Vec::new();
     let mut index_by_path: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
@@ -221,6 +354,7 @@ pub fn save(app: &tauri::AppHandle, settings: &Settings) -> Result<(), String> {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     let normalized = normalize_settings(settings.clone());
+    validate_workers(&normalized)?;
     std::fs::write(&path, to_json(&normalized)).map_err(|e| e.to_string())
 }
 
@@ -236,7 +370,9 @@ mod tests {
                 path: "/home/x/Knowledge".into(),
                 kind: KnowledgeKind::Personal,
                 name: "Knowledge".into(),
+                worker_id: None,
             }],
+            workers: vec![],
             active_root: Some("/home/x/Knowledge".into()),
             model_id: Some("gpt-5.6-sol".into()),
             provider_id: "grok".into(),
@@ -270,6 +406,7 @@ mod tests {
         assert!(s.skill_index_ref.is_empty());
         assert!(s.skill_grants.is_empty());
         assert!(s.provider_overrides.is_empty());
+        assert!(s.workers.is_empty());
     }
 
     #[test]
@@ -287,6 +424,103 @@ mod tests {
         assert_eq!(s.provider_overrides[0].model_id.as_deref(), Some("new"));
         let back = from_json(&to_json(&s));
         assert_eq!(back.provider_overrides, s.provider_overrides);
+    }
+
+    fn live_shaped_worker() -> SshWorker {
+        SshWorker {
+            id: "dev".to_string(),
+            label: "Dev box".to_string(),
+            host: "127.0.0.1".to_string(),
+            port: 22222,
+            user: None,
+            identity_file: Some("/tmp/arbor-r14/ssh/client_key".to_string()),
+            worker_cmd: "uv run --project /opt/arbor/python arbor-worker".to_string(),
+            remote_root: "/tmp/arbor-r14/remote".to_string(),
+        }
+    }
+
+    #[test]
+    fn worker_roundtrip_and_port_default() {
+        let json = r#"{
+            "workers":[{"id":"dev","label":"Dev","host":"127.0.0.1","worker_cmd":"uv run arbor-worker","remote_root":"/tmp/r"}]
+        }"#;
+        let s = from_json(json);
+        assert_eq!(s.workers.len(), 1);
+        assert_eq!(s.workers[0].port, 22);
+        let back = from_json(&to_json(&s));
+        assert_eq!(back.workers[0].port, 22);
+        assert_eq!(back.workers[0].host, "127.0.0.1");
+    }
+
+    #[test]
+    fn validate_workers_host_and_live_worker() {
+        let bad = Settings {
+            workers: vec![SshWorker {
+                id: "x".to_string(),
+                label: "X".to_string(),
+                host: "-oProxyCommand=evil".to_string(),
+                port: 22,
+                user: None,
+                identity_file: None,
+                worker_cmd: "arbor-worker".to_string(),
+                remote_root: "/tmp/r".to_string(),
+            }],
+            ..Settings::default()
+        };
+        assert!(validate_workers(&bad).is_err());
+
+        let good = Settings {
+            workers: vec![live_shaped_worker()],
+            ..Settings::default()
+        };
+        validate_workers(&good).unwrap();
+    }
+
+    #[test]
+    fn transport_for_root_local_and_ssh() {
+        let worker = live_shaped_worker();
+        let settings = Settings {
+            knowledge_roots: vec![
+                KnowledgeRootEntry {
+                    path: "/tmp/Knowledge".into(),
+                    kind: KnowledgeKind::Personal,
+                    name: "Knowledge".into(),
+                    worker_id: None,
+                },
+                KnowledgeRootEntry {
+                    path: "/tmp/Remote".into(),
+                    kind: KnowledgeKind::Personal,
+                    name: "Remote".into(),
+                    worker_id: Some("dev".to_string()),
+                },
+            ],
+            workers: vec![worker],
+            ..Settings::default()
+        };
+        assert!(matches!(
+            transport_for_root(&settings, "/tmp/Knowledge").unwrap(),
+            crate::transport::WorkerTransport::Local
+        ));
+        assert!(matches!(
+            transport_for_root(&settings, "/tmp/Remote").unwrap(),
+            crate::transport::WorkerTransport::Ssh { .. }
+        ));
+    }
+
+    #[test]
+    fn normalize_workers_dedupes_and_drops_local_id() {
+        let json = r#"{
+            "workers":[
+                {"id":"dev","label":"One","host":"127.0.0.1","worker_cmd":"w","remote_root":"/r"},
+                {"id":"dev","label":"Dup","host":"127.0.0.1","worker_cmd":"w","remote_root":"/r"},
+                {"id":"local","label":"Skip","host":"127.0.0.1","worker_cmd":"w","remote_root":"/r"}
+            ],
+            "knowledge_roots":[{"path":"/k","kind":"personal","name":"K","worker_id":" local "}]
+        }"#;
+        let s = from_json(json);
+        assert_eq!(s.workers.len(), 1);
+        assert_eq!(s.workers[0].label, "One");
+        assert!(s.knowledge_roots[0].worker_id.is_none());
     }
 
     #[test]

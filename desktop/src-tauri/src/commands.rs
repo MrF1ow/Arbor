@@ -1,7 +1,9 @@
 use crate::jobs::{self, JobTrigger, SharedCoordinator};
 use crate::search::{self, SearchHit};
 use crate::secrets::{self, OsSecretStore};
-use crate::settings::{self, Settings};
+use crate::remote_job::RemoteOps;
+use crate::settings::{self, Settings, SshWorker};
+use crate::transport::{map_ssh_error, validate_ssh, WorkerTransport};
 use crate::watch::WatchState;
 use crate::worker;
 use sha2::{Digest, Sha256};
@@ -449,6 +451,27 @@ pub fn get_settings(app: tauri::AppHandle) -> Settings {
 #[tauri::command]
 pub fn save_settings(app: tauri::AppHandle, settings: Settings) -> Result<(), String> {
     settings::save(&app, &settings)
+}
+
+#[tauri::command]
+pub fn test_worker_connection(app: tauri::AppHandle, worker: SshWorker) -> Result<String, String> {
+    settings::validate_workers(&Settings {
+        workers: vec![worker.clone()],
+        ..Settings::default()
+    })?;
+    let transport = worker.to_transport();
+    let endpoint = validate_ssh(&transport)?;
+    let app_data = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let mut ops = crate::remote_job::SystemRemoteOps::new(endpoint.clone(), &app_data)?;
+    let mut tokens = endpoint.worker_tokens;
+    tokens.push("--version".to_string());
+    let mut version = String::new();
+    match ops.run(&tokens, &mut |line| version = line.trim().to_string(), None) {
+        Ok(0) if !version.is_empty() => Ok(version),
+        Ok(0) => Err("worker produced no version".to_string()),
+        Ok(code) => Err(map_ssh_error("", code)),
+        Err(stderr) => Err(map_ssh_error(&stderr, 255)),
+    }
 }
 
 #[tauri::command]
@@ -2508,12 +2531,19 @@ pub fn start_update(
     trigger: Option<String>,
     provider: Option<String>,
 ) -> Result<String, String> {
+    let settings = settings::load(&app);
+    let transport = settings::transport_for_root(&settings, &root)?;
     let provider_id = default_provider_id(provider);
     let label = settings::provider_label(&provider_id);
-    let auth = run_worker_json_app(
-        &app,
-        &["check-auth", "--provider", &provider_id],
-    )?;
+    let auth = match &transport {
+        WorkerTransport::Local => run_worker_json_app(
+            &app,
+            &["check-auth", "--provider", &provider_id],
+        )?,
+        WorkerTransport::Ssh { .. } => {
+            worker::run_remote_check_auth(&app, &transport, &provider_id)?
+        }
+    };
     let authenticated = auth
         .get("authenticated")
         .and_then(|v| v.as_bool())
@@ -2558,16 +2588,60 @@ pub fn start_update(
     std::fs::write(&plan_path, plan_json.as_bytes()).map_err(|e| e.to_string())?;
 
     let app_dir = repo_dir(&app);
-    worker::spawn_update_stream(
-        app,
-        app_dir,
-        root.clone(),
-        model,
-        provider_id,
-        cancel,
-        plan_path,
-        job_id.clone(),
-    );
+    match &transport {
+        WorkerTransport::Local => {
+            worker::spawn_update_stream(
+                app,
+                app_dir,
+                root.clone(),
+                model,
+                provider_id,
+                cancel,
+                plan_path,
+                job_id.clone(),
+            );
+        }
+        WorkerTransport::Ssh { .. } => {
+            let paths: Vec<&str> = selections.iter().map(|s| s.path.as_str()).collect();
+            let courses = crate::remote_job::courses_from_selection_paths(&paths).map_err(|e| {
+                let _ = jobs::finish_job(
+                    knowledge_root,
+                    &job_id,
+                    jobs::JobStatus::Failed,
+                    -1,
+                    Some(e.clone()),
+                );
+                if let Ok(mut guard) = coordinator.lock() {
+                    guard.finish(&job_id);
+                }
+                e
+            })?;
+            let app_data = app.path().app_data_dir().map_err(|e| e.to_string())?;
+            let plan_str = plan_path.to_string_lossy().into_owned();
+            let cancel_str = cancel.to_string_lossy().into_owned();
+            let remote_tokens = worker::update_sub_args(
+                &root,
+                &model,
+                &provider_id,
+                &cancel_str,
+                &plan_str,
+            );
+            let message = format!("digest: {}", courses.join(", "));
+            worker::spawn_remote_update_stream(
+                app,
+                app_dir,
+                app_data,
+                root,
+                provider_id,
+                job_id.clone(),
+                transport.clone(),
+                courses,
+                remote_tokens,
+                plan_path,
+                message,
+            );
+        }
+    }
     Ok(job_id)
 }
 
@@ -2584,13 +2658,20 @@ pub fn start_study_job(
 ) -> Result<String, String> {
     let force = force.unwrap_or(false);
     let model = worker::normalize_study_model(model);
+    let settings = settings::load(&app);
+    let transport = settings::transport_for_root(&settings, &root)?;
     let provider_id = default_provider_id(provider);
     let label = settings::provider_label(&provider_id);
     if model.is_some() {
-        let auth = run_worker_json_app(
-            &app,
-            &["check-auth", "--provider", &provider_id],
-        )?;
+        let auth = match &transport {
+            WorkerTransport::Local => run_worker_json_app(
+                &app,
+                &["check-auth", "--provider", &provider_id],
+            )?,
+            WorkerTransport::Ssh { .. } => {
+                worker::run_remote_check_auth(&app, &transport, &provider_id)?
+            }
+        };
         let authenticated = auth
             .get("authenticated")
             .and_then(|value| value.as_bool())
@@ -2631,18 +2712,48 @@ pub fn start_study_job(
         }
     }
 
+    let cancel = worker::cancel_file_path();
+    let _ = std::fs::remove_file(&cancel);
+
     let app_dir = repo_dir(&app);
-    worker::spawn_generate_stream(
-        app,
-        app_dir,
-        root,
-        course,
-        skill,
-        force,
-        model,
-        provider_id,
-        job_id.clone(),
-    );
+    match &transport {
+        WorkerTransport::Local => {
+            worker::spawn_generate_stream(
+                app,
+                app_dir,
+                root,
+                course.clone(),
+                skill.clone(),
+                force,
+                model,
+                provider_id,
+                job_id.clone(),
+            );
+        }
+        WorkerTransport::Ssh { .. } => {
+            let app_data = app.path().app_data_dir().map_err(|e| e.to_string())?;
+            let remote_tokens = worker::generate_sub_args(
+                &root,
+                &course,
+                &skill,
+                force,
+                model.clone(),
+                &provider_id,
+            );
+            worker::spawn_remote_generate_stream(
+                app,
+                app_dir,
+                app_data,
+                root,
+                provider_id,
+                job_id.clone(),
+                transport.clone(),
+                course,
+                skill,
+                remote_tokens,
+            );
+        }
+    }
     Ok(job_id)
 }
 

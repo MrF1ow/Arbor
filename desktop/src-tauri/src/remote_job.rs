@@ -4,6 +4,7 @@ use crate::transport::{
     ValidatedSsh,
 };
 use serde_json::Value;
+use std::collections::HashSet;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -51,6 +52,32 @@ fn local_root_string(local_root: &Path) -> Result<String, String> {
         return Err("local_root: must be absolute".to_string());
     }
     Ok(local_root.to_string_lossy().into_owned())
+}
+
+pub fn courses_from_selection_paths(paths: &[&str]) -> Result<Vec<String>, String> {
+    let mut courses = Vec::new();
+    let mut seen = HashSet::new();
+    for path in paths {
+        let path = path.trim();
+        if path.is_empty() {
+            return Err("selection path: required".to_string());
+        }
+        for component in path.split('/') {
+            if component == ".." {
+                return Err(format!("selection path: invalid `{path}`"));
+            }
+        }
+        let Some((course, _rest)) = path.split_once('/') else {
+            return Err(format!("selection path must include course: `{path}`"));
+        };
+        if course.is_empty() {
+            return Err(format!("selection path: invalid `{path}`"));
+        }
+        if seen.insert(course.to_string()) {
+            courses.push(course.to_string());
+        }
+    }
+    Ok(courses)
 }
 
 pub fn prepare_remote_worker_tokens(
@@ -189,6 +216,7 @@ pub fn run_remote_job(
     ops: &mut dyn RemoteOps,
     req: &RemoteJobRequest,
     local_commit: &mut dyn FnMut(&[String], &str, bool) -> Result<(), String>,
+    mut on_line: Option<&mut dyn FnMut(&str)>,
 ) -> RemoteJobOutcome {
     let mut outcome = RemoteJobOutcome {
         lines: Vec::new(),
@@ -265,6 +293,9 @@ pub fn run_remote_job(
         &mut |line| {
             outcome.lines.push(line.to_string());
             parse_ndjson_line(line, &mut outcome.commit_paths, &mut worker_error);
+            if let Some(cb) = on_line.as_deref_mut() {
+                cb(line);
+            }
             lines_seen += 1;
             if req.cancel_after_first_line && lines_seen == 1 {
                 interrupt_flag.store(true, Ordering::SeqCst);
@@ -349,8 +380,6 @@ pub struct SystemRemoteOps {
     child_pid: Option<u32>,
 }
 
-// Constructed when a Settings host is selected. Nothing calls this until that wiring lands.
-#[allow(dead_code)]
 impl SystemRemoteOps {
     pub fn new(
         endpoint: ValidatedSsh,
@@ -663,6 +692,7 @@ mod tests {
                 committed_paths = Some(paths.to_vec());
                 Ok(())
             },
+            None,
         );
         assert!(outcome.error.is_none());
         assert!(outcome.committed);
@@ -718,6 +748,7 @@ mod tests {
                 commit_called = true;
                 Ok(())
             },
+            None,
         );
         assert!(outcome.killed);
         assert!(!commit_called);
@@ -752,6 +783,7 @@ mod tests {
                     commit_called = true;
                     Ok(())
                 },
+                None,
             );
             assert!(
                 outcome
@@ -779,10 +811,26 @@ mod tests {
                 commit_called = true;
                 Ok(())
             },
+            None,
         );
         assert_eq!(outcome.error.as_deref(), Some("model refused"));
         assert!(!outcome.committed);
         assert!(!commit_called);
+    }
+
+    #[test]
+    fn courses_from_selection_paths_helper() {
+        assert_eq!(
+            courses_from_selection_paths(&["Biology/a.pdf"]).unwrap(),
+            vec!["Biology".to_string()]
+        );
+        assert_eq!(
+            courses_from_selection_paths(&["Biology/lecture..notes.pdf"]).unwrap(),
+            vec!["Biology".to_string()]
+        );
+        assert!(courses_from_selection_paths(&["../etc/a.pdf"]).is_err());
+        assert!(courses_from_selection_paths(&["Biology/../../etc/passwd"]).is_err());
+        assert!(courses_from_selection_paths(&["orphan.pdf"]).is_err());
     }
 
     #[test]
@@ -792,14 +840,14 @@ mod tests {
         let mut req = sample_request(endpoint.clone(), local_root.clone());
         req.courses = vec!["../etc".to_string()];
         let mut ops = FakeOps::new(Ok(0));
-        let outcome = run_remote_job(&mut ops, &req, &mut |_, _, _| Ok(()));
+        let outcome = run_remote_job(&mut ops, &req, &mut |_, _, _| Ok(()), None);
         assert!(outcome.error.is_some());
         assert_eq!(ops.run_count.load(Ordering::SeqCst), 0);
 
         let mut req2 = sample_request(endpoint, local_root);
         req2.remote_tokens = vec!["foo;rm".to_string()];
         let mut ops2 = FakeOps::new(Ok(0));
-        let outcome2 = run_remote_job(&mut ops2, &req2, &mut |_, _, _| Ok(()));
+        let outcome2 = run_remote_job(&mut ops2, &req2, &mut |_, _, _| Ok(()), None);
         assert!(outcome2.error.is_some());
         assert_eq!(ops2.run_count.load(Ordering::SeqCst), 0);
     }

@@ -101,6 +101,7 @@ import type {
   LibraryShowResult,
   ProviderOverride,
   Settings,
+  SshWorker,
   SkillGrant,
   UpdatePlan,
   WorkerEvent,
@@ -346,6 +347,7 @@ const searchResultsEl = $("search-results");
 
 let knowledgeRoot: string | null = null;
 let knowledgeRoots: KnowledgeRootEntry[] = [];
+let workers: SshWorker[] = [];
 let providerId = "codex";
 let settingsProviderId = "codex";
 let settingsModelId: string | null = null;
@@ -2661,6 +2663,7 @@ async function loadSettings() {
   appearanceSel.value = appearance;
   applyTheme();
   knowledgeRoots = Array.isArray(s.knowledge_roots) ? [...s.knowledge_roots] : [];
+  workers = Array.isArray(s.workers) ? [...s.workers] : [];
   const activePath = s.active_root ?? s.knowledge_root;
   if (activePath) {
     knowledgeRoot = activePath;
@@ -2705,6 +2708,7 @@ async function persist() {
       skill_index_ref: skillIndexRef,
       skill_grants: skillGrants,
       provider_overrides: providerOverrides,
+      workers,
     } satisfies Settings,
   });
 }
