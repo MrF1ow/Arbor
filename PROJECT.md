@@ -501,11 +501,13 @@ Package releases (`0.1.0`, `0.2.0`, `1.0.0`, `2.0.0`, …) are in [`CHANGELOG.md
 | `v1.0.0` | Version 1 | Shipped |
 | `v2.0.0` | Version 2 | Shipped — automation on the v1 UI |
 | `v2.1.0`, `v2.2.0`, `v2.3.0`, `v2.4.0`, `v2.5.0` | Version 3 | Incremental releases. Shipped. |
-| `v3.0.0` | Version 3 | **Shipped** as package `3.0.0` on 2026-10-17. Linux live run recorded. Git tag not cut in this commit. Two Notes constructs (tables, emphasis) were not in any live digest. |
-| `v3.1.0`, `v3.2.0`, … | Version 4 **in progress** | Tutor work until `v4.0.0`. Not started. |
-| `v4.0.0` | Version 4 | Tutor milestone complete |
+| `v3.0.0` | Version 3 | **Shipped** as package `3.0.0` on 2026-10-17. Linux live run recorded. Tagged. Two Notes constructs (tables, emphasis) were not in any live digest. |
+| `v3.1.0` … `v3.5.0` | Version 4 | Incremental tutor releases. Shipped and tagged. |
+| `v4.0.0` | Version 4 | **Shipped** as package `4.0.0` on 2026-10-18. Linux live run recorded. Tag when this release lands. |
+| `v4.1.0`, … | Version 5 **in progress** | Collaboration work until `v5.0.0`. |
+| `v5.0.0` | Version 5 | Collaboration milestone complete |
 
-Do not tag `v3.0.0` for the shell alone, a fix release, or partial delivery. The desktop shell shipped in **`v2.1.0`**. The study loop shipped in **`v2.2.0`**. Mac-batch fixes ship in **`v2.3.0`**. After `v3.0.0`, Version 4 work ships as `v3.1.0`, `v3.2.0`, and so on, until `v4.0.0`.
+Do not tag `v3.0.0` for the shell alone, a fix release, or partial delivery. The desktop shell shipped in **`v2.1.0`**. The study loop shipped in **`v2.2.0`**. Mac-batch fixes ship in **`v2.3.0`**. Version 4 shipped as `v3.1.0` through `v3.5.0`, then closed at **`v4.0.0`**. Version 5 ships as `v4.1.0` and later until `v5.0.0`.
 
 Cursor rule: [`.cursor/rules/arbor-versioning.mdc`](.cursor/rules/arbor-versioning.mdc).
 
@@ -730,7 +732,7 @@ Goal:
 
 Personal AI Tutor.
 
-**Status:** In progress. Version 3’s Linux live run is recorded and the package is `3.0.0`. Issue #20 is not started. Version 4 ships as `v3.1.0`, `v3.2.0`, and so on, until `v4.0.0`.
+**Status:** Shipped as package `4.0.0` on 2026-10-18. The Version 4 Linux live run is recorded. Tag `v4.0.0` when this release lands. Issue #20 is ready to close. The parent closes it.
 
 New Features
 
@@ -747,7 +749,7 @@ New Features
 
 #### [#20](https://github.com/MrF1ow/Arbor/issues/20) — Knowledge-grounded Codex chat inside Arbor
 
-Nothing in this issue exists in the app today (no Chat tab, no chat worker path). Keep the full issue as Version 4 work. Do not treat flashcards, quiz, or graph as partial chat.
+The Chat tab and chat worker shipped in `v3.1.0` and `v3.2.0`. The 2026-10-18 Linux live run covered the acceptance criteria below on the fixture course Saltmarsh, because Behavioral Medicine was not available. Flashcards, quiz, and graph remain Version 3. They are not a substitute for this issue.
 
 Original core behavior:
 
@@ -786,7 +788,7 @@ Goal:
 
 Collaboration.
 
-**Do not start Version 5 until Version 4 is closed** (tutor implemented, locally tested, Version 4 Linux live run recorded, `v4.0.0` tagged). Mac proof is optional.
+**Status:** In progress. Next package is `v4.1.0`. Version 4 is closed at `v4.0.0` (tutor implemented, locally tested, Linux live run recorded 2026-10-18). Tag `v4.0.0` when this release lands. Mac proof is optional.
 
 Features
 
