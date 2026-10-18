@@ -121,6 +121,39 @@ def test_file_symlink_outside_root_rejected(tmp_path: Path) -> None:
         inspect_package_tree(pkg)
 
 
+def test_file_symlink_absolute_target_with_dotdot_escape_rejected(
+    tmp_path: Path,
+) -> None:
+    secret = tmp_path / "secret.txt"
+    secret.write_text("secret", encoding="utf-8")
+    pkg = tmp_path / "pkg"
+    subdir = pkg / "subdir"
+    subdir.mkdir(parents=True)
+    (pkg / "arbor-skill.json").write_text(
+        json.dumps(_valid_manifest()), encoding="utf-8"
+    )
+    (pkg / "anki_export.py").write_text("def export_deck(): pass\n", encoding="utf-8")
+    abs_escape = Path(f"{subdir.resolve()}/../../secret.txt")
+    os.symlink(abs_escape, pkg / "leak")
+    with pytest.raises(SkillPackageError):
+        inspect_package_tree(pkg)
+
+
+def test_file_symlink_relative_dotdot_outside_rejected(tmp_path: Path) -> None:
+    outside = tmp_path / "outside.txt"
+    outside.write_text("secret", encoding="utf-8")
+    pkg = tmp_path / "pkg"
+    inner = pkg / "inner"
+    inner.mkdir(parents=True)
+    (pkg / "arbor-skill.json").write_text(
+        json.dumps(_valid_manifest()), encoding="utf-8"
+    )
+    (pkg / "anki_export.py").write_text("def export_deck(): pass\n", encoding="utf-8")
+    os.symlink("../../outside.txt", inner / "leak.txt")
+    with pytest.raises(SkillPackageError):
+        inspect_package_tree(pkg)
+
+
 def test_file_symlink_inside_accepted_entry_must_be_regular(tmp_path: Path) -> None:
     pkg = tmp_path / "pkg"
     pkg.mkdir()
