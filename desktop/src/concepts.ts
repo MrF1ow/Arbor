@@ -79,9 +79,25 @@ export function parseConceptGraph(value: unknown): ConceptGraph {
   };
 }
 
-function digestKey(path: string): string {
+export function digestKey(path: string): string {
   const index = path.indexOf("digests/");
-  return index >= 0 ? path.slice(index) : path;
+  if (index >= 0) {
+    return path.slice(index);
+  }
+  if (
+    !path.includes("/") &&
+    !path.includes("\\") &&
+    path !== "." &&
+    path !== ".."
+  ) {
+    return `digests/${path}`;
+  }
+  return path;
+}
+
+/** Course-relative note path for opening a study source digest in Notes. */
+export function notePathForStudyDigest(course: string, digest: string): string {
+  return `${course}/${digestKey(digest)}`;
 }
 
 export function nodesForDigest(graph: ConceptGraph, digestPath: string): ConceptNode[] {

@@ -4,6 +4,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from arbor_worker.schemas.study.digest import normalize_study_digest
+
 
 class CardSource(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -16,7 +18,7 @@ class CardSource(BaseModel):
     def digest_must_not_be_blank(cls, value: str) -> str:
         if not value.strip():
             raise ValueError("source.digest must not be blank")
-        return value
+        return normalize_study_digest(value)
 
 
 class Flashcard(BaseModel):

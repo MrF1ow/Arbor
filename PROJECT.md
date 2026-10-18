@@ -500,9 +500,9 @@ Package releases (`0.1.0`, `0.2.0`, `1.0.0`, `2.0.0`, …) are in [`CHANGELOG.md
 |-----|-------------------|---------|
 | `v1.0.0` | Version 1 | Shipped |
 | `v2.0.0` | Version 2 | Shipped — automation on the v1 UI |
-| `v2.1.0`, `v2.2.0`, `v2.3.0`, … | Version 3 **in progress** | Incremental releases toward Version 3 |
-| `v3.0.0` | Version 3 | **Reserved** — tag only when every Version 3 feature below ships **and** one Linux live run is recorded. Mac proof does not block the tag. |
-| `v3.1.0`, `v3.2.0`, … | Version 4 **in progress** | After `v3.0.0`. Tutor work until `v4.0.0` |
+| `v2.1.0`, `v2.2.0`, `v2.3.0`, `v2.4.0`, `v2.5.0` | Version 3 | Incremental releases. Shipped. |
+| `v3.0.0` | Version 3 | **Shipped** as package `3.0.0` on 2026-10-17. Linux live run recorded. Git tag not cut in this commit. Two Notes constructs (tables, emphasis) were not in any live digest. |
+| `v3.1.0`, `v3.2.0`, … | Version 4 **in progress** | Tutor work until `v4.0.0`. Not started. |
 | `v4.0.0` | Version 4 | Tutor milestone complete |
 
 Do not tag `v3.0.0` for the shell alone, a fix release, or partial delivery. The desktop shell shipped in **`v2.1.0`**. The study loop shipped in **`v2.2.0`**. Mac-batch fixes ship in **`v2.3.0`**. After `v3.0.0`, Version 4 work ships as `v3.1.0`, `v3.2.0`, and so on, until `v4.0.0`.
@@ -658,7 +658,7 @@ A study app a student would download, with local memory and a concept graph an A
 
 The shell is the storefront. Flashcards and quiz are the study loop. Embeddings, concepts, cross-document links, and a graph-lite view are the memory a later tutor (Version 4) will use instead of rereading every digest. Diagram analysis and citation checks ground that memory in the notes the student already has.
 
-**Status:** In progress. Package **2.2.0** has the study loop. Package **2.3.0** (`v2.3.0`) is the fix release after the 2026-09-20 Mac batch. Package **2.5.0** is the current package (CLI provider registry). Package **2.4.0** remains the brand and gate release (tree mark and Linux live-run gate). **`v3.0.0` ships when the Linux live run is recorded** on the [implementation checklist](docs/implementation-checklist.md) and in [`linux-live-run.md`](docs/superpowers/plans/2026-10-17-roadmap-completion/linux-live-run.md). Do not renumber waves 1–8; they shipped in `2.2.0`. Later `2.x` tags, starting with `2.4.0`, are the slices in [`docs/superpowers/plans/2026-10-17-roadmap-completion/overview.md`](docs/superpowers/plans/2026-10-17-roadmap-completion/overview.md).
+**Status:** Shipped as package **3.0.0** (2026-10-17). The Linux live run is recorded on the [implementation checklist](docs/implementation-checklist.md) and in [`linux-live-run.md`](docs/superpowers/plans/2026-10-17-roadmap-completion/linux-live-run.md). The git tag is not cut in this commit. Tables and emphasis were not proven in a live digest. Do not renumber waves 1–8; they shipped in `2.2.0`. Later `2.x` tags, starting with `2.4.0`, are the slices in [`docs/superpowers/plans/2026-10-17-roadmap-completion/overview.md`](docs/superpowers/plans/2026-10-17-roadmap-completion/overview.md).
 
 **Shipped so far (`v2.1.0`):** desktop shell — [`docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md`](docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md).
 
@@ -720,7 +720,7 @@ Original acceptance criteria:
 
 **Already on `main` (package `2.3.0`):** in-app add-class form (`create_course`), overview labels, H1 titles, reserved-directory filtering, nested and ordered lists, emphasis, links, tables, heading ids, in-pane digest links, closing page-marker stripping, and Notes scroll CSS. Row status lives on the [implementation checklist](docs/implementation-checklist.md).
 
-**Still required before `v3.0.0`:** the Linux live run boxes on that checklist and in [`linux-live-run.md`](docs/superpowers/plans/2026-10-17-roadmap-completion/linux-live-run.md), including a long digest that scrolls in the Arbor window and a `course.md` link that opens the digest. Mac proof is optional. The 2026-09-12 plan is the record of how the local rows landed: [`docs/superpowers/plans/2026-09-12-v3-notes-gate.md`](docs/superpowers/plans/2026-09-12-v3-notes-gate.md).
+**Linux live run (2026-10-17):** recorded. The long digest scrolled to the end, and a `course.md` link opened the digest. Tables and emphasis were not in any live digest, so those checklist rows stay open. Mac proof is optional. The 2026-09-12 plan is the record of how the local rows landed: [`docs/superpowers/plans/2026-09-12-v3-notes-gate.md`](docs/superpowers/plans/2026-09-12-v3-notes-gate.md).
 
 ---
 
@@ -730,7 +730,7 @@ Goal:
 
 Personal AI Tutor.
 
-**Start Version 4 only after `v3.0.0`.** That tag waits for a recorded Version 3 Linux live run on the [implementation checklist](docs/implementation-checklist.md). Notes implementation for issue #42 is already on `main`. Version 4 then ships as `v3.1.0`, `v3.2.0`, and so on, until `v4.0.0`.
+**Status:** In progress. Version 3’s Linux live run is recorded and the package is `3.0.0`. Issue #20 is not started. Version 4 ships as `v3.1.0`, `v3.2.0`, and so on, until `v4.0.0`.
 
 New Features
 

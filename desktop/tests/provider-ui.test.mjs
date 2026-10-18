@@ -34,6 +34,17 @@ test("providerBadge formats ready and signed-out states", async () => {
   assert.equal(providerBadge("Claude", "Sonnet 5.5", false), "Claude · not signed in");
 });
 
+test("signedOutJobMessage formats auth refusal for the inspector log", async () => {
+  const { signedOutJobMessage } = await subject();
+
+  assert.equal(
+    signedOutJobMessage("Grok", "not logged in"),
+    "Grok is not authenticated: not logged in",
+  );
+  assert.equal(signedOutJobMessage("Grok", ""), "Grok is not authenticated");
+  assert.equal(signedOutJobMessage("Grok", "   "), "Grok is not authenticated");
+});
+
 test("pickerProviders drops fake and keeps grok", async () => {
   const { pickerProviders } = await subject();
 

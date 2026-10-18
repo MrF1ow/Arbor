@@ -79,6 +79,53 @@ test("finds nodes whose sources include a digest", async () => {
   assert.deepEqual(nodesForDigest(parsed, "digests/missing.md"), []);
 });
 
+test("matches bare digest filenames to course-relative digest paths", async () => {
+  const { parseConceptGraph, nodesForDigest } = await subject();
+  const withBareName = {
+    ...graph,
+    nodes: [
+      {
+        id: "glycolysis",
+        name: "Glycolysis",
+        summary: "Cytoplasmic breakdown of glucose to pyruvate.",
+        kind: "concept",
+        sources: [{ digest: "2026-08-15.md", heading: "Glycolysis" }],
+      },
+      {
+        id: "escape",
+        name: "Escape",
+        summary: "Outside digest reference.",
+        kind: "concept",
+        sources: [{ digest: "../secret.md", heading: "Cells" }],
+      },
+    ],
+    edges: [],
+  };
+  const parsed = parseConceptGraph(withBareName);
+
+  assert.deepEqual(
+    nodesForDigest(parsed, "Biology/digests/2026-08-15.md").map((node) => node.id),
+    ["glycolysis"],
+  );
+});
+
+test("builds note paths for study digest navigation", async () => {
+  const { notePathForStudyDigest } = await subject();
+
+  assert.equal(
+    notePathForStudyDigest("Biology", "2026-08-15.md"),
+    "Biology/digests/2026-08-15.md",
+  );
+  assert.equal(
+    notePathForStudyDigest("Biology", "digests/2026-08-15.md"),
+    "Biology/digests/2026-08-15.md",
+  );
+  assert.equal(
+    notePathForStudyDigest("Biology", "Biology/digests/2026-08-15.md"),
+    "Biology/digests/2026-08-15.md",
+  );
+});
+
 test("lists neighbors with relations", async () => {
   const { parseConceptGraph, neighbors } = await subject();
   const parsed = parseConceptGraph(graph);
