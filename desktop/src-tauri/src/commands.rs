@@ -7,7 +7,7 @@ use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::sync::Arc;
 use tauri::ipc::Channel;
 use tauri::Manager;
@@ -578,9 +578,6 @@ fn chat_history_path(root: &str, course: &str) -> Result<PathBuf, String> {
     validate_chat_course(course)?;
     let chat_dir = Path::new(root).join(".arbor").join("chat");
     let path = chat_dir.join(format!("{course}.jsonl"));
-    let chat_dir = path
-        .parent()
-        .ok_or_else(|| "Invalid chat history path".to_string())?;
     if path
         .components()
         .any(|component| matches!(component, Component::ParentDir))
@@ -588,6 +585,11 @@ fn chat_history_path(root: &str, course: &str) -> Result<PathBuf, String> {
         return Err("Invalid course name".into());
     }
     Ok(path)
+}
+
+fn kill_and_reap_child(child: &mut Child) {
+    let _ = child.kill();
+    let _ = child.wait();
 }
 
 fn validate_chat_line_role(line: &serde_json::Value) -> Result<(), String> {
@@ -790,6 +792,7 @@ pub fn start_chat(
                     "type": "error",
                     "message": "failed to write chat request to worker",
                 }));
+                kill_and_reap_child(&mut child);
                 send_exit(-1);
                 return;
             }
@@ -1297,6 +1300,18 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(missing, "File not found: Biology/digests/missing.md");
+    }
+
+    #[test]
+    fn kill_and_reap_child_terminates_running_process() {
+        let mut child = Command::new("sleep")
+            .arg("600")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn sleep");
+        kill_and_reap_child(&mut child);
+        assert!(child.try_wait().unwrap().is_some());
     }
 
     #[test]

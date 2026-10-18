@@ -1,6 +1,9 @@
 import { Channel, invoke as tauriInvoke } from "@tauri-apps/api/core";
 import { listen as tauriListen } from "@tauri-apps/api/event";
-import { open as tauriOpen } from "@tauri-apps/plugin-dialog";
+import {
+  confirm as tauriConfirm,
+  open as tauriOpen,
+} from "@tauri-apps/plugin-dialog";
 import { hasTauriInvoke, TAURI_UNAVAILABLE } from "./tauri";
 import {
   advanceAfterGrade,
@@ -106,6 +109,13 @@ function open(opts: Parameters<typeof tauriOpen>[0]) {
     return Promise.reject(new Error(TAURI_UNAVAILABLE));
   }
   return tauriOpen(opts);
+}
+
+function confirm(message: string, options?: string | Parameters<typeof tauriConfirm>[1]) {
+  if (!hasTauriInvoke(window)) {
+    return Promise.reject(new Error(TAURI_UNAVAILABLE));
+  }
+  return tauriConfirm(message, options);
 }
 
 type Place = "welcome" | "course" | "jobs" | "settings";
@@ -571,14 +581,21 @@ async function sendChatMessage() {
         return;
       }
       if (type === "worker_exit") {
-        void pendingAppend.then(() => {
-          chatInFlight = false;
-          if (chatLiveBubble) {
-            chatLiveBubble.remove();
-            chatLiveBubble = null;
-          }
-          refreshChatControls();
-        });
+        void pendingAppend
+          .catch((error) => {
+            logLine(`Could not append chat lines: ${error}`);
+            if (currentCourse === course) {
+              chatStatusEl.textContent = chatAuthErrorMessage(error);
+            }
+          })
+          .finally(() => {
+            chatInFlight = false;
+            if (chatLiveBubble) {
+              chatLiveBubble.remove();
+              chatLiveBubble = null;
+            }
+            refreshChatControls();
+          });
       }
     };
     await invoke("start_chat", {
@@ -1901,9 +1918,15 @@ chatNewBtn.addEventListener("click", () => {
 chatClearBtn.addEventListener("click", () => {
   if (!knowledgeRoot || !currentCourse || chatInFlight) return;
   void (async () => {
-    await invoke("clear_chat_history", { root: knowledgeRoot, course: currentCourse });
+    const course = currentCourse!;
+    const ok = await confirm(
+      `Delete all chat history for ${course}? This cannot be undone.`,
+      { title: "Clear history", kind: "warning" },
+    );
+    if (!ok) return;
+    await invoke("clear_chat_history", { root: knowledgeRoot, course });
     chatLines = [];
-    renderChatTranscript(currentCourse!);
+    renderChatTranscript(course);
     chatStatusEl.textContent = "";
   })();
 });

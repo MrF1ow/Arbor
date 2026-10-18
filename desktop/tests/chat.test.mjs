@@ -77,6 +77,33 @@ test("renderAnswerHtml escapes script and onerror payloads", () => {
   assert.match(html, /onerror/);
 });
 
+test("sendChatMessage resets chatInFlight when pending append fails on worker_exit", async () => {
+  const source = await readFile(new URL("../src/main.ts", import.meta.url), "utf8");
+  const start = source.indexOf("async function sendChatMessage");
+  const end = source.indexOf("\nasync function refreshFolderTools", start);
+  const body = source.slice(start, end === -1 ? undefined : end);
+  const exitIndex = body.indexOf('type === "worker_exit"');
+  assert.ok(exitIndex >= 0, "worker_exit handler must exist in sendChatMessage");
+  const handler = body.slice(exitIndex, exitIndex + 600);
+  assert.match(handler, /pendingAppend[\s\S]*\.catch\(/);
+  assert.match(handler, /pendingAppend[\s\S]*\.finally\(/);
+  assert.match(handler, /chatInFlight = false/);
+  assert.match(handler, /logLine\(`Could not append chat lines:/);
+});
+
+test("clear history confirms before deleting chat jsonl", async () => {
+  const source = await readFile(new URL("../src/main.ts", import.meta.url), "utf8");
+  const start = source.indexOf('chatClearBtn.addEventListener("click"');
+  assert.ok(start >= 0, "chat clear handler must exist");
+  const end = source.indexOf("generateStudyArtifactBtn.addEventListener", start);
+  const body = source.slice(start, end === -1 ? undefined : end);
+  const confirmIndex = body.indexOf("await confirm(");
+  const clearIndex = body.indexOf("clear_chat_history");
+  assert.ok(confirmIndex >= 0, "clear history must call confirm");
+  assert.ok(clearIndex > confirmIndex, "confirm must run before clear_chat_history");
+  assert.match(body, /if \(!ok\) return/);
+});
+
 test("sendChatMessage snapshots worker history before appending the user line", async () => {
   const source = await readFile(new URL("../src/main.ts", import.meta.url), "utf8");
   const start = source.indexOf("async function sendChatMessage");
