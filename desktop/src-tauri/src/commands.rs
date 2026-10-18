@@ -566,9 +566,37 @@ fn is_safe_user_dir(email: &str) -> bool {
         && !email.contains("..")
 }
 
+#[cfg(test)]
+mod git_user_dirname_test_sync {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::{Mutex, MutexGuard};
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+    static ENV_TEST_ACTIVE: AtomicBool = AtomicBool::new(false);
+
+    pub fn env_test_guard() -> MutexGuard<'static, ()> {
+        ENV_TEST_ACTIVE.store(true, Ordering::SeqCst);
+        ENV_LOCK.lock().unwrap()
+    }
+
+    pub fn finish_env_test() {
+        ENV_TEST_ACTIVE.store(false, Ordering::SeqCst);
+    }
+
+    pub fn sync_guard() -> Option<MutexGuard<'static, ()>> {
+        if ENV_TEST_ACTIVE.load(Ordering::SeqCst) {
+            None
+        } else {
+            Some(ENV_LOCK.lock().unwrap())
+        }
+    }
+}
+
 fn git_user_dirname(root: &str) -> Result<String, String> {
+    #[cfg(test)]
+    let _guard = git_user_dirname_test_sync::sync_guard();
     let output = Command::new("git")
-        .args(["-C", root, "config", "--local", "--get", "user.email"])
+        .args(["-C", root, "config", "--get", "user.email"])
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .output()
@@ -1628,6 +1656,52 @@ mod tests {
             .join("local")
             .join("Biology.quiz.json")
             .is_file());
+    }
+
+    fn restore_optional_env(key: &str, value: Option<String>) {
+        match value {
+            Some(v) => unsafe { std::env::set_var(key, v) },
+            None => unsafe { std::env::remove_var(key) },
+        }
+    }
+
+    #[test]
+    fn git_user_dirname_uses_effective_global_email() {
+        let _guard = git_user_dirname_test_sync::env_test_guard();
+
+        let saved_home = std::env::var("HOME").ok();
+        let saved_git_config_global = std::env::var("GIT_CONFIG_GLOBAL").ok();
+        let saved_git_config_nosystem = std::env::var("GIT_CONFIG_NOSYSTEM").ok();
+
+        let root = temp_root("git-user-global-email");
+        let root_str = root.to_string_lossy().into_owned();
+        let status = Command::new("git")
+            .args(["-C", &root_str, "init"])
+            .status()
+            .expect("git init");
+        assert!(status.success());
+
+        let fake_home = temp_root("git-user-fake-home");
+        let gitconfig_path = fake_home.join("gitconfig");
+        fs::write(
+            &gitconfig_path,
+            "[user]\n\temail = global-only@example.com\n\tname = Global Only\n",
+        )
+        .unwrap();
+
+        unsafe {
+            std::env::set_var("HOME", &fake_home);
+            std::env::set_var("GIT_CONFIG_GLOBAL", &gitconfig_path);
+            std::env::set_var("GIT_CONFIG_NOSYSTEM", "1");
+        }
+
+        let dirname = git_user_dirname(&root_str).unwrap();
+        assert_eq!(dirname, "global-only@example.com");
+
+        restore_optional_env("HOME", saved_home);
+        restore_optional_env("GIT_CONFIG_GLOBAL", saved_git_config_global);
+        restore_optional_env("GIT_CONFIG_NOSYSTEM", saved_git_config_nosystem);
+        git_user_dirname_test_sync::finish_env_test();
     }
 
     #[test]
