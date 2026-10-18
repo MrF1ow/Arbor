@@ -41,7 +41,8 @@ alwaysApply: true
 | `v4.1.0` | Version 5 in progress | Git remote sync. Package `4.1.0`. Tagged. |
 | `v4.2.0` | Version 5 in progress | Shared libraries and team workspaces. Package `4.2.0`. Tagged (`6c31a30`). |
 | `v4.3.0` | Version 5 in progress | Skill packages and marketplace (in-repo index). Package `4.3.0`. Not tagged yet. |
-| `v4.4.0` | Version 5 in progress | Library roles and shared provider profiles. Package `4.4.0`. Not tagged yet. |
-| `v4.5.0`, … | Version 5 in progress | Collaboration work until `v5.0.0`. |
+| `v4.4.0` | Version 5 in progress | Library roles and shared provider profiles. Package `4.4.0`. Tagged. |
+| `v4.5.0` | Version 5 in progress | Remote workers over SSH. Package `4.5.0`. Not tagged yet. |
+| `v4.6.0`, … | Version 5 in progress | Collaboration work until `v5.0.0`. |
 
-Program: `docs/superpowers/plans/2026-08-22-v3-program/overview.md`. Gates: `docs/implementation-checklist.md`. Live runs: `docs/superpowers/plans/2026-10-17-roadmap-completion/linux-live-run.md`. `mac-e2e.md` is optional. Version 4 shipped at `v4.0.0`. Version 5 is in progress. This package is `4.4.0`. Next package is `v4.5.0`.
+Program: `docs/superpowers/plans/2026-08-22-v3-program/overview.md`. Gates: `docs/implementation-checklist.md`. Live runs: `docs/superpowers/plans/2026-10-17-roadmap-completion/linux-live-run.md`. `mac-e2e.md` is optional. Version 4 shipped at `v4.0.0`. Version 5 is in progress. This package is `4.5.0`. Next package is `v4.6.0`.

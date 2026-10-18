@@ -509,8 +509,9 @@ Package releases (`0.1.0`, `0.2.0`, `1.0.0`, `2.0.0`, …) are in [`CHANGELOG.md
 | `v4.1.0` | Version 5 (partial) | **Shipped** as package `4.1.0` on 2026-10-18. Git remote sync. Tagged. |
 | `v4.2.0` | Version 5 (partial) | **Shipped** as package `4.2.0` on 2026-10-18. Shared libraries and team workspaces. Tagged. |
 | `v4.3.0` | Version 5 (partial) | **Shipped** as package `4.3.0` on 2026-10-18. Skill packages and marketplace (the in-repo index). Tag when this release lands. |
-| `v4.4.0` | Version 5 (partial) | **Shipped** as package `4.4.0` on 2026-10-18. Library roles and shared provider profiles. Tag when this release lands. |
-| `v4.5.0`, … | Version 5 **in progress** | Collaboration work until `v5.0.0`. |
+| `v4.4.0` | Version 5 (partial) | **Shipped** as package `4.4.0` on 2026-10-18. Library roles and shared provider profiles. Tagged. |
+| `v4.5.0` | Version 5 (partial) | **Shipped** as package `4.5.0` on 2026-10-18. Remote workers over SSH. Tag when this release lands. |
+| `v4.6.0`, … | Version 5 **in progress** | Collaboration work until `v5.0.0`. |
 | `v5.0.0` | Version 5 | Collaboration milestone complete |
 
 Do not tag `v3.0.0` for the shell alone, a fix release, or partial delivery. The desktop shell shipped in **`v2.1.0`**. The study loop shipped in **`v2.2.0`**. Mac-batch fixes ship in **`v2.3.0`**. Version 4 shipped as `v3.1.0` through `v3.5.0`, then closed at **`v4.0.0`**. Version 5 ships as `v4.1.0` and later until `v5.0.0`.
@@ -794,7 +795,7 @@ Goal:
 
 Collaboration.
 
-**Status:** In progress. Package `4.4.0` shipped library roles and shared provider profiles. Next package is `v4.5.0`. Version 4 is closed at `v4.0.0` (tutor implemented, locally tested, Linux live run recorded 2026-10-18). Tag `v4.0.0` exists. Mac proof is optional.
+**Status:** In progress. Package `4.5.0` shipped remote workers over SSH. Next package is `v4.6.0`. Version 4 is closed at `v4.0.0` (tutor implemented, locally tested, Linux live run recorded 2026-10-18). Tag `v4.0.0` exists. Mac proof is optional.
 
 Features
 
@@ -805,7 +806,7 @@ Features
 * Skill marketplace — shipped in `v4.3.0` as `marketplace/index.json` in this repo.
 * Shared AI providers — shipped in `v4.4.0`. Shared provider profile is `{id, model}` with no credentials in `library.json`.
 * Permissions — shipped in `v4.4.0`. Role enforcement inside Arbor is advisory; the git host's permissions are the real control.
-* Remote workers — SSH hosts in Settings; each root defaults to Local or picks a saved host. Course sources are copied up, the worker runs remotely with `--no-commit`, digests and study files come back, and the git commit happens on the local tree. Host keys live in an Arbor-managed file under app data, not in `~/.ssh/known_hosts`.
+* Remote workers — shipped in `v4.5.0`. SSH hosts in Settings; each root defaults to Local or picks a saved host. Course sources are copied up, the worker runs remotely with `--no-commit`, digests and study files come back, and the git commit happens on the local tree. Host keys live in an Arbor-managed file under app data, not in `~/.ssh/known_hosts`.
 
 None of the currently open GitHub issues (#3, #4, #19, #20, #21, #30, #42) belong here. Signing/notarization is release operations whenever Apple secrets exist, not Version 5.
 
