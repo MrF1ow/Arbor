@@ -53,3 +53,19 @@ Reinstalling the same id and pin replaces that directory atomically. Different p
 The worker passes a **context object** at run time that enforces declared permissions. This is not an OS sandbox.
 
 The marketplace index and Settings UI for skills are specified in the v4.3.0 plan and are not part of install itself.
+
+## Run
+
+An installed skill runs in a **worker child process** only after the caller sets **`confirmed`** and passes a **`grants`** list that matches the manifest **`permissions`** for that package **id** and **commit** exactly (order does not matter). If `confirmed` is false, or the grant set differs, the worker raises before spawning the child and does not import package code.
+
+Each pinned **commit** installs to its own directory under `skills/<id>/<commit>/`. A new commit is a new install path and needs its own confirmation. This release does **not** persist confirmations in app settings; the caller (CLI or desktop) passes them on each run. **Uninstall** still removes only the install tree under `skills/<id>/` and does not clear stored confirmations (a later unit).
+
+The child process receives a fresh environment: **`HOME`**, **`TMPDIR`**, and **`XDG_*`** point at a scratch directory, not the user’s real home. **`PYTHONNOUSERSITE=1`** and **`PYTHONDONTWRITEBYTECODE=1`** are set. Provider API keys and base URLs (`ARBOR_OPENAI_API_KEY`, `ARBOR_ANTHROPIC_API_KEY`, `ARBOR_LMSTUDIO_API_KEY`, `ARBOR_OPENAI_BASE_URL`, `ARBOR_ANTHROPIC_BASE_URL`, `ARBOR_OLLAMA_BASE_URL`, `ARBOR_LMSTUDIO_BASE_URL`) are passed through **only** when the manifest includes **`provider`**. Other parent secrets (for example `OPENAI_API_KEY` or ad hoc variables) are not copied. The **`network`** permission is a user acknowledgment only; it does not change the environment and Arbor does not block sockets in the child.
+
+At run time the worker loads the entry module with **`importlib`** (fixed module name `arbor_installed_skill`) and calls the manifest function with a **context object**. Methods enforce declared permissions:
+
+- **`read_course_file(relative)`** — reads bytes under the current course directory (requires **`read_course`**). Relative paths must stay inside that directory; `.`, `..`, absolute paths, backslashes, and symlinks on the path are refused.
+- **`write_export(relative, data)`** — writes bytes under the export directory (requires **`write_export_dir`**). Creates parent directories only inside that directory; writes use **`O_NOFOLLOW`** so symlinks are not followed.
+- **`write_study_file(relative, data)`** — writes bytes under `<course>/study` (requires **`write_course_study`**), creating **`study`** when missing if the path is not reached through a symlink.
+
+Missing permissions raise even when the relative path would otherwise be safe. This is the worker API, **not an OS sandbox**: a skill that calls **`open()`** or the network on its own is outside what Arbor can stop in this release.

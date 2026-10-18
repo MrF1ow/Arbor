@@ -185,6 +185,16 @@ def build_parser() -> argparse.ArgumentParser:
     su.add_argument("--id", required=True, dest="id", help="Skill package id.")
     su.add_argument("--data-home", default=None, dest="data_home", help="Arbor data home (XDG data dir).")
 
+    sr = sub.add_parser("skill-run", help="Run an installed skill package.")
+    sr.add_argument("--id", required=True, dest="id", help="Skill package id.")
+    sr.add_argument("--commit", required=True, help="Full 40-character lowercase commit SHA.")
+    sr.add_argument("--root", required=True, help="Knowledge repository root.")
+    sr.add_argument("--course", required=True, help="Course name.")
+    sr.add_argument("--export-dir", required=True, dest="export_dir", help="Export directory.")
+    sr.add_argument("--data-home", default=None, dest="data_home", help="Arbor data home (XDG data dir).")
+    sr.add_argument("--grant", action="append", dest="grant", default=[], help="Granted permission (repeatable).")
+    sr.add_argument("--confirmed", action="store_true", help="Confirm the permission grant.")
+
     return parser
 
 
@@ -258,4 +268,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "skill-uninstall":
         from arbor_worker.skillpkg.install import cmd_skill_uninstall
         return cmd_skill_uninstall(args)
+    if args.command == "skill-run":
+        from arbor_worker.skillpkg.run import cmd_skill_run
+        return cmd_skill_run(args)
     return 2
