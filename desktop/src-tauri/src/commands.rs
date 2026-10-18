@@ -33,17 +33,6 @@ where
     spawn_blocking_cmd(f).await
 }
 
-async fn spawn_blocking_cmd_value<T, F>(f: F) -> T
-where
-    F: FnOnce() -> T + Send + 'static,
-    T: Send + 'static,
-{
-    tauri::async_runtime::spawn_blocking(f)
-        .await
-        .map_err(|e| e.to_string())
-        .expect("spawn_blocking join")
-}
-
 fn non_empty_provider(provider: Option<String>) -> Option<String> {
     provider
         .map(|value| value.trim().to_string())
@@ -2778,7 +2767,6 @@ pub async fn start_update(
     provider: Option<String>,
 ) -> Result<String, String>  {
     spawn_blocking_cmd(move || {
-        let coordinator = app.state::<SharedCoordinator>().inner().clone();
 
     let settings = settings::load(&app);
     let transport = settings::transport_for_root(&settings, &root)?;
@@ -2817,7 +2805,11 @@ pub async fn start_update(
     )?;
 
     {
-        let mut guard = coordinator.lock().map_err(|e| e.to_string())?;
+        let mut guard = app
+            .state::<SharedCoordinator>()
+            .inner()
+            .lock()
+            .map_err(|e| e.to_string())?;
         if let Err(e) = guard.try_begin(&job_id, &root) {
             let _ = jobs::finish_job(
                 knowledge_root,
@@ -2860,7 +2852,7 @@ pub async fn start_update(
                     -1,
                     Some(e.clone()),
                 );
-                if let Ok(mut guard) = coordinator.lock() {
+                if let Ok(mut guard) = app.state::<SharedCoordinator>().inner().lock() {
                     guard.finish(&job_id);
                 }
                 e
@@ -2907,7 +2899,6 @@ pub async fn start_study_job(
     provider: Option<String>,
 ) -> Result<String, String>  {
     spawn_blocking_cmd(move || {
-        let coordinator = app.state::<SharedCoordinator>().inner().clone();
 
     let force = force.unwrap_or(false);
     let model = worker::normalize_study_model(model);
@@ -2952,7 +2943,11 @@ pub async fn start_study_job(
     )?;
 
     {
-        let mut guard = coordinator.lock().map_err(|e| e.to_string())?;
+        let mut guard = app
+            .state::<SharedCoordinator>()
+            .inner()
+            .lock()
+            .map_err(|e| e.to_string())?;
         if let Err(e) = guard.try_begin(&job_id, &root) {
             let _ = jobs::finish_job(
                 knowledge_root,
@@ -3019,7 +3014,6 @@ pub async fn start_embed_job(
     force: Option<bool>,
 ) -> Result<String, String>  {
     spawn_blocking_cmd(move || {
-        let coordinator = app.state::<SharedCoordinator>().inner().clone();
 
     let force = force.unwrap_or(false);
     let plan_json = serde_json::to_string(&serde_json::json!({
@@ -3031,7 +3025,11 @@ pub async fn start_embed_job(
     let job_id = jobs::create_job(knowledge_root, JobTrigger::Manual, "hashed", &plan_json)?;
 
     {
-        let mut guard = coordinator.lock().map_err(|error| error.to_string())?;
+        let mut guard = app
+            .state::<SharedCoordinator>()
+            .inner()
+            .lock()
+            .map_err(|error| error.to_string())?;
         if let Err(error) = guard.try_begin(&job_id, &root) {
             let _ = jobs::finish_job(
                 knowledge_root,

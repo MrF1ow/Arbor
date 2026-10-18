@@ -361,6 +361,19 @@ def _read_document(path: Path, course: str) -> dict[str, Any]:
     return _validate_document(raw, course)
 
 
+def _load_progress_document(root: Path, course: str) -> dict[str, Any]:
+    with progress_lock(root, course):
+        _migrate_v41_progress_unlocked(root, course)
+        path = progress_path(root, course)
+        if path.is_file():
+            return _read_document(path, course)
+        migrated = _build_from_legacy(root, course)
+        if migrated is not None:
+            _write_atomic(path, _serialize_document(migrated))
+            return migrated
+        return _empty_document(course)
+
+
 def _ensure_document(
     root: Path,
     course: str,
@@ -506,16 +519,7 @@ def _load_deck_ids(root: Path, course: str) -> list[str]:
 
 def study_progress_show(root: Path, course: str) -> dict[str, Any]:
     validate_course_name(course)
-    migrate_v41_progress(root, course)
-    path = progress_path(root, course)
-    if path.is_file():
-        return _read_document(path, course)
-    migrated = _build_from_legacy(root, course)
-    if migrated is not None:
-        with progress_lock(root, course):
-            _write_atomic(path, _serialize_document(migrated))
-        return migrated
-    return _empty_document(course)
+    return _load_progress_document(root, course)
 
 
 def study_progress_grade(
@@ -620,18 +624,7 @@ def study_progress_due(
     validate_course_name(course)
     clock = now or parse_utc_now(None)
     deck_ids = _load_deck_ids(root, course)
-    migrate_v41_progress(root, course)
-    path = progress_path(root, course)
-    if path.is_file():
-        doc = _read_document(path, course)
-    else:
-        migrated = _build_from_legacy(root, course)
-        if migrated is not None:
-            with progress_lock(root, course):
-                _write_atomic(path, _serialize_document(migrated))
-            doc = migrated
-        else:
-            doc = _empty_document(course)
+    doc = _load_progress_document(root, course)
     cards = doc["cards"]
     due_ids = [card_id for card_id in deck_ids if _card_is_due(cards.get(card_id), clock)]
     return {"due_ids": due_ids, "count": len(due_ids), "deck_count": len(deck_ids)}
@@ -671,18 +664,7 @@ def _concept_matches(concept_sources: list[dict], digest: str, heading: str | No
 
 def study_progress_weak(root: Path, course: str) -> dict[str, Any]:
     validate_course_name(course)
-    migrate_v41_progress(root, course)
-    path = progress_path(root, course)
-    if path.is_file():
-        doc = _read_document(path, course)
-    else:
-        migrated = _build_from_legacy(root, course)
-        if migrated is not None:
-            with progress_lock(root, course):
-                _write_atomic(path, _serialize_document(migrated))
-            doc = migrated
-        else:
-            doc = _empty_document(course)
+    doc = _load_progress_document(root, course)
 
     card_art, quiz_art = _load_artifact_sources(root, course)
     concepts_path = root / course / "study" / "concepts.json"

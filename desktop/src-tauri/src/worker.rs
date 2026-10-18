@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 use std::io::Read;
 use std::process::{Command, Stdio};
 use std::sync::{Condvar, Mutex, OnceLock};
+#[cfg(test)]
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -463,6 +464,12 @@ pub fn run_worker_json_with_deadline(
                     let _ = child.wait();
                     let _ = stdout_handle.join();
                     let _ = stderr_handle.join();
+                    if std::env::var("ARBOR_PERF").as_deref() == Ok("1") {
+                        eprintln!(
+                            "[arbor-perf] {sub0} {}ms exit=timeout",
+                            perf_start.elapsed().as_millis()
+                        );
+                    }
                     let secs = deadline.as_secs();
                     return Err(format!("worker timed out after {secs}s: {sub0}"));
                 }
@@ -490,8 +497,9 @@ pub fn run_worker_json_with_deadline(
     );
     if std::env::var("ARBOR_PERF").as_deref() == Ok("1") {
         eprintln!(
-            "[arbor-perf] {sub0} {}ms exit={exit_code:?}",
-            perf_start.elapsed().as_millis()
+            "[arbor-perf] {sub0} {}ms exit={}",
+            perf_start.elapsed().as_millis(),
+            exit_code.unwrap_or(-1)
         );
     }
     result
