@@ -227,6 +227,26 @@ Knowledge/                          # git repo root
 
 ---
 
+## Workers
+
+Settings → Workers stores SSH hosts. Each knowledge root uses **Local** (the default) or one saved host.
+
+A host has a label, host, port, optional user, optional identity file, a worker command (for example `uv run --project /path/to/python arbor-worker`), and a remote root.
+
+**Test connection** runs that command with `--version` and shows the version.
+
+Update and study jobs on a remote root copy the course sources to `remote_root/<root-id>/<course>/`, run the worker with `--no-commit`, stream the same NDJSON events, copy digests and study files back, then commit on the local Knowledge tree. Embed stays on this machine.
+
+**Cancel** stops the remote process.
+
+Host keys are written to an Arbor-managed `known_hosts` file under the app data directory. Arbor does not read or write `~/.ssh/known_hosts`.
+
+The worker command is not passed through a shell. Values that start with `-` are rejected except tokens inside the worker command itself.
+
+Provider API keys are not placed on the SSH command line. The remote worker uses whatever login that machine already has.
+
+---
+
 ## Worker CLI (without the desktop)
 
 From `python/`:

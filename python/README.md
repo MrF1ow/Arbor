@@ -39,6 +39,14 @@ uv run arbor-worker generate --root /path/to/Knowledge --course Biology --skill 
 uv run arbor-worker reindex --root /path/to/Knowledge
 ```
 
+`update` and `generate` accept `--no-commit`: outputs are written but no git commit is created; the JSONL stream includes a `commit_paths` event listing repo-relative paths to commit.
+
+```bash
+uv run arbor-worker commit-written --root /path/to/Knowledge --message "digest: Biology" [--index] -- Biology/digests/2026-01-01.md Biology/arbor-course.json
+```
+
+`commit-written` commits those paths with the existing local git identity (and optional per-course reindex when `--index` is set).
+
 `plan-update` prints pending sources with fingerprint-based suggestions:
 
 ```json

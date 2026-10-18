@@ -168,6 +168,8 @@ Responsibilities:
 * Flashcards
 * Quiz generation
 
+The desktop can run this same worker on another machine over SSH and still commit results on the local Knowledge tree.
+
 Python was selected because the AI ecosystem already exists.
 
 Rewriting these capabilities in Rust would significantly slow development.
@@ -803,7 +805,7 @@ Features
 * Skill marketplace — shipped in `v4.3.0` as `marketplace/index.json` in this repo.
 * Shared AI providers — shipped in `v4.4.0`. Shared provider profile is `{id, model}` with no credentials in `library.json`.
 * Permissions — shipped in `v4.4.0`. Role enforcement inside Arbor is advisory; the git host's permissions are the real control.
-* Remote workers
+* Remote workers — SSH hosts in Settings; each root defaults to Local or picks a saved host. Course sources are copied up, the worker runs remotely with `--no-commit`, digests and study files come back, and the git commit happens on the local tree. Host keys live in an Arbor-managed file under app data, not in `~/.ssh/known_hosts`.
 
 None of the currently open GitHub issues (#3, #4, #19, #20, #21, #30, #42) belong here. Signing/notarization is release operations whenever Apple secrets exist, not Version 5.
 
