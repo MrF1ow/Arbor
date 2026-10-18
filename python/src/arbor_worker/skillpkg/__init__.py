@@ -1,3 +1,9 @@
+from arbor_worker.skillpkg.install import (
+    InstalledSkill,
+    install_skill,
+    skills_root,
+    uninstall_skill,
+)
 from arbor_worker.skillpkg.manifest import (
     PERMISSIONS,
     SkillPackageError,
@@ -9,12 +15,16 @@ from arbor_worker.skillpkg.manifest import (
 from arbor_worker.skillpkg.tree import inspect_package_tree, safe_child
 
 __all__ = [
+    "InstalledSkill",
     "PERMISSIONS",
     "SkillPackageError",
     "SkillPackageManifest",
     "entry_module_path",
+    "install_skill",
     "inspect_package_tree",
     "load_manifest_file",
     "parse_manifest_obj",
     "safe_child",
+    "skills_root",
+    "uninstall_skill",
 ]
