@@ -184,6 +184,35 @@ def test_absolute_symlink_escape_refused(tmp_path: Path) -> None:
     assert not (skills_root(data_home) / "demo-skill").exists()
 
 
+def test_reinstall_same_pin_succeeds(tmp_path: Path) -> None:
+    bare, sha = _bare_repo_with_package(tmp_path)
+    data_home = tmp_path / "data"
+
+    first = install_skill(str(bare), sha, data_home=data_home)
+    second = install_skill(str(bare), sha, data_home=data_home)
+
+    dest = data_home / "arbor" / "skills" / "demo-skill" / sha
+    assert first.path == dest
+    assert second.path == dest
+    assert (dest / "arbor-skill.json").is_file()
+    assert not (dest / "arbor-skill.json").is_symlink()
+
+
+def test_symlinked_skill_id_dir_refused(tmp_path: Path) -> None:
+    bare, sha = _bare_repo_with_package(tmp_path)
+    data_home = tmp_path / "data"
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    skills = skills_root(data_home)
+    skills.mkdir(parents=True)
+    os.symlink(outside, skills / "demo-skill")
+
+    with pytest.raises(SkillPackageError):
+        install_skill(str(bare), sha, data_home=data_home)
+
+    assert not list(outside.iterdir())
+
+
 def test_uninstall_removes_id_directory(tmp_path: Path) -> None:
     bare, sha = _bare_repo_with_package(tmp_path)
     data_home = tmp_path / "data"

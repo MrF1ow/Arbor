@@ -110,6 +110,46 @@ def _inside_root(candidate: Path, root: Path) -> bool:
         return False
 
 
+def _prepare_skills_root(data_home: Path | None) -> tuple[Path, Path]:
+    root = skills_root(data_home)
+    root.parent.mkdir(parents=True, exist_ok=True)
+    if root.exists() and root.is_symlink():
+        raise SkillPackageError("invalid skills root")
+    if not root.exists():
+        root.mkdir()
+    root_res = root.resolve()
+    return root, root_res
+
+
+def _prepare_skill_id_dir(root: Path, root_res: Path, skill_id: str) -> Path:
+    id_dir = root / skill_id
+    if id_dir.exists():
+        if id_dir.is_symlink():
+            raise SkillPackageError("invalid skill install path")
+        if not id_dir.is_dir():
+            raise SkillPackageError("invalid skill install path")
+    else:
+        id_dir.mkdir()
+    if not _inside_root(id_dir, root):
+        raise SkillPackageError("invalid skill install path")
+    if id_dir.resolve().parent != root_res:
+        raise SkillPackageError("invalid skill install path")
+    return id_dir
+
+
+def _remove_confined_commit_dir(
+    final: Path, root: Path, root_res: Path, skill_id: str, commit: str
+) -> None:
+    if not final.exists():
+        return
+    if final.is_symlink() or not final.is_dir():
+        raise SkillPackageError("invalid skill install path")
+    expected = root_res / skill_id / commit
+    if final.resolve() != expected:
+        raise SkillPackageError("invalid skill install path")
+    _confined_rmtree(final)
+
+
 def _copy_tree_no_git(src: Path, dest: Path) -> None:
     dest.mkdir(parents=True, exist_ok=True)
     for dirpath, dirnames, filenames in os.walk(src, followlinks=False):
@@ -198,12 +238,16 @@ def install_skill(
         if expected_id is not None and manifest.id != expected_id:
             raise SkillPackageError("manifest id does not match expected id")
 
-        root = skills_root(data_home)
-        final = root / manifest.id / commit
-        final.parent.mkdir(parents=True, exist_ok=True)
-        staging: Path | None = final.parent / f".install-{commit}-{uuid.uuid4().hex}"
+        root, root_res = _prepare_skills_root(data_home)
+        id_dir = _prepare_skill_id_dir(root, root_res, manifest.id)
+        final = id_dir / commit
+        if not _inside_root(final, root):
+            raise SkillPackageError("invalid skill install path")
+        staging: Path | None = id_dir / f".install-{commit}-{uuid.uuid4().hex}"
         try:
             _copy_tree_no_git(package_root, staging)
+            if not _inside_root(staging, root):
+                raise SkillPackageError("invalid skill install path")
             meta = {
                 "id": manifest.id,
                 "commit": commit,
@@ -215,10 +259,13 @@ def install_skill(
                 encoding="utf-8",
             )
             inspect_package_tree(staging)
+            _remove_confined_commit_dir(final, root, root_res, manifest.id, commit)
             os.replace(staging, final)
+            staging = None
         except Exception:
             if staging is not None and staging.exists():
-                _confined_rmtree(staging)
+                if _inside_root(staging, root):
+                    _confined_rmtree(staging)
             raise
 
         return InstalledSkill(
