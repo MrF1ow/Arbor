@@ -1472,8 +1472,8 @@ mod tests {
 
         let candidates = sidecar_candidates(macos.as_path());
         assert_eq!(
-            first_existing_sidecar(&candidates).as_deref(),
-            Some(onedir_worker.as_path())
+            first_existing_sidecar(&candidates),
+            Some(onedir_worker.canonicalize().unwrap())
         );
         let _ = std::fs::remove_dir_all(&root);
     }
@@ -1485,8 +1485,8 @@ mod tests {
         std::fs::write(&triple, b"x").unwrap();
         let candidates = sidecar_candidates(dir.as_path());
         assert_eq!(
-            first_existing_sidecar(&candidates).as_deref(),
-            Some(triple.as_path())
+            first_existing_sidecar(&candidates),
+            Some(triple.canonicalize().unwrap())
         );
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -1500,8 +1500,8 @@ mod tests {
         std::fs::write(&worker, b"x").unwrap();
         let candidates = sidecar_candidates(dir.as_path());
         assert_eq!(
-            first_existing_sidecar(&candidates).as_deref(),
-            Some(worker.as_path())
+            first_existing_sidecar(&candidates),
+            Some(worker.canonicalize().unwrap())
         );
         let _ = std::fs::remove_dir_all(&dir);
     }
