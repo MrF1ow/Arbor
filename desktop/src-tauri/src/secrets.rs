@@ -1,5 +1,7 @@
 use crate::settings::Settings;
+#[cfg(test)]
 use std::collections::HashMap;
+#[cfg(test)]
 use std::sync::Mutex;
 
 const SERVICE: &str = "com.arbor.app";
