@@ -19,8 +19,18 @@ export interface AuthStatus {
   docs_url: string;
 }
 
+export type KnowledgeKind = "personal" | "shared";
+
+export interface KnowledgeRootEntry {
+  path: string;
+  kind: KnowledgeKind;
+  name: string;
+}
+
 export interface Settings {
   knowledge_root: string | null;
+  knowledge_roots: KnowledgeRootEntry[];
+  active_root: string | null;
   model_id: string | null;
   provider_id: string;
   appearance: Appearance;
@@ -73,6 +83,8 @@ export interface KnowledgeSettings {
 export interface SyncShowResult {
   remote: string | null;
   shared: boolean;
+  sync_remote?: "origin" | "arbor" | null;
+  remote_note?: string | null;
 }
 
 export interface SyncWorkerResult {

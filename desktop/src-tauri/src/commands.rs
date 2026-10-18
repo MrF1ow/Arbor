@@ -134,6 +134,34 @@ pub fn sync_set_shared(
 }
 
 #[tauri::command]
+pub fn create_shared_library(
+    app: tauri::AppHandle,
+    root: String,
+    name: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let mut args = vec!["library-create", "--root", root.as_str()];
+    let name_arg;
+    if let Some(ref n) = name {
+        name_arg = n.as_str();
+        args.push("--name");
+        args.push(name_arg);
+    }
+    run_worker_json_app(&app, &args)
+}
+
+#[tauri::command]
+pub fn join_library(
+    app: tauri::AppHandle,
+    url: String,
+    dest: String,
+) -> Result<serde_json::Value, String> {
+    run_worker_json_app(
+        &app,
+        &["library-join", "--url", url.as_str(), "--dest", dest.as_str()],
+    )
+}
+
+#[tauri::command]
 pub fn sync_now(app: tauri::AppHandle, root: String) -> Result<serde_json::Value, String> {
     run_worker_json_app(&app, &["sync", "--root", &root])
 }
@@ -529,6 +557,53 @@ fn validate_path_component(value: &str, label: &str) -> Result<(), String> {
     Ok(())
 }
 
+fn is_safe_user_dir(email: &str) -> bool {
+    !email.is_empty()
+        && email != "."
+        && email != ".."
+        && !email.contains('/')
+        && !email.contains('\\')
+        && !email.contains("..")
+}
+
+fn git_user_dirname(root: &str) -> Result<String, String> {
+    let output = Command::new("git")
+        .args(["-C", root, "config", "--get", "user.email"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .output()
+        .map_err(|e| e.to_string())?;
+    let email = if output.status.success() {
+        String::from_utf8_lossy(&output.stdout).trim().to_string()
+    } else {
+        String::new()
+    };
+    Ok(if is_safe_user_dir(&email) {
+        email
+    } else {
+        "arbor@localhost".to_string()
+    })
+}
+
+fn migrate_derived_file(old: &Path, new: &Path, bak: &Path) -> Result<(), String> {
+    if new.is_file() {
+        return Ok(());
+    }
+    if !old.is_file() {
+        return Ok(());
+    }
+    if let Some(parent) = new.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    std::fs::copy(old, new).map_err(|e| e.to_string())?;
+    if !bak.is_file() {
+        std::fs::rename(old, bak).map_err(|e| e.to_string())?;
+    } else {
+        std::fs::remove_file(old).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub fn read_study_json(
     root: String,
@@ -544,10 +619,20 @@ pub fn read_study_json(
 
 fn flashcard_progress_path(root: &str, course: &str) -> Result<PathBuf, String> {
     validate_path_component(course, "course name")?;
-    Ok(Path::new(root)
+    let dirname = git_user_dirname(root)?;
+    let new_path = Path::new(root)
+        .join(".arbor")
+        .join("users")
+        .join(&dirname)
+        .join("local")
+        .join(format!("{course}.flashcards.json"));
+    let old_path = Path::new(root)
         .join(".arbor")
         .join("progress")
-        .join(format!("{course}.flashcards.json")))
+        .join(format!("{course}.flashcards.json"));
+    let bak_path = old_path.with_extension("json.bak");
+    migrate_derived_file(&old_path, &new_path, &bak_path)?;
+    Ok(new_path)
 }
 
 #[tauri::command]
@@ -587,10 +672,20 @@ pub fn write_flashcard_progress(
 
 fn quiz_progress_path(root: &str, course: &str) -> Result<PathBuf, String> {
     validate_path_component(course, "course name")?;
-    Ok(Path::new(root)
+    let dirname = git_user_dirname(root)?;
+    let new_path = Path::new(root)
+        .join(".arbor")
+        .join("users")
+        .join(&dirname)
+        .join("local")
+        .join(format!("{course}.quiz.json"));
+    let old_path = Path::new(root)
         .join(".arbor")
         .join("progress")
-        .join(format!("{course}.quiz.json")))
+        .join(format!("{course}.quiz.json"));
+    let bak_path = old_path.with_extension("json.bak");
+    migrate_derived_file(&old_path, &new_path, &bak_path)?;
+    Ok(new_path)
 }
 
 #[tauri::command]
@@ -900,15 +995,26 @@ fn validate_chat_course(course: &str) -> Result<(), String> {
 
 fn chat_history_path(root: &str, course: &str) -> Result<PathBuf, String> {
     validate_chat_course(course)?;
-    let chat_dir = Path::new(root).join(".arbor").join("chat");
-    let path = chat_dir.join(format!("{course}.jsonl"));
-    if path
+    let dirname = git_user_dirname(root)?;
+    let new_path = Path::new(root)
+        .join(".arbor")
+        .join("users")
+        .join(&dirname)
+        .join("chat")
+        .join(format!("{course}.jsonl"));
+    if new_path
         .components()
         .any(|component| matches!(component, Component::ParentDir))
     {
         return Err("Invalid course name".into());
     }
-    Ok(path)
+    let old_path = Path::new(root)
+        .join(".arbor")
+        .join("chat")
+        .join(format!("{course}.jsonl"));
+    let bak_path = old_path.with_file_name(format!("{course}.jsonl.bak"));
+    migrate_derived_file(&old_path, &new_path, &bak_path)?;
+    Ok(new_path)
 }
 
 fn kill_and_reap_child(child: &mut Child) {
@@ -1151,6 +1257,91 @@ pub fn start_chat(
 mod tests {
     use super::*;
     use std::fs;
+    use std::sync::{Mutex, MutexGuard};
+
+    static GIT_IDENTITY_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    struct IsolatedGitIdentityGuard {
+        _mutex: MutexGuard<'static, ()>,
+        saved_home: Option<String>,
+        saved_git_config_global: Option<String>,
+        saved_git_config_nosystem: Option<String>,
+        _temp_home: PathBuf,
+        _temp_gitconfig: PathBuf,
+    }
+
+    fn restore_optional_env(key: &str, value: Option<String>) {
+        match value {
+            Some(v) => unsafe { std::env::set_var(key, v) },
+            None => unsafe { std::env::remove_var(key) },
+        }
+    }
+
+    impl IsolatedGitIdentityGuard {
+        fn with_empty_identity() -> Self {
+            let mutex = GIT_IDENTITY_TEST_LOCK.lock().unwrap();
+            let saved_home = std::env::var("HOME").ok();
+            let saved_git_config_global = std::env::var("GIT_CONFIG_GLOBAL").ok();
+            let saved_git_config_nosystem = std::env::var("GIT_CONFIG_NOSYSTEM").ok();
+
+            let temp_home = temp_root("git-identity-home");
+            let gitconfig_path = temp_home.join("gitconfig");
+            fs::write(&gitconfig_path, "").unwrap();
+
+            unsafe {
+                std::env::set_var("HOME", &temp_home);
+                std::env::set_var("GIT_CONFIG_GLOBAL", &gitconfig_path);
+                std::env::set_var("GIT_CONFIG_NOSYSTEM", "1");
+            }
+
+            Self {
+                _mutex: mutex,
+                saved_home,
+                saved_git_config_global,
+                saved_git_config_nosystem,
+                _temp_home: temp_home,
+                _temp_gitconfig: gitconfig_path,
+            }
+        }
+
+        fn with_global_email() -> Self {
+            let mutex = GIT_IDENTITY_TEST_LOCK.lock().unwrap();
+            let saved_home = std::env::var("HOME").ok();
+            let saved_git_config_global = std::env::var("GIT_CONFIG_GLOBAL").ok();
+            let saved_git_config_nosystem = std::env::var("GIT_CONFIG_NOSYSTEM").ok();
+
+            let temp_home = temp_root("git-identity-home");
+            let gitconfig_path = temp_home.join("gitconfig");
+            fs::write(
+                &gitconfig_path,
+                "[user]\n\temail = global-only@example.com\n\tname = Global Only\n",
+            )
+            .unwrap();
+
+            unsafe {
+                std::env::set_var("HOME", &temp_home);
+                std::env::set_var("GIT_CONFIG_GLOBAL", &gitconfig_path);
+                std::env::set_var("GIT_CONFIG_NOSYSTEM", "1");
+            }
+
+            Self {
+                _mutex: mutex,
+                saved_home,
+                saved_git_config_global,
+                saved_git_config_nosystem,
+                _temp_home: temp_home,
+                _temp_gitconfig: gitconfig_path,
+            }
+        }
+    }
+
+    impl Drop for IsolatedGitIdentityGuard {
+        fn drop(&mut self) {
+            restore_optional_env("HOME", self.saved_home.take());
+            restore_optional_env("GIT_CONFIG_GLOBAL", self.saved_git_config_global.take());
+            restore_optional_env("GIT_CONFIG_NOSYSTEM", self.saved_git_config_nosystem.take());
+        }
+    }
 
     fn temp_root(label: &str) -> PathBuf {
         let root = std::env::temp_dir().join(format!(
@@ -1476,6 +1667,7 @@ mod tests {
 
     #[test]
     fn flashcard_progress_defaults_empty_and_round_trips() {
+        let _guard = IsolatedGitIdentityGuard::with_empty_identity();
         let root = temp_root("progress");
         let root_string = root.to_string_lossy().into_owned();
         let empty = read_flashcard_progress(root_string.clone(), "Biology".into()).unwrap();
@@ -1492,13 +1684,16 @@ mod tests {
         );
         assert!(root
             .join(".arbor")
-            .join("progress")
+            .join("users")
+            .join("arbor@localhost")
+            .join("local")
             .join("Biology.flashcards.json")
             .is_file());
     }
 
     #[test]
     fn quiz_progress_defaults_empty_and_round_trips() {
+        let _guard = IsolatedGitIdentityGuard::with_empty_identity();
         let root = temp_root("quiz-progress");
         let root_string = root.to_string_lossy().into_owned();
         let empty = read_quiz_progress(root_string.clone(), "Biology".into()).unwrap();
@@ -1515,9 +1710,49 @@ mod tests {
         );
         assert!(root
             .join(".arbor")
-            .join("progress")
+            .join("users")
+            .join("arbor@localhost")
+            .join("local")
             .join("Biology.quiz.json")
             .is_file());
+    }
+
+    #[test]
+    fn git_user_dirname_uses_effective_global_email() {
+        let _guard = IsolatedGitIdentityGuard::with_global_email();
+
+        let root = temp_root("git-user-global-email");
+        let root_str = root.to_string_lossy().into_owned();
+        let status = Command::new("git")
+            .args(["-C", &root_str, "init"])
+            .status()
+            .expect("git init");
+        assert!(status.success());
+
+        let dirname = git_user_dirname(&root_str).unwrap();
+        assert_eq!(dirname, "global-only@example.com");
+    }
+
+    #[test]
+    fn chat_history_uses_fallback_user_dir_without_git_email() {
+        let _guard = IsolatedGitIdentityGuard::with_empty_identity();
+        let root = temp_root("chat-fallback-user");
+        let root_string = root.to_string_lossy().into_owned();
+        let line = serde_json::json!({
+            "ts": "2026-10-17T12:00:00Z",
+            "role": "user",
+            "mode": "ask",
+            "content": "Hello"
+        });
+        append_chat_lines(root_string.clone(), "Biology".into(), vec![line.clone()]).unwrap();
+        let expected = root
+            .join(".arbor")
+            .join("users")
+            .join("arbor@localhost")
+            .join("chat")
+            .join("Biology.jsonl");
+        assert!(expected.is_file());
+        assert_eq!(read_chat_history(root_string, "Biology".into()).unwrap().len(), 1);
     }
 
     #[test]
@@ -1853,6 +2088,7 @@ mod tests {
 
     #[test]
     fn chat_history_round_trips_and_keeps_session_line() {
+        let _guard = IsolatedGitIdentityGuard::with_empty_identity();
         let root = temp_root("chat-history");
         let root_string = root.to_string_lossy().into_owned();
         let empty = read_chat_history(root_string.clone(), "Biology".into()).unwrap();
@@ -1903,6 +2139,7 @@ mod tests {
 
     #[test]
     fn chat_history_clear_only_removes_one_course() {
+        let _guard = IsolatedGitIdentityGuard::with_empty_identity();
         let root = temp_root("chat-clear");
         let root_string = root.to_string_lossy().into_owned();
         let line = serde_json::json!({

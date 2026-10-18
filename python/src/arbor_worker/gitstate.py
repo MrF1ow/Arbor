@@ -41,11 +41,12 @@ def _git(root: Path, args: list[str], runner: _Runner) -> subprocess.CompletedPr
     )
 
 
-def _env_git_email_set() -> bool:
-    for key in ("GIT_AUTHOR_EMAIL", "GIT_COMMITTER_EMAIL"):
-        if (os.environ.get(key) or "").strip():
-            return True
-    return False
+def _env_author_email_set() -> bool:
+    return bool((os.environ.get("GIT_AUTHOR_EMAIL") or "").strip())
+
+
+def _env_committer_email_set() -> bool:
+    return bool((os.environ.get("GIT_COMMITTER_EMAIL") or "").strip())
 
 
 def _effective_user_email(root: Path, runner: _Runner) -> str | None:
@@ -56,8 +57,30 @@ def _effective_user_email(root: Path, runner: _Runner) -> str | None:
     return email if email else None
 
 
+def effective_git_email(root: Path, runner: _Runner = subprocess.run) -> str:
+    return _effective_user_email(root, runner) or "arbor@localhost"
+
+
+def _is_safe_user_dir_component(email: str) -> bool:
+    if not email or email in (".", ".."):
+        return False
+    if "/" in email or "\\" in email or ".." in email:
+        return False
+    return True
+
+
+def git_user_dirname(root: Path, runner: _Runner = subprocess.run) -> str:
+    email = _effective_user_email(root, runner)
+    if email is None or not _is_safe_user_dir_component(email):
+        return "arbor@localhost"
+    return email
+
+
 def git_identity_args(root: Path, runner: _Runner = subprocess.run) -> list[str]:
-    if _effective_user_email(root, runner) or _env_git_email_set():
+    config_email = _effective_user_email(root, runner)
+    author_covered = bool(config_email) or _env_author_email_set()
+    committer_covered = bool(config_email) or _env_committer_email_set()
+    if author_covered and committer_covered:
         return []
     return ["-c", "user.name=Arbor", "-c", "user.email=arbor@localhost"]
 
@@ -77,8 +100,19 @@ def commit_batch(
     identity = git_identity_args(root, runner)
     if identity:
         notice = FALLBACK_IDENTITY_NOTICE
+    path_args = [str(p) for p in rel_paths]
     commit = runner(
-        ["git", "-C", str(root), *identity, "commit", "-m", message],
+        [
+            "git",
+            "-C",
+            str(root),
+            *identity,
+            "commit",
+            "-m",
+            message,
+            "--",
+            *path_args,
+        ],
         capture_output=True,
         text=True,
     )

@@ -348,6 +348,7 @@
                       <input id="sync-remote" type="text" autocomplete="off" spellcheck="false" placeholder="git@host:repo.git">
                       <button class="btn-secondary" id="sync-remote-save" type="button">Save remote</button>
                     </div>
+                    <p id="sync-remote-note" class="sync-status"></p>
                     <div class="setting-row">
                       <span>Shared library (merge on sync)</span>
                       <button class="toggle off" id="toggle-sync-shared" type="button" aria-label="Shared library"></button>
@@ -359,6 +360,11 @@
                     <div class="setting-row">
                       <span>Manual sync</span>
                       <button class="btn-secondary" id="sync-now" type="button">Sync now</button>
+                    </div>
+                    <div class="setting-row">
+                      <span>Shared libraries</span>
+                      <button class="btn-secondary" id="create-shared-library" type="button">Create shared library</button>
+                      <button class="btn-secondary" id="join-library" type="button">Join a library</button>
                     </div>
                     <p id="sync-status" class="sync-status"></p>
                   </div>
@@ -419,6 +425,29 @@
       <div class="sync-conflict-actions">
         <button type="button" id="sync-conflict-close" class="btn-secondary">Close</button>
         <button type="button" id="sync-conflict-continue" class="btn-primary">Continue sync</button>
+      </div>
+    </dialog>
+    <dialog id="library-create-dialog" class="library-dialog">
+      <h2>Create shared library</h2>
+      <label for="library-create-name">Name</label>
+      <input id="library-create-name" type="text" autocomplete="off" spellcheck="false">
+      <p id="library-create-error" class="library-dialog-error"></p>
+      <div class="library-dialog-actions">
+        <button type="button" id="library-create-cancel" class="btn-secondary">Cancel</button>
+        <button type="button" id="library-create-confirm" class="btn-primary">Create</button>
+      </div>
+    </dialog>
+    <dialog id="library-join-dialog" class="library-dialog">
+      <h2>Join a library</h2>
+      <label for="library-join-url">Library URL</label>
+      <input id="library-join-url" type="text" autocomplete="off" spellcheck="false" placeholder="git@host:repo.git">
+      <label for="library-join-dest">Folder</label>
+      <input id="library-join-dest" type="text" readonly>
+      <button type="button" id="library-join-pick" class="btn-secondary">Choose folder…</button>
+      <p id="library-join-error" class="library-dialog-error"></p>
+      <div class="library-dialog-actions">
+        <button type="button" id="library-join-cancel" class="btn-secondary">Cancel</button>
+        <button type="button" id="library-join-confirm" class="btn-primary">Join</button>
       </div>
     </dialog>
     <dialog id="make-card-dialog" class="make-card-dialog">

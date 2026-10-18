@@ -28,3 +28,22 @@ test("successful sync with head_changed reloads the library like update commit",
   const syncDoneSlice = source.slice(syncDoneIndex, syncDoneIndex + 200);
   assert.match(syncDoneSlice, /reloadLibraryAfterSync\(\)/);
 });
+
+test("sync conflict list marks resolved files and settings show remote note", async () => {
+  const mainSource = await readFile(new URL("../src/main.ts", import.meta.url), "utf8");
+  const renderStart = mainSource.indexOf("function renderSyncConflictSession");
+  assert.ok(renderStart >= 0, "renderSyncConflictSession must exist");
+  const renderEnd = mainSource.indexOf("\nasync function openSyncConflictDialog", renderStart);
+  const renderBody = mainSource.slice(renderStart, renderEnd === -1 ? undefined : renderEnd);
+  assert.match(renderBody, /classList\.toggle\("resolved", resolved\)/);
+  assert.match(renderBody, /\(resolved\)/);
+
+  const refreshStart = mainSource.indexOf("async function refreshSyncUi");
+  const refreshEnd = mainSource.indexOf("\nlet syncConflictSelectedPath", refreshStart);
+  const refreshBody = mainSource.slice(refreshStart, refreshEnd === -1 ? undefined : refreshEnd);
+  assert.match(refreshBody, /syncRemoteNoteEl/);
+  assert.match(refreshBody, /show\.remote_note/);
+
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  assert.match(html, /id="sync-remote-note"/);
+});

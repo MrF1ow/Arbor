@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+from arbor_worker.gitstate import git_user_dirname
 from arbor_worker.schemas.study.digest import normalize_study_digest
 
 DEFAULT_EASE = 2.5
@@ -23,9 +24,32 @@ def validate_course_name(course: str) -> None:
         raise ValueError(f"invalid course name: {course!r}")
 
 
-def progress_path(root: Path, course: str) -> Path:
+def legacy_v41_progress_path(root: Path, course: str) -> Path:
     validate_course_name(course)
     return root / course / "study" / "progress.json"
+
+
+def progress_path(root: Path, course: str) -> Path:
+    validate_course_name(course)
+    dirname = git_user_dirname(root)
+    return root / ".arbor" / "users" / dirname / course / "progress.json"
+
+
+def migrate_v41_progress(root: Path, course: str) -> None:
+    validate_course_name(course)
+    new_path = progress_path(root, course)
+    if new_path.is_file():
+        return
+    legacy = legacy_v41_progress_path(root, course)
+    if not legacy.is_file():
+        return
+    new_path.parent.mkdir(parents=True, exist_ok=True)
+    new_path.write_bytes(legacy.read_bytes())
+    bak_path = legacy.parent / "progress.json.bak"
+    if not bak_path.is_file():
+        legacy.rename(bak_path)
+    else:
+        legacy.unlink()
 
 
 def legacy_flashcards_path(root: Path, course: str) -> Path:
@@ -165,6 +189,8 @@ def _load_artifact_sources(root: Path, course: str) -> tuple[dict[str, dict], di
 
 
 def _build_from_legacy(root: Path, course: str) -> dict[str, Any] | None:
+    if legacy_v41_progress_path(root, course).is_file():
+        return None
     legacy_cards = _load_legacy_counts(legacy_flashcards_path(root, course))
     legacy_questions = _load_legacy_counts(legacy_quiz_path(root, course))
     if not legacy_cards and not legacy_questions:
@@ -307,6 +333,7 @@ def _ensure_document(
     *,
     write_migration: bool,
 ) -> dict[str, Any]:
+    migrate_v41_progress(root, course)
     path = progress_path(root, course)
     if path.is_file():
         return _read_document(path, course)
@@ -445,6 +472,7 @@ def _load_deck_ids(root: Path, course: str) -> list[str]:
 
 def study_progress_show(root: Path, course: str) -> dict[str, Any]:
     validate_course_name(course)
+    migrate_v41_progress(root, course)
     path = progress_path(root, course)
     if path.is_file():
         return _read_document(path, course)
@@ -555,6 +583,7 @@ def study_progress_due(
     validate_course_name(course)
     clock = now or parse_utc_now(None)
     deck_ids = _load_deck_ids(root, course)
+    migrate_v41_progress(root, course)
     path = progress_path(root, course)
     if path.is_file():
         doc = _read_document(path, course)
@@ -604,6 +633,7 @@ def _concept_matches(concept_sources: list[dict], digest: str, heading: str | No
 
 def study_progress_weak(root: Path, course: str) -> dict[str, Any]:
     validate_course_name(course)
+    migrate_v41_progress(root, course)
     path = progress_path(root, course)
     if path.is_file():
         doc = _read_document(path, course)

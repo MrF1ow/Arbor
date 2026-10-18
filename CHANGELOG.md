@@ -2,15 +2,24 @@
 
 Package version for the worker, desktop, and Tauri app. See [Version numbering](PROJECT.md#version-numbering) in `PROJECT.md`.
 
-**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is complete as package `3.0.0`. **Version 4** is complete as package `4.0.0`. **Version 5** is in progress and will ship as `v4.1.0`, `v4.2.0`, … until `v5.0.0`. **Current package:** `4.1.0`. **Current tag:** `v4.1.0` is cut when this release lands. `v4.0.0` is the previous package (tag when that release landed). `v3.0.0` through `v3.5.0` are already tagged. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) was retested on the 2026-10-17 Linux live run.
+**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is complete as package `3.0.0`. **Version 4** is complete as package `4.0.0`. **Version 5** is in progress and will ship as `v4.1.0`, `v4.2.0`, … until `v5.0.0`. **Current package:** `4.2.0`. **Current tag:** `v4.2.0` is cut when this release lands. `v4.1.0` is the previous package and is tagged. `v4.0.0` is tagged. `v3.0.0` through `v3.5.0` are already tagged. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) was retested on the 2026-10-17 Linux live run.
 
 ## Unreleased
 
-Nothing pending above `4.1.0`.
+Nothing pending above `4.2.0`.
+
+## 4.2.0 — 2026-10-18
+
+Git tag `v4.2.0` when this release lands. **Product:** shared libraries and team workspaces. Version 5 continues at `v4.3.0`. Worker, desktop, and Tauri report `4.2.0`, including `arbor-worker --version`.
+
+- Sync hardening: a job commit includes only the paths that job wrote, so a file the user staged by hand stays staged. The fallback identity Arbor <arbor@localhost> applies to the committer even when only an author email is set. The conflict list marks a file resolved after Mine or Theirs. When origin and arbor have the same URL, Arbor syncs origin; when both exist and the URLs differ, Settings says Arbor syncs the arbor remote.
+- Team workspaces: app settings hold a list of Knowledge roots, each personal or shared, plus the active root, migrated from the old single knowledge_root. The sidebar groups courses by root and switching is one click. Watcher, search, jobs, and chat follow the active root.
+- Shared libraries: `.arbor/library.json` (name, members, created_by) is tracked in git. Create requires an arbor remote, writes that file, marks the root shared, and commits only that path. Join clones a git URL into an empty folder, adds the arbor remote, and marks it shared. Personal roots still rebase. A shared root, or a root with a valid library.json, merges on sync.
+- Per-user state: study progress is `.arbor/users/<git-email>/<course>/progress.json` and is committed. Chat history and the flashcard/quiz UI counts live under that user's chat/ and local/ directories and stay gitignored. The email is the effective user.email, or arbor@localhost. A legacy `<course>/study/progress.json` is copied into the new path and kept as progress.json.bak.
 
 ## 4.1.0 — 2026-10-18
 
-Git tag: `v4.1.0` when this release lands. **Product:** First Version 5 slice (git remote sync). Version 5 continues at `v4.2.0`. Worker, desktop, and Tauri report `4.1.0`, including `arbor-worker --version`.
+Git tag: `v4.1.0` is tagged. **Product:** First Version 5 slice (git remote sync). Version 5 continues at `v4.2.0`. Worker, desktop, and Tauri report `4.1.0`, including `arbor-worker --version`.
 
 - Knowledge commits use `Arbor <arbor@localhost>` when git has no `user.email`, and the UI says so ([#80](https://github.com/MrF1ow/Arbor/issues/80)).
 - Study plan, make-card, and study progress commit through the same helper ([#81](https://github.com/MrF1ow/Arbor/issues/81)).

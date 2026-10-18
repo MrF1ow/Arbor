@@ -88,6 +88,8 @@ import type {
   QuizReview,
   SearchHit,
   Selection,
+  KnowledgeRootEntry,
+  KnowledgeKind,
   Settings,
   UpdatePlan,
   WorkerEvent,
@@ -253,9 +255,24 @@ const toggleAutoFlashcards = $("toggle-auto-flashcards");
 const toggleAutoQuiz = $("toggle-auto-quiz");
 const syncRemoteInput = $("sync-remote") as HTMLInputElement;
 const syncRemoteSaveBtn = $("sync-remote-save") as HTMLButtonElement;
+const syncRemoteNoteEl = $("sync-remote-note");
 const toggleSyncShared = $("toggle-sync-shared");
 const toggleSyncAfter = $("toggle-sync-after");
 const syncNowBtn = $("sync-now") as HTMLButtonElement;
+const createSharedLibraryBtn = $("create-shared-library") as HTMLButtonElement;
+const joinLibraryBtn = $("join-library") as HTMLButtonElement;
+const libraryCreateDialogEl = $("library-create-dialog") as HTMLDialogElement;
+const libraryCreateNameEl = $("library-create-name") as HTMLInputElement;
+const libraryCreateErrorEl = $("library-create-error");
+const libraryCreateConfirmBtn = $("library-create-confirm") as HTMLButtonElement;
+const libraryCreateCancelBtn = $("library-create-cancel") as HTMLButtonElement;
+const libraryJoinDialogEl = $("library-join-dialog") as HTMLDialogElement;
+const libraryJoinUrlEl = $("library-join-url") as HTMLInputElement;
+const libraryJoinDestEl = $("library-join-dest") as HTMLInputElement;
+const libraryJoinPickBtn = $("library-join-pick") as HTMLButtonElement;
+const libraryJoinErrorEl = $("library-join-error");
+const libraryJoinConfirmBtn = $("library-join-confirm") as HTMLButtonElement;
+const libraryJoinCancelBtn = $("library-join-cancel") as HTMLButtonElement;
 const syncStatusEl = $("sync-status");
 const syncConflictDialogEl = $("sync-conflict-dialog") as HTMLDialogElement;
 const syncConflictFilesEl = $("sync-conflict-files");
@@ -288,6 +305,7 @@ const searchSemanticInput = $<HTMLInputElement>("search-semantic");
 const searchResultsEl = $("search-results");
 
 let knowledgeRoot: string | null = null;
+let knowledgeRoots: KnowledgeRootEntry[] = [];
 let providerId = "codex";
 let ollamaBaseUrl = "";
 let lmstudioBaseUrl = "";
@@ -354,9 +372,21 @@ function showPanel(name: string) {
   panels.forEach((p) => p.classList.toggle("active", (p as HTMLElement).dataset.panel === name));
 }
 
+function updateFolderChooseLabels() {
+  const label =
+    knowledgeRoots.length > 0 ? "Add folder…" : "Choose Knowledge folder…";
+  chooseBtn.textContent = label;
+  welcomeChooseBtn.textContent = label;
+}
+
 function setNavActive(place: Place, course?: string) {
   courseListEl.querySelectorAll(".nav-item").forEach((btn) => {
-    btn.classList.toggle("active", place === "course" && btn.getAttribute("data-course") === course);
+    btn.classList.toggle(
+      "active",
+      place === "course" &&
+        btn.getAttribute("data-course") === course &&
+        btn.getAttribute("data-root") === knowledgeRoot,
+    );
   });
   navJobs.classList.toggle("active", place === "jobs");
   navSettings.classList.toggle("active", place === "settings");
@@ -702,6 +732,7 @@ function refreshFolderTools() {
   toggleSyncShared.toggleAttribute("disabled", !ready);
   toggleSyncAfter.toggleAttribute("disabled", !ready);
   syncNowBtn.disabled = !ready;
+  createSharedLibraryBtn.disabled = !ready;
   refreshUpdateEnabled();
   refreshStudyEnabled();
 }
@@ -721,32 +752,112 @@ function shortenPath(path: string): string {
   return home.length > 36 ? "…" + home.slice(-34) : home;
 }
 
+function knowledgePathBasename(path: string): string {
+  const trimmed = path.replace(/\/+$/, "");
+  const parts = trimmed.split("/");
+  return parts[parts.length - 1] || trimmed;
+}
+
+function workspaceRootLabel(entry: KnowledgeRootEntry, all: KnowledgeRootEntry[]): string {
+  const dupes = all.filter((e) => e.name === entry.name);
+  if (dupes.length <= 1) return entry.name;
+  const trimmed = entry.path.replace(/\/+$/, "");
+  const parts = trimmed.split("/");
+  const parent = parts.length >= 2 ? parts[parts.length - 2] : "";
+  return parent ? `${entry.name} (${parent})` : entry.name;
+}
+
+function clearChatTranscriptForRootSwitch() {
+  chatLines = [];
+  chatLiveBubble = null;
+  chatLogEl.innerHTML = "";
+}
+
+async function switchKnowledgeRoot(path: string, course?: string) {
+  if (course === undefined && path === knowledgeRoot) {
+    return;
+  }
+  knowledgeRoot = path;
+  folderHintEl.textContent = shortenPath(path);
+  chatRootEl.textContent = shortenPath(path);
+  updateFolderChooseLabels();
+  await invoke("start_folder_watch", { root: path });
+  await renderCourseList();
+  await loadJobHistory();
+  if (searchInput.value.trim()) {
+    await runSearch(searchInput.value);
+  }
+  clearChatTranscriptForRootSwitch();
+  refreshChatCourseOptions();
+  void refreshSyncUi();
+  await persist();
+  if (course) {
+    setCourseView(course, "notes");
+  } else if (courses.length > 0) {
+    setCourseView(courses[0], "notes");
+  } else {
+    setPlaceView("welcome");
+  }
+}
+
 async function renderCourseList() {
   courseListEl.innerHTML = "";
-  if (!knowledgeRoot) {
-    courseListEl.innerHTML = '<p class="nav-empty">No courses yet</p>';
-    return;
-  }
-  try {
-    courses = await invoke<string[]>("list_courses", { root: knowledgeRoot });
-  } catch {
+  if (knowledgeRoots.length === 0) {
     courses = [];
-  }
-  if (courses.length === 0) {
-    courseListEl.innerHTML = '<p class="nav-empty">No classes yet</p>';
+    courseListEl.innerHTML = '<p class="nav-empty">No courses yet</p>';
+    refreshChatCourseOptions();
     return;
   }
-  for (const course of courses) {
-    const btn = document.createElement("button");
-    btn.className = "nav-item";
-    btn.dataset.place = "course";
-    btn.dataset.course = course;
-    const icon = document.createElement("span");
-    icon.className = "icon";
-    icon.textContent = "◈";
-    btn.append(icon, document.createTextNode(` ${course}`));
-    btn.addEventListener("click", () => setCourseView(course, "notes"));
-    courseListEl.appendChild(btn);
+  for (const entry of knowledgeRoots) {
+    const rootBtn = document.createElement("button");
+    rootBtn.type = "button";
+    rootBtn.className = "workspace-root";
+    if (entry.path === knowledgeRoot) rootBtn.classList.add("active");
+    rootBtn.dataset.root = entry.path;
+    const label = workspaceRootLabel(entry, knowledgeRoots);
+    rootBtn.textContent = `${label} · ${entry.kind}`;
+    rootBtn.title = entry.path;
+    rootBtn.addEventListener("click", () => void switchKnowledgeRoot(entry.path));
+    courseListEl.appendChild(rootBtn);
+
+    const group = document.createElement("div");
+    group.className = "workspace-courses";
+    let rootCourses: string[] = [];
+    try {
+      rootCourses = await invoke<string[]>("list_courses", { root: entry.path });
+    } catch {
+      rootCourses = [];
+    }
+    if (entry.path === knowledgeRoot) {
+      courses = rootCourses;
+    }
+    if (rootCourses.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "nav-empty";
+      empty.textContent = "No classes yet";
+      group.appendChild(empty);
+    } else {
+      for (const course of rootCourses) {
+        const btn = document.createElement("button");
+        btn.className = "nav-item";
+        btn.dataset.place = "course";
+        btn.dataset.course = course;
+        btn.dataset.root = entry.path;
+        const icon = document.createElement("span");
+        icon.className = "icon";
+        icon.textContent = "◈";
+        btn.append(icon, document.createTextNode(` ${course}`));
+        btn.addEventListener("click", () => {
+          if (entry.path !== knowledgeRoot) {
+            void switchKnowledgeRoot(entry.path, course);
+          } else {
+            setCourseView(course, "notes");
+          }
+        });
+        group.appendChild(btn);
+      }
+    }
+    courseListEl.appendChild(group);
   }
   refreshChatCourseOptions();
 }
@@ -1609,35 +1720,29 @@ async function startCitationJob(force: boolean) {
 }
 
 async function activateKnowledgeRoot(picked: string) {
-  knowledgeRoot = picked;
-  folderHintEl.textContent = shortenPath(picked);
-  chatRootEl.textContent = shortenPath(picked);
-  chooseBtn.textContent = "Change folder…";
+  if (!knowledgeRoots.some((e) => e.path === picked)) {
+    knowledgeRoots.push({
+      path: picked,
+      kind: "personal",
+      name: knowledgePathBasename(picked),
+    });
+  }
   try {
     const created = await invoke<boolean>("init_knowledge_repo", { path: picked });
     if (created) logLine(`Initialized git repository in ${picked}`);
   } catch (e) {
     logLine(`Could not initialize git: ${e}`);
   }
-  await invoke("start_folder_watch", { root: picked });
   await loadProviders(providerId);
   await loadModels(modelSel.value || null);
-  await persist();
-  await renderCourseList();
-  await loadJobHistory();
+  await switchKnowledgeRoot(picked);
   refreshFolderTools();
-  void refreshSyncUi();
-  if (courses.length > 0) {
-    setCourseView(courses[0], "notes");
-  } else {
-    setPlaceView("welcome");
-    readingArticleEl.innerHTML = '<p class="reading-empty">Add a class with +, then add lecture files to it.</p>';
-  }
 }
 
 async function refreshSyncUi() {
   if (!knowledgeRoot) {
     syncRemoteInput.value = "";
+    syncRemoteNoteEl.textContent = "";
     syncStatusEl.textContent = "";
     setToggle(toggleSyncShared, false);
     setToggle(toggleSyncAfter, false);
@@ -1646,6 +1751,7 @@ async function refreshSyncUi() {
   try {
     const show = await invoke<SyncShowResult>("sync_show", { root: knowledgeRoot });
     syncRemoteInput.value = show.remote ?? "";
+    syncRemoteNoteEl.textContent = show.remote_note ?? "";
     setToggle(toggleSyncShared, show.shared);
     const ks = await invoke<KnowledgeSettings>("get_knowledge_settings", { root: knowledgeRoot });
     setToggle(toggleSyncAfter, ks.sync_after_commit);
@@ -1687,8 +1793,11 @@ function renderSyncConflictSession(session: SyncConflictSession, focusPath?: str
   for (const entry of files) {
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.textContent = entry.path;
+    const resolved =
+      entry.choice === "mine" || entry.choice === "theirs" || entry.choice === "edit";
+    btn.textContent = resolved ? `${entry.path} (resolved)` : entry.path;
     btn.classList.toggle("selected", entry.path === selected);
+    btn.classList.toggle("resolved", resolved);
     btn.addEventListener("click", () => {
       syncConflictSelectedPath = entry.path;
       for (const child of syncConflictFilesEl.querySelectorAll("button")) {
@@ -2127,18 +2236,22 @@ async function loadSettings() {
   } catch (error) {
     logLine(`Could not load providers: ${error}`);
   }
-  if (s.knowledge_root) {
-    knowledgeRoot = s.knowledge_root;
-    folderHintEl.textContent = shortenPath(s.knowledge_root);
-    chooseBtn.textContent = "Change folder…";
-    await invoke("start_folder_watch", { root: s.knowledge_root });
+  knowledgeRoots = Array.isArray(s.knowledge_roots) ? [...s.knowledge_roots] : [];
+  const activePath = s.active_root ?? s.knowledge_root;
+  if (activePath) {
+    knowledgeRoot = activePath;
+    folderHintEl.textContent = shortenPath(activePath);
+    updateFolderChooseLabels();
+    await invoke("start_folder_watch", { root: activePath });
     await renderCourseList();
     await loadJobHistory();
     if (courses.length > 0) {
       setCourseView(courses[0], "notes");
     }
     refreshFolderTools();
+    void refreshSyncUi();
   } else {
+    knowledgeRoot = null;
     setPlaceView("welcome");
   }
   try {
@@ -2155,6 +2268,8 @@ async function persist() {
   syncProviderBaseUrlFromInput();
   await invoke("save_settings", {
     settings: {
+      knowledge_roots: knowledgeRoots,
+      active_root: knowledgeRoot,
       knowledge_root: knowledgeRoot,
       model_id: modelSel.value || null,
       provider_id: providerId,
@@ -2446,6 +2561,109 @@ syncRemoteSaveBtn.addEventListener("click", async () => {
 
 syncNowBtn.addEventListener("click", () => {
   void runSyncNow();
+});
+
+function activeRootEntryName(): string {
+  if (!knowledgeRoot) return "";
+  const entry = knowledgeRoots.find((e) => e.path === knowledgeRoot);
+  return entry?.name ?? knowledgePathBasename(knowledgeRoot);
+}
+
+createSharedLibraryBtn.addEventListener("click", () => {
+  if (!knowledgeRoot) return;
+  libraryCreateErrorEl.textContent = "";
+  libraryCreateNameEl.value = activeRootEntryName();
+  libraryCreateDialogEl.showModal();
+});
+
+libraryCreateCancelBtn.addEventListener("click", () => {
+  libraryCreateDialogEl.close();
+});
+
+libraryCreateConfirmBtn.addEventListener("click", async () => {
+  if (!knowledgeRoot) return;
+  libraryCreateErrorEl.textContent = "";
+  const name = libraryCreateNameEl.value.trim();
+  try {
+    const doc = await invoke<{ name: string }>("create_shared_library", {
+      root: knowledgeRoot,
+      name: name || null,
+    });
+    const entry = knowledgeRoots.find((e) => e.path === knowledgeRoot);
+    if (entry) {
+      entry.kind = "shared";
+      entry.name = doc.name;
+    }
+    await persist();
+    await renderCourseList();
+    void refreshSyncUi();
+    libraryCreateDialogEl.close();
+  } catch (error) {
+    libraryCreateErrorEl.textContent = String(error);
+  }
+});
+
+let libraryJoinInFlight = false;
+
+joinLibraryBtn.addEventListener("click", () => {
+  libraryJoinErrorEl.textContent = "";
+  libraryJoinUrlEl.value = "";
+  libraryJoinDestEl.value = "";
+  libraryJoinDialogEl.showModal();
+});
+
+libraryJoinCancelBtn.addEventListener("click", () => {
+  libraryJoinDialogEl.close();
+});
+
+libraryJoinPickBtn.addEventListener("click", async () => {
+  libraryJoinErrorEl.textContent = "";
+  try {
+    const picked = await open({ directory: true, multiple: false });
+    if (typeof picked !== "string") return;
+    libraryJoinDestEl.value = picked;
+  } catch (error) {
+    libraryJoinErrorEl.textContent = String(error);
+  }
+});
+
+libraryJoinConfirmBtn.addEventListener("click", async () => {
+  if (libraryJoinInFlight) return;
+  const url = libraryJoinUrlEl.value.trim();
+  const dest = libraryJoinDestEl.value.trim();
+  if (!url || !dest) {
+    libraryJoinErrorEl.textContent = "Enter a URL and choose a folder.";
+    return;
+  }
+  libraryJoinErrorEl.textContent = "";
+  libraryJoinInFlight = true;
+  joinLibraryBtn.disabled = true;
+  libraryJoinConfirmBtn.disabled = true;
+  try {
+    const result = await invoke<{ path: string; name: string; kind: KnowledgeKind }>(
+      "join_library",
+      { url, dest },
+    );
+    const existing = knowledgeRoots.find((e) => e.path === result.path);
+    if (existing) {
+      existing.kind = "shared";
+      existing.name = result.name;
+    } else {
+      knowledgeRoots.push({
+        path: result.path,
+        kind: "shared",
+        name: result.name,
+      });
+    }
+    libraryJoinDialogEl.close();
+    await switchKnowledgeRoot(result.path);
+  } catch (error) {
+    libraryJoinErrorEl.textContent = String(error);
+  } finally {
+    libraryJoinInFlight = false;
+    joinLibraryBtn.disabled = false;
+    libraryJoinConfirmBtn.disabled = false;
+  }
 });
 
 syncConflictCloseBtn.addEventListener("click", () => {

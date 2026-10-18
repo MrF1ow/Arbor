@@ -12,6 +12,7 @@ from arbor_worker.study_progress import (
     _serialize_document,
     _write_atomic,
     digest_key,
+    migrate_v41_progress,
     progress_path,
     study_progress_due,
     study_progress_weak,
@@ -20,6 +21,7 @@ from arbor_worker.study_progress import (
 
 
 def _load_progress_doc(root: Path, course: str) -> dict[str, Any]:
+    migrate_v41_progress(root, course)
     path = progress_path(root, course)
     if path.is_file():
         return _read_document(path, course)
