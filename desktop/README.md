@@ -1,8 +1,8 @@
 # Arbor Desktop
 
-Tauri v2 shell for Arbor (package **3.0.0**). Drives the `arbor-worker` CLI (see `../python`).
+Tauri v2 shell for Arbor (package **3.1.0**). Drives the `arbor-worker` CLI (see `../python`).
 
-The UI is the Version 3 shell. First delivery was **v2.1.0**. Package **2.2.0** adds the study loop. Package **2.3.0** is the Mac-batch fix release. Version 3 completed at **3.0.0** after the 2026-10-17 Linux live run. Mac proof does not block the tag. Sidebar library, course workspace with Notes / Flashcards / Quiz / Graph tabs, in-app digest preview, and a collapsed bottom inspector for Update and job logs.
+The UI is the Version 3 shell. First delivery was **v2.1.0**. Package **2.2.0** adds the study loop. Package **2.3.0** is the Mac-batch fix release. Version 3 completed at **3.0.0** after the 2026-10-17 Linux live run. Package **3.1.0** adds the worker `chat` command and does not change the UI. Mac proof does not block the tag. Sidebar library, course workspace with Notes / Flashcards / Quiz / Graph tabs, in-app digest preview, and a collapsed bottom inspector for Update and job logs.
 
 Design spec: [`docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md`](../docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md). Reference mockup: [`docs/mockups/v3-shell.html`](../docs/mockups/v3-shell.html).
 
