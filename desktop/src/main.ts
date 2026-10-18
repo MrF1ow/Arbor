@@ -44,7 +44,7 @@ import {
 } from "./citations";
 import { headingId, renderMarkdown } from "./markdown";
 import { renderSearchHit } from "./search-hit";
-import { pickerProviders, providerBadge } from "./provider";
+import { pickerProviders, providerBadge, signedOutJobMessage } from "./provider";
 import { parseAppearance, resolvedTheme } from "./theme";
 import type {
   Appearance,
@@ -202,6 +202,7 @@ let knowledgeRoot: string | null = null;
 let providerId = "codex";
 let appearance: Appearance = "system";
 let authed = false;
+let authCheckReason = "";
 let activeUpdateJobId: string | null = null;
 let studyJobRunning = false;
 let pendingAutoEmbed = false;
@@ -551,10 +552,16 @@ function gradeCurrentFlashcard(grade: "again" | "wrong" | "mastered") {
   renderCurrentFlashcard();
 }
 
+function abortIfSignedOut(): boolean {
+  if (authed) return false;
+  logLine(signedOutJobMessage(currentProviderLabel(), authCheckReason));
+  return true;
+}
+
 async function startFlashcardJob(force: boolean) {
   if (!knowledgeRoot || !currentCourse || !modelSel.value) return;
   await refreshAuth();
-  if (!authed) return;
+  if (abortIfSignedOut()) return;
   studyJobRunning = true;
   refreshStudyEnabled();
   try {
@@ -794,7 +801,7 @@ function persistQuizProgress() {
 async function startQuizJob(force: boolean) {
   if (!knowledgeRoot || !currentCourse || !modelSel.value) return;
   await refreshAuth();
-  if (!authed) return;
+  if (abortIfSignedOut()) return;
   studyJobRunning = true;
   refreshStudyEnabled();
   try {
@@ -813,7 +820,7 @@ async function startQuizJob(force: boolean) {
 async function startConceptJob(force: boolean) {
   if (!knowledgeRoot || !currentCourse || !modelSel.value) return;
   await refreshAuth();
-  if (!authed) return;
+  if (abortIfSignedOut()) return;
   studyJobRunning = true;
   refreshStudyEnabled();
   try {
@@ -832,7 +839,7 @@ async function startConceptJob(force: boolean) {
 async function startDiagramJob(force: boolean) {
   if (!knowledgeRoot || !currentCourse || !modelSel.value) return;
   await refreshAuth();
-  if (!authed) return;
+  if (abortIfSignedOut()) return;
   studyJobRunning = true;
   refreshStudyEnabled();
   try {
@@ -868,7 +875,7 @@ async function loadCitations(course: string) {
 async function startCitationJob(force: boolean) {
   if (!knowledgeRoot || !currentCourse || !modelSel.value) return;
   await refreshAuth();
-  if (!authed) return;
+  if (abortIfSignedOut()) return;
   studyJobRunning = true;
   refreshStudyEnabled();
   try {
@@ -994,7 +1001,7 @@ async function presentUpdatePlan(
       if (!authed) {
         renderReview(plan.pending);
         logLine(
-          `Auto-update waiting for ${currentProviderLabel()} auth. Review and Confirm when ready.`,
+          `Auto-update waiting for ${currentProviderLabel()} auth. Review and Confirm when ready. ${signedOutJobMessage(currentProviderLabel(), authCheckReason)}`,
         );
         return;
       }
@@ -1309,10 +1316,12 @@ async function refreshAuth() {
       const a = await invoke<AuthStatus>("check_auth", { provider: providerId });
       authed = a.authenticated;
       if (a.authenticated) {
+        authCheckReason = "";
         providerLabelEl.textContent = providerBadge(label, modelLabel, true);
         providerStatusEl.className = "auth-badge";
         docsLink.hidden = true;
       } else {
+        authCheckReason = a.reason;
         providerLabelEl.textContent = providerBadge(label, modelLabel, false);
         providerStatusEl.className = "auth-badge bad";
         docsLink.href = a.docs_url;
@@ -1321,6 +1330,9 @@ async function refreshAuth() {
       }
     } catch {
       authed = false;
+      if (!authCheckReason.trim()) {
+        authCheckReason = "auth check failed";
+      }
       providerLabelEl.textContent = providerBadge(label, modelLabel, false);
       providerStatusEl.className = "auth-badge bad";
     }
@@ -1676,7 +1688,7 @@ quizSourceBtn.addEventListener("click", () => {
 updateBtn.addEventListener("click", async () => {
   if (!knowledgeRoot || !modelSel.value) return;
   await refreshAuth();
-  if (!authed) return;
+  if (abortIfSignedOut()) return;
   logEl.textContent = "";
   openInspector();
   try {
@@ -1694,7 +1706,7 @@ updateBtn.addEventListener("click", async () => {
 confirmBtn.addEventListener("click", async () => {
   if (!knowledgeRoot || !modelSel.value) return;
   await refreshAuth();
-  if (!authed) return;
+  if (abortIfSignedOut()) return;
   try {
     await startUpdateWithSelections(collectSelections());
   } catch (e) {

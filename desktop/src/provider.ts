@@ -1,3 +1,11 @@
+export function signedOutJobMessage(providerLabel: string, reason: string): string {
+  const trimmed = reason.trim();
+  if (trimmed === "") {
+    return `${providerLabel} is not authenticated`;
+  }
+  return `${providerLabel} is not authenticated: ${trimmed}`;
+}
+
 export function providerBadge(
   providerLabel: string,
   modelLabel: string,
