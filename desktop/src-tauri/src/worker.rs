@@ -5,12 +5,20 @@ pub use crate::transport::{
     rsync_ssh_wrapper, ssh_argv, validate_ssh, ValidatedSsh, WorkerTransport,
 };
 
+use std::collections::HashSet;
 use std::ffi::OsString;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::OnceLock;
+#[cfg(target_os = "macos")]
+use std::time::{Duration, Instant};
 
-pub fn parse_worker_json_output(stdout: &str, stderr: &str) -> Result<serde_json::Value, String> {
+pub fn parse_worker_json_output(
+    stdout: &str,
+    stderr: &str,
+    exit_code: Option<i32>,
+) -> Result<serde_json::Value, String> {
     let mut last_invalid: Option<(serde_json::Error, String)> = None;
     for line in stdout.lines().rev() {
         let line = line.trim();
@@ -29,7 +37,134 @@ pub fn parse_worker_json_output(stdout: &str, stderr: &str) -> Result<serde_json
     if let Some((err, last)) = last_invalid {
         return Err(format!("invalid worker json: {err}: {last}"));
     }
+    if let Some(code) = exit_code.filter(|code| *code != 0) {
+        let trimmed = stderr.trim();
+        let tail = if trimmed.len() > 600 {
+            &trimmed[trimmed.len() - 600..]
+        } else {
+            trimmed
+        };
+        return Err(format!("worker failed to start (exit {code}): {tail}"));
+    }
     Err(format!("worker produced no output (stderr: {stderr})"))
+}
+
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn extract_login_shell_path(raw: &str) -> Option<String> {
+    const START: &str = "__ARBOR_PATH__";
+    const END: &str = "__ARBOR_PATH__";
+    let start = raw.find(START)? + START.len();
+    let end = raw[start..].find(END)? + start;
+    let path = raw[start..end].trim();
+    if path.is_empty() {
+        None
+    } else {
+        Some(path.to_string())
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn login_shell_path_uncached() -> Option<String> {
+    use std::process::{Command, Stdio};
+
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
+    let mut child = Command::new(&shell)
+        .arg("-ilc")
+        .arg("printf \"__ARBOR_PATH__%s__ARBOR_PATH__\" \"$PATH\"")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?;
+    let deadline = Instant::now() + Duration::from_secs(3);
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => {
+                let output = child.wait_with_output().ok()?;
+                if !output.status.success() {
+                    return None;
+                }
+                return extract_login_shell_path(&String::from_utf8_lossy(&output.stdout));
+            }
+            Ok(None) => {
+                if Instant::now() >= deadline {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return None;
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            Err(_) => return None,
+        }
+    }
+}
+
+static LOGIN_SHELL_PATH: OnceLock<Option<String>> = OnceLock::new();
+
+fn cached_login_shell_path() -> Option<&'static str> {
+    LOGIN_SHELL_PATH
+        .get_or_init(|| {
+            #[cfg(target_os = "macos")]
+            {
+                login_shell_path_uncached()
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                None
+            }
+        })
+        .as_deref()
+}
+
+fn push_path_segment(seen: &mut HashSet<String>, parts: &mut Vec<OsString>, segment: &str) {
+    if segment.is_empty() || seen.contains(segment) {
+        return;
+    }
+    seen.insert(segment.to_string());
+    parts.push(OsString::from(segment));
+}
+
+pub fn augmented_path_from(
+    home: Option<&str>,
+    login_shell: Option<&str>,
+    current: Option<&str>,
+) -> OsString {
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut parts: Vec<OsString> = Vec::new();
+    if let Some(login) = login_shell.filter(|path| !path.is_empty()) {
+        for segment in login.split(':') {
+            push_path_segment(&mut seen, &mut parts, segment);
+        }
+    }
+    if let Some(home) = home {
+        for sub in [
+            ".local/bin",
+            ".grok/bin",
+            ".claude/local",
+            ".npm-global/bin",
+            ".bun/bin",
+            ".volta/bin",
+            ".cargo/bin",
+        ] {
+            let segment = Path::new(home).join(sub).to_string_lossy().into_owned();
+            push_path_segment(&mut seen, &mut parts, &segment);
+        }
+    }
+    push_path_segment(&mut seen, &mut parts, "/opt/homebrew/bin");
+    push_path_segment(&mut seen, &mut parts, "/usr/local/bin");
+    if let Some(current) = current.filter(|path| !path.is_empty()) {
+        for segment in current.split(':') {
+            push_path_segment(&mut seen, &mut parts, segment);
+        }
+    }
+    let mut joined = OsString::new();
+    for (i, part) in parts.iter().enumerate() {
+        if i > 0 {
+            joined.push(":");
+        }
+        joined.push(part);
+    }
+    joined
 }
 
 pub fn sidecar_path_in(dir: &Path) -> Option<PathBuf> {
@@ -48,31 +183,16 @@ pub fn sidecar_path_in(dir: &Path) -> Option<PathBuf> {
     None
 }
 
-pub fn augmented_path_from(home: Option<&str>, current: Option<&str>) -> OsString {
-    let mut parts: Vec<OsString> = Vec::new();
-    if let Some(home) = home {
-        parts.push(Path::new(home).join(".local/bin").into_os_string());
-    }
-    parts.push(OsString::from("/opt/homebrew/bin"));
-    parts.push(OsString::from("/usr/local/bin"));
-    if let Some(current) = current.filter(|path| !path.is_empty()) {
-        parts.push(OsString::from(current));
-    }
-    let mut joined = OsString::new();
-    for (i, part) in parts.iter().enumerate() {
-        if i > 0 {
-            joined.push(":");
-        }
-        joined.push(part);
-    }
-    joined
+pub fn process_path_for_spawn() -> OsString {
+    augmented_path_from(
+        std::env::var("HOME").ok().as_deref(),
+        cached_login_shell_path(),
+        std::env::var("PATH").ok().as_deref(),
+    )
 }
 
 fn process_path() -> OsString {
-    augmented_path_from(
-        std::env::var("HOME").ok().as_deref(),
-        std::env::var("PATH").ok().as_deref(),
-    )
+    process_path_for_spawn()
 }
 
 pub fn resolve_worker_argv(
@@ -206,9 +326,11 @@ pub fn run_worker_json(
     let output = command
         .output()
         .map_err(|e| format!("failed to launch worker: {e}"))?;
+    let exit_code = output.status.code();
     parse_worker_json_output(
         &String::from_utf8_lossy(&output.stdout),
         &String::from_utf8_lossy(&output.stderr),
+        exit_code,
     )
 }
 
@@ -572,7 +694,7 @@ pub fn run_remote_check_auth(
         ],
         &mut |line| stdout = line.to_string(),
     )?;
-    parse_worker_json_output(&stdout, "")
+    parse_worker_json_output(&stdout, "", None)
 }
 
 #[cfg(feature = "desktop-runtime")]
@@ -1034,6 +1156,7 @@ mod tests {
         let value = parse_worker_json_output(
             "warning: downloading\n{\"authenticated\":false,\"reason\":\"not found\"}\nerror: exit 1\n",
             "",
+            None,
         )
         .unwrap();
         assert_eq!(value["authenticated"], false);
@@ -1042,18 +1165,59 @@ mod tests {
 
     #[test]
     fn parse_worker_json_reports_stderr_when_stdout_is_empty() {
-        let err = parse_worker_json_output("", "failed to launch uv").unwrap_err();
+        let err = parse_worker_json_output("", "failed to launch uv", None).unwrap_err();
         assert!(err.contains("failed to launch uv"));
     }
 
     #[test]
+    fn parse_worker_json_startup_failure_includes_exit_and_stderr() {
+        let err = parse_worker_json_output("", "Python shared library load failed", Some(255))
+            .unwrap_err();
+        assert!(err.contains("worker failed to start (exit 255)"));
+        assert!(err.contains("Python shared library load failed"));
+    }
+
+    #[test]
     fn augmented_path_puts_homebrew_ahead_of_usr_bin() {
-        let path = augmented_path_from(Some("/Users/ada"), Some("/usr/bin:/bin"));
+        let path = augmented_path_from(Some("/Users/ada"), None, Some("/usr/bin:/bin"));
         let text = path.to_string_lossy();
         let brew = text.find("/opt/homebrew/bin").expect("homebrew");
         let usr = text.find("/usr/bin").expect("usr");
         assert!(brew < usr);
         assert!(text.contains("/Users/ada/.local/bin"));
+    }
+
+    #[test]
+    fn augmented_path_prefers_login_shell_and_dedupes() {
+        let path = augmented_path_from(
+            Some("/Users/ada"),
+            Some("/custom/bin:/opt/homebrew/bin"),
+            Some("/usr/bin:/custom/bin"),
+        );
+        let binding = path.to_string_lossy();
+        let parts: Vec<&str> = binding.split(':').collect();
+        assert_eq!(parts[0], "/custom/bin");
+        assert_eq!(parts.iter().filter(|p| **p == "/custom/bin").count(), 1);
+        let brew = parts.iter().position(|p| *p == "/opt/homebrew/bin").unwrap();
+        let usr = parts.iter().position(|p| *p == "/usr/bin").unwrap();
+        assert!(brew < usr);
+    }
+
+    #[test]
+    fn augmented_path_handles_empty_optional_inputs() {
+        let path = augmented_path_from(None, None, None);
+        let text = path.to_string_lossy();
+        assert!(text.contains("/opt/homebrew/bin"));
+        assert!(text.contains("/usr/local/bin"));
+    }
+
+    #[test]
+    fn extract_login_shell_path_parses_markers() {
+        assert_eq!(
+            extract_login_shell_path("noise __ARBOR_PATH__/a:/b__ARBOR_PATH__ tail"),
+            Some("/a:/b".to_string())
+        );
+        assert_eq!(extract_login_shell_path("__ARBOR_PATH____ARBOR_PATH__"), None);
     }
 
     #[test]

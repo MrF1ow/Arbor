@@ -1,3 +1,16 @@
+export function authCheckWorkerFailureReason(error: unknown): string {
+  const message =
+    error instanceof Error ? error.message.trim() : String(error ?? "").trim();
+  if (message === "") {
+    return "Arbor worker unavailable";
+  }
+  return `Arbor worker unavailable: ${message}`;
+}
+
+export function isWorkerUnavailableAuthReason(reason: string): boolean {
+  return reason.startsWith("Arbor worker unavailable");
+}
+
 export function signedOutJobMessage(providerLabel: string, reason: string): string {
   const trimmed = reason.trim();
   if (trimmed === "") {

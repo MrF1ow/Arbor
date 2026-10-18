@@ -1458,13 +1458,7 @@ pub fn start_chat(
         let mut command = Command::new(&argv[0]);
         command
             .args(&argv[1..])
-            .env(
-                "PATH",
-                worker::augmented_path_from(
-                    std::env::var("HOME").ok().as_deref(),
-                    std::env::var("PATH").ok().as_deref(),
-                ),
-            )
+            .env("PATH", worker::process_path_for_spawn())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
