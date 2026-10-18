@@ -233,6 +233,13 @@ const generateStudyArtifactBtn = $("generate-study-artifact") as HTMLButtonEleme
 const jobsListEl = $("jobs-list");
 const jobsLogEl = $("jobs-log");
 const providerSel = $("provider") as HTMLSelectElement;
+const providerKeyRow = $("provider-key-row");
+const providerKeyInput = $("provider-key") as HTMLInputElement;
+const providerKeySaveBtn = $("provider-key-save") as HTMLButtonElement;
+const providerKeyClearBtn = $("provider-key-clear") as HTMLButtonElement;
+const providerKeyStatusEl = $("provider-key-status");
+const providerBaseUrlRow = $("provider-base-url-row");
+const providerBaseUrlInput = $("provider-base-url") as HTMLInputElement;
 const modelSel = $("model") as HTMLSelectElement;
 const toggleWatch = $("toggle-watch");
 const toggleAuto = $("toggle-auto");
@@ -259,6 +266,8 @@ const searchResultsEl = $("search-results");
 
 let knowledgeRoot: string | null = null;
 let providerId = "codex";
+let ollamaBaseUrl = "";
+let lmstudioBaseUrl = "";
 let appearance: Appearance = "system";
 let authed = false;
 let authCheckReason = "";
@@ -1885,7 +1894,47 @@ const PROVIDER_FALLBACK = [
   { id: "codex", label: "Codex" },
   { id: "claude", label: "Claude" },
   { id: "grok", label: "Grok" },
+  { id: "ollama", label: "Ollama" },
+  { id: "lmstudio", label: "LM Studio" },
+  { id: "openai_api", label: "OpenAI API" },
+  { id: "anthropic_api", label: "Anthropic API" },
 ];
+
+function syncProviderBaseUrlFromInput() {
+  const value = providerBaseUrlInput.value.trim();
+  if (providerId === "ollama") {
+    ollamaBaseUrl = value;
+  } else if (providerId === "lmstudio") {
+    lmstudioBaseUrl = value;
+  }
+}
+
+function refreshProviderExtraRows() {
+  const showKey = providerId === "openai_api" || providerId === "anthropic_api";
+  const showBase = providerId === "ollama" || providerId === "lmstudio";
+  providerKeyRow.hidden = !showKey;
+  providerBaseUrlRow.hidden = !showBase;
+  if (providerId === "ollama") {
+    providerBaseUrlInput.placeholder = "http://127.0.0.1:11434";
+    providerBaseUrlInput.value = ollamaBaseUrl;
+  } else if (providerId === "lmstudio") {
+    providerBaseUrlInput.placeholder = "http://127.0.0.1:1234/v1";
+    providerBaseUrlInput.value = lmstudioBaseUrl;
+  }
+}
+
+async function refreshProviderKeyStatus() {
+  if (providerId !== "openai_api" && providerId !== "anthropic_api") {
+    providerKeyStatusEl.textContent = "";
+    return;
+  }
+  try {
+    const status = await invoke<string>("provider_secret_status", { providerId });
+    providerKeyStatusEl.textContent = status === "ready" ? "ready" : "key missing";
+  } catch {
+    providerKeyStatusEl.textContent = "key missing";
+  }
+}
 
 function currentProviderLabel(): string {
   const opt = providerSel.selectedOptions[0];
@@ -1922,6 +1971,8 @@ async function loadProviders(selectedId: string) {
 async function loadSettings() {
   const s = await invoke<Settings>("get_settings");
   providerId = s.provider_id?.trim() || "codex";
+  ollamaBaseUrl = s.ollama_base_url?.trim() ?? "";
+  lmstudioBaseUrl = s.lmstudio_base_url?.trim() ?? "";
   appearance = s.appearance ?? "system";
   appearanceSel.value = appearance;
   applyTheme();
@@ -1950,15 +2001,20 @@ async function loadSettings() {
     modelSel.innerHTML = "";
     logLine(`Could not load models: ${error}`);
   }
+  refreshProviderExtraRows();
+  await refreshProviderKeyStatus();
 }
 
 async function persist() {
+  syncProviderBaseUrlFromInput();
   await invoke("save_settings", {
     settings: {
       knowledge_root: knowledgeRoot,
       model_id: modelSel.value || null,
       provider_id: providerId,
       appearance,
+      ollama_base_url: ollamaBaseUrl.trim() || null,
+      lmstudio_base_url: lmstudioBaseUrl.trim() || null,
     } satisfies Settings,
   });
 }
@@ -1997,12 +2053,12 @@ async function refreshAuth() {
       authed = a.authenticated;
       if (a.authenticated) {
         authCheckReason = "";
-        providerLabelEl.textContent = providerBadge(label, modelLabel, true);
+        providerLabelEl.textContent = providerBadge(label, modelLabel, true, a.reason);
         providerStatusEl.className = "auth-badge";
         docsLink.hidden = true;
       } else {
         authCheckReason = a.reason;
-        providerLabelEl.textContent = providerBadge(label, modelLabel, false);
+        providerLabelEl.textContent = providerBadge(label, modelLabel, false, a.reason);
         providerStatusEl.className = "auth-badge bad";
         docsLink.href = a.docs_url;
         docsLink.textContent = `Set up ${label}`;
@@ -2013,7 +2069,7 @@ async function refreshAuth() {
       if (!authCheckReason.trim()) {
         authCheckReason = "auth check failed";
       }
-      providerLabelEl.textContent = providerBadge(label, modelLabel, false);
+      providerLabelEl.textContent = providerBadge(label, modelLabel, false, authCheckReason);
       providerStatusEl.className = "auth-badge bad";
     }
     refreshUpdateEnabled();
@@ -2219,6 +2275,8 @@ providerSel.addEventListener("change", () => {
   providerId = providerSel.value;
   const prevModel = modelSel.value;
   void (async () => {
+    refreshProviderExtraRows();
+    await refreshProviderKeyStatus();
     try {
       await loadModels(prevModel || null);
     } catch (error) {
@@ -2229,6 +2287,40 @@ providerSel.addEventListener("change", () => {
     await refreshAuth();
     await persist();
   })();
+});
+
+providerKeySaveBtn.addEventListener("click", () => {
+  void (async () => {
+    try {
+      await invoke("set_provider_secret", {
+        providerId,
+        secret: providerKeyInput.value,
+      });
+      providerKeyInput.value = "";
+      await refreshProviderKeyStatus();
+      await refreshAuth();
+    } catch (error) {
+      logLine(`Could not save API key: ${error}`);
+    }
+  })();
+});
+
+providerKeyClearBtn.addEventListener("click", () => {
+  void (async () => {
+    try {
+      await invoke("clear_provider_secret", { providerId });
+      providerKeyInput.value = "";
+      await refreshProviderKeyStatus();
+      await refreshAuth();
+    } catch (error) {
+      logLine(`Could not clear API key: ${error}`);
+    }
+  })();
+});
+
+providerBaseUrlInput.addEventListener("change", () => {
+  syncProviderBaseUrlFromInput();
+  void persist();
 });
 
 modelSel.addEventListener("change", () => {

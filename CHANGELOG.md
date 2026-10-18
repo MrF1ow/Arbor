@@ -2,11 +2,22 @@
 
 Package version for the worker, desktop, and Tauri app. See [Version numbering](PROJECT.md#version-numbering) in `PROJECT.md`.
 
-**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is complete as package `3.0.0`. **Version 4** is in progress and will ship as `v3.1.0`, `v3.2.0`, … until `v4.0.0`. **Current package:** `3.4.0`. **Current tag:** `v3.4.0` is cut when this release lands. `v3.0.0`, `v3.2.0`, and `v3.3.0` are already tagged. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) was retested on the 2026-10-17 Linux live run.
+**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is complete as package `3.0.0`. **Version 4** is in progress and will ship as `v3.1.0`, `v3.2.0`, … until `v4.0.0`. **Current package:** `3.5.0`. **Current tag:** `v3.5.0` is cut when this release lands. `v3.0.0`, `v3.2.0`, `v3.3.0`, and `v3.4.0` are already tagged. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) was retested on the 2026-10-17 Linux live run.
 
 ## Unreleased
 
-Nothing pending above `3.4.0`.
+Nothing pending above `3.5.0`.
+
+## 3.5.0 — 2026-10-18
+
+Git tag: `v3.5.0` when this release lands. **Product:** Version 4 in progress (API and local providers), not `v4.0.0`. Worker, desktop, and Tauri report `3.5.0`, including `arbor-worker --version`.
+
+- Settings adds **Ollama**, **LM Studio**, **OpenAI API**, and **Anthropic API** as providers alongside the existing CLI options.
+- OpenAI and Anthropic API keys are entered in Settings, stored in the OS keyring, and passed to the worker only as environment variables at process spawn. Keys are never written to `.arbor`, `settings.json`, job history, or argv.
+- The API key field is masked; **Save key** and **Clear key** update the keyring without reading the secret back into the UI.
+- The provider badge shows **key missing** or **ready** for API providers and **not running** for local servers when appropriate.
+- Anthropic API is refused with a clear reason when Arbor runs inside a Claude Code session (`CLAUDECODE`).
+- The desktop app sets `ARBOR_ALLOW_REMOTE_API=1` for the worker only when OpenAI API or Anthropic API is selected and a key is saved in the keyring.
 
 ## 3.4.0 — 2026-10-17
 

@@ -1,6 +1,7 @@
 mod commands;
 mod db;
 mod jobs;
+mod secrets;
 pub mod linux_graphics;
 mod search;
 mod settings;
@@ -25,6 +26,9 @@ pub fn run() {
             commands::plan_update,
             commands::get_settings,
             commands::save_settings,
+            commands::set_provider_secret,
+            commands::clear_provider_secret,
+            commands::provider_secret_status,
             commands::start_update,
             commands::start_study_job,
             commands::start_embed_job,

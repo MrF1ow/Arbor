@@ -2,9 +2,9 @@
 
 <img src="docs/brand/arbor-logo-wordmark.png" alt="Arbor" width="160" />
 
-Local-first desktop app that turns course PDFs, PowerPoints, and Word files into structured study digests using a signed-in CLI provider (Codex CLI, Claude Code, or Grok CLI). Your Knowledge library is a normal git repo on disk. Sources and generated notes stay together in history.
+Local-first desktop app that turns course PDFs, PowerPoints, and Word files into structured study digests using CLI providers (Codex CLI, Claude Code, Grok CLI), local models (Ollama, LM Studio), or cloud APIs (OpenAI API, Anthropic API). Your Knowledge library is a normal git repo on disk. Sources and generated notes stay together in history.
 
-**Current release:** [3.4.0](CHANGELOG.md) (package `3.4.0`; tag `v3.4.0` is cut when this release lands). `v3.3.0` is already tagged. Package `3.4.0` adds study plans, recommendations, and make-card-from-selection. Worker, desktop, and Tauri all report this number (`arbor-worker --version`). The 2026-10-17 Linux live run is recorded on the [implementation checklist](docs/implementation-checklist.md). Tables and emphasis were not in any live digest.
+**Current release:** [3.5.0](CHANGELOG.md) (package `3.5.0`; tag `v3.5.0` is cut when this release lands). `v3.4.0` is already tagged. Package `3.5.0` adds Ollama, LM Studio, OpenAI API, and Anthropic API with OS keyring storage for API keys. Worker, desktop, and Tauri all report this number (`arbor-worker --version`). The 2026-10-17 Linux live run is recorded on the [implementation checklist](docs/implementation-checklist.md). Tables and emphasis were not in any live digest.
 
 **Version 2** (`v2.0.0`) shipped automation on the old UI. **Version 3** shipped as `3.0.0`. `v2.1.0` added the desktop shell. `2.2.0` adds the study loop. `2.3.0` is the fix release after that. **`2.4.0`** is the brand and gate release (tree mark and Linux live-run tag gate). **`2.5.0`** adds Codex, Claude, and Grok CLI providers with a Settings picker. **Version 4** is in progress and ships as `v3.1.0` and later until `v4.0.0`. Mac runs are optional and do not block a tag. See [Version numbering](PROJECT.md#version-numbering).
 
@@ -67,7 +67,7 @@ The 2.2.0 study loop, plus the fixes from the 2026-09-20 Mac batch and tighter d
 | Desktop | File reads stay inside the Knowledge root. AI text is escaped. A content security policy is set. |
 | Notify | The default capability includes `notification:default`. |
 
-**`v3.0.0` is tagged.** Package **`3.2.0`** is the Chat tab release; **`3.1.0`** is the chat-worker release; **`3.3.0`** is review scheduling and weak topics (tagged); **`3.4.0`** is study plans, recommendations, and make-card-from-selection (tag not cut yet). Codex CLI is still a separate install. The gate list is the [implementation checklist](docs/implementation-checklist.md).
+**`v3.0.0` is tagged.** Package **`3.2.0`** is the Chat tab release; **`3.1.0`** is the chat-worker release; **`3.3.0`** is review scheduling and weak topics (tagged); **`3.4.0`** is study plans, recommendations, and make-card-from-selection (tagged); **`3.5.0`** is API and local providers (tag not cut yet). Codex CLI is still a separate install. The gate list is the [implementation checklist](docs/implementation-checklist.md).
 
 ---
 
@@ -99,7 +99,7 @@ Editing digests by hand never triggers reprocessing.
 |-------------|--------|
 | **macOS or Linux** | Packaged DMG is macOS. Linux runs from source. Windows is untested |
 | **Git** | Knowledge library must be a git repo |
-| **Codex CLI, Claude Code, or Grok CLI** | One installed and signed in — [Codex CLI](https://developers.openai.com/codex/cli), [Claude Code](https://code.claude.com/docs), or [Grok CLI](https://x.ai/grok) |
+| **Provider** | One of: [Codex CLI](https://developers.openai.com/codex/cli), [Claude Code](https://code.claude.com/docs), [Grok CLI](https://x.ai/grok), [Ollama](http://127.0.0.1:11434), [LM Studio](http://127.0.0.1:1234/v1), OpenAI API, or Anthropic API. CLI providers must be installed and signed in. API keys are entered in Settings, stored in the OS keyring, and are not written to `.arbor` or `settings.json` |
 | **Python ≥ 3.11** | Worker runtime |
 | **[uv](https://docs.astral.sh/uv/)** | Installs and runs the Python worker |
 | **Rust + cargo** | Tauri desktop shell ([rustup](https://rustup.rs/)) |
@@ -156,7 +156,7 @@ codex login   # if not already authenticated
 codex exec --help
 ```
 
-You can use [Claude Code](https://code.claude.com/docs) or [Grok CLI](https://x.ai/grok) instead of Codex. In **Settings**, choose **Provider** above **Model** and sign in with that CLI (`claude auth status`, `grok models`, and so on).
+You can use [Claude Code](https://code.claude.com/docs), [Grok CLI](https://x.ai/grok), [Ollama](http://127.0.0.1:11434), [LM Studio](http://127.0.0.1:1234/v1), OpenAI API, or Anthropic API instead of Codex. In **Settings**, choose **Provider** above **Model**. CLI providers sign in outside the app (`claude auth status`, `grok models`, and so on). For OpenAI API and Anthropic API, enter the key in Settings; it is stored in the OS keyring and is not written to `.arbor` or `settings.json`.
 
 ### 3. Install the Python worker
 

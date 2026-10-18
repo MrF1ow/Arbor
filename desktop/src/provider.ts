@@ -10,9 +10,19 @@ export function providerBadge(
   providerLabel: string,
   modelLabel: string,
   available: boolean,
+  reason?: string,
 ): string {
   if (available) {
     return `${modelLabel} · ready`;
+  }
+  if (reason === "key missing") {
+    return `${providerLabel} · key missing`;
+  }
+  if (reason?.includes("not running")) {
+    return `${providerLabel} · not running`;
+  }
+  if (reason?.includes("disabled inside a Claude Code session")) {
+    return `${providerLabel} · disabled in this session`;
   }
   return `${providerLabel} · not signed in`;
 }

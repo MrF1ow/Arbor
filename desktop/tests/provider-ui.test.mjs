@@ -25,6 +25,9 @@ test("index.html exposes provider controls", async () => {
   assert.notEqual(providerIdx, -1);
   assert.notEqual(modelIdx, -1);
   assert.ok(providerIdx < modelIdx);
+  assert.match(html, /type="password"/);
+  assert.match(html, /id="provider-key-clear"/);
+  assert.match(html, /Clear key/);
 });
 
 test("providerBadge formats ready and signed-out states", async () => {
@@ -32,6 +35,14 @@ test("providerBadge formats ready and signed-out states", async () => {
 
   assert.equal(providerBadge("Grok", "Grok 4.7", true), "Grok 4.7 · ready");
   assert.equal(providerBadge("Claude", "Sonnet 5.5", false), "Claude · not signed in");
+  assert.equal(
+    providerBadge("OpenAI API", "gpt-4o", false, "key missing"),
+    "OpenAI API · key missing",
+  );
+  assert.equal(
+    providerBadge("Ollama", "llama3", false, "Ollama is not running at http://127.0.0.1:11434"),
+    "Ollama · not running",
+  );
 });
 
 test("signedOutJobMessage formats auth refusal for the inspector log", async () => {
