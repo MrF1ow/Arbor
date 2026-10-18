@@ -410,17 +410,30 @@ pub fn remote_course_dir(remote_root: &str, root_id: &str, course: &str) -> Resu
     Ok(format!("{base}/{course}"))
 }
 
-pub fn rsync_remote_spec(endpoint: &ValidatedSsh, remote_dir: &str) -> Result<String, String> {
+fn rsync_remote_spec_inner(
+    endpoint: &ValidatedSsh,
+    remote_path: &str,
+    trailing_slash: bool,
+) -> Result<String, String> {
     revalidate_ssh_endpoint(endpoint)?;
-    validate_rsync_local_path("remote_dir", remote_dir)?;
+    validate_rsync_local_path("remote path", remote_path)?;
     validate_label_field("host", &endpoint.host)?;
+    let suffix = if trailing_slash { "/" } else { "" };
     let spec = if let Some(user) = &endpoint.user {
         validate_label_field("user", user)?;
-        format!("{user}@{}:{remote_dir}/", endpoint.host)
+        format!("{user}@{}:{remote_path}{suffix}", endpoint.host)
     } else {
-        format!("{}:{remote_dir}/", endpoint.host)
+        format!("{}:{remote_path}{suffix}", endpoint.host)
     };
     Ok(spec)
+}
+
+pub fn rsync_remote_spec(endpoint: &ValidatedSsh, remote_dir: &str) -> Result<String, String> {
+    rsync_remote_spec_inner(endpoint, remote_dir, true)
+}
+
+pub fn rsync_remote_file_spec(endpoint: &ValidatedSsh, remote_file: &str) -> Result<String, String> {
+    rsync_remote_spec_inner(endpoint, remote_file, false)
 }
 
 fn quote_sh_single(path: &str, field: &str) -> Result<String, String> {
@@ -464,7 +477,7 @@ pub fn rsync_ssh_wrapper(
 pub fn rsync_argv(wrapper: &Path, source: &str, destination: &str) -> Result<Vec<String>, String> {
     let wrapper_str = wrapper.to_string_lossy();
     validate_absolute_path_field("wrapper", &wrapper_str)?;
-    validate_rsync_local_path("source", source)?;
+    validate_rsync_destination("source", source)?;
     validate_rsync_destination("destination", destination)?;
     Ok(vec![
         "rsync".to_string(),
@@ -788,6 +801,30 @@ mod tests {
 
         assert!(quote_remote_token("foo;rm").is_err());
         assert!(remote_course_dir("/tmp/r", root_id, "../etc").is_err());
+    }
+
+    #[test]
+    fn rsync_remote_file_spec_trailing_slash() {
+        let endpoint = live_endpoint();
+        let root_id = root_id_for("/tmp/Knowledge");
+        let knowledge = remote_knowledge_root("/tmp/arbor-r14/remote", &root_id).unwrap();
+        let plan_path = format!("{knowledge}/arbor-remote-plan.json");
+        let file_spec = rsync_remote_file_spec(&endpoint, &plan_path).unwrap();
+        assert!(!file_spec.ends_with('/'));
+        assert!(file_spec.ends_with("arbor-remote-plan.json"));
+
+        let course_dir =
+            remote_course_dir("/tmp/arbor-r14/remote", &root_id, "Biology").unwrap();
+        let dir_spec = rsync_remote_spec(&endpoint, &course_dir).unwrap();
+        assert!(dir_spec.ends_with('/'));
+    }
+
+    #[test]
+    fn rsync_argv_accepts_remote_source() {
+        let wrapper = PathBuf::from("/tmp/arbor-app-data/ssh/rsh");
+        let source = "127.0.0.1:/tmp/arbor-r14/remote/abc/Biology/course.md";
+        let destination = "/tmp/Knowledge/Biology/course.md";
+        assert!(rsync_argv(&wrapper, source, destination).is_ok());
     }
 
     #[test]

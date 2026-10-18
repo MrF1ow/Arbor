@@ -2683,7 +2683,9 @@ pub fn start_embed_job(
 #[tauri::command]
 pub fn cancel_update(_app: tauri::AppHandle) -> Result<(), String> {
     let cancel = worker::cancel_file_path();
-    std::fs::write(&cancel, b"stop").map_err(|e| e.to_string())
+    std::fs::write(&cancel, b"stop").map_err(|e| e.to_string())?;
+    crate::remote_job::cancel_active_remote();
+    Ok(())
 }
 
 #[tauri::command]

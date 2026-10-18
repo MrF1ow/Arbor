@@ -7,6 +7,7 @@ mod search;
 mod settings;
 mod watch;
 mod transport;
+mod remote_job;
 mod worker;
 
 use jobs::JobCoordinator;

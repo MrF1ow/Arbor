@@ -39,6 +39,11 @@ def build_parser() -> argparse.ArgumentParser:
     up.add_argument("--provider", default="codex", choices=provider_choices())
     up.add_argument("--cancel-file", default=None, help="If this file appears, stop at the next range or action boundary.")
     up.add_argument("--plan", default=None, help='JSON file with {"selections": [{"path", "ranges"}]}.')
+    up.add_argument(
+        "--no-commit",
+        action="store_true",
+        help="Write outputs but defer git commit (emit commit_paths instead).",
+    )
 
     gen = sub.add_parser("generate", help="Generate study artifacts for a course.")
     gen.add_argument("--root", required=True, help="Path to the Knowledge git repo.")
@@ -47,6 +52,29 @@ def build_parser() -> argparse.ArgumentParser:
     gen.add_argument("--force", action="store_true", help="Regenerate a current artifact.")
     gen.add_argument("--provider", default="codex", choices=provider_choices())
     gen.add_argument("--model", default=None, help="Model id passed to the provider.")
+    gen.add_argument(
+        "--no-commit",
+        action="store_true",
+        help="Write study files but defer git commit (emit commit_paths instead).",
+    )
+
+    cw = sub.add_parser(
+        "commit-written",
+        help="Commit paths written by a prior --no-commit worker run.",
+    )
+    cw.add_argument("--root", required=True, help="Path to the Knowledge git repo.")
+    cw.add_argument("--message", required=True, help="Git commit message.")
+    cw.add_argument(
+        "--index",
+        action="store_true",
+        help="Reindex search for each distinct course in the path list.",
+    )
+    cw.add_argument(
+        "paths",
+        nargs="+",
+        metavar="REL",
+        help="Repo-relative paths to commit.",
+    )
 
     ri = sub.add_parser("reindex", help="Rebuild the search index under a Knowledge root.")
     ri.add_argument("--root", required=True, help="Path to the Knowledge git repo.")
@@ -243,6 +271,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "update":
         from arbor_worker.commands import cmd_update
         return cmd_update(args)
+    if args.command == "commit-written":
+        from arbor_worker.commands import cmd_commit_written
+        return cmd_commit_written(args)
     if args.command == "generate":
         from arbor_worker.commands import cmd_generate
         return cmd_generate(args)

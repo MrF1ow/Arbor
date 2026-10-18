@@ -255,6 +255,7 @@ def run_update(
     *,
     selections: dict[str, list[PageRange] | None] | None = None,
     cancel_file: Path | None = None,
+    commit: bool = True,
 ) -> RunResult:
     root = Path(root)
     emitter.run_started(root=str(root), model_id=model_id, provider=provider.name)
@@ -416,7 +417,7 @@ def run_update(
 
         emitter.course_done(course_dir=course_rel, digests=len(new_digests))
 
-    commit = None
+    commit_rev: str | None = None
     if commit_paths:
         from arbor_worker.sync import derived_gitignore_extras
 
@@ -425,22 +426,26 @@ def run_update(
             settings.cache_dir_name,
             derived_gitignore_extras(settings.cache_dir_name),
         )
-        commit_paths.append(Path(".gitignore"))
-        message = "digest: " + ", ".join(done_courses)
-        try:
-            commit = commit_and_note(root, commit_paths, message, emitter)
-            emitter.committed(commit=commit, courses=done_courses)
-            from arbor_worker.sync import maybe_sync_after_commit
+        if commit:
+            commit_paths.append(Path(".gitignore"))
+            message = "digest: " + ", ".join(done_courses)
+            try:
+                commit_rev = commit_and_note(root, commit_paths, message, emitter)
+                emitter.committed(commit=commit_rev, courses=done_courses)
+                from arbor_worker.sync import maybe_sync_after_commit
 
-            maybe_sync_after_commit(root, emitter)
-            if done_courses:
-                from arbor_worker.indexer import index_courses
+                maybe_sync_after_commit(root, emitter)
+                if done_courses:
+                    from arbor_worker.indexer import index_courses
 
-                index_courses(root, done_courses)
-        except GitStateError as e:
-            emitter.error(message=str(e))
-            emitter.run_done(processed=processed, failed=failed, skipped=skipped)
-            return RunResult(processed, failed, skipped, None, outcomes)
+                    index_courses(root, done_courses)
+            except GitStateError as e:
+                emitter.error(message=str(e))
+                emitter.run_done(processed=processed, failed=failed, skipped=skipped)
+                return RunResult(processed, failed, skipped, None, outcomes)
+        else:
+            rel_paths = [p.as_posix() for p in commit_paths]
+            emitter.emit("commit_paths", paths=rel_paths)
 
     emitter.run_done(processed=processed, failed=failed, skipped=skipped)
-    return RunResult(processed, failed, skipped, commit, outcomes)
+    return RunResult(processed, failed, skipped, commit_rev, outcomes)
