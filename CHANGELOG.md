@@ -2,11 +2,24 @@
 
 Package version for the worker, desktop, and Tauri app. See [Version numbering](PROJECT.md#version-numbering) in `PROJECT.md`.
 
-**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is in progress; incremental releases use `v2.1.0`, `v2.2.0`, `v2.3.0`, … until `v3.0.0` when the full v3 milestone ships. **Current package:** `2.5.0`. **Current tag:** `v2.5.0` is cut when this release lands. **`v3.0.0` waits** for a recorded Linux live run, not a Mac batch. The 2026-09-20 batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) recorded failures and does not close Version 3.
+**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is complete as package `3.0.0`. **Version 4** is in progress and will ship as `v3.1.0`, `v3.2.0`, … until `v4.0.0`. **Current package:** `3.0.0`. **Current tag:** `v3.0.0` is cut when this release lands. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) was retested on the 2026-10-17 Linux live run.
 
 ## Unreleased
 
-Nothing pending above `2.5.0`. **`v3.0.0`** still waits for a recorded Linux live run on the [implementation checklist](docs/implementation-checklist.md).
+Nothing pending above `3.0.0`.
+
+## 3.0.0 — 2026-10-17
+
+Git tag: `v3.0.0` when this release lands. **Product:** Version 3 shipped. Version 4 is in progress (not started). Worker, desktop, and Tauri report `3.0.0`, including `arbor-worker --version`.
+
+Linux live run recorded in [linux-live-run.md](docs/superpowers/plans/2026-10-17-roadmap-completion/linux-live-run.md). Boxes 1–3 and 5–15 passed. Box 4 is partial: no live digest contained a table or emphasis.
+
+- Grok digests cannot call tools (`--disallowed-tools`).
+- Study digests resolve when the model omits the `digests/` prefix, and `..` paths are not followed.
+- Grok image prompts go through `--prompt-file` so large page sets stay under Linux `MAX_ARG_STRLEN`.
+- Study JSON may have a preamble before the object.
+- A signed-out Confirm, Update, or study action logs the provider’s reason and does not start a job.
+- Packaged Linux AppImage and deb bundle `arbor-worker` and launch without the repo or `uv`.
 
 ## 2.5.0 — 2026-10-17
 
