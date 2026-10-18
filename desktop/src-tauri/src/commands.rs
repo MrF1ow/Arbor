@@ -15,6 +15,35 @@ use std::sync::Arc;
 use tauri::ipc::Channel;
 use tauri::Manager;
 
+
+async fn spawn_blocking_cmd<T, F>(f: F) -> Result<T, String>
+where
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+    T: Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(f)
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+async fn spawn_blocking_cmd_unit<F>(f: F) -> Result<(), String>
+where
+    F: FnOnce() -> Result<(), String> + Send + 'static,
+{
+    spawn_blocking_cmd(f).await
+}
+
+async fn spawn_blocking_cmd_value<T, F>(f: F) -> T
+where
+    F: FnOnce() -> T + Send + 'static,
+    T: Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(f)
+        .await
+        .map_err(|e| e.to_string())
+        .expect("spawn_blocking join")
+}
+
 fn non_empty_provider(provider: Option<String>) -> Option<String> {
     provider
         .map(|value| value.trim().to_string())
@@ -139,23 +168,30 @@ fn repo_dir(app: &tauri::AppHandle) -> PathBuf {
     )
 }
 
+
 #[tauri::command]
-pub fn check_auth(
+pub async fn check_auth(
     app: tauri::AppHandle,
     provider: Option<String>,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value, String>  {
+    spawn_blocking_cmd(move || {
+
     match non_empty_provider(provider) {
         Some(id) => run_worker_json_app(&app, &["check-auth", "--provider", &id]),
         None => run_worker_json_app(&app, &["check-auth"]),
     }
+    }).await
 }
 
+
 #[tauri::command]
-pub fn list_models(
+pub async fn list_models(
     app: tauri::AppHandle,
     root: Option<String>,
     provider: Option<String>,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value, String>  {
+    spawn_blocking_cmd(move || {
+
     let provider_id = non_empty_provider(provider);
     let mut args: Vec<&str> = vec!["list-models"];
     if let Some(r) = root.as_deref() {
@@ -167,59 +203,83 @@ pub fn list_models(
         args.push(id);
     }
     run_worker_json_app(&app, &args)
+    }).await
 }
 
+
 #[tauri::command]
-pub fn list_providers(
+pub async fn list_providers(
     app: tauri::AppHandle,
     root: Option<String>,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value, String>  {
+    spawn_blocking_cmd(move || {
+
     let mut args: Vec<&str> = vec!["list-providers"];
     if let Some(r) = root.as_deref() {
         args.push("--root");
         args.push(r);
     }
     run_worker_json_app(&app, &args)
+    }).await
 }
 
+
 #[tauri::command]
-pub fn plan_update(app: tauri::AppHandle, root: String) -> Result<serde_json::Value, String> {
+pub async fn plan_update(app: tauri::AppHandle, root: String) -> Result<serde_json::Value, String>  {
+    spawn_blocking_cmd(move || {
+
     run_worker_json_app(&app, &["plan-update", "--root", &root])
+    }).await
 }
 
+
 #[tauri::command]
-pub fn sync_show(app: tauri::AppHandle, root: String) -> Result<serde_json::Value, String> {
+pub async fn sync_show(app: tauri::AppHandle, root: String) -> Result<serde_json::Value, String>  {
+    spawn_blocking_cmd(move || {
+
     run_worker_json_app(&app, &["sync", "--root", &root, "--show"])
+    }).await
 }
 
+
 #[tauri::command]
-pub fn sync_set_remote(
+pub async fn sync_set_remote(
     app: tauri::AppHandle,
     root: String,
     url: String,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value, String>  {
+    spawn_blocking_cmd(move || {
+
     run_worker_json_app(
         &app,
         &["sync", "--root", &root, "--set-remote", url.as_str()],
     )
+    }).await
 }
 
+
 #[tauri::command]
-pub fn sync_set_shared(
+pub async fn sync_set_shared(
     app: tauri::AppHandle,
     root: String,
     shared: bool,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value, String>  {
+    spawn_blocking_cmd(move || {
+
     let flag = if shared { "--shared" } else { "--no-shared" };
     run_worker_json_app(&app, &["sync", "--root", &root, flag])
+    }).await
 }
 
+
 #[tauri::command]
-pub fn create_shared_library(
+pub async fn create_shared_library(
     app: tauri::AppHandle,
     root: String,
     name: Option<String>,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value, String>  {
+    spawn_blocking_cmd(move || {
+
     let mut args = vec!["library-create", "--root", root.as_str()];
     let name_arg;
     if let Some(ref n) = name {
@@ -228,31 +288,43 @@ pub fn create_shared_library(
         args.push(name_arg);
     }
     run_worker_json_app(&app, &args)
+    }).await
 }
 
+
 #[tauri::command]
-pub fn join_library(
+pub async fn join_library(
     app: tauri::AppHandle,
     url: String,
     dest: String,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value, String>  {
+    spawn_blocking_cmd(move || {
+
     run_worker_json_app(
         &app,
         &["library-join", "--url", url.as_str(), "--dest", dest.as_str()],
     )
+    }).await
 }
 
+
 #[tauri::command]
-pub fn library_show(app: tauri::AppHandle, root: String) -> Result<serde_json::Value, String> {
+pub async fn library_show(app: tauri::AppHandle, root: String) -> Result<serde_json::Value, String>  {
+    spawn_blocking_cmd(move || {
+
     run_worker_json_app(&app, &["library-show", "--root", &root])
+    }).await
 }
 
+
 #[tauri::command]
-pub fn library_set_members(
+pub async fn library_set_members(
     app: tauri::AppHandle,
     root: String,
     members: serde_json::Value,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value, String>  {
+    spawn_blocking_cmd(move || {
+
     let members_json = serde_json::to_string(&members).map_err(|e| e.to_string())?;
     run_worker_json_app(
         &app,
@@ -264,16 +336,20 @@ pub fn library_set_members(
             members_json.as_str(),
         ],
     )
+    }).await
 }
 
+
 #[tauri::command]
-pub fn library_set_provider(
+pub async fn library_set_provider(
     app: tauri::AppHandle,
     root: String,
     id: Option<String>,
     model: Option<String>,
     clear: bool,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value, String>  {
+    spawn_blocking_cmd(move || {
+
     if clear {
         return run_worker_json_app(&app, &["library-provider", "--root", &root, "--clear"]);
     }
@@ -291,21 +367,29 @@ pub fn library_set_provider(
             model.as_str(),
         ],
     )
+    }).await
 }
 
+
 #[tauri::command]
-pub fn sync_now(app: tauri::AppHandle, root: String) -> Result<serde_json::Value, String> {
+pub async fn sync_now(app: tauri::AppHandle, root: String) -> Result<serde_json::Value, String>  {
+    spawn_blocking_cmd(move || {
+
     run_worker_json_app(&app, &["sync", "--root", &root])
+    }).await
 }
 
+
 #[tauri::command]
-pub fn sync_resolve(
+pub async fn sync_resolve(
     app: tauri::AppHandle,
     root: String,
     path: String,
     side: String,
     content: Option<String>,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value, String>  {
+    spawn_blocking_cmd(move || {
+
     let mut owned = vec![
         "sync-resolve".to_string(),
         "--root".to_string(),
@@ -321,20 +405,32 @@ pub fn sync_resolve(
     }
     let refs: Vec<&str> = owned.iter().map(String::as_str).collect();
     run_worker_json_app(&app, &refs)
+    }).await
 }
 
+
 #[tauri::command]
-pub fn sync_continue(app: tauri::AppHandle, root: String) -> Result<serde_json::Value, String> {
+pub async fn sync_continue(app: tauri::AppHandle, root: String) -> Result<serde_json::Value, String>  {
+    spawn_blocking_cmd(move || {
+
     run_worker_json_app(&app, &["sync-continue", "--root", &root])
+    }).await
 }
 
+
 #[tauri::command]
-pub fn skill_index(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+pub async fn skill_index(app: tauri::AppHandle) -> Result<serde_json::Value, String>  {
+    spawn_blocking_cmd(move || {
+
     fetch_skill_index(&app)
+    }).await
 }
 
+
 #[tauri::command]
-pub fn skill_install(app: tauri::AppHandle, id: String) -> Result<serde_json::Value, String> {
+pub async fn skill_install(app: tauri::AppHandle, id: String) -> Result<serde_json::Value, String>  {
+    spawn_blocking_cmd(move || {
+
     let index = fetch_skill_index(&app)?;
     let entry = index_package_by_id(&index, &id)?;
     let kind = entry
@@ -369,18 +465,24 @@ pub fn skill_install(app: tauri::AppHandle, id: String) -> Result<serde_json::Va
     }
     let refs: Vec<&str> = owned.iter().map(String::as_str).collect();
     run_worker_json_inherit(&app, &refs)
+    }).await
 }
 
+
 #[tauri::command]
-pub fn skill_uninstall(app: tauri::AppHandle, id: String) -> Result<serde_json::Value, String> {
+pub async fn skill_uninstall(app: tauri::AppHandle, id: String) -> Result<serde_json::Value, String>  {
+    spawn_blocking_cmd(move || {
+
     run_worker_json_inherit(
         &app,
         &["skill-uninstall", "--id", id.as_str()],
     )
+    }).await
 }
 
+
 #[tauri::command]
-pub fn skill_run(
+pub async fn skill_run(
     app: tauri::AppHandle,
     root: String,
     id: String,
@@ -388,7 +490,9 @@ pub fn skill_run(
     course: String,
     export_dir: String,
     confirmed: bool,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value, String>  {
+    spawn_blocking_cmd(move || {
+
     if !confirmed {
         return Err("permissions not confirmed".to_string());
     }
@@ -427,14 +531,19 @@ pub fn skill_run(
     }
     let refs: Vec<&str> = owned.iter().map(String::as_str).collect();
     run_worker_json_inherit(&app, &refs)
+    }).await
 }
 
+
 #[tauri::command]
-pub fn read_sync_conflict(root: String) -> Result<serde_json::Value, String> {
+pub async fn read_sync_conflict(root: String) -> Result<serde_json::Value, String>  {
+    spawn_blocking_cmd(move || {
+
     let relative = ".arbor/sync-conflict.json";
     let path = resolve_in_root(&root, relative)?;
     let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
     serde_json::from_str(&text).map_err(|e| e.to_string())
+    }).await
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Clone)]
@@ -443,18 +552,26 @@ pub struct Selection {
     pub ranges: Option<Vec<[u32; 2]>>,
 }
 
+
 #[tauri::command]
 pub fn get_settings(app: tauri::AppHandle) -> Settings {
     settings::load(&app)
 }
 
-#[tauri::command]
-pub fn save_settings(app: tauri::AppHandle, settings: Settings) -> Result<(), String> {
-    settings::save(&app, &settings)
-}
 
 #[tauri::command]
-pub fn test_worker_connection(app: tauri::AppHandle, worker: SshWorker) -> Result<String, String> {
+pub async fn save_settings(app: tauri::AppHandle, settings: Settings) -> Result<(), String>  {
+    spawn_blocking_cmd_unit(move || {
+
+    settings::save(&app, &settings)
+    }).await
+}
+
+
+#[tauri::command]
+pub async fn test_worker_connection(app: tauri::AppHandle, worker: SshWorker) -> Result<String, String>  {
+    spawn_blocking_cmd(move || {
+
     settings::validate_workers(&Settings {
         workers: vec![worker.clone()],
         ..Settings::default()
@@ -472,24 +589,37 @@ pub fn test_worker_connection(app: tauri::AppHandle, worker: SshWorker) -> Resul
         Ok(code) => Err(map_ssh_error("", code)),
         Err(stderr) => Err(map_ssh_error(&stderr, 255)),
     }
+    }).await
 }
 
+
 #[tauri::command]
-pub fn set_provider_secret(provider_id: String, secret: String) -> Result<(), String> {
+pub async fn set_provider_secret(provider_id: String, secret: String) -> Result<(), String>  {
+    spawn_blocking_cmd_unit(move || {
+
     let store = OsSecretStore;
     secrets::set_provider_secret_logic(&store, &provider_id, &secret)
+    }).await
 }
 
+
 #[tauri::command]
-pub fn clear_provider_secret(provider_id: String) -> Result<(), String> {
+pub async fn clear_provider_secret(provider_id: String) -> Result<(), String>  {
+    spawn_blocking_cmd_unit(move || {
+
     let store = OsSecretStore;
     secrets::clear_provider_secret_logic(&store, &provider_id)
+    }).await
 }
 
+
 #[tauri::command]
-pub fn provider_secret_status(provider_id: String) -> Result<String, String> {
+pub async fn provider_secret_status(provider_id: String) -> Result<String, String>  {
+    spawn_blocking_cmd(move || {
+
     let store = OsSecretStore;
     secrets::provider_secret_status_logic(&store, &provider_id)
+    }).await
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Clone)]
@@ -587,8 +717,11 @@ fn date_from_stem(stem: &str) -> String {
     stem.to_string()
 }
 
+
 #[tauri::command]
-pub fn list_courses(root: String) -> Result<Vec<String>, String> {
+pub async fn list_courses(root: String) -> Result<Vec<String>, String>  {
+    spawn_blocking_cmd(move || {
+
     let root_path = Path::new(&root);
     if !root_path.is_dir() {
         return Err(format!("Not a folder: {root}"));
@@ -607,6 +740,7 @@ pub fn list_courses(root: String) -> Result<Vec<String>, String> {
     }
     courses.sort_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
     Ok(courses)
+    }).await
 }
 
 const SOURCE_EXTENSIONS: &[&str] = &["pdf", "pptx", "docx"];
@@ -646,8 +780,11 @@ fn dest_file_name(path: &Path) -> Result<String, String> {
         .ok_or_else(|| format!("Invalid path: {}", path.display()))
 }
 
+
 #[tauri::command]
-pub fn create_course(root: String, name: String) -> Result<String, String> {
+pub async fn create_course(root: String, name: String) -> Result<String, String>  {
+    spawn_blocking_cmd(move || {
+
     let name = name.trim();
     if name.is_empty() {
         return Err("Class name cannot be empty".into());
@@ -664,14 +801,18 @@ pub fn create_course(root: String, name: String) -> Result<String, String> {
     }
     std::fs::create_dir(&path).map_err(|e| e.to_string())?;
     Ok(name.to_string())
+    }).await
 }
 
+
 #[tauri::command]
-pub fn import_sources(
+pub async fn import_sources(
     root: String,
     course: String,
     paths: Vec<String>,
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<String>, String>  {
+    spawn_blocking_cmd(move || {
+
     validate_path_component(&course, "course name")?;
     let dest_dir = Path::new(&root).join(&course);
     if !dest_dir.is_dir() {
@@ -712,10 +853,14 @@ pub fn import_sources(
         imported.push(out_name);
     }
     Ok(imported)
+    }).await
 }
 
+
 #[tauri::command]
-pub fn list_digests(root: String, course: String) -> Result<Vec<DigestInfo>, String> {
+pub async fn list_digests(root: String, course: String) -> Result<Vec<DigestInfo>, String>  {
+    spawn_blocking_cmd(move || {
+
     if course.contains('/') || course.contains('\\') || course.contains("..") {
         return Err("Invalid course name".into());
     }
@@ -748,6 +893,7 @@ pub fn list_digests(root: String, course: String) -> Result<Vec<DigestInfo>, Str
     }
     digests.sort_by(|a, b| b.path.cmp(&a.path));
     Ok(digests)
+    }).await
 }
 
 fn resolve_in_root(root: &str, relative: &str) -> Result<PathBuf, String> {
@@ -777,31 +923,43 @@ fn resolve_in_root(root: &str, relative: &str) -> Result<PathBuf, String> {
     Ok(canon_joined)
 }
 
+
 #[tauri::command]
-pub fn read_markdown(root: String, relative_path: String) -> Result<String, String> {
+pub async fn read_markdown(root: String, relative_path: String) -> Result<String, String>  {
+    spawn_blocking_cmd(move || {
+
     let path = resolve_in_root(&root, &relative_path)?;
     if !path.is_file() {
         return Err(format!("File not found: {relative_path}"));
     }
     std::fs::read_to_string(&path).map_err(|e| e.to_string())
+    }).await
 }
 
+
 #[tauri::command]
-pub fn save_knowledge_settings(root: String, settings: KnowledgeSettings) -> Result<(), String> {
+pub async fn save_knowledge_settings(root: String, settings: KnowledgeSettings) -> Result<(), String>  {
+    spawn_blocking_cmd_unit(move || {
+
     let arbor_dir = Path::new(&root).join(".arbor");
     std::fs::create_dir_all(&arbor_dir).map_err(|e| e.to_string())?;
     let text = serde_json::to_string_pretty(&settings).map_err(|e| e.to_string())?;
     std::fs::write(arbor_dir.join("settings.json"), text).map_err(|e| e.to_string())
+    }).await
 }
 
+
 #[tauri::command]
-pub fn get_knowledge_settings(root: String) -> Result<KnowledgeSettings, String> {
+pub async fn get_knowledge_settings(root: String) -> Result<KnowledgeSettings, String>  {
+    spawn_blocking_cmd(move || {
+
     let path = Path::new(&root).join(".arbor").join("settings.json");
     if !path.is_file() {
         return Ok(KnowledgeSettings::default());
     }
     let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
     serde_json::from_str(&text).map_err(|e| e.to_string())
+    }).await
 }
 
 fn validate_path_component(value: &str, label: &str) -> Result<(), String> {
@@ -858,17 +1016,21 @@ fn migrate_derived_file(old: &Path, new: &Path, bak: &Path) -> Result<(), String
     Ok(())
 }
 
+
 #[tauri::command]
-pub fn read_study_json(
+pub async fn read_study_json(
     root: String,
     course: String,
     file: String,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value, String>  {
+    spawn_blocking_cmd(move || {
+
     validate_path_component(&course, "course name")?;
     validate_path_component(&file, "study file")?;
     let path = Path::new(&root).join(course).join("study").join(file);
     let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
     serde_json::from_slice(&bytes).map_err(|e| e.to_string())
+    }).await
 }
 
 fn flashcard_progress_path(root: &str, course: &str) -> Result<PathBuf, String> {
@@ -889,8 +1051,11 @@ fn flashcard_progress_path(root: &str, course: &str) -> Result<PathBuf, String> 
     Ok(new_path)
 }
 
+
 #[tauri::command]
-pub fn read_flashcard_progress(root: String, course: String) -> Result<serde_json::Value, String> {
+pub async fn read_flashcard_progress(root: String, course: String) -> Result<serde_json::Value, String>  {
+    spawn_blocking_cmd(move || {
+
     let path = flashcard_progress_path(&root, &course)?;
     if !path.is_file() {
         return Ok(serde_json::json!({}));
@@ -901,14 +1066,18 @@ pub fn read_flashcard_progress(root: String, course: String) -> Result<serde_jso
         return Err("Flashcard progress must be a JSON object".into());
     }
     Ok(value)
+    }).await
 }
 
+
 #[tauri::command]
-pub fn write_flashcard_progress(
+pub async fn write_flashcard_progress(
     root: String,
     course: String,
     data: serde_json::Value,
-) -> Result<(), String> {
+) -> Result<(), String>  {
+    spawn_blocking_cmd_unit(move || {
+
     if !data.is_object() {
         return Err("Flashcard progress must be a JSON object".into());
     }
@@ -922,6 +1091,7 @@ pub fn write_flashcard_progress(
     let temp = path.with_extension("json.tmp");
     std::fs::write(&temp, bytes).map_err(|e| e.to_string())?;
     std::fs::rename(temp, path).map_err(|e| e.to_string())
+    }).await
 }
 
 fn quiz_progress_path(root: &str, course: &str) -> Result<PathBuf, String> {
@@ -942,8 +1112,11 @@ fn quiz_progress_path(root: &str, course: &str) -> Result<PathBuf, String> {
     Ok(new_path)
 }
 
+
 #[tauri::command]
-pub fn read_quiz_progress(root: String, course: String) -> Result<serde_json::Value, String> {
+pub async fn read_quiz_progress(root: String, course: String) -> Result<serde_json::Value, String>  {
+    spawn_blocking_cmd(move || {
+
     let path = quiz_progress_path(&root, &course)?;
     if !path.is_file() {
         return Ok(serde_json::json!({}));
@@ -954,6 +1127,7 @@ pub fn read_quiz_progress(root: String, course: String) -> Result<serde_json::Va
         return Err("Quiz progress must be a JSON object".into());
     }
     Ok(value)
+    }).await
 }
 
 pub fn build_study_progress_argv(
@@ -1002,8 +1176,9 @@ fn study_progress_argv_refs(argv: &[String]) -> Vec<&str> {
     argv.iter().map(String::as_str).collect()
 }
 
+
 #[tauri::command]
-pub fn study_progress(
+pub async fn study_progress(
     app: tauri::AppHandle,
     root: String,
     course: String,
@@ -1012,7 +1187,9 @@ pub fn study_progress(
     result: Option<String>,
     digest: Option<String>,
     heading: Option<String>,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value, String>  {
+    spawn_blocking_cmd(move || {
+
     let argv = build_study_progress_argv(
         &root,
         &course,
@@ -1024,6 +1201,7 @@ pub fn study_progress(
     )?;
     let refs = study_progress_argv_refs(&argv);
     run_worker_json_app(&app, &refs)
+    }).await
 }
 
 fn validate_exam_date(value: &str) -> Result<String, String> {
@@ -1078,15 +1256,18 @@ pub fn build_study_plan_argv(
     Ok(argv)
 }
 
+
 #[tauri::command]
-pub fn study_plan(
+pub async fn study_plan(
     app: tauri::AppHandle,
     root: String,
     course: String,
     provider: Option<String>,
     model: String,
     exam_date: Option<String>,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value, String>  {
+    spawn_blocking_cmd(move || {
+
     let provider_id = default_provider_id(provider);
     let argv = build_study_plan_argv(
         &root,
@@ -1097,6 +1278,7 @@ pub fn study_plan(
     )?;
     let refs = study_progress_argv_refs(&argv);
     run_worker_json_app(&app, &refs)
+    }).await
 }
 
 pub fn build_append_card_argv(
@@ -1147,8 +1329,9 @@ pub fn build_append_card_argv(
     Ok(argv)
 }
 
+
 #[tauri::command]
-pub fn append_card(
+pub async fn append_card(
     app: tauri::AppHandle,
     root: String,
     course: String,
@@ -1157,7 +1340,9 @@ pub fn append_card(
     digest: String,
     heading: Option<String>,
     page: Option<String>,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value, String>  {
+    spawn_blocking_cmd(move || {
+
     let argv = build_append_card_argv(
         &root,
         &course,
@@ -1169,14 +1354,18 @@ pub fn append_card(
     )?;
     let refs = study_progress_argv_refs(&argv);
     run_worker_json_app(&app, &refs)
+    }).await
 }
 
+
 #[tauri::command]
-pub fn write_quiz_progress(
+pub async fn write_quiz_progress(
     root: String,
     course: String,
     data: serde_json::Value,
-) -> Result<(), String> {
+) -> Result<(), String>  {
+    spawn_blocking_cmd_unit(move || {
+
     if !data.is_object() {
         return Err("Quiz progress must be a JSON object".into());
     }
@@ -1190,6 +1379,7 @@ pub fn write_quiz_progress(
     let temp = path.with_extension("json.tmp");
     std::fs::write(&temp, bytes).map_err(|e| e.to_string())?;
     std::fs::rename(temp, path).map_err(|e| e.to_string())
+    }).await
 }
 
 #[derive(serde::Deserialize)]
@@ -1202,8 +1392,11 @@ struct StaleArtifact {
     content_sha256: String,
 }
 
+
 #[tauri::command]
-pub fn study_artifact_stale(root: String, course: String, skill: String) -> Result<bool, String> {
+pub async fn study_artifact_stale(root: String, course: String, skill: String) -> Result<bool, String>  {
+    spawn_blocking_cmd(move || {
+
     validate_path_component(&course, "course name")?;
     validate_path_component(&skill, "skill name")?;
     let course_dir = Path::new(&root).join(course);
@@ -1235,6 +1428,7 @@ pub fn study_artifact_stale(root: String, course: String, skill: String) -> Resu
         .map(|byte| format!("{byte:02x}"))
         .collect::<String>();
     Ok(current != artifact.content_sha256)
+    }).await
 }
 
 fn validate_chat_course(course: &str) -> Result<(), String> {
@@ -1316,8 +1510,11 @@ pub(crate) fn chat_worker_stdin_payload(
     })
 }
 
+
 #[tauri::command]
-pub fn read_chat_history(root: String, course: String) -> Result<Vec<serde_json::Value>, String> {
+pub async fn read_chat_history(root: String, course: String) -> Result<Vec<serde_json::Value>, String>  {
+    spawn_blocking_cmd(move || {
+
     let path = chat_history_path(&root, &course)?;
     if !path.is_file() {
         return Ok(Vec::new());
@@ -1333,14 +1530,18 @@ pub fn read_chat_history(root: String, course: String) -> Result<Vec<serde_json:
         }
     }
     Ok(lines)
+    }).await
 }
 
+
 #[tauri::command]
-pub fn append_chat_lines(
+pub async fn append_chat_lines(
     root: String,
     course: String,
     lines: Vec<serde_json::Value>,
-) -> Result<(), String> {
+) -> Result<(), String>  {
+    spawn_blocking_cmd_unit(move || {
+
     let path = chat_history_path(&root, &course)?;
     for line in &lines {
         validate_chat_line_role(line)?;
@@ -1360,19 +1561,25 @@ pub fn append_chat_lines(
         file.write_all(&bytes).map_err(|e| e.to_string())?;
     }
     Ok(())
+    }).await
 }
 
+
 #[tauri::command]
-pub fn clear_chat_history(root: String, course: String) -> Result<(), String> {
+pub async fn clear_chat_history(root: String, course: String) -> Result<(), String>  {
+    spawn_blocking_cmd_unit(move || {
+
     let path = chat_history_path(&root, &course)?;
     if path.is_file() {
         std::fs::remove_file(&path).map_err(|e| e.to_string())?;
     }
     Ok(())
+    }).await
 }
 
+
 #[tauri::command]
-pub fn start_chat(
+pub async fn start_chat(
     app: tauri::AppHandle,
     on_event: Channel<serde_json::Value>,
     root: String,
@@ -1382,7 +1589,9 @@ pub fn start_chat(
     provider: Option<String>,
     model: String,
     history: Vec<serde_json::Value>,
-) -> Result<(), String> {
+) -> Result<(), String>  {
+    spawn_blocking_cmd_unit(move || {
+
     validate_chat_course(&course)?;
     validate_chat_mode(&mode)?;
     if model.trim().is_empty() {
@@ -1499,10 +1708,16 @@ pub fn start_chat(
     });
 
     Ok(())
+    }).await
 }
 
 #[cfg(test)]
 mod tests {
+    fn block_on_cmd<T>(future: impl std::future::Future<Output = T>) -> T {
+        tauri::async_runtime::block_on(future)
+    }
+
+
     use super::*;
     use std::fs;
     use std::sync::{Mutex, MutexGuard};
@@ -1663,7 +1878,7 @@ mod tests {
     #[test]
     fn missing_settings_file_enables_watch() {
         let root = temp_root("missing");
-        let ks = get_knowledge_settings(root.to_string_lossy().into_owned()).unwrap();
+        let ks = block_on_cmd(get_knowledge_settings(root.to_string_lossy().into_owned())).unwrap();
         assert!(ks.watch_enabled);
         assert!(!ks.auto_update);
     }
@@ -1677,7 +1892,7 @@ mod tests {
             r#"{"auto_update": true}"#,
         )
         .unwrap();
-        let ks = get_knowledge_settings(root.to_string_lossy().into_owned()).unwrap();
+        let ks = block_on_cmd(get_knowledge_settings(root.to_string_lossy().into_owned())).unwrap();
         assert!(ks.watch_enabled);
         assert!(ks.auto_update);
     }
@@ -1691,7 +1906,7 @@ mod tests {
             r#"{"watch_enabled": false}"#,
         )
         .unwrap();
-        let ks = get_knowledge_settings(root.to_string_lossy().into_owned()).unwrap();
+        let ks = block_on_cmd(get_knowledge_settings(root.to_string_lossy().into_owned())).unwrap();
         assert!(!ks.watch_enabled);
     }
 
@@ -1706,19 +1921,19 @@ mod tests {
         )
         .unwrap();
 
-        let value = read_study_json(
+        let value = block_on_cmd(read_study_json(
             root.to_string_lossy().into_owned(),
             "Biology".into(),
             "flashcards.json".into(),
-        )
+        ))
         .unwrap();
 
         assert_eq!(value["course"], "Biology");
-        assert!(read_study_json(
+        assert!(block_on_cmd(read_study_json(
             root.to_string_lossy().into_owned(),
             "Biology".into(),
             "../course.md".into(),
-        )
+        ))
         .is_err());
     }
 
@@ -1918,16 +2133,16 @@ mod tests {
         let _guard = IsolatedGitIdentityGuard::with_empty_identity();
         let root = temp_root("progress");
         let root_string = root.to_string_lossy().into_owned();
-        let empty = read_flashcard_progress(root_string.clone(), "Biology".into()).unwrap();
+        let empty = block_on_cmd(read_flashcard_progress(root_string.clone(), "Biology".into())).unwrap();
         assert_eq!(empty, serde_json::json!({}));
 
         let progress = serde_json::json!({
             "fc_12345678": {"seen": 2, "correct": 1, "wrong": 0}
         });
-        write_flashcard_progress(root_string.clone(), "Biology".into(), progress.clone()).unwrap();
+        block_on_cmd(write_flashcard_progress(root_string.clone(), "Biology".into(), progress.clone())).unwrap();
 
         assert_eq!(
-            read_flashcard_progress(root_string, "Biology".into()).unwrap(),
+            block_on_cmd(read_flashcard_progress(root_string, "Biology".into())).unwrap(),
             progress
         );
         assert!(root
@@ -1944,16 +2159,16 @@ mod tests {
         let _guard = IsolatedGitIdentityGuard::with_empty_identity();
         let root = temp_root("quiz-progress");
         let root_string = root.to_string_lossy().into_owned();
-        let empty = read_quiz_progress(root_string.clone(), "Biology".into()).unwrap();
+        let empty = block_on_cmd(read_quiz_progress(root_string.clone(), "Biology".into())).unwrap();
         assert_eq!(empty, serde_json::json!({}));
 
         let progress = serde_json::json!({
             "q_12345678": {"seen": 2, "correct": 1, "wrong": 0}
         });
-        write_quiz_progress(root_string.clone(), "Biology".into(), progress.clone()).unwrap();
+        block_on_cmd(write_quiz_progress(root_string.clone(), "Biology".into(), progress.clone())).unwrap();
 
         assert_eq!(
-            read_quiz_progress(root_string, "Biology".into()).unwrap(),
+            block_on_cmd(read_quiz_progress(root_string, "Biology".into())).unwrap(),
             progress
         );
         assert!(root
@@ -1992,7 +2207,7 @@ mod tests {
             "mode": "ask",
             "content": "Hello"
         });
-        append_chat_lines(root_string.clone(), "Biology".into(), vec![line.clone()]).unwrap();
+        block_on_cmd(append_chat_lines(root_string.clone(), "Biology".into(), vec![line.clone()])).unwrap();
         let expected = root
             .join(".arbor")
             .join("users")
@@ -2000,7 +2215,7 @@ mod tests {
             .join("chat")
             .join("Biology.jsonl");
         assert!(expected.is_file());
-        assert_eq!(read_chat_history(root_string, "Biology".into()).unwrap().len(), 1);
+        assert_eq!(block_on_cmd(read_chat_history(root_string, "Biology".into())).unwrap().len(), 1);
     }
 
     #[test]
@@ -2028,12 +2243,21 @@ mod tests {
         let root_string = root.to_string_lossy().into_owned();
 
         assert!(
-            !study_artifact_stale(root_string.clone(), "Biology".into(), "flashcards".into(),)
-                .unwrap()
+            !block_on_cmd(study_artifact_stale(
+                root_string.clone(),
+                "Biology".into(),
+                "flashcards".into(),
+            ))
+            .unwrap()
         );
 
         fs::write(course.join("digests").join("b.md"), b"changed").unwrap();
-        assert!(study_artifact_stale(root_string, "Biology".into(), "flashcards".into(),).unwrap());
+        assert!(block_on_cmd(study_artifact_stale(
+            root_string,
+            "Biology".into(),
+            "flashcards".into(),
+        ))
+        .unwrap());
     }
 
     #[test]
@@ -2047,7 +2271,7 @@ mod tests {
         )
         .unwrap();
 
-        let listed = list_digests(root.to_string_lossy().into_owned(), "Biology".into()).unwrap();
+        let listed = block_on_cmd(list_digests(root.to_string_lossy().into_owned(), "Biology".into())).unwrap();
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0].title, "Glycolysis net yield");
         assert_eq!(listed[0].date, "2026-08-12");
@@ -2069,7 +2293,7 @@ mod tests {
         fs::create_dir(root.join("digests")).unwrap();
         fs::write(root.join("notes.md"), b"# not a course\n").unwrap();
 
-        let listed = list_courses(root.to_string_lossy().into_owned()).unwrap();
+        let listed = block_on_cmd(list_courses(root.to_string_lossy().into_owned())).unwrap();
         assert_eq!(listed, vec!["Biology", "Organic Chem"]);
     }
 
@@ -2078,25 +2302,25 @@ mod tests {
         let root = temp_root("create-course");
         let root_string = root.to_string_lossy().into_owned();
         let name =
-            create_course(root_string.clone(), " Organic Chem ".into()).unwrap();
+            block_on_cmd(create_course(root_string.clone(), " Organic Chem ".into())).unwrap();
         assert_eq!(name, "Organic Chem");
         assert!(root.join("Organic Chem").is_dir());
 
         assert_eq!(
-            create_course(root_string.clone(), "Organic Chem".into()).unwrap_err(),
+            block_on_cmd(create_course(root_string.clone(), "Organic Chem".into())).unwrap_err(),
             "A class named Organic Chem already exists"
         );
         assert_eq!(
-            create_course(root_string.clone(), "../x".into()).unwrap_err(),
+            block_on_cmd(create_course(root_string.clone(), "../x".into())).unwrap_err(),
             "Invalid course name"
         );
         assert_eq!(
-            create_course(root_string.clone(), " ".into()).unwrap_err(),
+            block_on_cmd(create_course(root_string.clone(), " ".into())).unwrap_err(),
             "Class name cannot be empty"
         );
 
         for reserved in ["study", "digests", "_arbor_cache", "_ARBOR_CACHE", ".private"] {
-            let error = create_course(root_string.clone(), reserved.into()).unwrap_err();
+            let error = block_on_cmd(create_course(root_string.clone(), reserved.into())).unwrap_err();
             assert!(error.contains("reserved"), "{error}");
             assert!(error.contains(reserved), "{error}");
         }
@@ -2112,30 +2336,30 @@ mod tests {
         let first = src_dir.join("lecture.pdf");
         fs::write(&first, b"%PDF").unwrap();
 
-        let imported = import_sources(
+        let imported = block_on_cmd(import_sources(
             root.to_string_lossy().into_owned(),
             "Biology".into(),
             vec![first.to_string_lossy().into_owned()],
-        )
+        ))
         .unwrap();
         assert_eq!(imported, vec!["lecture.pdf"]);
         assert!(course.join("lecture.pdf").is_file());
 
         fs::write(&first, b"%PDF-v2").unwrap();
-        let again = import_sources(
+        let again = block_on_cmd(import_sources(
             root.to_string_lossy().into_owned(),
             "Biology".into(),
             vec![first.to_string_lossy().into_owned()],
-        )
+        ))
         .unwrap();
         assert_eq!(again, vec!["lecture.pdf"]);
         assert_eq!(fs::read(course.join("lecture.pdf")).unwrap(), b"%PDF-v2");
         assert!(!course.join("lecture-2.pdf").exists());
-        assert!(import_sources(
+        assert!(block_on_cmd(import_sources(
             root.to_string_lossy().into_owned(),
             "Biology".into(),
             vec![src_dir.join("notes.txt").to_string_lossy().into_owned()],
-        )
+        ))
         .is_err());
     }
 
@@ -2151,11 +2375,11 @@ mod tests {
         let incoming = inbox.join("Clin Med 1.pdf");
         fs::write(&incoming, b"%PDF-new").unwrap();
 
-        let imported = import_sources(
+        let imported = block_on_cmd(import_sources(
             root.to_string_lossy().into_owned(),
             "Clin Med 2".into(),
             vec![incoming.to_string_lossy().into_owned()],
-        )
+        ))
         .unwrap();
 
         assert_eq!(imported, vec!["Clin Med 1.pdf"]);
@@ -2174,11 +2398,11 @@ mod tests {
         let existing = course.join("Clin Med 1.pdf");
         fs::write(&existing, b"%PDF-existing").unwrap();
 
-        let imported = import_sources(
+        let imported = block_on_cmd(import_sources(
             root.to_string_lossy().into_owned(),
             "Clin Med 2".into(),
             vec![existing.to_string_lossy().into_owned()],
-        )
+        ))
         .unwrap();
 
         assert_eq!(imported, vec!["Clin Med 1.pdf"]);
@@ -2205,11 +2429,11 @@ mod tests {
         let existing = nested.join("lecture.pdf");
         fs::write(&existing, b"%PDF-nested").unwrap();
 
-        let imported = import_sources(
+        let imported = block_on_cmd(import_sources(
             root.to_string_lossy().into_owned(),
             "Biology".into(),
             vec![existing.to_string_lossy().into_owned()],
-        )
+        ))
         .unwrap();
 
         assert_eq!(imported, vec!["lecture.pdf"]);
@@ -2229,14 +2453,14 @@ mod tests {
         fs::write(a.join("lecture.pdf"), b"%PDF-a").unwrap();
         fs::write(b.join("lecture.pdf"), b"%PDF-b").unwrap();
 
-        let imported = import_sources(
+        let imported = block_on_cmd(import_sources(
             root.to_string_lossy().into_owned(),
             "Biology".into(),
             vec![
                 a.join("lecture.pdf").to_string_lossy().into_owned(),
                 b.join("lecture.pdf").to_string_lossy().into_owned(),
             ],
-        )
+        ))
         .unwrap();
 
         assert_eq!(imported, vec!["lecture.pdf", "lecture-2.pdf"]);
@@ -2256,14 +2480,14 @@ mod tests {
         fs::write(a.join("Lecture.pdf"), b"%PDF-a").unwrap();
         fs::write(b.join("lecture.pdf"), b"%PDF-b").unwrap();
 
-        let imported = import_sources(
+        let imported = block_on_cmd(import_sources(
             root.to_string_lossy().into_owned(),
             "Biology".into(),
             vec![
                 a.join("Lecture.pdf").to_string_lossy().into_owned(),
                 b.join("lecture.pdf").to_string_lossy().into_owned(),
             ],
-        )
+        ))
         .unwrap();
 
         assert_eq!(imported, vec!["Lecture.pdf", "lecture-2.pdf"]);
@@ -2275,17 +2499,17 @@ mod tests {
     fn read_markdown_rejects_absolute_path() {
         let root = temp_root("md-abs");
         let err =
-            read_markdown(root.to_string_lossy().into_owned(), "/etc/passwd".into()).unwrap_err();
+            block_on_cmd(read_markdown(root.to_string_lossy().into_owned(), "/etc/passwd".into())).unwrap_err();
         assert_eq!(err, "Invalid path");
     }
 
     #[test]
     fn read_markdown_rejects_parent_segments() {
         let root = temp_root("md-dotdot");
-        let err = read_markdown(
+        let err = block_on_cmd(read_markdown(
             root.to_string_lossy().into_owned(),
             "Biology/../../etc/passwd".into(),
-        )
+        ))
         .unwrap_err();
         assert_eq!(err, "Invalid path");
     }
@@ -2298,7 +2522,7 @@ mod tests {
         let secret = outside.join("secret.md");
         fs::write(&secret, "secret").unwrap();
         std::os::unix::fs::symlink(&secret, root.join("leak.md")).unwrap();
-        let err = read_markdown(root.to_string_lossy().into_owned(), "leak.md".into()).unwrap_err();
+        let err = block_on_cmd(read_markdown(root.to_string_lossy().into_owned(), "leak.md".into())).unwrap_err();
         assert_eq!(err, "Invalid path");
     }
 
@@ -2308,16 +2532,16 @@ mod tests {
         let dir = root.join("Biology").join("digests");
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join("note.md"), "hello").unwrap();
-        let text = read_markdown(
+        let text = block_on_cmd(read_markdown(
             root.to_string_lossy().into_owned(),
             "Biology/digests/note.md".into(),
-        )
+        ))
         .unwrap();
         assert_eq!(text, "hello");
-        let missing = read_markdown(
+        let missing = block_on_cmd(read_markdown(
             root.to_string_lossy().into_owned(),
             "Biology/digests/missing.md".into(),
-        )
+        ))
         .unwrap_err();
         assert_eq!(missing, "File not found: Biology/digests/missing.md");
     }
@@ -2339,7 +2563,7 @@ mod tests {
         let _guard = IsolatedGitIdentityGuard::with_empty_identity();
         let root = temp_root("chat-history");
         let root_string = root.to_string_lossy().into_owned();
-        let empty = read_chat_history(root_string.clone(), "Biology".into()).unwrap();
+        let empty = block_on_cmd(read_chat_history(root_string.clone(), "Biology".into())).unwrap();
         assert!(empty.is_empty());
 
         let user = serde_json::json!({
@@ -2361,20 +2585,20 @@ mod tests {
             "role": "session",
             "content": ""
         });
-        append_chat_lines(
+        block_on_cmd(append_chat_lines(
             root_string.clone(),
             "Biology".into(),
             vec![user.clone(), assistant.clone()],
-        )
+        ))
         .unwrap();
-        append_chat_lines(root_string.clone(), "Biology".into(), vec![session.clone()]).unwrap();
+        block_on_cmd(append_chat_lines(root_string.clone(), "Biology".into(), vec![session.clone()])).unwrap();
 
-        let read_back = read_chat_history(root_string.clone(), "Biology".into()).unwrap();
+        let read_back = block_on_cmd(read_chat_history(root_string.clone(), "Biology".into())).unwrap();
         assert_eq!(read_back.len(), 3);
         assert_eq!(read_back[2]["role"], "session");
 
-        clear_chat_history(root_string.clone(), "Biology".into()).unwrap();
-        assert!(read_chat_history(root_string.clone(), "Biology".into())
+        block_on_cmd(clear_chat_history(root_string.clone(), "Biology".into())).unwrap();
+        assert!(block_on_cmd(read_chat_history(root_string.clone(), "Biology".into()))
             .unwrap()
             .is_empty());
         assert!(root
@@ -2396,13 +2620,13 @@ mod tests {
             "mode": "ask",
             "content": "Hi"
         });
-        append_chat_lines(root_string.clone(), "Biology".into(), vec![line.clone()]).unwrap();
-        append_chat_lines(root_string.clone(), "Chemistry".into(), vec![line.clone()]).unwrap();
-        clear_chat_history(root_string.clone(), "Biology".into()).unwrap();
-        assert!(read_chat_history(root_string.clone(), "Biology".into())
+        block_on_cmd(append_chat_lines(root_string.clone(), "Biology".into(), vec![line.clone()])).unwrap();
+        block_on_cmd(append_chat_lines(root_string.clone(), "Chemistry".into(), vec![line.clone()])).unwrap();
+        block_on_cmd(clear_chat_history(root_string.clone(), "Biology".into())).unwrap();
+        assert!(block_on_cmd(read_chat_history(root_string.clone(), "Biology".into()))
             .unwrap()
             .is_empty());
-        assert_eq!(read_chat_history(root_string.clone(), "Chemistry".into()).unwrap().len(), 1);
+        assert_eq!(block_on_cmd(read_chat_history(root_string.clone(), "Chemistry".into())).unwrap().len(), 1);
     }
 
     #[test]
@@ -2416,9 +2640,9 @@ mod tests {
             "content": "Hi"
         });
         for bad in ["../x", "foo/bar", "/abs", "study"] {
-            assert!(read_chat_history(root_string.clone(), bad.into()).is_err());
-            assert!(append_chat_lines(root_string.clone(), bad.into(), vec![line.clone()]).is_err());
-            assert!(clear_chat_history(root_string.clone(), bad.into()).is_err());
+            assert!(block_on_cmd(read_chat_history(root_string.clone(), bad.into())).is_err());
+            assert!(block_on_cmd(append_chat_lines(root_string.clone(), bad.into(), vec![line.clone()])).is_err());
+            assert!(block_on_cmd(clear_chat_history(root_string.clone(), bad.into())).is_err());
         }
     }
 
@@ -2446,22 +2670,29 @@ mod tests {
     }
 }
 
+
 #[tauri::command]
-pub fn search_knowledge(
+pub async fn search_knowledge(
     root: String,
     query: String,
     limit: Option<u32>,
-) -> Result<Vec<SearchHit>, String> {
+) -> Result<Vec<SearchHit>, String>  {
+    spawn_blocking_cmd(move || {
+
     search::search_documents(Path::new(&root), &query, limit.unwrap_or(25))
+    }).await
 }
 
+
 #[tauri::command]
-pub fn search_semantic(
+pub async fn search_semantic(
     app: tauri::AppHandle,
     root: String,
     query: String,
     limit: Option<u32>,
-) -> Result<Vec<SearchHit>, String> {
+) -> Result<Vec<SearchHit>, String>  {
+    spawn_blocking_cmd(move || {
+
     let limit_value = limit.unwrap_or(25).to_string();
     let sub_args = [
         "embed-search",
@@ -2486,45 +2717,69 @@ pub fn search_semantic(
         limit.unwrap_or(25),
         &refs,
     )
+    }).await
 }
 
+
 #[tauri::command]
-pub fn reindex_knowledge(app: tauri::AppHandle, root: String) -> Result<serde_json::Value, String> {
+pub async fn reindex_knowledge(app: tauri::AppHandle, root: String) -> Result<serde_json::Value, String>  {
+    spawn_blocking_cmd(move || {
+
     run_worker_json_app(&app, &["reindex", "--root", &root])
+    }).await
 }
 
+
 #[tauri::command]
-pub fn start_folder_watch(app: tauri::AppHandle, root: String) -> Result<(), String> {
+pub async fn start_folder_watch(app: tauri::AppHandle, root: String) -> Result<(), String>  {
+    spawn_blocking_cmd_unit(move || {
+
     let watch = app.state::<Arc<WatchState>>();
     watch.start(app.clone(), PathBuf::from(root));
     Ok(())
+    }).await
 }
 
+
 #[tauri::command]
-pub fn init_arbor_db(root: String) -> Result<(), String> {
+pub async fn init_arbor_db(root: String) -> Result<(), String>  {
+    spawn_blocking_cmd_unit(move || {
+
     jobs::ensure_db(Path::new(&root))
+    }).await
 }
 
+
 #[tauri::command]
-pub fn list_jobs(root: String, limit: Option<u32>) -> Result<Vec<jobs::JobSummary>, String> {
+pub async fn list_jobs(root: String, limit: Option<u32>) -> Result<Vec<jobs::JobSummary>, String>  {
+    spawn_blocking_cmd(move || {
+
     jobs::list_jobs(Path::new(&root), limit.unwrap_or(20))
+    }).await
 }
 
+
 #[tauri::command]
-pub fn get_job_events(root: String, job_id: String) -> Result<Vec<jobs::JobEventRow>, String> {
+pub async fn get_job_events(root: String, job_id: String) -> Result<Vec<jobs::JobEventRow>, String>  {
+    spawn_blocking_cmd(move || {
+
     jobs::job_events(Path::new(&root), &job_id)
+    }).await
 }
 
+
 #[tauri::command]
-pub fn start_update(
+pub async fn start_update(
     app: tauri::AppHandle,
-    coordinator: tauri::State<'_, SharedCoordinator>,
     root: String,
     model: String,
     selections: Vec<Selection>,
     trigger: Option<String>,
     provider: Option<String>,
-) -> Result<String, String> {
+) -> Result<String, String>  {
+    spawn_blocking_cmd(move || {
+        let coordinator = app.state::<SharedCoordinator>().inner().clone();
+
     let settings = settings::load(&app);
     let transport = settings::transport_for_root(&settings, &root)?;
     let provider_id = default_provider_id(provider);
@@ -2637,19 +2892,23 @@ pub fn start_update(
         }
     }
     Ok(job_id)
+    }).await
 }
 
+
 #[tauri::command]
-pub fn start_study_job(
+pub async fn start_study_job(
     app: tauri::AppHandle,
-    coordinator: tauri::State<'_, SharedCoordinator>,
     root: String,
     course: String,
     skill: String,
     force: Option<bool>,
     model: Option<String>,
     provider: Option<String>,
-) -> Result<String, String> {
+) -> Result<String, String>  {
+    spawn_blocking_cmd(move || {
+        let coordinator = app.state::<SharedCoordinator>().inner().clone();
+
     let force = force.unwrap_or(false);
     let model = worker::normalize_study_model(model);
     let settings = settings::load(&app);
@@ -2749,15 +3008,19 @@ pub fn start_study_job(
         }
     }
     Ok(job_id)
+    }).await
 }
 
+
 #[tauri::command]
-pub fn start_embed_job(
+pub async fn start_embed_job(
     app: tauri::AppHandle,
-    coordinator: tauri::State<'_, SharedCoordinator>,
     root: String,
     force: Option<bool>,
-) -> Result<String, String> {
+) -> Result<String, String>  {
+    spawn_blocking_cmd(move || {
+        let coordinator = app.state::<SharedCoordinator>().inner().clone();
+
     let force = force.unwrap_or(false);
     let plan_json = serde_json::to_string(&serde_json::json!({
         "op": "embed",
@@ -2783,18 +3046,26 @@ pub fn start_embed_job(
 
     worker::spawn_embed_stream(app.clone(), repo_dir(&app), root, force, job_id.clone());
     Ok(job_id)
+    }).await
 }
 
+
 #[tauri::command]
-pub fn cancel_update(_app: tauri::AppHandle) -> Result<(), String> {
+pub async fn cancel_update(_app: tauri::AppHandle) -> Result<(), String>  {
+    spawn_blocking_cmd_unit(move || {
+
     let cancel = worker::cancel_file_path();
     std::fs::write(&cancel, b"stop").map_err(|e| e.to_string())?;
     crate::remote_job::cancel_active_remote();
     Ok(())
+    }).await
 }
 
+
 #[tauri::command]
-pub fn open_folder(path: String) -> Result<(), String> {
+pub async fn open_folder(path: String) -> Result<(), String>  {
+    spawn_blocking_cmd_unit(move || {
+
     #[cfg(target_os = "macos")]
     let program = "open";
     #[cfg(target_os = "linux")]
@@ -2807,10 +3078,14 @@ pub fn open_folder(path: String) -> Result<(), String> {
         .spawn()
         .map(|_| ())
         .map_err(|e| e.to_string())
+    }).await
 }
 
+
 #[tauri::command]
-pub fn init_knowledge_repo(path: String) -> Result<bool, String> {
+pub async fn init_knowledge_repo(path: String) -> Result<bool, String>  {
+    spawn_blocking_cmd(move || {
+
     let root = Path::new(&path);
     if !root.is_dir() {
         return Err(format!("Not a folder: {path}"));
@@ -2840,4 +3115,5 @@ pub fn init_knowledge_repo(path: String) -> Result<bool, String> {
         "Initialize Arbor knowledge library",
     ])?;
     Ok(true)
+    }).await
 }

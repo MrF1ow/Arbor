@@ -9,9 +9,11 @@ use std::collections::HashSet;
 use std::ffi::OsString;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
+use std::io::Read;
 use std::process::{Command, Stdio};
-use std::sync::OnceLock;
-#[cfg(target_os = "macos")]
+use std::sync::{Condvar, Mutex, OnceLock};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::thread;
 use std::time::{Duration, Instant};
 
 pub fn parse_worker_json_output(
@@ -307,15 +309,106 @@ pub fn uv_project_missing_error(argv: &[String]) -> Option<String> {
     }
 }
 
+pub fn worker_deadline(sub_args: &[&str]) -> Duration {
+    let sub0 = sub_args.first().copied().unwrap_or("");
+    match sub0 {
+        "check-auth" => Duration::from_secs(15),
+        "list-models" => Duration::from_secs(20),
+        "list-providers" => Duration::from_secs(30),
+        "sync" if sub_args.iter().any(|arg| *arg == "--show") => Duration::from_secs(30),
+        "sync" => Duration::from_secs(120),
+        "reindex" => Duration::from_secs(300),
+        "skill-install" | "skill-run" => Duration::from_secs(300),
+        _ => Duration::from_secs(30),
+    }
+}
+
+struct WorkerSpawnLimiter {
+    active: Mutex<usize>,
+    cv: Condvar,
+}
+
+static WORKER_SPAWN_LIMITER: OnceLock<WorkerSpawnLimiter> = OnceLock::new();
+
+#[cfg(test)]
+static TEST_SPAWN_ACTIVE: AtomicUsize = AtomicUsize::new(0);
+
+#[cfg(test)]
+static TEST_SPAWN_HIGH_WATER: AtomicUsize = AtomicUsize::new(0);
+
+fn worker_spawn_limiter() -> &'static WorkerSpawnLimiter {
+    WORKER_SPAWN_LIMITER.get_or_init(|| WorkerSpawnLimiter {
+        active: Mutex::new(0),
+        cv: Condvar::new(),
+    })
+}
+
+struct WorkerSpawnSlot;
+
+impl Drop for WorkerSpawnSlot {
+    fn drop(&mut self) {
+        let limiter = worker_spawn_limiter();
+        let mut guard = limiter
+            .active
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        *guard = guard.saturating_sub(1);
+        limiter.cv.notify_all();
+        #[cfg(test)]
+        TEST_SPAWN_ACTIVE.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
+fn acquire_worker_spawn_slot() -> WorkerSpawnSlot {
+    const MAX: usize = 3;
+    let limiter = worker_spawn_limiter();
+    let mut guard = limiter
+        .active
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    while *guard >= MAX {
+        guard = limiter
+            .cv
+            .wait(guard)
+            .unwrap_or_else(|error| error.into_inner());
+    }
+    *guard += 1;
+    #[cfg(test)]
+    {
+        let active = TEST_SPAWN_ACTIVE.fetch_add(1, Ordering::SeqCst) + 1;
+        let mut high = TEST_SPAWN_HIGH_WATER.load(Ordering::SeqCst);
+        while active > high {
+            match TEST_SPAWN_HIGH_WATER.compare_exchange_weak(
+                high,
+                active,
+                Ordering::SeqCst,
+                Ordering::SeqCst,
+            ) {
+                Ok(_) => break,
+                Err(next) => high = next,
+            }
+        }
+    }
+    drop(guard);
+    WorkerSpawnSlot
+}
+
 #[cfg(feature = "desktop-runtime")]
-pub fn run_worker_json(
+pub fn run_worker_json_with_deadline(
     app_dir: &Path,
     sub_args: &[&str],
     extra_env: &[(&str, &str)],
+    deadline: Duration,
 ) -> Result<serde_json::Value, String> {
-    use std::process::Command;
+    let _slot = acquire_worker_spawn_slot();
+    let perf_start = Instant::now();
+    let sub0 = sub_args.first().copied().unwrap_or("");
 
-    let sidecar = packaged_sidecar();
+    let sidecar = if std::env::var("ARBOR_WORKER_NO_SIDECAR").as_deref() == Ok("1") {
+        None
+    } else {
+        packaged_sidecar()
+    };
     let argv = resolve_worker_argv(
         &|k| std::env::var(k).ok(),
         &default_python_dir(app_dir),
@@ -328,17 +421,89 @@ pub fn run_worker_json(
     let mut command = Command::new(&argv[0]);
     command
         .args(&argv[1..])
-        .env("PATH", process_path());
+        .env("PATH", process_path())
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
     crate::secrets::apply_env_pairs(&mut command, extra_env);
-    let output = command
-        .output()
+    let mut child = command
+        .spawn()
         .map_err(|e| format!("failed to launch worker: {e}"))?;
-    let exit_code = output.status.code();
-    parse_worker_json_output(
-        &String::from_utf8_lossy(&output.stdout),
-        &String::from_utf8_lossy(&output.stderr),
+
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| "worker stdout unavailable".to_string())?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| "worker stderr unavailable".to_string())?;
+
+    let stdout_handle = thread::spawn(move || {
+        let mut buf = Vec::new();
+        let mut reader = stdout;
+        let _ = reader.read_to_end(&mut buf);
+        buf
+    });
+    let stderr_handle = thread::spawn(move || {
+        let mut buf = Vec::new();
+        let mut reader = stderr;
+        let _ = reader.read_to_end(&mut buf);
+        buf
+    });
+
+    let poll = Duration::from_millis(10);
+    let deadline_at = Instant::now() + deadline;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) => {
+                if Instant::now() >= deadline_at {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    let _ = stdout_handle.join();
+                    let _ = stderr_handle.join();
+                    let secs = deadline.as_secs();
+                    return Err(format!("worker timed out after {secs}s: {sub0}"));
+                }
+                thread::sleep(poll);
+            }
+            Err(error) => {
+                let _ = stdout_handle.join();
+                let _ = stderr_handle.join();
+                return Err(format!("failed waiting on worker: {error}"));
+            }
+        }
+    };
+
+    let stdout_bytes = stdout_handle
+        .join()
+        .map_err(|_| "worker stdout reader panicked".to_string())?;
+    let stderr_bytes = stderr_handle
+        .join()
+        .map_err(|_| "worker stderr reader panicked".to_string())?;
+    let exit_code = status.code();
+    let result = parse_worker_json_output(
+        &String::from_utf8_lossy(&stdout_bytes),
+        &String::from_utf8_lossy(&stderr_bytes),
         exit_code,
-    )
+    );
+    if std::env::var("ARBOR_PERF").as_deref() == Ok("1") {
+        eprintln!(
+            "[arbor-perf] {sub0} {}ms exit={exit_code:?}",
+            perf_start.elapsed().as_millis()
+        );
+    }
+    result
+}
+
+#[cfg(feature = "desktop-runtime")]
+pub fn run_worker_json(
+    app_dir: &Path,
+    sub_args: &[&str],
+    extra_env: &[(&str, &str)],
+) -> Result<serde_json::Value, String> {
+    run_worker_json_with_deadline(app_dir, sub_args, extra_env, worker_deadline(sub_args))
 }
 
 #[cfg(feature = "desktop-runtime")]
@@ -1403,5 +1568,115 @@ mod tests {
         ];
         assert_eq!(uv_project_missing_error(&argv), None);
         let _ = std::fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn worker_deadline_mapping() {
+        assert_eq!(worker_deadline(&["check-auth"]), Duration::from_secs(15));
+        assert_eq!(worker_deadline(&["list-models"]), Duration::from_secs(20));
+        assert_eq!(worker_deadline(&["list-providers"]), Duration::from_secs(30));
+        assert_eq!(
+            worker_deadline(&["sync", "--root", "/k", "--show"]),
+            Duration::from_secs(30)
+        );
+        assert_eq!(
+            worker_deadline(&["sync", "--root", "/k"]),
+            Duration::from_secs(120)
+        );
+        assert_eq!(worker_deadline(&["reindex"]), Duration::from_secs(300));
+        assert_eq!(
+            worker_deadline(&["skill-install"]),
+            Duration::from_secs(300)
+        );
+        assert_eq!(worker_deadline(&["library-show"]), Duration::from_secs(30));
+    }
+
+    #[cfg(unix)]
+    static WORKER_ENV_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    #[cfg(unix)]
+    fn fake_worker_script(name: &str, body: &str) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+
+        let path = std::env::temp_dir().join(format!("arbor-fake-worker-{name}-{}", std::process::id()));
+        std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        path
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_worker_json_times_out_and_kills_slow_child() {
+        let _guard = WORKER_ENV_TEST_LOCK.lock().unwrap();
+        let start = Instant::now();
+        let script = fake_worker_script("slow", "exec sleep 30");
+        std::env::set_var("ARBOR_WORKER_CMD", script.to_string_lossy().as_ref());
+        std::env::set_var("ARBOR_WORKER_NO_SIDECAR", "1");
+        let err = run_worker_json_with_deadline(
+            Path::new("/tmp"),
+            &["probe"],
+            &[],
+            Duration::from_secs(1),
+        )
+        .unwrap_err();
+        std::env::remove_var("ARBOR_WORKER_CMD");
+        std::env::remove_var("ARBOR_WORKER_NO_SIDECAR");
+        let _ = std::fs::remove_file(script);
+        assert!(err.contains("worker timed out after 1s"));
+        assert!(start.elapsed() < Duration::from_secs(3));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_worker_json_parses_json_from_fake_worker() {
+        let _guard = WORKER_ENV_TEST_LOCK.lock().unwrap();
+        let script = fake_worker_script("json", "echo '{\"ok\":true}'");
+        std::env::set_var("ARBOR_WORKER_CMD", script.to_string_lossy().as_ref());
+        std::env::set_var("ARBOR_WORKER_NO_SIDECAR", "1");
+        let value = run_worker_json_with_deadline(
+            Path::new("/tmp"),
+            &["probe"],
+            &[],
+            Duration::from_secs(5),
+        )
+        .expect("json");
+        std::env::remove_var("ARBOR_WORKER_CMD");
+        std::env::remove_var("ARBOR_WORKER_NO_SIDECAR");
+        let _ = std::fs::remove_file(script);
+        assert_eq!(value["ok"], true);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_worker_json_limits_concurrent_spawns() {
+        let _guard = WORKER_ENV_TEST_LOCK.lock().unwrap();
+        TEST_SPAWN_HIGH_WATER.store(0, Ordering::SeqCst);
+        let script = fake_worker_script("sleep-json", "sleep 2; echo '{\"ok\":true}'");
+        std::env::set_var("ARBOR_WORKER_CMD", script.to_string_lossy().as_ref());
+        std::env::set_var("ARBOR_WORKER_NO_SIDECAR", "1");
+        let app_dir = Path::new("/tmp");
+        let handles: Vec<_> = (0..5)
+            .map(|_| {
+                thread::spawn(move || {
+                    run_worker_json_with_deadline(
+                        app_dir,
+                        &["probe"],
+                        &[],
+                        Duration::from_secs(30),
+                    )
+                })
+            })
+            .collect();
+        for handle in handles {
+            handle.join().expect("thread").expect("worker");
+        }
+        std::env::remove_var("ARBOR_WORKER_CMD");
+        std::env::remove_var("ARBOR_WORKER_NO_SIDECAR");
+        let _ = std::fs::remove_file(script);
+        assert!(
+            TEST_SPAWN_HIGH_WATER.load(Ordering::SeqCst) <= 3,
+            "high water {}",
+            TEST_SPAWN_HIGH_WATER.load(Ordering::SeqCst)
+        );
     }
 }

@@ -4,8 +4,11 @@ import io
 import json
 import contextlib
 import subprocess
+import threading
+import uuid
 from datetime import timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -402,7 +405,8 @@ def test_grade_only_touches_progress_json(git_repo: Path, git):
         digest="digests/a.md", heading="Cells",
     )
     status = g("status", "--porcelain", "-uall")
-    assert status.strip() == "?? .arbor/users/test@arbor.local/Biology/progress.json"
+    assert "?? .arbor/users/test@arbor.local/Biology/progress.json" in status
+    assert "?? .arbor/locks/" not in status
     assert g("log", "--oneline", "-1").strip().endswith("biology course")
 
 
@@ -544,3 +548,56 @@ def test_quiz_updates_questions(git_repo: Path):
     _course_dir(git_repo)
     doc = study_progress_quiz(git_repo, "Biology", "q1", "wrong")
     assert doc["questions"]["q1"] == {"seen": 1, "correct": 0, "wrong": 1}
+
+
+def test_concurrent_grades_persist_all_entries(git_repo: Path):
+    _course_dir(git_repo)
+    card_ids = [f"fc_{slot}_{index}" for slot in range(2) for index in range(20)]
+    _write_deck(git_repo, card_ids)
+
+    def grade_batch(slot: int) -> None:
+        for index in range(20):
+            study_progress_grade(
+                git_repo,
+                "Biology",
+                f"fc_{slot}_{index}",
+                "mastered",
+                now=CLOCK,
+            )
+
+    threads = [threading.Thread(target=grade_batch, args=(slot,)) for slot in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    doc = study_progress_show(git_repo, "Biology")
+    assert len(doc["cards"]) == 40
+
+
+def test_write_atomic_temp_names_unique(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    from arbor_worker import study_progress as sp
+
+    counter = {"n": 0}
+    captured: list[str] = []
+    real_write_text = Path.write_text
+
+    def fake_uuid4():
+        counter["n"] += 1
+        return type("U", (), {"hex": f"{counter['n']:08x}{'0' * 24}"})()
+
+    def write_text(self, *args, **kwargs):
+        if ".tmp-" in self.name:
+            captured.append(self.name)
+        return real_write_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(sp.uuid, "uuid4", fake_uuid4)
+    monkeypatch.setattr(Path, "write_text", write_text)
+    target = tmp_path / "progress.json"
+    sp._write_atomic(target, '{"a":1}\n')
+    sp._write_atomic(target, '{"a":2}\n')
+    assert len(captured) == 2
+    assert captured[0] != captured[1]
+    assert str(threading.get_ident()) in captured[0]
+    assert "00000001" in captured[0]
+    assert "00000002" in captured[1]
