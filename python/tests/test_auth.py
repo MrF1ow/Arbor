@@ -83,6 +83,24 @@ def test_login_status_uses_resolved_path():
     assert captured["argv"][:3] == ["/opt/codex", "login", "status"]
 
 
+def test_extra_bin_dirs_includes_common_home_install_paths(tmp_path: Path):
+    from arbor_worker.auth import extra_bin_dirs
+
+    paths = extra_bin_dirs(tmp_path)
+    assert tmp_path / ".claude" / "local" in paths
+    assert tmp_path / ".cargo" / "bin" in paths
+    assert len(paths) == len(set(paths))
+
+
+def test_resolve_claude_local_bin(tmp_path: Path):
+    claude_dir = tmp_path / ".claude" / "local"
+    claude_dir.mkdir(parents=True)
+    exe = claude_dir / "claude"
+    exe.write_text("#!/bin/sh\n")
+    exe.chmod(0o755)
+    assert resolve_cli_command("claude", which=lambda name: None, home=tmp_path) == str(exe)
+
+
 def test_resolve_grok_home_bin(tmp_path: Path):
     grok_bin = tmp_path / ".grok" / "bin"
     grok_bin.mkdir(parents=True)

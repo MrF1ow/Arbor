@@ -1,5 +1,21 @@
+export function authCheckWorkerFailureReason(error: unknown): string {
+  const message =
+    error instanceof Error ? error.message.trim() : String(error ?? "").trim();
+  if (message === "") {
+    return "Arbor worker unavailable";
+  }
+  return `Arbor worker unavailable: ${message}`;
+}
+
+export function isWorkerUnavailableAuthReason(reason: string): boolean {
+  return reason.startsWith("Arbor worker unavailable");
+}
+
 export function signedOutJobMessage(providerLabel: string, reason: string): string {
   const trimmed = reason.trim();
+  if (isWorkerUnavailableAuthReason(trimmed)) {
+    return trimmed;
+  }
   if (trimmed === "") {
     return `${providerLabel} is not authenticated`;
   }
@@ -14,6 +30,9 @@ export function providerBadge(
 ): string {
   if (available) {
     return `${modelLabel} · ready`;
+  }
+  if (reason && isWorkerUnavailableAuthReason(reason)) {
+    return reason;
   }
   if (reason === "key missing") {
     return `${providerLabel} · key missing`;

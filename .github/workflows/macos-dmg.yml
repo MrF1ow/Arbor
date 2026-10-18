@@ -50,6 +50,9 @@ jobs:
           APPLE_SIGNING_IDENTITY: "-"
         run: npx tauri build --bundles dmg --config src-tauri/tauri.bundle.json
 
+      - name: Smoke test DMG bundle
+        run: bash scripts/smoke-macos-bundle.sh desktop/src-tauri/target/release/bundle/dmg/*.dmg
+
       - uses: actions/upload-artifact@v4
         with:
           name: arbor-macos-dmg

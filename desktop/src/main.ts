@@ -63,7 +63,12 @@ import {
 } from "./chat";
 import { headingId, renderMarkdown } from "./markdown";
 import { renderSearchHit } from "./search-hit";
-import { pickerProviders, providerBadge, signedOutJobMessage } from "./provider";
+import {
+  authCheckWorkerFailureReason,
+  pickerProviders,
+  providerBadge,
+  signedOutJobMessage,
+} from "./provider";
 import {
   effectiveProvider,
   LIBRARY_RECOMMENDATION_LABEL,
@@ -2996,13 +3001,12 @@ async function refreshAuth() {
         docsLink.textContent = `Set up ${label}`;
         docsLink.hidden = false;
       }
-    } catch {
+    } catch (error) {
       authed = false;
-      if (!authCheckReason.trim()) {
-        authCheckReason = "auth check failed";
-      }
+      authCheckReason = authCheckWorkerFailureReason(error);
       providerLabelEl.textContent = providerBadge(label, modelLabel, false, authCheckReason);
       providerStatusEl.className = "auth-badge bad";
+      docsLink.hidden = true;
     }
     refreshUpdateEnabled();
     refreshStudyEnabled();

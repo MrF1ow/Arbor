@@ -27,6 +27,11 @@ def extra_bin_dirs(
     dirs = [
         Path(home) / ".local/bin",
         Path(home) / ".grok" / "bin",
+        Path(home) / ".claude" / "local",
+        Path(home) / ".npm-global/bin",
+        Path(home) / ".bun" / "bin",
+        Path(home) / ".volta" / "bin",
+        Path(home) / ".cargo" / "bin",
     ]
     dirs.extend(DEFAULT_EXTRA_BIN_DIRS if extra_dirs is None else extra_dirs)
     seen: set[Path] = set()
