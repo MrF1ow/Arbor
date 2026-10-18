@@ -24,6 +24,9 @@ pub trait RemoteOps {
     ) -> Result<i32, String>;
     fn sync_down(&mut self, remote_dir: &str, local_dir: &Path, rel_paths: &[String]) -> Result<(), String>;
     fn kill(&mut self) -> Result<(), String>;
+    fn cancelled(&self) -> bool {
+        false
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -316,6 +319,12 @@ pub fn run_remote_job(
         Some(&interrupt),
     );
 
+    if ops.cancelled() {
+        outcome.killed = true;
+        outcome.error = None;
+        return outcome;
+    }
+
     match run_result {
         Ok(0) => {}
         Ok(_code) if outcome.killed => {}
@@ -376,7 +385,17 @@ fn active_kill_slot() -> &'static Mutex<Option<KillFn>> {
     SLOT.get_or_init(|| Mutex::new(None))
 }
 
+fn active_cancel_flag() -> &'static Mutex<Option<Arc<AtomicBool>>> {
+    static SLOT: OnceLock<Mutex<Option<Arc<AtomicBool>>>> = OnceLock::new();
+    SLOT.get_or_init(|| Mutex::new(None))
+}
+
 pub fn cancel_active_remote() {
+    if let Ok(guard) = active_cancel_flag().lock() {
+        if let Some(flag) = guard.as_ref() {
+            flag.store(true, Ordering::SeqCst);
+        }
+    }
     if let Ok(mut guard) = active_kill_slot().lock() {
         if let Some(kill) = guard.as_mut() {
             kill();
@@ -389,6 +408,7 @@ pub struct SystemRemoteOps {
     known_hosts: PathBuf,
     wrapper: PathBuf,
     child_pid: Option<u32>,
+    run_cancelled: Option<Arc<AtomicBool>>,
 }
 
 impl SystemRemoteOps {
@@ -412,6 +432,7 @@ impl SystemRemoteOps {
             known_hosts,
             wrapper,
             child_pid: None,
+            run_cancelled: None,
         })
     }
 
@@ -504,6 +525,14 @@ impl RemoteOps for SystemRemoteOps {
         on_line: &mut dyn FnMut(&str),
         interrupt: Option<&AtomicBool>,
     ) -> Result<i32, String> {
+        let cancelled = Arc::new(AtomicBool::new(false));
+        cancelled.store(false, Ordering::SeqCst);
+        self.run_cancelled = Some(cancelled.clone());
+        {
+            let mut flag_guard = active_cancel_flag().lock().map_err(|e| e.to_string())?;
+            *flag_guard = Some(cancelled.clone());
+        }
+
         let argv = ssh_argv(&self.endpoint, &self.known_hosts, remote_tokens)?;
         let mut child = Command::new(&argv[0]);
         child.args(&argv[1..]);
@@ -518,8 +547,10 @@ impl RemoteOps for SystemRemoteOps {
         self.child_pid = Some(pid);
 
         {
+            let cancelled_kill = cancelled.clone();
             let mut guard = active_kill_slot().lock().map_err(|e| e.to_string())?;
             *guard = Some(Box::new(move || {
+                cancelled_kill.store(true, Ordering::SeqCst);
                 let _ = Command::new("kill")
                     .args(["-TERM", &format!("-{pid}")])
                     .status();
@@ -558,6 +589,9 @@ impl RemoteOps for SystemRemoteOps {
         if let Ok(mut guard) = active_kill_slot().lock() {
             *guard = None;
         }
+        if let Ok(mut flag_guard) = active_cancel_flag().lock() {
+            *flag_guard = None;
+        }
 
         let code = status.code().unwrap_or(255);
         if code == 0 {
@@ -569,12 +603,21 @@ impl RemoteOps for SystemRemoteOps {
     }
 
     fn kill(&mut self) -> Result<(), String> {
+        if let Some(flag) = self.run_cancelled.as_ref() {
+            flag.store(true, Ordering::SeqCst);
+        }
         if let Some(pid) = self.child_pid.take() {
             let _ = Command::new("kill")
                 .args(["-TERM", &format!("-{pid}")])
                 .status();
         }
         Ok(())
+    }
+
+    fn cancelled(&self) -> bool {
+        self.run_cancelled
+            .as_ref()
+            .is_some_and(|f| f.load(Ordering::SeqCst))
     }
 }
 
@@ -610,6 +653,7 @@ mod tests {
         run_result: Result<i32, String>,
         block_until_kill: bool,
         killed: Arc<Mutex<bool>>,
+        user_cancelled: bool,
     }
 
     impl FakeOps {
@@ -627,6 +671,7 @@ mod tests {
                 run_result,
                 block_until_kill: false,
                 killed: Arc::new(Mutex::new(false)),
+                user_cancelled: false,
             }
         }
     }
@@ -681,6 +726,10 @@ mod tests {
             self.kill_count.fetch_add(1, Ordering::SeqCst);
             *self.killed.lock().unwrap() = true;
             Ok(())
+        }
+
+        fn cancelled(&self) -> bool {
+            self.user_cancelled
         }
     }
 
@@ -786,6 +835,27 @@ mod tests {
             .unwrap();
         assert!(kh.contains("ssh/known_hosts"));
         assert!(!kh.contains(".ssh"));
+    }
+
+    #[test]
+    fn user_cancel_after_ssh_err_is_killed_not_failed() {
+        let endpoint = test_endpoint();
+        let local_root = PathBuf::from("/tmp/Knowledge");
+        let mut ops = FakeOps::new(Err("Connection reset".to_string()));
+        ops.user_cancelled = true;
+        let mut commit_called = false;
+        let outcome = run_remote_job(
+            &mut ops,
+            &sample_request(endpoint, local_root),
+            &mut |_, _, _| {
+                commit_called = true;
+                Ok(())
+            },
+            None,
+        );
+        assert!(outcome.killed);
+        assert!(outcome.error.is_none());
+        assert!(!commit_called);
     }
 
     #[test]
