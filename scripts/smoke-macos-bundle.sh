@@ -26,7 +26,14 @@ if [[ "$INPUT" == *.dmg ]]; then
   MOUNT_POINT="$(mktemp -d "${TMPDIR:-/tmp}/arbor-dmg.XXXXXX")"
   trap cleanup_mount EXIT
   hdiutil attach -nobrowse -readonly "$INPUT" -mountpoint "$MOUNT_POINT" >/dev/null
-  APP_PATH="$(find "$MOUNT_POINT" -maxdepth 1 -name '*.app' -print -quit)"
+  # macOS find is BSD and has no -quit. A one-level glob is bash 3.2-safe.
+  APP_PATH=""
+  for candidate in "$MOUNT_POINT"/*.app; do
+    if [[ -d "$candidate" ]]; then
+      APP_PATH="$candidate"
+      break
+    fi
+  done
   if [[ -z "$APP_PATH" ]]; then
     echo "no .app found in DMG mount" >&2
     exit 1
@@ -45,7 +52,9 @@ if [[ ! -f "$WORKER" ]]; then
 fi
 
 SIGNING_OUT="$(codesign -dv --verbose=4 "$WORKER" 2>&1)" || true
-if echo "$SIGNING_OUT" | grep -qE '(^|[[:space:]])runtime([[:space:]]|$)'; then
+# codesign -dv writes to stderr. The runtime bit is inside the flags list,
+# for example flags=0x10002(adhoc,runtime), not a whitespace-delimited word.
+if printf '%s\n' "$SIGNING_OUT" | grep -E 'flags=0x[0-9a-fA-F]+\([^)]*runtime' >/dev/null; then
   echo "hardened runtime must be disabled for ad-hoc PyInstaller worker (found runtime flag)" >&2
   echo "$SIGNING_OUT" >&2
   exit 1
