@@ -193,6 +193,33 @@ pub fn sidecar_path_in(dir: &Path) -> Option<PathBuf> {
     None
 }
 
+/// Search paths for a packaged worker binary, in priority order.
+pub fn sidecar_candidates(exe_dir: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    out.push(
+        exe_dir
+            .join("../Resources/arbor-worker/arbor-worker")
+            .to_path_buf(),
+    );
+    out.push(exe_dir.join("arbor-worker/arbor-worker"));
+    if let Some(onefile) = sidecar_path_in(exe_dir) {
+        out.push(onefile);
+    }
+    out
+}
+
+fn first_existing_sidecar(candidates: &[PathBuf]) -> Option<PathBuf> {
+    for path in candidates {
+        if path.is_file() {
+            return path
+                .canonicalize()
+                .ok()
+                .or_else(|| Some(path.to_path_buf()));
+        }
+    }
+    None
+}
+
 pub fn process_path_for_spawn() -> OsString {
     augmented_path_from(
         std::env::var("HOME").ok().as_deref(),
@@ -237,7 +264,7 @@ pub fn resolve_worker_argv(
 
 pub fn packaged_sidecar() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
-    sidecar_path_in(exe.parent()?)
+    first_existing_sidecar(&sidecar_candidates(exe.parent()?))
 }
 
 #[allow(dead_code)]
@@ -1429,6 +1456,54 @@ mod tests {
             Some("/a:/b".to_string())
         );
         assert_eq!(extract_login_shell_path("__ARBOR_PATH____ARBOR_PATH__"), None);
+    }
+
+    #[test]
+    fn sidecar_candidates_prefers_onedir_layout() {
+        let root = unique_dir("arbor-sidecar-layout");
+        let macos = root.join("Contents/MacOS");
+        let resources = root.join("Contents/Resources/arbor-worker");
+        std::fs::create_dir_all(&macos).unwrap();
+        std::fs::create_dir_all(&resources).unwrap();
+        let onedir_worker = resources.join("arbor-worker");
+        std::fs::write(&onedir_worker, b"x").unwrap();
+        let onefile = macos.join("arbor-worker-x86_64-apple-darwin");
+        std::fs::write(&onefile, b"y").unwrap();
+
+        let candidates = sidecar_candidates(macos.as_path());
+        assert_eq!(
+            first_existing_sidecar(&candidates).as_deref(),
+            Some(onedir_worker.as_path())
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn sidecar_candidates_falls_back_to_onefile_in_exe_dir() {
+        let dir = unique_dir("arbor-sidecar-onefile");
+        let triple = dir.join("arbor-worker-aarch64-unknown-linux-gnu");
+        std::fs::write(&triple, b"x").unwrap();
+        let candidates = sidecar_candidates(dir.as_path());
+        assert_eq!(
+            first_existing_sidecar(&candidates).as_deref(),
+            Some(triple.as_path())
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sidecar_candidates_linux_onedir_next_to_exe() {
+        let dir = unique_dir("arbor-sidecar-linux-onedir");
+        let nested = dir.join("arbor-worker");
+        std::fs::create_dir_all(&nested).unwrap();
+        let worker = nested.join("arbor-worker");
+        std::fs::write(&worker, b"x").unwrap();
+        let candidates = sidecar_candidates(dir.as_path());
+        assert_eq!(
+            first_existing_sidecar(&candidates).as_deref(),
+            Some(worker.as_path())
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

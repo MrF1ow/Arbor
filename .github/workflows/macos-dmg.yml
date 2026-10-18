@@ -36,7 +36,15 @@ jobs:
           cache: npm
           cache-dependency-path: desktop/package-lock.json
 
-      - name: Bundle arbor-worker sidecar
+      - name: Bundle onefile worker (before benchmark)
+        run: |
+          set -euo pipefail
+          ONEFILE_BENCH_DIR="$(mktemp -d)"
+          echo "ONEFILE_BENCH_DIR=$ONEFILE_BENCH_DIR" >> "$GITHUB_ENV"
+          ARBOR_WORKER_ONEFILE=1 bash scripts/bundle-worker.sh
+          cp desktop/src-tauri/binaries/arbor-worker-* "$ONEFILE_BENCH_DIR/arbor-worker-onefile"
+
+      - name: Bundle arbor-worker sidecar (onedir)
         run: bash scripts/bundle-worker.sh
 
       - name: Install desktop deps
@@ -52,6 +60,30 @@ jobs:
 
       - name: Smoke test DMG bundle
         run: bash scripts/smoke-macos-bundle.sh desktop/src-tauri/target/release/bundle/dmg/*.dmg
+
+      - name: Benchmark worker startup (macOS)
+        run: |
+          set -euo pipefail
+          DMG=(desktop/src-tauri/target/release/bundle/dmg/*.dmg)
+          MOUNT="$(mktemp -d "${TMPDIR:-/tmp}/arbor-dmg-bench.XXXXXX")"
+          cleanup() { hdiutil detach "$MOUNT" -quiet 2>/dev/null || hdiutil detach "$MOUNT" -force -quiet 2>/dev/null || true; }
+          trap cleanup EXIT
+          hdiutil attach -nobrowse -readonly "${DMG[0]}" -mountpoint "$MOUNT" >/dev/null
+          APP=""
+          for candidate in "$MOUNT"/*.app; do
+            if [[ -d "$candidate" ]]; then
+              APP="$candidate"
+              break
+            fi
+          done
+          WORKER="$APP/Contents/Resources/arbor-worker/arbor-worker"
+          {
+            echo "## onedir (after)"
+            bash scripts/bench-worker.sh "$WORKER"
+            echo ""
+            echo "## onefile (before)"
+            bash scripts/bench-worker.sh "$ONEFILE_BENCH_DIR/arbor-worker-onefile"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         with:

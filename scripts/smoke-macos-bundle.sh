@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Smoke-test a signed macOS .app or .dmg before publish (issue #95).
+# Smoke-test a signed macOS .app or .dmg before publish (issue #95, #97).
 set -euo pipefail
 
 if [[ $# -ne 1 ]]; then
@@ -47,19 +47,35 @@ else
   exit 2
 fi
 
-WORKER="$APP_PATH/Contents/MacOS/arbor-worker"
+WORKER="$APP_PATH/Contents/Resources/arbor-worker/arbor-worker"
+WORKER_DIR="$APP_PATH/Contents/Resources/arbor-worker"
 if [[ ! -f "$WORKER" ]]; then
-  echo "missing worker binary: $WORKER" >&2
+  WORKER="$APP_PATH/Contents/MacOS/arbor-worker"
+  WORKER_DIR="$(dirname "$WORKER")"
+fi
+if [[ ! -f "$WORKER" ]]; then
+  echo "missing worker binary (checked Resources and MacOS paths)" >&2
   exit 1
 fi
 
-SIGNING_OUT="$(codesign -dv --verbose=4 "$WORKER" 2>&1)" || true
-# codesign -dv writes to stderr. The runtime bit is inside the flags list,
-# for example flags=0x10002(adhoc,runtime), not a whitespace-delimited word.
-if printf '%s\n' "$SIGNING_OUT" | grep -E 'flags=0x[0-9a-fA-F]+\([^)]*runtime' >/dev/null; then
-  echo "hardened runtime must be disabled for ad-hoc PyInstaller worker (found runtime flag)" >&2
-  echo "$SIGNING_OUT" >&2
-  exit 1
+check_no_hardened_runtime() {
+  local target="$1"
+  local signing_out
+  signing_out="$(codesign -dv --verbose=4 "$target" 2>&1)" || true
+  if printf '%s\n' "$signing_out" | grep -E 'flags=0x[0-9a-fA-F]+\([^)]*runtime' >/dev/null; then
+    echo "hardened runtime must be disabled for ad-hoc PyInstaller worker (found runtime flag on $target)" >&2
+    echo "$signing_out" >&2
+    exit 1
+  fi
+}
+
+check_no_hardened_runtime "$WORKER"
+if [[ -d "$WORKER_DIR" ]]; then
+  while IFS= read -r f; do
+    if [[ -n "$f" ]] && file "$f" 2>/dev/null | grep -q 'Mach-O'; then
+      check_no_hardened_runtime "$f"
+    fi
+  done < <(find "$WORKER_DIR" -type f 2>/dev/null)
 fi
 
 run_with_timeout() {
@@ -83,6 +99,38 @@ if [[ "$VERSION_OUT" != "$EXPECTED_VERSION" ]]; then
   exit 1
 fi
 
+# Performance gate: 1 warm-up, then 5 timed --version runs (median must be ≤ 1500 ms).
+run_with_timeout 60 "$WORKER" --version >/dev/null || {
+  echo "arbor-worker --version warm-up failed" >&2
+  exit 1
+}
+PERF_RESULT="$(python3 - "$WORKER" <<'PY'
+import subprocess
+import sys
+import time
+
+worker = sys.argv[1]
+times_ms = []
+for i in range(5):
+    start = time.perf_counter()
+    subprocess.run([worker, "--version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+    ms = (time.perf_counter() - start) * 1000.0
+    times_ms.append(ms)
+    print(f"perf --version run {i + 1}: {ms:.1f} ms", flush=True)
+
+times_ms.sort()
+median = times_ms[len(times_ms) // 2]
+print(f"perf --version median: {median:.1f} ms", flush=True)
+if median > 1500.0:
+    print(f"perf gate failed: median {median:.1f} ms > 1500 ms", file=sys.stderr)
+    sys.exit(1)
+PY
+)" || {
+  echo "$PERF_RESULT" >&2
+  exit 1
+}
+printf '%s\n' "$PERF_RESULT"
+
 # The worker prints JSON on stdout. Stderr may carry warnings, so keep it out.
 LIST_OUT="$(run_with_timeout 120 "$WORKER" list-providers)" || {
   echo "arbor-worker list-providers failed" >&2
@@ -95,4 +143,4 @@ python3 -c 'import json,sys; json.loads(sys.argv[1])' "$LIST_JSON" || {
   exit 1
 }
 
-echo "smoke ok: worker $EXPECTED_VERSION, signing without hardened runtime"
+echo "smoke ok: worker $EXPECTED_VERSION, signing without hardened runtime, perf gate passed"
