@@ -56,6 +56,7 @@ test("citationLabel formats digest basename heading and page range", () => {
 
 test("unsupported banner string is exact", () => {
   assert.equal(unsupportedBanner(false), "Not supported by this course");
+  assert.equal(unsupportedBanner(undefined), "Not supported by this course");
   assert.equal(unsupportedBanner(true), null);
 });
 
@@ -69,8 +70,22 @@ test("renderAnswerHtml escapes script and onerror payloads", () => {
   const html = renderAnswerHtml(
     '<script>alert(1)</script>\n<img src=x onerror=alert(1)>',
   );
+  assert.match(html, /&lt;script/);
+  assert.match(html, /&lt;img/);
   assert.doesNotMatch(html, /<script/i);
-  assert.doesNotMatch(html, /onerror/i);
+  assert.doesNotMatch(html, /<img/i);
+  assert.match(html, /onerror/);
+});
+
+test("sendChatMessage snapshots worker history before appending the user line", async () => {
+  const source = await readFile(new URL("../src/main.ts", import.meta.url), "utf8");
+  const start = source.indexOf("async function sendChatMessage");
+  const end = source.indexOf("\nasync function refreshFolderTools", start);
+  const body = source.slice(start, end === -1 ? undefined : end);
+  const historyIndex = body.indexOf("workerHistory(chatLines)");
+  const userAppendIndex = body.indexOf("appendChatLines", historyIndex);
+  assert.ok(historyIndex >= 0, "workerHistory(chatLines) must exist in sendChatMessage");
+  assert.ok(userAppendIndex > historyIndex, "appendChatLines must follow history snapshot");
 });
 
 test("CSP string in tauri.conf.json is unchanged", async () => {

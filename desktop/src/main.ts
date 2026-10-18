@@ -52,6 +52,7 @@ import {
   type ChatCitation,
   type ChatLine,
   type ChatMode,
+  unsupportedBanner,
   visibleTranscript,
   workerHistory,
 } from "./chat";
@@ -388,6 +389,7 @@ function refreshChatControls() {
   chatSendBtn.disabled = busy;
   chatNewBtn.disabled = busy;
   chatClearBtn.disabled = busy;
+  chatCourseSel.disabled = busy;
 }
 
 function renderChatTranscript(course: string) {
@@ -405,7 +407,7 @@ function renderChatTranscript(course: string) {
       answer.className = "chat-answer";
       answer.innerHTML = renderAnswerHtml(line.content ?? "");
       turn.appendChild(answer);
-      const banner = line.supported === false ? "Not supported by this course" : null;
+      const banner = unsupportedBanner(line.supported);
       if (banner) {
         const bannerEl = document.createElement("div");
         bannerEl.className = "chat-banner";
@@ -452,14 +454,15 @@ async function loadChat(course: string) {
   }
 }
 
-async function appendChatLines(course: string, lines: ChatLine[]) {
-  if (!knowledgeRoot) return;
+async function appendChatLines(root: string, course: string, lines: ChatLine[]) {
   await invoke("append_chat_lines", {
-    root: knowledgeRoot,
+    root,
     course,
     lines,
   });
-  chatLines.push(...lines);
+  if (currentCourse === course) {
+    chatLines.push(...lines);
+  }
 }
 
 function chatAuthErrorMessage(error: unknown): string {
@@ -485,22 +488,33 @@ async function sendChatMessage() {
     chatStatusEl.textContent = "Select a model in Settings.";
     return;
   }
+  const course = currentCourse;
+  const mode = chatMode;
+  const root = knowledgeRoot;
+  const history = workerHistory(chatLines);
+
   chatStatusEl.textContent = "Retrieving";
   chatInFlight = true;
   refreshChatControls();
-  const userLine = buildUserLine(chatMode, question);
+  const userLine = buildUserLine(mode, question);
+  let pendingAppend: Promise<void> = Promise.resolve();
   try {
-    await appendChatLines(currentCourse, [userLine]);
-    renderChatTranscript(currentCourse);
+    await appendChatLines(root, course, [userLine]);
+    if (currentCourse === course) {
+      renderChatTranscript(course);
+    }
     chatInputEl.value = "";
     const channel = new Channel<Record<string, unknown>>();
     channel.onmessage = (event) => {
       const type = typeof event.type === "string" ? event.type : "";
       if (type === "chat_retrieved") {
-        chatStatusEl.textContent = "Answering";
+        if (currentCourse === course) {
+          chatStatusEl.textContent = "Answering";
+        }
         return;
       }
       if (type === "chat_delta") {
+        if (currentCourse !== course) return;
         const delta = typeof event.delta === "string" ? event.delta : "";
         if (!chatLiveBubble) {
           chatLiveBubble = document.createElement("div");
@@ -517,20 +531,22 @@ async function sendChatMessage() {
           chatLiveBubble = null;
         }
         const markdown = typeof event.markdown === "string" ? event.markdown : "";
-        const supported = event.supported !== false;
+        const supported = event.supported === true;
         const citations = Array.isArray(event.citations)
           ? (event.citations as ChatCitation[])
           : [];
-        void (async () => {
+        pendingAppend = (async () => {
           const assistantLine = buildAssistantLine(
-            chatMode,
+            mode,
             markdown,
             supported,
             citations,
           );
-          await appendChatLines(currentCourse!, [assistantLine]);
-          renderChatTranscript(currentCourse!);
-          chatStatusEl.textContent = "Done";
+          await appendChatLines(root, course, [assistantLine]);
+          if (currentCourse === course) {
+            renderChatTranscript(course);
+            chatStatusEl.textContent = "Done";
+          }
         })();
         return;
       }
@@ -539,35 +555,41 @@ async function sendChatMessage() {
           typeof event.reason === "string"
             ? event.reason
             : authCheckReason;
-        chatStatusEl.textContent = signedOutJobMessage(
-          currentProviderLabel(),
-          reason,
-        );
+        if (currentCourse === course) {
+          chatStatusEl.textContent = signedOutJobMessage(
+            currentProviderLabel(),
+            reason,
+          );
+        }
         return;
       }
       if (type === "error") {
-        chatStatusEl.textContent =
-          typeof event.message === "string" ? event.message : "Chat failed.";
+        if (currentCourse === course) {
+          chatStatusEl.textContent =
+            typeof event.message === "string" ? event.message : "Chat failed.";
+        }
         return;
       }
       if (type === "worker_exit") {
-        chatInFlight = false;
-        if (chatLiveBubble) {
-          chatLiveBubble.remove();
-          chatLiveBubble = null;
-        }
-        refreshChatControls();
+        void pendingAppend.then(() => {
+          chatInFlight = false;
+          if (chatLiveBubble) {
+            chatLiveBubble.remove();
+            chatLiveBubble = null;
+          }
+          refreshChatControls();
+        });
       }
     };
     await invoke("start_chat", {
       onEvent: channel,
-      root: knowledgeRoot,
-      course: currentCourse,
+      root,
+      course,
       question,
-      mode: chatMode,
+      mode,
       provider: providerId,
       model: modelSel.value,
-      history: workerHistory(chatLines),
+      history,
     });
   } catch (error) {
     chatInFlight = false;
@@ -1870,7 +1892,7 @@ chatInputEl.addEventListener("keydown", (event) => {
 chatNewBtn.addEventListener("click", () => {
   if (!knowledgeRoot || !currentCourse || chatInFlight) return;
   void (async () => {
-    await appendChatLines(currentCourse!, [buildSessionLine()]);
+    await appendChatLines(knowledgeRoot, currentCourse!, [buildSessionLine()]);
     renderChatTranscript(currentCourse!);
     chatStatusEl.textContent = "";
   })();

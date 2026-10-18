@@ -406,6 +406,12 @@ html[data-theme="dark"] .welcome-mark {
   overflow: hidden;
   min-height: 0;
 }
+.content-panel.active[data-panel="chat"] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
 
 /* ── Welcome ── */
 .welcome {

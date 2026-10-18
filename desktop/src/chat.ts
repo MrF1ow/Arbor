@@ -1,20 +1,5 @@
+import { notePathForStudyDigest } from "./concepts.ts";
 import { renderMarkdown } from "./markdown.ts";
-
-function digestKey(path: string): string {
-  const index = path.indexOf("digests/");
-  if (index >= 0) {
-    return path.slice(index);
-  }
-  if (
-    !path.includes("/") &&
-    !path.includes("\\") &&
-    path !== "." &&
-    path !== ".."
-  ) {
-    return `digests/${path}`;
-  }
-  return path;
-}
 
 export type ChatMode = "ask" | "explain" | "quiz";
 
@@ -56,7 +41,7 @@ export function chatNotePath(course: string, digestPath: string): string {
   if (norm === `${course}/course.md` || norm.endsWith("/course.md")) {
     return `${course}/course.md`;
   }
-  return `${course}/${digestKey(digestPath)}`;
+  return notePathForStudyDigest(course, digestPath);
 }
 
 export function citationLabel(citation: ChatCitation): string {
@@ -71,10 +56,7 @@ export function citationLabel(citation: ChatCitation): string {
 }
 
 export function renderAnswerHtml(markdown: string): string {
-  const scrubbed = markdown
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/\bonerror\b/gi, "");
-  return renderMarkdown(scrubbed).html;
+  return renderMarkdown(markdown).html;
 }
 
 export function phaseLabel(eventType: string): string | null {
@@ -84,8 +66,8 @@ export function phaseLabel(eventType: string): string | null {
 }
 
 export function unsupportedBanner(supported: boolean | undefined): string | null {
-  if (supported === false) return "Not supported by this course";
-  return null;
+  if (supported === true) return null;
+  return "Not supported by this course";
 }
 
 export function buildUserLine(mode: ChatMode, content: string): ChatLine {
