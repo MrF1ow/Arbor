@@ -14,8 +14,10 @@ EXPECTED_VERSION="$(
 )"
 
 cleanup_mount() {
-  if [[ -n "${MOUNT_POINT:-}" ]] && mount | grep -q " on ${MOUNT_POINT} "; then
-    hdiutil detach "$MOUNT_POINT" -quiet || hdiutil detach "$MOUNT_POINT" -force -quiet
+  # The mount table shows /private/var for $TMPDIR, so detach without matching it.
+  if [[ -n "${MOUNT_POINT:-}" ]]; then
+    hdiutil detach "$MOUNT_POINT" -quiet 2>/dev/null ||
+      hdiutil detach "$MOUNT_POINT" -force -quiet 2>/dev/null || true
   fi
 }
 
@@ -70,21 +72,27 @@ run_with_timeout() {
   fi
 }
 
-VERSION_OUT="$(run_with_timeout 60 "$WORKER" --version 2>&1)" || {
+VERSION_OUT="$(run_with_timeout 60 "$WORKER" --version)" || {
   echo "arbor-worker --version failed" >&2
   echo "$VERSION_OUT" >&2
   exit 1
 }
-if [[ "$VERSION_OUT" != *"$EXPECTED_VERSION"* ]]; then
+VERSION_OUT="$(printf '%s' "$VERSION_OUT" | tr -d '[:space:]')"
+if [[ "$VERSION_OUT" != "$EXPECTED_VERSION" ]]; then
   echo "expected version $EXPECTED_VERSION in --version output, got: $VERSION_OUT" >&2
   exit 1
 fi
 
-LIST_OUT="$(run_with_timeout 120 "$WORKER" list-providers 2>&1)" || {
+# The worker prints JSON on stdout. Stderr may carry warnings, so keep it out.
+LIST_OUT="$(run_with_timeout 120 "$WORKER" list-providers)" || {
   echo "arbor-worker list-providers failed" >&2
   echo "$LIST_OUT" >&2
   exit 1
 }
-python3 -c 'import json,sys; json.loads(sys.argv[1])' "$LIST_OUT"
+LIST_JSON="$(printf '%s\n' "$LIST_OUT" | awk 'NF { last = $0 } END { print last }')"
+python3 -c 'import json,sys; json.loads(sys.argv[1])' "$LIST_JSON" || {
+  echo "arbor-worker list-providers did not print JSON: $LIST_OUT" >&2
+  exit 1
+}
 
 echo "smoke ok: worker $EXPECTED_VERSION, signing without hardened runtime"
