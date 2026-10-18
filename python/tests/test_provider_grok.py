@@ -146,6 +146,37 @@ def test_run_parses_fixture(tmp_path: Path):
     assert captured["argv"][1] == "--prompt-file"
 
 
+@pytest.mark.parametrize("returncode", [0, 1])
+def test_run_raises_on_max_turn_tool_call(tmp_path: Path, returncode: int):
+    stdout = json.dumps(
+        {
+            "text": "",
+            "stopReason": "max_turn_requests",
+            "thought": "I will read /etc/hostname using the read_file tool.",
+        }
+    )
+
+    def runner(*a, **k):
+        return type("R", (), {"returncode": returncode, "stdout": stdout, "stderr": ""})()
+
+    prov = GrokCliProvider(models=[Model("m", "M")], runner=runner, which=lambda name: "/usr/bin/grok")
+    with pytest.raises(ProviderError, match="tool call") as exc:
+        prov.run(ProviderRequest(prompt="p", model_id="grok-4.7", cwd=tmp_path))
+    assert "max_turn_requests" in str(exc.value)
+    assert "read /etc/hostname" in str(exc.value)
+
+
+def test_run_raises_on_reported_tool_name(tmp_path: Path):
+    stdout = json.dumps({"text": "", "type": "tool_call", "toolName": "some_future_tool"})
+
+    def runner(*a, **k):
+        return type("R", (), {"returncode": 0, "stdout": stdout, "stderr": ""})()
+
+    prov = GrokCliProvider(models=[Model("m", "M")], runner=runner, which=lambda name: "/usr/bin/grok")
+    with pytest.raises(ProviderError, match="some_future_tool"):
+        prov.run(ProviderRequest(prompt="p", model_id="grok-4.7", cwd=tmp_path))
+
+
 def test_run_raises_on_error_json(tmp_path: Path):
     prov = GrokCliProvider(models=[Model("m", "M")], which=lambda name: "/usr/bin/grok", runner=lambda *a, **k: type(
         "R", (), {"returncode": 1, "stdout": '{"type":"error","message":"bad"}', "stderr": ""}

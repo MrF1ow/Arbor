@@ -33,6 +33,40 @@ GROK_DISALLOWED_TOOLS = (
 )
 
 
+def _iter_payload_nodes(payload: dict):
+    yield payload
+    for value in payload.values():
+        if isinstance(value, dict):
+            yield from _iter_payload_nodes(value)
+        elif isinstance(value, list):
+            for item in value:
+                if isinstance(item, dict):
+                    yield from _iter_payload_nodes(item)
+
+
+def _raise_if_tool_call(payload: dict) -> None:
+    if payload.get("stopReason") == "max_turn_requests":
+        thought = payload.get("thought")
+        msg = (
+            "grok consumed the allowed turn on a tool call (stopReason max_turn_requests)"
+        )
+        if isinstance(thought, str) and thought.strip():
+            msg = f"{msg}: {thought.strip()}"
+        raise ProviderError(msg)
+
+    for node in _iter_payload_nodes(payload):
+        node_type = node.get("type")
+        if node_type in ("tool_call", "tool_use"):
+            tool = node.get("toolName") or node.get("name") or node_type
+            raise ProviderError(f"grok reported a tool call ({tool})")
+        tool_name = node.get("toolName")
+        if isinstance(tool_name, str) and tool_name.strip():
+            raise ProviderError(f"grok reported a tool call ({tool_name.strip()})")
+        tool_calls = node.get("tool_calls")
+        if tool_calls:
+            raise ProviderError(f"grok reported tool_calls ({tool_calls!r})")
+
+
 class GrokCliProvider:
     name = "grok"
 
@@ -96,6 +130,7 @@ class GrokCliProvider:
             raise ProviderError(str(payload.get("message") or "grok error"))
         if payload.get("is_error"):
             raise ProviderError(str(payload.get("message") or "grok error"))
+        _raise_if_tool_call(payload)
         text = payload.get("text")
         if not isinstance(text, str) or not text.strip():
             raise ProviderError("grok returned empty text")
@@ -150,10 +185,10 @@ class GrokCliProvider:
                 payload = json.loads(stdout)
             except json.JSONDecodeError:
                 payload = None
-            if isinstance(payload, dict) and (
-                payload.get("type") == "error" or payload.get("is_error")
-            ):
-                raise ProviderError(str(payload.get("message") or "grok error"))
+            if isinstance(payload, dict):
+                if payload.get("type") == "error" or payload.get("is_error"):
+                    raise ProviderError(str(payload.get("message") or "grok error"))
+                _raise_if_tool_call(payload)
             detail = (proc.stderr or proc.stdout or "").strip() or "grok failed"
             raise ProviderError(f"grok failed ({proc.returncode}): {detail}")
         return self._parse_stdout(proc.stdout or "")
