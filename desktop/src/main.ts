@@ -262,6 +262,7 @@ let flashcardDueIds: string[] = [];
 let flashcardDeckCount = 0;
 let flashcardDeckMode: "due" | "full" = "due";
 let flashcardCourse: string | null = null;
+let flashcardGradeInFlight = false;
 let quizReview: QuizReview | null = null;
 let quizProgress: QuizProgress = {};
 let chatLines: ChatLine[] = [];
@@ -875,6 +876,10 @@ function renderCurrentFlashcard() {
   flashcardAgainBtn.hidden = gradesHidden;
   flashcardWrongBtn.hidden = gradesHidden;
   flashcardMasteredBtn.hidden = gradesHidden;
+  const gradeDisabled = gradesHidden || flashcardGradeInFlight;
+  flashcardAgainBtn.disabled = gradeDisabled;
+  flashcardWrongBtn.disabled = gradeDisabled;
+  flashcardMasteredBtn.disabled = gradeDisabled;
 }
 
 async function loadFlashcards(course: string) {
@@ -930,8 +935,12 @@ async function gradeCurrentFlashcard(grade: "again" | "wrong" | "mastered") {
   if (!flashcardReview || !flashcardReview.flipped || flashcardReview.cards.length === 0) {
     return;
   }
+  if (flashcardGradeInFlight) return;
   if (!knowledgeRoot || !flashcardCourse) return;
   const card = currentCard(flashcardReview);
+  flashcardGradeInFlight = true;
+  renderCurrentFlashcard();
+  let gradeSaved = false;
   try {
     await invoke("study_progress", {
       root: knowledgeRoot,
@@ -942,8 +951,14 @@ async function gradeCurrentFlashcard(grade: "again" | "wrong" | "mastered") {
       digest: card.source.digest,
       heading: card.source.heading ?? "",
     });
+    gradeSaved = true;
   } catch (error) {
     logLine(`Could not save flashcard grade: ${error}`);
+  } finally {
+    flashcardGradeInFlight = false;
+  }
+  if (!gradeSaved) {
+    renderCurrentFlashcard();
     return;
   }
   flashcardDueIds = applyGradeToDueIds(flashcardDueIds, card.id, grade);
@@ -2047,7 +2062,7 @@ generateStudyArtifactBtn.addEventListener("click", () => {
 });
 
 flashcardFlipBtn.addEventListener("click", () => {
-  if (!flashcardReview) return;
+  if (!flashcardReview || flashcardReview.cards.length === 0) return;
   flashcardReview = flipReview(flashcardReview);
   renderCurrentFlashcard();
 });
@@ -2079,19 +2094,19 @@ flashcardMasteredBtn.addEventListener("click", () => {
 });
 
 flashcardNextBtn.addEventListener("click", () => {
-  if (!flashcardReview) return;
+  if (!flashcardReview || flashcardReview.cards.length === 0) return;
   flashcardReview = nextReview(flashcardReview);
   renderCurrentFlashcard();
 });
 
 flashcardPrevBtn.addEventListener("click", () => {
-  if (!flashcardReview) return;
+  if (!flashcardReview || flashcardReview.cards.length === 0) return;
   flashcardReview = previousReview(flashcardReview);
   renderCurrentFlashcard();
 });
 
 flashcardShuffleBtn.addEventListener("click", () => {
-  if (!flashcardReview) return;
+  if (!flashcardReview || flashcardReview.cards.length === 0) return;
   flashcardReview = {
     cards: shuffleCards(flashcardReview.cards),
     index: 0,

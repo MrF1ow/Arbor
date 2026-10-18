@@ -177,6 +177,33 @@ test("requeueCurrentCard moves the current card to the end face down", async () 
   assert.equal(solo.flipped, false);
 });
 
+test("requeueCurrentCard on the last of three cards wraps to the first", async () => {
+  const { createReview, requeueCurrentCard, currentCard } = await subject();
+  const threeCardDeck = {
+    ...deck,
+    cards: [
+      deck.cards[0],
+      deck.cards[1],
+      {
+        id: "fc_33333333",
+        front: "What is meiosis?",
+        back: "Gamete formation.",
+        tags: [],
+        source: { digest: "digests/2026-08-15.md", heading: null },
+      },
+    ],
+  };
+  const review = {
+    ...createReview(threeCardDeck),
+    index: 2,
+    flipped: true,
+  };
+  const requeued = requeueCurrentCard(review);
+  assert.equal(currentCard(requeued).id, "fc_11111111");
+  assert.equal(requeued.cards[requeued.cards.length - 1].id, "fc_33333333");
+  assert.equal(requeued.flipped, false);
+});
+
 test("dropCurrentCard removes the current card and keeps the following index", async () => {
   const { createReview, dropCurrentCard, currentCard } = await subject();
   const review = createReview(deck);

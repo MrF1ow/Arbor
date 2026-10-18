@@ -169,9 +169,12 @@ export function requeueCurrentCard(review: FlashcardReview): FlashcardReview {
     ...review.cards.slice(review.index + 1),
     current,
   ];
+  const wasLast = review.index === review.cards.length - 1;
+  const index =
+    rest.length === 1 ? 0 : wasLast ? 0 : review.index;
   return {
     cards: rest,
-    index: rest.length === 1 ? 0 : review.index,
+    index,
     flipped: false,
   };
 }
