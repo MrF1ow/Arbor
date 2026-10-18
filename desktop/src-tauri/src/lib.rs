@@ -51,6 +51,10 @@ pub fn run() {
             commands::read_quiz_progress,
             commands::write_quiz_progress,
             commands::study_artifact_stale,
+            commands::read_chat_history,
+            commands::append_chat_lines,
+            commands::clear_chat_history,
+            commands::start_chat,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Arbor");

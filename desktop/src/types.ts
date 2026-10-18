@@ -1,4 +1,4 @@
-export type Mode = "notes" | "flashcards" | "quiz" | "graph";
+export type Mode = "notes" | "flashcards" | "quiz" | "graph" | "chat";
 
 export type Appearance = "system" | "light" | "dark";
 

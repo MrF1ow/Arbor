@@ -1,6 +1,9 @@
-import { invoke as tauriInvoke } from "@tauri-apps/api/core";
+import { Channel, invoke as tauriInvoke } from "@tauri-apps/api/core";
 import { listen as tauriListen } from "@tauri-apps/api/event";
-import { open as tauriOpen } from "@tauri-apps/plugin-dialog";
+import {
+  confirm as tauriConfirm,
+  open as tauriOpen,
+} from "@tauri-apps/plugin-dialog";
 import { hasTauriInvoke, TAURI_UNAVAILABLE } from "./tauri";
 import {
   advanceAfterGrade,
@@ -42,6 +45,20 @@ import {
   failedIdsFor,
   parseCitationsReport,
 } from "./citations";
+import {
+  buildAssistantLine,
+  buildSessionLine,
+  buildUserLine,
+  chatNotePath,
+  citationLabel,
+  renderAnswerHtml,
+  type ChatCitation,
+  type ChatLine,
+  type ChatMode,
+  unsupportedBanner,
+  visibleTranscript,
+  workerHistory,
+} from "./chat";
 import { headingId, renderMarkdown } from "./markdown";
 import { renderSearchHit } from "./search-hit";
 import { pickerProviders, providerBadge, signedOutJobMessage } from "./provider";
@@ -92,6 +109,13 @@ function open(opts: Parameters<typeof tauriOpen>[0]) {
     return Promise.reject(new Error(TAURI_UNAVAILABLE));
   }
   return tauriOpen(opts);
+}
+
+function confirm(message: string, options?: string | Parameters<typeof tauriConfirm>[1]) {
+  if (!hasTauriInvoke(window)) {
+    return Promise.reject(new Error(TAURI_UNAVAILABLE));
+  }
+  return tauriConfirm(message, options);
 }
 
 type Place = "welcome" | "course" | "jobs" | "settings";
@@ -171,6 +195,19 @@ const conceptNeighborsEl = $("concept-neighbors");
 const conceptSourcesEl = $("concept-sources");
 const notesConceptChipsEl = $("notes-concept-chips");
 const generateCitationsBtn = $("generate-citations") as HTMLButtonElement;
+const chatCourseSel = $("chat-course") as HTMLSelectElement;
+const chatRootEl = $("chat-root");
+const chatModeAskBtn = $("chat-mode-ask") as HTMLButtonElement;
+const chatModeExplainBtn = $("chat-mode-explain") as HTMLButtonElement;
+const chatModeQuizBtn = $("chat-mode-quiz") as HTMLButtonElement;
+const chatNewBtn = $("chat-new") as HTMLButtonElement;
+const chatClearBtn = $("chat-clear") as HTMLButtonElement;
+const chatLogEl = $("chat-log");
+const chatStatusEl = $("chat-status");
+const chatInputEl = $("chat-input") as HTMLTextAreaElement;
+const chatSendBtn = $("chat-send") as HTMLButtonElement;
+const chatArtifactSel = $("chat-artifact") as HTMLSelectElement;
+const generateStudyArtifactBtn = $("generate-study-artifact") as HTMLButtonElement;
 const jobsListEl = $("jobs-list");
 const jobsLogEl = $("jobs-log");
 const providerSel = $("provider") as HTMLSelectElement;
@@ -218,6 +255,10 @@ let flashcardProgress: FlashcardProgress = {};
 let flashcardCourse: string | null = null;
 let quizReview: QuizReview | null = null;
 let quizProgress: QuizProgress = {};
+let chatLines: ChatLine[] = [];
+let chatMode: ChatMode = "ask";
+let chatInFlight = false;
+let chatLiveBubble: HTMLElement | null = null;
 let quizCourse: string | null = null;
 let progressWrite = Promise.resolve();
 let conceptGraph: ConceptGraph | null = null;
@@ -275,6 +316,9 @@ function setCourseView(
   if (mode === "flashcards") void loadFlashcards(course);
   if (mode === "quiz") void loadQuiz(course);
   if (mode === "graph") void loadGraph(course);
+  if (mode === "chat") void loadChat(course);
+  refreshChatCourseOptions();
+  if (knowledgeRoot) chatRootEl.textContent = shortenPath(knowledgeRoot);
   refreshStudyEnabled();
 }
 
@@ -322,6 +366,253 @@ function refreshStudyEnabled() {
   refreshConceptsBtn.disabled = !enabled;
   refreshDiagramsBtn.disabled = !enabled;
   generateCitationsBtn.disabled = !enabled;
+  generateStudyArtifactBtn.disabled = !enabled;
+}
+
+function refreshChatCourseOptions() {
+  const prev = chatCourseSel.value;
+  chatCourseSel.innerHTML = "";
+  for (const course of courses) {
+    const option = document.createElement("option");
+    option.value = course;
+    option.textContent = course;
+    chatCourseSel.appendChild(option);
+  }
+  if (currentCourse && courses.includes(currentCourse)) {
+    chatCourseSel.value = currentCourse;
+  } else if (prev && courses.includes(prev)) {
+    chatCourseSel.value = prev;
+  }
+}
+
+function setChatModeButtons(mode: ChatMode) {
+  chatMode = mode;
+  for (const button of [chatModeAskBtn, chatModeExplainBtn, chatModeQuizBtn]) {
+    const active = button.dataset.chatMode === mode;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", active ? "true" : "false");
+  }
+}
+
+function refreshChatControls() {
+  const busy = chatInFlight;
+  chatSendBtn.disabled = busy;
+  chatNewBtn.disabled = busy;
+  chatClearBtn.disabled = busy;
+  chatCourseSel.disabled = busy;
+}
+
+function renderChatTranscript(course: string) {
+  chatLogEl.innerHTML = "";
+  for (const line of visibleTranscript(chatLines)) {
+    const turn = document.createElement("div");
+    turn.className = `chat-turn chat-${line.role}`;
+    if (line.role === "user") {
+      turn.textContent = line.content ?? "";
+      chatLogEl.appendChild(turn);
+      continue;
+    }
+    if (line.role === "assistant") {
+      const answer = document.createElement("div");
+      answer.className = "chat-answer";
+      answer.innerHTML = renderAnswerHtml(line.content ?? "");
+      turn.appendChild(answer);
+      const banner = unsupportedBanner(line.supported);
+      if (banner) {
+        const bannerEl = document.createElement("div");
+        bannerEl.className = "chat-banner";
+        bannerEl.textContent = banner;
+        turn.appendChild(bannerEl);
+      }
+      const cites = document.createElement("div");
+      cites.className = "chat-citations";
+      for (const citation of line.citations ?? []) {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "source-chip";
+        chip.textContent = citationLabel(citation);
+        chip.addEventListener("click", () => {
+          setCourseView(
+            course,
+            "notes",
+            chatNotePath(course, citation.digest_path ?? ""),
+            citation.heading_id ?? null,
+          );
+        });
+        cites.appendChild(chip);
+      }
+      turn.appendChild(cites);
+      chatLogEl.appendChild(turn);
+    }
+  }
+  chatLogEl.scrollTop = chatLogEl.scrollHeight;
+}
+
+async function loadChat(course: string) {
+  if (!knowledgeRoot) return;
+  try {
+    const rows = await invoke<ChatLine[]>("read_chat_history", {
+      root: knowledgeRoot,
+      course,
+    });
+    chatLines = rows;
+    renderChatTranscript(course);
+  } catch (error) {
+    chatStatusEl.textContent = String(error);
+    chatLines = [];
+    renderChatTranscript(course);
+  }
+}
+
+async function appendChatLines(root: string, course: string, lines: ChatLine[]) {
+  await invoke("append_chat_lines", {
+    root,
+    course,
+    lines,
+  });
+  if (currentCourse === course) {
+    chatLines.push(...lines);
+  }
+}
+
+function chatAuthErrorMessage(error: unknown): string {
+  const text = String(error);
+  if (text.includes("authenticated") || text.includes("auth")) {
+    return signedOutJobMessage(currentProviderLabel(), text);
+  }
+  return text;
+}
+
+async function sendChatMessage() {
+  const question = chatInputEl.value.trim();
+  if (!question || !knowledgeRoot || !currentCourse) return;
+  await refreshAuth();
+  if (abortIfSignedOut()) {
+    chatStatusEl.textContent = signedOutJobMessage(
+      currentProviderLabel(),
+      authCheckReason,
+    );
+    return;
+  }
+  if (!modelSel.value) {
+    chatStatusEl.textContent = "Select a model in Settings.";
+    return;
+  }
+  const course = currentCourse;
+  const mode = chatMode;
+  const root = knowledgeRoot;
+  const history = workerHistory(chatLines);
+
+  chatStatusEl.textContent = "Retrieving";
+  chatInFlight = true;
+  refreshChatControls();
+  const userLine = buildUserLine(mode, question);
+  let pendingAppend: Promise<void> = Promise.resolve();
+  try {
+    await appendChatLines(root, course, [userLine]);
+    if (currentCourse === course) {
+      renderChatTranscript(course);
+    }
+    chatInputEl.value = "";
+    const channel = new Channel<Record<string, unknown>>();
+    channel.onmessage = (event) => {
+      const type = typeof event.type === "string" ? event.type : "";
+      if (type === "chat_retrieved") {
+        if (currentCourse === course) {
+          chatStatusEl.textContent = "Answering";
+        }
+        return;
+      }
+      if (type === "chat_delta") {
+        if (currentCourse !== course) return;
+        const delta = typeof event.delta === "string" ? event.delta : "";
+        if (!chatLiveBubble) {
+          chatLiveBubble = document.createElement("div");
+          chatLiveBubble.className = "chat-turn chat-assistant chat-live";
+          chatLogEl.appendChild(chatLiveBubble);
+        }
+        chatLiveBubble.textContent = (chatLiveBubble.textContent ?? "") + delta;
+        chatLogEl.scrollTop = chatLogEl.scrollHeight;
+        return;
+      }
+      if (type === "chat_done") {
+        if (chatLiveBubble) {
+          chatLiveBubble.remove();
+          chatLiveBubble = null;
+        }
+        const markdown = typeof event.markdown === "string" ? event.markdown : "";
+        const supported = event.supported === true;
+        const citations = Array.isArray(event.citations)
+          ? (event.citations as ChatCitation[])
+          : [];
+        pendingAppend = (async () => {
+          const assistantLine = buildAssistantLine(
+            mode,
+            markdown,
+            supported,
+            citations,
+          );
+          await appendChatLines(root, course, [assistantLine]);
+          if (currentCourse === course) {
+            renderChatTranscript(course);
+            chatStatusEl.textContent = "Done";
+          }
+        })();
+        return;
+      }
+      if (type === "auth_failed") {
+        const reason =
+          typeof event.reason === "string"
+            ? event.reason
+            : authCheckReason;
+        if (currentCourse === course) {
+          chatStatusEl.textContent = signedOutJobMessage(
+            currentProviderLabel(),
+            reason,
+          );
+        }
+        return;
+      }
+      if (type === "error") {
+        if (currentCourse === course) {
+          chatStatusEl.textContent =
+            typeof event.message === "string" ? event.message : "Chat failed.";
+        }
+        return;
+      }
+      if (type === "worker_exit") {
+        void pendingAppend
+          .catch((error) => {
+            logLine(`Could not append chat lines: ${error}`);
+            if (currentCourse === course) {
+              chatStatusEl.textContent = chatAuthErrorMessage(error);
+            }
+          })
+          .finally(() => {
+            chatInFlight = false;
+            if (chatLiveBubble) {
+              chatLiveBubble.remove();
+              chatLiveBubble = null;
+            }
+            refreshChatControls();
+          });
+      }
+    };
+    await invoke("start_chat", {
+      onEvent: channel,
+      root,
+      course,
+      question,
+      mode,
+      provider: providerId,
+      model: modelSel.value,
+      history,
+    });
+  } catch (error) {
+    chatInFlight = false;
+    refreshChatControls();
+    chatStatusEl.textContent = chatAuthErrorMessage(error);
+  }
 }
 
 function refreshFolderTools() {
@@ -376,6 +667,7 @@ async function renderCourseList() {
     btn.addEventListener("click", () => setCourseView(course, "notes"));
     courseListEl.appendChild(btn);
   }
+  refreshChatCourseOptions();
 }
 
 function scrollNotesToHeading(heading: string | null | undefined) {
@@ -894,6 +1186,7 @@ async function startCitationJob(force: boolean) {
 async function activateKnowledgeRoot(picked: string) {
   knowledgeRoot = picked;
   folderHintEl.textContent = shortenPath(picked);
+  chatRootEl.textContent = shortenPath(picked);
   chooseBtn.textContent = "Change folder…";
   try {
     const created = await invoke<boolean>("init_knowledge_repo", { path: picked });
@@ -1591,6 +1884,59 @@ refreshDiagramsBtn.addEventListener("click", () => {
 
 generateCitationsBtn.addEventListener("click", () => {
   void startCitationJob(true);
+});
+
+chatCourseSel.addEventListener("change", () => {
+  const next = chatCourseSel.value;
+  if (next) setCourseView(next, "chat");
+});
+
+chatModeAskBtn.addEventListener("click", () => setChatModeButtons("ask"));
+chatModeExplainBtn.addEventListener("click", () => setChatModeButtons("explain"));
+chatModeQuizBtn.addEventListener("click", () => setChatModeButtons("quiz"));
+
+chatSendBtn.addEventListener("click", () => {
+  void sendChatMessage();
+});
+
+chatInputEl.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    void sendChatMessage();
+  }
+});
+
+chatNewBtn.addEventListener("click", () => {
+  if (!knowledgeRoot || !currentCourse || chatInFlight) return;
+  void (async () => {
+    await appendChatLines(knowledgeRoot, currentCourse!, [buildSessionLine()]);
+    renderChatTranscript(currentCourse!);
+    chatStatusEl.textContent = "";
+  })();
+});
+
+chatClearBtn.addEventListener("click", () => {
+  if (!knowledgeRoot || !currentCourse || chatInFlight) return;
+  void (async () => {
+    const course = currentCourse!;
+    const ok = await confirm(
+      `Delete all chat history for ${course}? This cannot be undone.`,
+      { title: "Clear history", kind: "warning" },
+    );
+    if (!ok) return;
+    await invoke("clear_chat_history", { root: knowledgeRoot, course });
+    chatLines = [];
+    renderChatTranscript(course);
+    chatStatusEl.textContent = "";
+  })();
+});
+
+generateStudyArtifactBtn.addEventListener("click", () => {
+  if (chatArtifactSel.value === "quiz") {
+    void startQuizJob(false);
+  } else {
+    void startFlashcardJob(false);
+  }
 });
 
 flashcardFlipBtn.addEventListener("click", () => {

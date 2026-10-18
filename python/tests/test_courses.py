@@ -48,3 +48,15 @@ def test_ignores_non_source_extensions(tmp_path: Path, make_pdf):
 
     found = _discover(tmp_path)
     assert found == [CourseSource(Path("Biology/a.pdf"), Path("Biology"), "pdf")]
+
+
+def test_ignores_arbor_chat_history_files(tmp_path: Path, make_pdf):
+    chat_dir = tmp_path / ".arbor" / "chat"
+    chat_dir.mkdir(parents=True)
+    make_pdf(chat_dir / "orphan.pdf", pages=1)
+    (chat_dir / "Biology.jsonl").write_text('{"role":"user"}\n', encoding="utf-8")
+    (tmp_path / "Biology").mkdir()
+    make_pdf(tmp_path / "Biology" / "lecture.pdf", pages=1)
+
+    found = _discover(tmp_path)
+    assert [str(s.path) for s in found] == ["Biology/lecture.pdf"]
