@@ -33,9 +33,23 @@ cd desktop && npm install && npm run tauri dev
 | 14 | Packaged build | `npm run tauri build` on Linux produces an AppImage/deb that launches without the repo or `uv` (sidecar proof, Linux equivalent of the Finder box) |
 | 15 | Auth states | Grok signed out → badge shows not signed in and jobs refuse with the provider's message |
 
-## Version 4 / 5 scripts
+## Version 4 script (`v4.0.0`)
 
-Appended by [v4-tutor.md](v4-tutor.md) and [v5-collaboration.md](v5-collaboration.md).
+From [v4-tutor.md](v4-tutor.md). Behavioral Medicine was not on this machine. The 2026-10-18 run used a fresh fixture course, Saltmarsh, built from three multi-page lecture PDFs ingested through the app with Grok `grok-4.7`.
+
+| # | Box | Pass when |
+|---|-----|-----------|
+| T1 | Covered question | Concise answer with a clickable digest/page citation that opens Notes at the heading |
+| T2 | Uncovered question | Explicit "not supported" |
+| T3 | Explain and Quiz | Both stay within course material. The next turn grades the quiz answer and does not ask a new question |
+| T4 | History | Persists across a restart. New and Clear work |
+| T5 | Read-only chat | Knowledge folder unchanged by chat (`git status` clean apart from `.arbor/`) |
+| T6 | Study loop on the fresh course | Due today deck, weak topics (grade some cards wrong first), study plan, and make-card-from-selection |
+| T7 | Signed-out provider | Chat shows the auth state |
+
+## Version 5 script
+
+Appended by [v5-collaboration.md](v5-collaboration.md) when `v5.0.0` closes.
 
 ## Runs
 
@@ -64,3 +78,23 @@ Private Xvfb `:97` (1600x1000), private D-Bus session, `CLAUDECODE=1`, Grok `gro
 `ARBOR_PATH_PREFIX` does not win: the worker prepends `~/.local/bin` before `PATH`, and that directory holds the real `grok` symlink. The signed-out launch used a private mount namespace that bind-mounted a fake `grok` over those two symlinks. Outside the namespace the real symlinks were unchanged. The real Grok CLI was not logged out.
 
 Hyprland `arbor` client count was 0 after every launch in this run. The first dev launch in the previous segment briefly had a portal speak Hyprland protocols; no Arbor window was placed on the real session and no dispatch was sent.
+
+### 2026-10-18 — `release/v4.0.0` (package still `3.5.0` during the run)
+
+Private Xvfb `:97` (1600x1000), private D-Bus session, `CLAUDECODE=1`, Grok `grok-4.7`. No `hyprctl dispatch`. Screenshots with `magick import -display :97`. Knowledge root `/tmp/arbor-v4/Knowledge` (`git init`, empty until the app ingested sources). Course **Saltmarsh**. Behavioral Medicine was not available, so three multi-page lecture PDFs (tidal frame, fiddler crabs, wrack) were generated and ingested through the app. Real `~/.config/com.arbor.app/settings.json` stayed byte-identical (`87c2bcd705df9bebaa657bb89c3010e4cc90069b71f568af35a52d8883a2759b`). No product bug. No Composer fix.
+
+| # | Result | Evidence |
+|---|--------|----------|
+| T1 | Pass | Ask: “What is the carbon burial rate on the Winyah accretion terrace?” Answer: “218 grams of carbon per square meter per year [1][2].” Chips `course.md · saltmarsh` and `2026-10-18T0545.md · important-details · p. 1-3`. The page chip opened Notes on “Important Details”. `/tmp/arbor-v4/shots/T1-answer.png`, `T1-notes.png`. |
+| T2 | Pass | “What is the boiling point of tungsten?” Answer says the sources do not state it. Banner text is “Not supported by this course”. `/tmp/arbor-v4/shots/T2-answer.png`. |
+| T3 | Pass | Explain of Spartina zonation stayed in the course and cited `course.md` (`T3-explain.png`). Quiz asked one question (August stem density and canopy height, `T3-quiz-question.png`). The next turn graded “Correct” with digest and page citations and did not ask another question (`T3-quiz-grade.png`). |
+| T4 | Pass | After a full restart the Chat tab still showed the transcript (`T4-history.png`). New chat emptied the visible log and appended a session line (`T4-new.png`). Clear history confirmed in the dialog (`T4-clear-dialog.png`) and deleted `.arbor/chat/Saltmarsh.jsonl` (`T4-cleared.png`). |
+| T5 | Pass | After the chat session, before study writes: `git status` was only untracked `.arbor/arbor.db`, `.arbor/chat/Saltmarsh.jsonl`, and `.arbor/settings.json`. No tracked diff. `/tmp/arbor-v4/shots/T5-git-status.png`, `/tmp/arbor-v4/shots/T5-git-status.txt`. |
+| T6 | Pass | Flashcard job `job-18df8acbad2b6fbc` committed `d8b11c2` (36 cards). Due today started at 36 (`T6-due.png`). Three Wrong grades left Due today at 33 and listed weak topics Important Details, Key Concepts, and Overview (`T6-graded.png`, `T6-weak.png`). Generate wrote `Saltmarsh/study/plan.md` and the overview rendered it (`T6-plan.png`). Make card from a digest selection saved `fc_ad8768d2` and the deck showed it as 34 of 34, Due today 34, full deck 37, with a page chip (`T6-make-card.png`, `T6-card-saved.png`). |
+| T7 | Pass | Signed-out launch (mount namespace, fake `grok`). Chat badge “Grok · not signed in” with Set up (`T7-auth.png`). The fake binary logged `models` twice and exited 1. Outside the namespace the real Grok CLI still printed “You are logged in with grok.com.” |
+
+Ingest used folder watch plus Confirm. The GTK Open File dialog on `:97` is modal and was not used for the import. The update job generated all three digests and `course.md`, then failed at `git commit` because the isolated `XDG_CONFIG_HOME` hid `~/.config/git/config`. Local identity was set only in `/tmp/arbor-v4/Knowledge`, and the already-written digest was committed as `5d98970`. Settings Reindex indexed 4 documents. Embed did not run. FTS plus `course.md` was enough for the page citation. The study-plan command and make-card append write files and do not commit them, so `plan.md`, `progress.json`, and the appended card stayed untracked or unstaged after T6. That is after the T5 snapshot.
+
+`ARBOR_PATH_PREFIX` does not hide `grok`: the worker prepends `~/.local/bin` and `~/.grok/bin`. T7 bind-mounted a fake `grok` over both symlinks inside a user mount namespace. The real symlinks were unchanged outside it. The real Grok CLI was not logged out.
+
+Hyprland client count for Arbor was 0. Two exact-pid restarts (`pgrep -x desktop` only) cleared a stuck Open File dialog. Xvfb `:97` stayed up. No `hyprctl dispatch`.

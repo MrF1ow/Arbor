@@ -2,15 +2,29 @@
 
 Package version for the worker, desktop, and Tauri app. See [Version numbering](PROJECT.md#version-numbering) in `PROJECT.md`.
 
-**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is complete as package `3.0.0`. **Version 4** is in progress and will ship as `v3.1.0`, `v3.2.0`, … until `v4.0.0`. **Current package:** `3.5.0`. **Current tag:** `v3.5.0` is cut when this release lands. `v3.0.0`, `v3.2.0`, `v3.3.0`, and `v3.4.0` are already tagged. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) was retested on the 2026-10-17 Linux live run.
+**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is complete as package `3.0.0`. **Version 4** is complete as package `4.0.0`. **Version 5** is in progress and will ship as `v4.1.0`, `v4.2.0`, … until `v5.0.0`. **Current package:** `4.0.0`. **Current tag:** `v4.0.0` is cut when this release lands. `v3.0.0` through `v3.5.0` are already tagged. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) was retested on the 2026-10-17 Linux live run.
 
 ## Unreleased
 
-Nothing pending above `3.5.0`.
+Nothing pending above `4.0.0`.
+
+## 4.0.0 — 2026-10-18
+
+Git tag: `v4.0.0` when this release lands. **Product:** Version 4 shipped. Version 5 is in progress (next package `v4.1.0`). Worker, desktop, and Tauri report `4.0.0`, including `arbor-worker --version`.
+
+Linux live run recorded in [linux-live-run.md](docs/superpowers/plans/2026-10-17-roadmap-completion/linux-live-run.md). Boxes T1–T7 passed on a fresh fixture course, Saltmarsh, because Behavioral Medicine was not available. No product fix came out of the run.
+
+- A covered question returns a concise answer. The digest/page chip opens Notes at the heading (T1).
+- An uncovered question shows **Not supported by this course** (T2).
+- Explain and Quiz stay inside the course. The turn after a quiz answer grades it and does not ask a new question (T3).
+- Chat history survives a restart. New chat and Clear history work (T4).
+- Chat leaves the Knowledge tree clean apart from `.arbor/` (T5).
+- Due today, weak topics, the study plan, and make-card-from-selection work on a course ingested in the same run (T6).
+- A signed-out Grok provider shows **Grok · not signed in** on the Chat tab (T7).
 
 ## 3.5.0 — 2026-10-18
 
-Git tag: `v3.5.0` when this release lands. **Product:** Version 4 in progress (API and local providers), not `v4.0.0`. Worker, desktop, and Tauri report `3.5.0`, including `arbor-worker --version`.
+Git tag: `v3.5.0` is tagged. **Product:** Version 4 in progress (API and local providers), not `v4.0.0`. Worker, desktop, and Tauri report `3.5.0`, including `arbor-worker --version`.
 
 - Settings adds **Ollama**, **LM Studio**, **OpenAI API**, and **Anthropic API** as providers alongside the existing CLI options.
 - OpenAI and Anthropic API keys are entered in Settings, stored in the OS keyring, and passed to the worker only as environment variables at process spawn. Keys are never written to `.arbor`, `settings.json`, job history, or argv.

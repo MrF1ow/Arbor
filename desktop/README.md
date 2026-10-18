@@ -1,8 +1,8 @@
 # Arbor Desktop
 
-Tauri v2 shell for Arbor (package **3.5.0**). Drives the `arbor-worker` CLI (see `../python`).
+Tauri v2 shell for Arbor (package **4.0.0**). Drives the `arbor-worker` CLI (see `../python`).
 
-The UI is the Version 3 shell. First delivery was **v2.1.0**. Package **2.2.0** adds the study loop. Package **2.3.0** is the Mac-batch fix release. Version 3 completed at **3.0.0** after the 2026-10-17 Linux live run. Package **3.1.0** adds the worker `chat` command without a Chat tab. Package **3.2.0** adds the Chat tab. Package **3.3.0** adds review scheduling and weak topics. Package **3.4.0** adds study plans, recommendations, and make-card-from-selection. Package **3.5.0** adds Ollama, LM Studio, OpenAI API, and Anthropic API with OS keyring storage for API keys. Mac proof does not block the tag. Sidebar library, course workspace with Notes / Flashcards / Quiz / Graph / Chat tabs, in-app digest preview, and a collapsed bottom inspector for Update and job logs.
+The UI is the Version 3 shell plus the Version 4 tutor. First delivery was **v2.1.0**. Package **2.2.0** adds the study loop. Package **2.3.0** is the Mac-batch fix release. Version 3 completed at **3.0.0** after the 2026-10-17 Linux live run. Package **3.1.0** adds the worker `chat` command without a Chat tab. Package **3.2.0** adds the Chat tab. Package **3.3.0** adds review scheduling and weak topics. Package **3.4.0** adds study plans, recommendations, and make-card-from-selection. Package **3.5.0** adds Ollama, LM Studio, OpenAI API, and Anthropic API with OS keyring storage for API keys. Package **4.0.0** closes Version 4 after the 2026-10-18 Linux live run. Mac proof does not block the tag. Sidebar library, course workspace with Notes / Flashcards / Quiz / Graph / Chat tabs, in-app digest preview, and a collapsed bottom inspector for Update and job logs.
 
 Design spec: [`docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md`](../docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md). Reference mockup: [`docs/mockups/v3-shell.html`](../docs/mockups/v3-shell.html).
 

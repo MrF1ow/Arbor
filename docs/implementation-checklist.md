@@ -10,9 +10,9 @@ Living tracker for **implemented / locally tested / live-run tested**. Capabilit
 - Check **Mac (optional)** only when a recorded MacBook run covered that row. One run covers many rows. Mac never blocks a tag. Do not live-test every PR.
 - **Blockers from Mac runs** at the bottom catch E2E findings from optional Mac proof. Fix locally. Retest on the next Linux live run. They do not start the next version.
 
-**Current era:** Version 4 is in progress. Version 3’s Linux live run is recorded (2026-10-17). A Mac run does not close a version.
+**Current era:** Version 5 is in progress. Version 4’s Linux live run is recorded (2026-10-18). A Mac run does not close a version.
 
-**Current package:** `3.0.0`. **`v3.0.0` is not tagged in this commit** (tag when the release lands). Two Notes rows stayed open: markdown tables, and bold/italic, because no live digest contained them. The 2026-09-20 Mac blockers were retested on this run.
+**Current package:** `4.0.0`. **`v4.0.0` is not tagged in this commit** (tag when the release lands). Version 3’s two Notes rows stay open: markdown tables, and bold/italic, because no live digest contained them. The 2026-09-20 Mac blockers were retested on the 2026-10-17 run.
 
 | Marker | Meaning |
 |--------|---------|
@@ -28,9 +28,9 @@ Living tracker for **implemented / locally tested / live-run tested**. Capabilit
 |------|----|-------------------|
 | Version 1 | Version 2 | Version 1 implemented + locally tested. Mac proof for packaging may ride a later batch. **Passed** (`v2.0.0` tagged). |
 | Version 2 | Version 3 shell | Version 2 features implemented + locally tested. **Passed** (`v2.0.0` tagged; shell is `v2.1.0`). Leftover proof rides the Version 3 Linux live run. Mac proof is optional. |
-| Version 3 work | **`v3.0.0` tag** | Linux live run recorded 2026-10-17. Package `3.0.0`. **Tag not cut in this commit.** Tables and emphasis were not in any live digest, so those two checklist rows stay open. Mac does not block the tag. |
-| Version 3 | Version 4 | **In progress.** Do not treat issue #20 as started. Version 4 ships as `v3.1.0`, `v3.2.0`, … until `v4.0.0`. |
-| Version 4 | Version 5 | `v4.0.0` tagged after a Version 4 Linux live run. |
+| Version 3 work | **`v3.0.0` tag** | Linux live run recorded 2026-10-17. Package `3.0.0` is tagged. Tables and emphasis were not in any live digest, so those two checklist rows stay open. Mac does not block the tag. |
+| Version 3 | Version 4 | **Passed.** Linux live run recorded 2026-10-18. Package `4.0.0`. Tag `v4.0.0` when this release lands. |
+| Version 4 | Version 5 | **In progress.** Next package is `v4.1.0`. |
 
 Local commands (every change):
 
@@ -76,9 +76,9 @@ Shipped `v2.0.0`. Do not add features here. Leftover proof rides the Version 3 L
 
 ---
 
-## Version 3 — study app (current)
+## Version 3 — study app (shipped)
 
-Package `3.0.0`. The 2026-10-17 Linux live run is recorded. Tag `v3.0.0` is not cut in this commit. Tables and emphasis stayed unchecked.
+Package `3.0.0`, tagged `v3.0.0`. The 2026-10-17 Linux live run is recorded. Tables and emphasis stayed unchecked.
 
 ### Shipped (do not re-do)
 
@@ -113,33 +113,35 @@ Pass conditions are the Version 3 script table in [linux-live-run.md](superpower
 
 **Optional Mac proof (does not close Version 3):** 2026-09-20 partial run (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)). Failures are in the Blockers table below.
 
-The 2026-10-17 run is recorded. Package **`3.0.0`**. The git tag is not cut in this commit. Version 4 may proceed as `v3.1.0`, `v3.2.0`, and so on. Tables and emphasis remain open on this checklist.
+The 2026-10-17 run is recorded. Package **`3.0.0`** is tagged. Tables and emphasis remain open on this checklist.
 
 ---
 
-## Version 4 — tutor (blocked)
+## Version 4 — tutor (shipped)
 
-Issue [#20](https://github.com/MrF1ow/Arbor/issues/20). Version 4 is in progress. These rows are not started.
+Issue [#20](https://github.com/MrF1ow/Arbor/issues/20). Shipped as package `4.0.0`. The 2026-10-18 Linux live run is recorded. Behavioral Medicine was not available. The fixture course Saltmarsh stands in for that acceptance row. Tag `v4.0.0` when this release lands. Issue #20 stays open until the parent closes it.
 
 | Item | Implemented | Local/VM | Live run | Mac (optional) |
 |------|-------------|----------|----------|----------------|
-| Chat tab on selected Knowledge root + course | [ ] | [ ] | [ ] | [ ] |
-| Retrieve `course.md` / digests / page metadata before Codex | [ ] | [ ] | [ ] | [ ] |
-| Source-grounded answers; say when unsupported | [ ] | [ ] | [ ] | [ ] |
-| Clickable digest/page citations | [ ] | [ ] | [ ] | [ ] |
-| Per-course history; new/clear chat | [ ] | [ ] | [ ] | [ ] |
-| Read-only Knowledge unless user asks to generate | [ ] | [ ] | [ ] | [ ] |
-| Stream progress; auth/error states | [ ] | [ ] | [ ] | [ ] |
-| Ask / Explain / Quiz modes from course material only | [ ] | [ ] | [ ] | [ ] |
-| Behavioral Medicine cited-answer acceptance run (Linux live run) | [ ] | [ ] | [ ] | [ ] |
+| Chat tab on selected Knowledge root + course | [x] | [x] | [x] | [ ] |
+| Retrieve `course.md` / digests / page metadata before Codex | [x] | [x] | [x] | [ ] |
+| Source-grounded answers; say when unsupported | [x] | [x] | [x] | [ ] |
+| Clickable digest/page citations | [x] | [x] | [x] | [ ] |
+| Per-course history; new/clear chat | [x] | [x] | [x] | [ ] |
+| Read-only Knowledge unless user asks to generate | [x] | [x] | [x] | [ ] |
+| Stream progress; auth/error states | [x] | [x] | [x] | [ ] |
+| Ask / Explain / Quiz modes from course material only | [x] | [x] | [x] | [ ] |
+| Behavioral Medicine cited-answer acceptance run (Linux live run) | [x] | [x] | [x] | [ ] |
 
-Also Version 4 (not extra GitHub issues): review scheduling, weak-topic detection, study plans, make-card-from-selection, extra AI providers.
+Live-run notes: T1 covers the chat tab, retrieval, the covered answer, and the clickable page citation. T2 covers the unsupported banner. T3 covers Explain and Quiz. T4 covers history, New, and Clear. T5 covers read-only chat. T7 covers the signed-out badge. The cited-answer row used Saltmarsh (three lecture PDFs ingested with Grok `grok-4.7`), not Behavioral Medicine. The provider on the live run was Grok, which is the Linux live-run provider. Codex remains the unit-tested path.
+
+Also Version 4 (not extra GitHub issues): review scheduling, weak-topic detection, study plans, and make-card-from-selection passed on Saltmarsh as box T6. Extra AI providers shipped in `3.5.0` and were not re-smoked on this run. Grok signed-out is T7.
 
 ---
 
-## Version 5 — collaboration (blocked)
+## Version 5 — collaboration (in progress)
 
-No current GitHub issue. Cloud sync, shared libraries, marketplaces, permissions, remote workers. Starts after `v4.0.0`.
+No current GitHub issue. Cloud sync, shared libraries, marketplaces, permissions, remote workers. Next package is `v4.1.0`. Version 4 is closed at `v4.0.0`.
 
 ---
 
