@@ -42,6 +42,13 @@ fn default_provider_id() -> String {
     "codex".to_string()
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SkillGrant {
+    pub id: String,
+    pub commit: String,
+    pub permissions: Vec<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Settings {
     #[serde(default)]
@@ -60,6 +67,12 @@ pub struct Settings {
     pub ollama_base_url: Option<String>,
     #[serde(default)]
     pub lmstudio_base_url: Option<String>,
+    #[serde(default)]
+    pub skill_index_source: String,
+    #[serde(default)]
+    pub skill_index_ref: String,
+    #[serde(default)]
+    pub skill_grants: Vec<SkillGrant>,
 }
 
 impl Default for Settings {
@@ -73,6 +86,9 @@ impl Default for Settings {
             appearance: Appearance::default(),
             ollama_base_url: None,
             lmstudio_base_url: None,
+            skill_index_source: String::new(),
+            skill_index_ref: String::new(),
+            skill_grants: vec![],
         }
     }
 }
@@ -194,6 +210,9 @@ mod tests {
             appearance: Appearance::Dark,
             ollama_base_url: None,
             lmstudio_base_url: None,
+            skill_index_source: String::new(),
+            skill_index_ref: String::new(),
+            skill_grants: vec![],
         };
         let back = from_json(&to_json(&s));
         assert_eq!(s, back);
@@ -213,6 +232,22 @@ mod tests {
         assert!(s.model_id.is_none());
         assert_eq!(s.provider_id, "codex");
         assert_eq!(s.appearance, Appearance::System);
+        assert!(s.skill_index_source.is_empty());
+        assert!(s.skill_index_ref.is_empty());
+        assert!(s.skill_grants.is_empty());
+    }
+
+    #[test]
+    fn skill_grant_roundtrip() {
+        let json = r#"{
+            "skill_grants":[{"id":"demo-skill","commit":"0123456789abcdef0123456789abcdef01234567","permissions":["read_course"]}]
+        }"#;
+        let s = from_json(json);
+        assert_eq!(s.skill_grants.len(), 1);
+        assert_eq!(s.skill_grants[0].id, "demo-skill");
+        assert_eq!(s.skill_grants[0].permissions, vec!["read_course".to_string()]);
+        let back = from_json(&to_json(&s));
+        assert_eq!(back.skill_grants, s.skill_grants);
     }
 
     #[test]

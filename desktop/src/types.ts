@@ -27,6 +27,12 @@ export interface KnowledgeRootEntry {
   name: string;
 }
 
+export interface SkillGrant {
+  id: string;
+  commit: string;
+  permissions: string[];
+}
+
 export interface Settings {
   knowledge_root: string | null;
   knowledge_roots: KnowledgeRootEntry[];
@@ -36,6 +42,9 @@ export interface Settings {
   appearance: Appearance;
   ollama_base_url?: string | null;
   lmstudio_base_url?: string | null;
+  skill_index_source?: string;
+  skill_index_ref?: string;
+  skill_grants?: SkillGrant[];
 }
 
 export interface ProviderInfo {

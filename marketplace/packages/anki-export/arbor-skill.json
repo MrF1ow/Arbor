@@ -1,0 +1,9 @@
+{
+  "id": "anki-export",
+  "version": "1.0.0",
+  "kind": "skill",
+  "entry": "anki_export:export_deck",
+  "inputs": ["course"],
+  "outputs": ["tsv"],
+  "permissions": ["read_course", "write_export_dir"]
+}

@@ -174,6 +174,31 @@ def build_parser() -> argparse.ArgumentParser:
     lj.add_argument("--url", required=True, help="Git URL of the shared library.")
     lj.add_argument("--dest", required=True, help="Empty folder path for the clone.")
 
+    si = sub.add_parser("skill-install", help="Install a skill package from a pinned git commit.")
+    si.add_argument("--git", required=True, dest="git", help="Git URL or local repository path.")
+    si.add_argument("--commit", required=True, help="Full 40-character lowercase commit SHA.")
+    si.add_argument("--subdir", default=None, help="Package directory inside the repository.")
+    si.add_argument("--data-home", default=None, dest="data_home", help="Arbor data home (XDG data dir).")
+    si.add_argument("--id", default=None, dest="id", help="Expected manifest id.")
+
+    su = sub.add_parser("skill-uninstall", help="Remove an installed skill package id.")
+    su.add_argument("--id", required=True, dest="id", help="Skill package id.")
+    su.add_argument("--data-home", default=None, dest="data_home", help="Arbor data home (XDG data dir).")
+
+    sx = sub.add_parser("skill-index", help="Load a marketplace index from a local source.")
+    sx.add_argument("--source", required=True, help="Local file, directory, or git URL.")
+    sx.add_argument("--ref", default=None, help="Git ref when reading from a repository.")
+
+    sr = sub.add_parser("skill-run", help="Run an installed skill package.")
+    sr.add_argument("--id", required=True, dest="id", help="Skill package id.")
+    sr.add_argument("--commit", required=True, help="Full 40-character lowercase commit SHA.")
+    sr.add_argument("--root", required=True, help="Knowledge repository root.")
+    sr.add_argument("--course", required=True, help="Course name.")
+    sr.add_argument("--export-dir", required=True, dest="export_dir", help="Export directory.")
+    sr.add_argument("--data-home", default=None, dest="data_home", help="Arbor data home (XDG data dir).")
+    sr.add_argument("--grant", action="append", dest="grant", default=[], help="Granted permission (repeatable).")
+    sr.add_argument("--confirmed", action="store_true", help="Confirm the permission grant.")
+
     return parser
 
 
@@ -241,4 +266,16 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "library-join":
         from arbor_worker.commands import cmd_library_join
         return cmd_library_join(args)
+    if args.command == "skill-index":
+        from arbor_worker.skillpkg.index import cmd_skill_index
+        return cmd_skill_index(args)
+    if args.command == "skill-install":
+        from arbor_worker.skillpkg.install import cmd_skill_install
+        return cmd_skill_install(args)
+    if args.command == "skill-uninstall":
+        from arbor_worker.skillpkg.install import cmd_skill_uninstall
+        return cmd_skill_uninstall(args)
+    if args.command == "skill-run":
+        from arbor_worker.skillpkg.run import cmd_skill_run
+        return cmd_skill_run(args)
     return 2
