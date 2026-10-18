@@ -512,6 +512,7 @@ Package releases (`0.1.0`, `0.2.0`, `1.0.0`, `2.0.0`, …) are in [`CHANGELOG.md
 | `v4.4.0` | Version 5 (partial) | **Shipped** as package `4.4.0` on 2026-10-18. Library roles and shared provider profiles. Tagged. |
 | `v4.5.0` | Version 5 (partial) | **Shipped** as package `4.5.0` on 2026-10-18. Remote workers over SSH. Tag when this release lands. |
 | `v5.0.0` | Version 5 | **Shipped** as package `5.0.0` on 2026-10-18. Collaboration milestone complete. Linux live run recorded. Tag when this release lands. |
+| `v5.0.1` | Version 5 (patch) | **Shipped** as package `5.0.1` on 2026-10-18. macOS worker startup and CLI discovery ([#95](https://github.com/MrF1ow/Arbor/issues/95)). Tag when this release lands. |
 
 Do not tag `v3.0.0` for the shell alone, a fix release, or partial delivery. The desktop shell shipped in **`v2.1.0`**. The study loop shipped in **`v2.2.0`**. Mac-batch fixes ship in **`v2.3.0`**. Version 4 shipped as `v3.1.0` through `v3.5.0`, then closed at **`v4.0.0`**. Version 5 shipped as `v4.1.0` through `v4.5.0`, then closed at **`v5.0.0`**.
 
@@ -794,7 +795,7 @@ Goal:
 
 Collaboration.
 
-**Status:** Shipped as package `5.0.0` on 2026-10-18. Linux live run recorded (boxes C1–C6; the skill TSV run stays open, issue #70). Tag `v5.0.0` when this release lands. Version 4 is closed at `v4.0.0`. Mac proof is optional.
+**Status:** Version 5 shipped as package `5.0.0` on 2026-10-18. Current package is `5.0.1` (macOS worker patch, issue #95). Linux live run recorded (boxes C1–C6; the skill TSV run stays open, issue #70). Tag `v5.0.1` when this release lands. Version 4 is closed at `v4.0.0`. Mac proof is optional.
 
 Features
 
