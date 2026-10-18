@@ -2139,11 +2139,12 @@ quizSubmitBtn.addEventListener("click", () => {
   if (!quizReview || quizReview.selected === null || !knowledgeRoot || !quizCourse) return;
   const question = currentQuestion(quizReview);
   const wasSubmitted = quizReview.submitted;
-  const result = submitChoice(quizReview, quizReview.selected, quizProgress);
+  const choiceIndex = quizReview.selected;
+  const result = submitChoice(quizReview, choiceIndex, quizProgress);
   quizReview = result.review;
   quizProgress = result.progress;
   if (!wasSubmitted && quizReview.submitted) {
-    const correct = quizReview.selected === question.answer_index;
+    const correct = choiceIndex === question.answer_index;
     const root = knowledgeRoot;
     const course = quizCourse;
     const payload = {
@@ -2157,6 +2158,7 @@ quizSubmitBtn.addEventListener("click", () => {
     };
     progressWrite = progressWrite
       .then(() => invoke("study_progress", payload))
+      .then(() => undefined)
       .catch((error) => logLine(`Could not save quiz answer: ${error}`));
   }
   renderCurrentQuiz();
