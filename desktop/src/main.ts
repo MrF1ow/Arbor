@@ -64,6 +64,14 @@ import {
 import { headingId, renderMarkdown } from "./markdown";
 import { renderSearchHit } from "./search-hit";
 import { pickerProviders, providerBadge, signedOutJobMessage } from "./provider";
+import {
+  effectiveProvider,
+  LIBRARY_RECOMMENDATION_LABEL,
+  skillHasWritePermission,
+  VIEWER_WRITE_REASON,
+  viewerBlocksWrite,
+  type LibraryRole,
+} from "./library-role";
 import { parseAppearance, resolvedTheme } from "./theme";
 import type {
   Appearance,
@@ -90,6 +98,8 @@ import type {
   Selection,
   KnowledgeRootEntry,
   KnowledgeKind,
+  LibraryShowResult,
+  ProviderOverride,
   Settings,
   SkillGrant,
   UpdatePlan,
@@ -249,6 +259,7 @@ const generateStudyArtifactBtn = $("generate-study-artifact") as HTMLButtonEleme
 const jobsListEl = $("jobs-list");
 const jobsLogEl = $("jobs-log");
 const providerSel = $("provider") as HTMLSelectElement;
+const providerRecommendationEl = $("provider-recommendation");
 const providerKeyRow = $("provider-key-row");
 const providerKeyInput = $("provider-key") as HTMLInputElement;
 const providerKeySaveBtn = $("provider-key-save") as HTMLButtonElement;
@@ -284,6 +295,19 @@ const libraryJoinErrorEl = $("library-join-error");
 const libraryJoinConfirmBtn = $("library-join-confirm") as HTMLButtonElement;
 const libraryJoinCancelBtn = $("library-join-cancel") as HTMLButtonElement;
 const syncStatusEl = $("sync-status");
+const libraryRoleNoteEl = $("library-role-note");
+const libraryRoleNoteSettingsEl = $("library-role-note-settings");
+const librarySettingsBlockEl = $("library-settings-block");
+const libraryMembersEl = $("library-members");
+const libraryMemberEmailInput = $("library-member-email") as HTMLInputElement;
+const libraryMemberRoleSel = $("library-member-role") as HTMLSelectElement;
+const libraryMemberAddBtn = $("library-member-add") as HTMLButtonElement;
+const libraryMembersSaveBtn = $("library-members-save") as HTMLButtonElement;
+const libraryProviderIdInput = $("library-provider-id") as HTMLInputElement;
+const libraryProviderModelInput = $("library-provider-model") as HTMLInputElement;
+const libraryProviderSaveBtn = $("library-provider-save") as HTMLButtonElement;
+const libraryProviderClearBtn = $("library-provider-clear") as HTMLButtonElement;
+const librarySettingsNoteEl = $("library-settings-note");
 const skillIndexSourceInput = $("skill-index-source") as HTMLInputElement;
 const skillIndexRefInput = $("skill-index-ref") as HTMLInputElement;
 const skillIndexSaveBtn = $("skill-index-save") as HTMLButtonElement;
@@ -309,7 +333,7 @@ const cancelBtn = $("cancel") as HTMLButtonElement;
 const logEl = $("log");
 const reviewEl = $("review");
 const reviewRowsEl = $("review-rows") as HTMLTableSectionElement;
-const confirmBtn = $("confirm-update");
+const confirmUpdateBtn = $("confirm-update") as HTMLButtonElement;
 const cancelReviewBtn = $("cancel-review");
 const inspectorBodyEl = $("inspector-body");
 const inspectorToggleBtn = $("inspector-toggle");
@@ -323,6 +347,14 @@ const searchResultsEl = $("search-results");
 let knowledgeRoot: string | null = null;
 let knowledgeRoots: KnowledgeRootEntry[] = [];
 let providerId = "codex";
+let settingsProviderId = "codex";
+let settingsModelId: string | null = null;
+let providerOverrides: ProviderOverride[] = [];
+let programmaticProviderChange = false;
+let libraryRole: LibraryRole | null = null;
+let libraryPresent = false;
+let libraryProvider: { id: string; model: string } | null = null;
+let libraryMembersDraft: { email: string; role: LibraryRole }[] = [];
 let ollamaBaseUrl = "";
 let lmstudioBaseUrl = "";
 let skillIndexSource = "";
@@ -467,28 +499,62 @@ function setPlaceView(place: Place) {
   }
 }
 
+function refreshLibraryRoleNotes() {
+  const blocked = viewerBlocksWrite(libraryRole);
+  for (const el of [libraryRoleNoteEl, libraryRoleNoteSettingsEl]) {
+    if (blocked) {
+      el.hidden = false;
+      el.textContent = VIEWER_WRITE_REASON;
+    } else {
+      el.hidden = true;
+      el.textContent = "";
+    }
+  }
+}
+
+function viewerWriteBlockedEarly(): boolean {
+  if (!viewerBlocksWrite(libraryRole)) return false;
+  refreshLibraryRoleNotes();
+  return true;
+}
+
+function setViewerWriteButtonState(btn: HTMLButtonElement, baseEnabled: boolean) {
+  const blocked = viewerBlocksWrite(libraryRole);
+  btn.disabled = !baseEnabled || blocked;
+  if (blocked) btn.title = VIEWER_WRITE_REASON;
+  else btn.removeAttribute("title");
+}
+
 function refreshUpdateEnabled() {
-  updateBtn.disabled = !(authed && knowledgeRoot && currentPlace === "course");
+  const base = authed && knowledgeRoot && currentPlace === "course";
+  setViewerWriteButtonState(updateBtn, base);
+  setViewerWriteButtonState(confirmUpdateBtn, base);
 }
 
 function refreshStudyEnabled() {
-  const enabled = Boolean(
+  const baseEnabled = Boolean(
     authed &&
       knowledgeRoot &&
       currentCourse &&
       modelSel.value &&
       !studyJobRunning,
   );
-  generateFlashcardsBtn.disabled = !enabled;
-  refreshFlashcardsBtn.disabled = !enabled;
-  generateQuizBtn.disabled = !enabled;
-  refreshQuizBtn.disabled = !enabled;
-  generateConceptsBtn.disabled = !enabled;
-  generateDiagramsBtn.disabled = !enabled;
-  refreshConceptsBtn.disabled = !enabled;
-  refreshDiagramsBtn.disabled = !enabled;
-  generateCitationsBtn.disabled = !enabled;
-  generateStudyArtifactBtn.disabled = !enabled;
+  const writeButtons = [
+    generateFlashcardsBtn,
+    refreshFlashcardsBtn,
+    generateQuizBtn,
+    refreshQuizBtn,
+    generateConceptsBtn,
+    generateDiagramsBtn,
+    refreshConceptsBtn,
+    refreshDiagramsBtn,
+    generateCitationsBtn,
+    generateStudyArtifactBtn,
+    studyPlanGenerateBtn,
+  ];
+  for (const btn of writeButtons) {
+    setViewerWriteButtonState(btn, baseEnabled);
+  }
 }
 
 function refreshChatCourseOptions() {
@@ -757,6 +823,163 @@ function refreshFolderTools() {
   refreshStudyEnabled();
 }
 
+function upsertProviderOverride(path: string, provider_id: string, model_id: string | null) {
+  providerOverrides = [
+    ...providerOverrides.filter((o) => o.path !== path),
+    { path, provider_id, model_id },
+  ];
+}
+
+function currentEffectiveProvider() {
+  return effectiveProvider({
+    root: knowledgeRoot,
+    settingsProviderId,
+    settingsModelId,
+    overrides: providerOverrides,
+    libraryProvider,
+  });
+}
+
+function refreshProviderRecommendationUi() {
+  const eff = currentEffectiveProvider();
+  if (eff.source === "library") {
+    providerRecommendationEl.hidden = false;
+    providerRecommendationEl.textContent = LIBRARY_RECOMMENDATION_LABEL;
+  } else {
+    providerRecommendationEl.hidden = true;
+    providerRecommendationEl.textContent = LIBRARY_RECOMMENDATION_LABEL;
+  }
+}
+
+async function applyEffectiveProviderForActiveRoot() {
+  const eff = currentEffectiveProvider();
+  programmaticProviderChange = true;
+  try {
+    await loadProviders(eff.providerId);
+    providerId = eff.providerId;
+    providerSel.value = eff.providerId;
+    refreshProviderExtraRows();
+    await loadModels(eff.modelId);
+    refreshProviderRecommendationUi();
+  } finally {
+    programmaticProviderChange = false;
+  }
+}
+
+async function refreshLibraryShow() {
+  libraryRole = null;
+  libraryPresent = false;
+  libraryProvider = null;
+  libraryMembersDraft = [];
+  if (!knowledgeRoot) {
+    librarySettingsBlockEl.hidden = true;
+    renderLibrarySettingsUi();
+    refreshLibraryRoleNotes();
+    refreshProviderRecommendationUi();
+    refreshUpdateEnabled();
+    refreshStudyEnabled();
+    refreshMakeCardButton();
+    return;
+  }
+  try {
+    const show = await invoke<LibraryShowResult>("library_show", { root: knowledgeRoot });
+    if (!show.present) {
+      librarySettingsBlockEl.hidden = true;
+      renderLibrarySettingsUi();
+      refreshLibraryRoleNotes();
+      refreshProviderRecommendationUi();
+      refreshUpdateEnabled();
+      refreshStudyEnabled();
+      refreshMakeCardButton();
+      return;
+    }
+    libraryPresent = true;
+    libraryRole = show.role;
+    libraryProvider = show.provider;
+    libraryMembersDraft = show.members.map((m) => ({ ...m }));
+  } catch (error) {
+    logLine(`library-show failed: ${error}`);
+    libraryRole = null;
+    libraryPresent = false;
+    libraryProvider = null;
+    libraryMembersDraft = [];
+  }
+  librarySettingsBlockEl.hidden = !libraryPresent;
+  renderLibrarySettingsUi();
+  refreshLibraryRoleNotes();
+  refreshProviderRecommendationUi();
+  refreshUpdateEnabled();
+  refreshStudyEnabled();
+  refreshMakeCardButton();
+}
+
+function renderLibrarySettingsUi() {
+  librarySettingsNoteEl.textContent = "";
+  libraryMembersEl.innerHTML = "";
+  if (!libraryPresent || !knowledgeRoot) {
+    libraryMemberAddBtn.disabled = true;
+    libraryMembersSaveBtn.disabled = true;
+    libraryMemberEmailInput.disabled = true;
+    libraryMemberRoleSel.disabled = true;
+    libraryProviderIdInput.disabled = true;
+    libraryProviderModelInput.disabled = true;
+    libraryProviderSaveBtn.disabled = true;
+    libraryProviderClearBtn.disabled = true;
+    return;
+  }
+
+  const owner = libraryRole === "owner";
+  const canEditProvider = libraryRole === "owner" || libraryRole === "editor";
+
+  if (!owner) {
+    librarySettingsNoteEl.textContent = "Only an owner can edit library members.";
+  }
+
+  libraryMemberEmailInput.disabled = !owner;
+  libraryMemberRoleSel.disabled = !owner;
+  libraryMemberAddBtn.disabled = !owner;
+  libraryMembersSaveBtn.disabled = !owner;
+
+  libraryProviderIdInput.disabled = !canEditProvider;
+  libraryProviderModelInput.disabled = !canEditProvider;
+  libraryProviderSaveBtn.disabled = !canEditProvider;
+  libraryProviderClearBtn.disabled = !canEditProvider;
+
+  libraryProviderIdInput.value = libraryProvider?.id ?? "";
+  libraryProviderModelInput.value = libraryProvider?.model ?? "";
+
+  for (let i = 0; i < libraryMembersDraft.length; i++) {
+    const member = libraryMembersDraft[i];
+    const row = document.createElement("div");
+    row.className = "setting-row";
+
+    const emailSpan = document.createElement("span");
+    emailSpan.textContent = member.email;
+    row.appendChild(emailSpan);
+
+    if (owner) {
+      const roleSel = document.createElement("select");
+      for (const role of ["owner", "editor", "viewer"] as LibraryRole[]) {
+        const opt = document.createElement("option");
+        opt.value = role;
+        opt.textContent = role;
+        roleSel.appendChild(opt);
+      }
+      roleSel.value = member.role;
+      roleSel.addEventListener("change", () => {
+        libraryMembersDraft[i] = { ...member, role: roleSel.value as LibraryRole };
+      });
+      row.appendChild(roleSel);
+    } else {
+      const roleText = document.createElement("span");
+      roleText.textContent = member.role;
+      row.appendChild(roleText);
+    }
+
+    libraryMembersEl.appendChild(row);
+  }
+}
+
 function systemPrefersDark(): boolean {
   return window.matchMedia("(prefers-color-scheme: dark)").matches;
 }
@@ -809,7 +1032,7 @@ async function switchKnowledgeRoot(path: string, course?: string) {
   }
   clearChatTranscriptForRootSwitch();
   refreshChatCourseOptions();
-  void refreshSyncUi();
+  await refreshSyncUi();
   await persist();
   if (course) {
     setCourseView(course, "notes");
@@ -991,21 +1214,21 @@ function refreshMakeCardButton() {
       clearMakeCardSnapshot();
       clearMakeCardDraft();
     }
-    makeCardBtn.disabled = true;
+    setViewerWriteButtonState(makeCardBtn, false);
     return;
   }
   if (tryUpdateMakeCardSnapshotFromSelection()) {
-    makeCardBtn.disabled = false;
+    setViewerWriteButtonState(makeCardBtn, true);
     return;
   }
   if (makeCardButtonEngaged() && makeCardSelectionText) {
-    makeCardBtn.disabled = false;
+    setViewerWriteButtonState(makeCardBtn, true);
     return;
   }
   if (!makeCardDialogEl.open) {
     clearMakeCardSnapshot();
   }
-  makeCardBtn.disabled = true;
+  setViewerWriteButtonState(makeCardBtn, false);
 }
 
 function updateNotesChrome(relativePath: string) {
@@ -1418,6 +1641,7 @@ function abortIfSignedOut(): boolean {
 
 async function startFlashcardJob(force: boolean) {
   if (!knowledgeRoot || !currentCourse || !modelSel.value) return;
+  if (viewerWriteBlockedEarly()) return;
   await refreshAuth();
   if (abortIfSignedOut()) return;
   studyJobRunning = true;
@@ -1648,6 +1872,7 @@ async function loadGraph(course: string) {
 
 async function startQuizJob(force: boolean) {
   if (!knowledgeRoot || !currentCourse || !modelSel.value) return;
+  if (viewerWriteBlockedEarly()) return;
   await refreshAuth();
   if (abortIfSignedOut()) return;
   studyJobRunning = true;
@@ -1667,6 +1892,7 @@ async function startQuizJob(force: boolean) {
 
 async function startConceptJob(force: boolean) {
   if (!knowledgeRoot || !currentCourse || !modelSel.value) return;
+  if (viewerWriteBlockedEarly()) return;
   await refreshAuth();
   if (abortIfSignedOut()) return;
   studyJobRunning = true;
@@ -1686,6 +1912,7 @@ async function startConceptJob(force: boolean) {
 
 async function startDiagramJob(force: boolean) {
   if (!knowledgeRoot || !currentCourse || !modelSel.value) return;
+  if (viewerWriteBlockedEarly()) return;
   await refreshAuth();
   if (abortIfSignedOut()) return;
   studyJobRunning = true;
@@ -1722,6 +1949,7 @@ async function loadCitations(course: string) {
 
 async function startCitationJob(force: boolean) {
   if (!knowledgeRoot || !currentCourse || !modelSel.value) return;
+  if (viewerWriteBlockedEarly()) return;
   await refreshAuth();
   if (abortIfSignedOut()) return;
   studyJobRunning = true;
@@ -1753,8 +1981,6 @@ async function activateKnowledgeRoot(picked: string) {
   } catch (e) {
     logLine(`Could not initialize git: ${e}`);
   }
-  await loadProviders(providerId);
-  await loadModels(modelSel.value || null);
   await switchKnowledgeRoot(picked);
   refreshFolderTools();
 }
@@ -1778,6 +2004,8 @@ async function refreshSyncUi() {
   } catch {
     /* sync config may be unreadable before init */
   }
+  await refreshLibraryShow();
+  await applyEffectiveProviderForActiveRoot();
 }
 
 function refreshSkillsUi() {
@@ -1843,6 +2071,12 @@ function renderSkillPackages(packages: SkillIndexPackage[]) {
     runBtn.type = "button";
     runBtn.className = "btn-secondary";
     runBtn.textContent = "Run";
+    const viewerBlocksSkillRun =
+      viewerBlocksWrite(libraryRole) && skillHasWritePermission(pkg.permissions);
+    if (viewerBlocksSkillRun) {
+      runBtn.disabled = true;
+      runBtn.title = VIEWER_WRITE_REASON;
+    }
     runBtn.addEventListener("click", () => void runSkillPackage(pkg));
     actions.appendChild(runBtn);
 
@@ -1905,6 +2139,11 @@ async function runSkillPackage(pkg: SkillIndexPackage) {
   }
   if (!knowledgeRoot) {
     skillStatusEl.textContent = "Choose a knowledge folder first";
+    return;
+  }
+  if (viewerBlocksWrite(libraryRole) && skillHasWritePermission(pkg.permissions)) {
+    refreshLibraryRoleNotes();
+    skillStatusEl.textContent = VIEWER_WRITE_REASON;
     return;
   }
   const grant = skillGrantFor(pkg);
@@ -2080,6 +2319,7 @@ async function startUpdateWithSelections(
   trigger: "manual" | "watch" = "manual",
 ) {
   if (!knowledgeRoot || !modelSel.value) return;
+  if (viewerWriteBlockedEarly()) return;
   reviewEl.hidden = true;
   updateBtn.disabled = true;
   cancelBtn.disabled = false;
@@ -2405,7 +2645,10 @@ async function loadProviders(selectedId: string) {
 
 async function loadSettings() {
   const s = await invoke<Settings>("get_settings");
-  providerId = s.provider_id?.trim() || "codex";
+  settingsProviderId = s.provider_id?.trim() || "codex";
+  settingsModelId = s.model_id ?? null;
+  providerId = settingsProviderId;
+  providerOverrides = Array.isArray(s.provider_overrides) ? [...s.provider_overrides] : [];
   ollamaBaseUrl = s.ollama_base_url?.trim() ?? "";
   lmstudioBaseUrl = s.lmstudio_base_url?.trim() ?? "";
   skillIndexSource = s.skill_index_source?.trim() ?? "";
@@ -2414,11 +2657,6 @@ async function loadSettings() {
   appearance = s.appearance ?? "system";
   appearanceSel.value = appearance;
   applyTheme();
-  try {
-    await loadProviders(providerId);
-  } catch (error) {
-    logLine(`Could not load providers: ${error}`);
-  }
   knowledgeRoots = Array.isArray(s.knowledge_roots) ? [...s.knowledge_roots] : [];
   const activePath = s.active_root ?? s.knowledge_root;
   if (activePath) {
@@ -2432,16 +2670,17 @@ async function loadSettings() {
       setCourseView(courses[0], "notes");
     }
     refreshFolderTools();
-    void refreshSyncUi();
+    await refreshSyncUi();
   } else {
     knowledgeRoot = null;
     setPlaceView("welcome");
-  }
-  try {
-    await loadModels(s.model_id);
-  } catch (error) {
-    modelSel.innerHTML = "";
-    logLine(`Could not load models: ${error}`);
+    try {
+      await loadProviders(settingsProviderId);
+      await loadModels(settingsModelId);
+    } catch (error) {
+      modelSel.innerHTML = "";
+      logLine(`Could not load providers or models: ${error}`);
+    }
   }
   refreshProviderExtraRows();
   await refreshProviderKeyStatus();
@@ -2454,14 +2693,15 @@ async function persist() {
       knowledge_roots: knowledgeRoots,
       active_root: knowledgeRoot,
       knowledge_root: knowledgeRoot,
-      model_id: modelSel.value || null,
-      provider_id: providerId,
+      model_id: settingsModelId,
+      provider_id: settingsProviderId,
       appearance,
       ollama_base_url: ollamaBaseUrl.trim() || null,
       lmstudio_base_url: lmstudioBaseUrl.trim() || null,
       skill_index_source: skillIndexSource,
       skill_index_ref: skillIndexRef,
       skill_grants: skillGrants,
+      provider_overrides: providerOverrides,
     } satisfies Settings,
   });
 }
@@ -2790,7 +3030,7 @@ libraryCreateConfirmBtn.addEventListener("click", async () => {
     }
     await persist();
     await renderCourseList();
-    void refreshSyncUi();
+    await refreshSyncUi();
     libraryCreateDialogEl.close();
   } catch (error) {
     libraryCreateErrorEl.textContent = String(error);
@@ -2858,6 +3098,81 @@ libraryJoinConfirmBtn.addEventListener("click", async () => {
     joinLibraryBtn.disabled = false;
     libraryJoinConfirmBtn.disabled = false;
   }
+});
+
+libraryMemberAddBtn.addEventListener("click", () => {
+  if (libraryRole !== "owner") return;
+  const email = libraryMemberEmailInput.value.trim();
+  if (!email) return;
+  const role = libraryMemberRoleSel.value as LibraryRole;
+  libraryMembersDraft.push({ email, role });
+  libraryMemberEmailInput.value = "";
+  renderLibrarySettingsUi();
+});
+
+libraryMembersSaveBtn.addEventListener("click", () => {
+  void (async () => {
+    if (!knowledgeRoot || libraryRole !== "owner") return;
+    if (!libraryMembersDraft.some((m) => m.role === "owner")) {
+      librarySettingsNoteEl.textContent = "At least one owner is required.";
+      return;
+    }
+    librarySettingsNoteEl.textContent = "";
+    try {
+      await invoke("library_set_members", {
+        root: knowledgeRoot,
+        members: libraryMembersDraft,
+      });
+      await refreshLibraryShow();
+      await applyEffectiveProviderForActiveRoot();
+    } catch (error) {
+      librarySettingsNoteEl.textContent = String(error);
+    }
+  })();
+});
+
+libraryProviderSaveBtn.addEventListener("click", () => {
+  void (async () => {
+    if (!knowledgeRoot || (libraryRole !== "owner" && libraryRole !== "editor")) return;
+    const id = libraryProviderIdInput.value.trim();
+    const model = libraryProviderModelInput.value.trim();
+    if (!id || !model) {
+      librarySettingsNoteEl.textContent = "Provider id and model are required.";
+      return;
+    }
+    librarySettingsNoteEl.textContent = "";
+    try {
+      await invoke("library_set_provider", {
+        root: knowledgeRoot,
+        id,
+        model,
+        clear: false,
+      });
+      await refreshLibraryShow();
+      await applyEffectiveProviderForActiveRoot();
+    } catch (error) {
+      librarySettingsNoteEl.textContent = String(error);
+    }
+  })();
+});
+
+libraryProviderClearBtn.addEventListener("click", () => {
+  void (async () => {
+    if (!knowledgeRoot || (libraryRole !== "owner" && libraryRole !== "editor")) return;
+    librarySettingsNoteEl.textContent = "";
+    try {
+      await invoke("library_set_provider", {
+        root: knowledgeRoot,
+        id: null,
+        model: null,
+        clear: true,
+      });
+      await refreshLibraryShow();
+      await applyEffectiveProviderForActiveRoot();
+    } catch (error) {
+      librarySettingsNoteEl.textContent = String(error);
+    }
+  })();
 });
 
 syncConflictCloseBtn.addEventListener("click", () => {
@@ -2945,6 +3260,12 @@ providerSel.addEventListener("change", () => {
   providerId = providerSel.value;
   const prevModel = modelSel.value;
   void (async () => {
+    if (!programmaticProviderChange && knowledgeRoot && libraryProvider) {
+      upsertProviderOverride(knowledgeRoot, providerId, modelSel.value || null);
+      refreshProviderRecommendationUi();
+    } else if (!programmaticProviderChange) {
+      settingsProviderId = providerId;
+    }
     refreshProviderExtraRows();
     await refreshProviderKeyStatus();
     try {
@@ -2994,6 +3315,12 @@ providerBaseUrlInput.addEventListener("change", () => {
 });
 
 modelSel.addEventListener("change", () => {
+  if (!programmaticProviderChange && knowledgeRoot && libraryProvider) {
+    upsertProviderOverride(knowledgeRoot, providerId, modelSel.value || null);
+    refreshProviderRecommendationUi();
+  } else if (!programmaticProviderChange) {
+    settingsModelId = modelSel.value || null;
+  }
   refreshStudyEnabled();
   void refreshAuth();
   void persist();
@@ -3067,6 +3394,7 @@ chatNewBtn.addEventListener("click", () => {
 studyPlanGenerateBtn.addEventListener("click", () => {
   void (async () => {
     if (!knowledgeRoot || !currentCourse) return;
+    if (viewerWriteBlockedEarly()) return;
     const course = currentCourse;
     const pathAtStart = currentNotesPath;
     if (!modelSel.value) {
@@ -3099,7 +3427,7 @@ studyPlanGenerateBtn.addEventListener("click", () => {
       if (currentNotesPath !== pathAtStart) return;
       studyPlanStatusEl.textContent = String(error);
     } finally {
-      studyPlanGenerateBtn.disabled = false;
+      refreshStudyEnabled();
     }
   })();
 });
@@ -3123,6 +3451,7 @@ makeCardBtn.addEventListener("mousedown", (event) => {
 });
 
 makeCardBtn.addEventListener("click", () => {
+  if (viewerWriteBlockedEarly()) return;
   const text = makeCardSelectionText;
   const digest = makeCardDigest;
   if (!text || !digest) return;
@@ -3154,6 +3483,7 @@ makeCardSaveBtn.addEventListener("click", () => {
   void (async () => {
     const draft = makeCardDraft;
     if (!knowledgeRoot || !currentCourse || !draft) return;
+    if (viewerWriteBlockedEarly()) return;
     const front = makeCardFrontEl.value.trim();
     const back = makeCardBackEl.value.trim();
     if (!front || !back) {
@@ -3339,6 +3669,7 @@ quizSourceBtn.addEventListener("click", () => {
 
 updateBtn.addEventListener("click", async () => {
   if (!knowledgeRoot || !modelSel.value) return;
+  if (viewerWriteBlockedEarly()) return;
   await refreshAuth();
   if (abortIfSignedOut()) return;
   logEl.textContent = "";
@@ -3355,8 +3686,9 @@ updateBtn.addEventListener("click", async () => {
   }
 });
 
-confirmBtn.addEventListener("click", async () => {
+confirmUpdateBtn.addEventListener("click", async () => {
   if (!knowledgeRoot || !modelSel.value) return;
+  if (viewerWriteBlockedEarly()) return;
   await refreshAuth();
   if (abortIfSignedOut()) return;
   try {

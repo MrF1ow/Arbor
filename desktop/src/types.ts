@@ -33,6 +33,12 @@ export interface SkillGrant {
   permissions: string[];
 }
 
+export interface ProviderOverride {
+  path: string;
+  provider_id: string;
+  model_id: string | null;
+}
+
 export interface Settings {
   knowledge_root: string | null;
   knowledge_roots: KnowledgeRootEntry[];
@@ -45,7 +51,21 @@ export interface Settings {
   skill_index_source?: string;
   skill_index_ref?: string;
   skill_grants?: SkillGrant[];
+  provider_overrides?: ProviderOverride[];
 }
+
+export type LibraryRole = "owner" | "editor" | "viewer";
+
+export type LibraryShowResult =
+  | { present: false }
+  | {
+      present: true;
+      name: string;
+      created_by: string;
+      members: { email: string; role: LibraryRole }[];
+      provider: { id: string; model: string } | null;
+      role: LibraryRole;
+    };
 
 export interface ProviderInfo {
   id: string;
