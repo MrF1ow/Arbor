@@ -101,6 +101,19 @@
                   </nav>
                   <div class="reading-pane">
                     <div id="notes-concept-chips" class="concept-chips" hidden></div>
+                    <section id="study-overview" class="study-overview" hidden>
+                      <h2>Study plan</h2>
+                      <input type="date" id="study-plan-exam" />
+                      <button type="button" id="study-plan-generate" class="btn-primary">Generate</button>
+                      <p id="study-plan-status" class="weak-topic-empty"></p>
+                      <div id="study-plan-body"></div>
+                      <h2>Recommendations</h2>
+                      <div id="study-recommendation-list"></div>
+                      <button type="button" id="explain-weakest" class="btn-secondary">Explain weakest topic</button>
+                    </section>
+                    <div id="notes-actions" class="notes-actions" hidden>
+                      <button type="button" id="make-card" class="btn-secondary" disabled>Make card</button>
+                    </div>
                     <section id="weak-topics" class="weak-topics" hidden>
                       <h2>Weak topics</h2>
                       <ol id="weak-topic-list"></ol>
@@ -351,6 +364,19 @@
         </div>
       </div>
     </div>
+    <dialog id="make-card-dialog" class="make-card-dialog">
+      <h2>Make flashcard</h2>
+      <label for="make-card-front">Front</label>
+      <textarea id="make-card-front" rows="3"></textarea>
+      <label for="make-card-back">Back</label>
+      <textarea id="make-card-back" rows="3"></textarea>
+      <p id="make-card-citation" class="make-card-citation"></p>
+      <p id="make-card-error" class="make-card-error"></p>
+      <div class="make-card-actions">
+        <button type="button" id="make-card-cancel" class="btn-secondary">Cancel</button>
+        <button type="button" id="make-card-save" class="btn-primary">Save</button>
+      </div>
+    </dialog>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

@@ -70,6 +70,7 @@ export interface KnowledgeSettings {
 export interface CardSource {
   digest: string;
   heading: string | null;
+  page?: string | null;
 }
 
 export interface Flashcard {

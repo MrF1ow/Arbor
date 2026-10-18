@@ -25,9 +25,14 @@ function parseSource(value: unknown): CardSource {
   if (heading !== undefined && heading !== null && typeof heading !== "string") {
     throw new Error("source.heading must be a string or null");
   }
+  const page = value.page;
+  if (page !== undefined && page !== null && typeof page !== "string") {
+    throw new Error("source.page must be a string or null");
+  }
   return {
     digest: nonBlankString(value.digest, "source.digest"),
     heading: typeof heading === "string" ? heading : null,
+    page: typeof page === "string" ? page : null,
   };
 }
 

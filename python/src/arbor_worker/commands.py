@@ -636,6 +636,12 @@ def cmd_study_progress(args) -> int:
             )
             emit_json_line(doc)
             return 0
+        if action == "recommend":
+            from arbor_worker.recommendations import study_recommendations
+
+            now = parse_utc_now(args.now) if getattr(args, "now", None) else None
+            emit_json_line(study_recommendations(root, course, now=now))
+            return 0
     except ValueError as error:
         message = str(error)
         print(message, file=sys.stderr)
@@ -647,6 +653,84 @@ def cmd_study_progress(args) -> int:
         return 1
     print(f"unknown study-progress action: {action}", file=sys.stderr)
     return 2
+
+
+def cmd_study_plan(args) -> int:
+    from arbor_worker.study_progress import emit_json_line
+    from arbor_worker.study_plan import generate_study_plan
+
+    root = Path(args.root)
+    emitter = EventEmitter(sys.stderr)
+    if args.provider == "fake":
+        fake_markdown = os.environ.get(
+            "ARBOR_FAKE_MD",
+            json.dumps(
+                {
+                    "skill": "study_plan",
+                    "course": args.course,
+                    "ok": True,
+                }
+            ),
+        )
+        resolved, code = _resolve_llm_provider(
+            args.provider,
+            root,
+            args.model,
+            emitter,
+            fake_markdown=fake_markdown,
+            emit_missing_model_error=False,
+        )
+    else:
+        resolved, code = _resolve_llm_provider(
+            args.provider,
+            root,
+            args.model,
+            emitter,
+            emit_missing_model_error=False,
+        )
+    if code is not None:
+        if code == 2:
+            print(
+                f"--model is required with the {args.provider} provider",
+                file=sys.stderr,
+            )
+        return code
+    provider, model_id = resolved
+    try:
+        result = generate_study_plan(
+            root,
+            args.course,
+            provider,
+            model_id,
+            exam_date=args.exam_date,
+        )
+    except ValueError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    emit_json_line(result)
+    return 0
+
+
+def cmd_append_card(args) -> int:
+    from arbor_worker.append_card import append_flashcard
+    from arbor_worker.study_progress import emit_json_line
+
+    root = Path(args.root)
+    try:
+        card = append_flashcard(
+            root,
+            args.course,
+            args.front,
+            args.back,
+            args.digest,
+            heading=args.heading,
+            page=args.page,
+        )
+    except ValueError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    emit_json_line(card)
+    return 0
 
 
 def cmd_chat(_args) -> int:

@@ -167,6 +167,22 @@ const flashcardDueBtn = $("flashcard-due") as HTMLButtonElement;
 const flashcardAllBtn = $("flashcard-all") as HTMLButtonElement;
 const weakTopicsEl = $("weak-topics");
 const weakTopicListEl = $("weak-topic-list");
+const studyOverviewEl = $("study-overview");
+const studyPlanExamEl = $("study-plan-exam") as HTMLInputElement;
+const studyPlanGenerateBtn = $("study-plan-generate") as HTMLButtonElement;
+const studyPlanStatusEl = $("study-plan-status");
+const studyPlanBodyEl = $("study-plan-body");
+const studyRecommendationListEl = $("study-recommendation-list");
+const explainWeakestBtn = $("explain-weakest") as HTMLButtonElement;
+const notesActionsEl = $("notes-actions");
+const makeCardBtn = $("make-card") as HTMLButtonElement;
+const makeCardDialogEl = $("make-card-dialog") as HTMLDialogElement;
+const makeCardFrontEl = $("make-card-front") as HTMLTextAreaElement;
+const makeCardBackEl = $("make-card-back") as HTMLTextAreaElement;
+const makeCardCitationEl = $("make-card-citation");
+const makeCardErrorEl = $("make-card-error");
+const makeCardCancelBtn = $("make-card-cancel");
+const makeCardSaveBtn = $("make-card-save") as HTMLButtonElement;
 const quizCopyEl = $("quiz-copy");
 const quizEmptyEl = $("quiz-empty");
 const quizPackEl = $("quiz-pack");
@@ -275,6 +291,19 @@ let conceptGraph: ConceptGraph | null = null;
 let selectedConceptId: string | null = null;
 let currentNotesPath: string | null = null;
 let citationsReport: CitationsReport | null = null;
+let pendingFocusCardId: string | null = null;
+let weakestRecommendTopic: { label: string } | null = null;
+let makeCardSelectionText = "";
+let makeCardHeading: string | null = null;
+let makeCardPage: string | null = null;
+let makeCardDigest: string | null = null;
+type MakeCardDraft = {
+  digest: string;
+  heading: string | null;
+  page: string | null;
+};
+let makeCardDraft: MakeCardDraft | null = null;
+let chatLoadGeneration = 0;
 
 function logLine(text: string) {
   logEl.textContent += text + "\n";
@@ -460,14 +489,17 @@ function renderChatTranscript(course: string) {
 
 async function loadChat(course: string) {
   if (!knowledgeRoot) return;
+  const generation = ++chatLoadGeneration;
   try {
     const rows = await invoke<ChatLine[]>("read_chat_history", {
       root: knowledgeRoot,
       course,
     });
+    if (generation !== chatLoadGeneration || currentCourse !== course) return;
     chatLines = rows;
     renderChatTranscript(course);
   } catch (error) {
+    if (generation !== chatLoadGeneration || currentCourse !== course) return;
     chatStatusEl.textContent = String(error);
     chatLines = [];
     renderChatTranscript(course);
@@ -496,6 +528,7 @@ function chatAuthErrorMessage(error: unknown): string {
 async function sendChatMessage() {
   const question = chatInputEl.value.trim();
   if (!question || !knowledgeRoot || !currentCourse) return;
+  chatLoadGeneration += 1;
   await refreshAuth();
   if (abortIfSignedOut()) {
     chatStatusEl.textContent = signedOutJobMessage(
@@ -691,6 +724,216 @@ function scrollNotesToHeading(heading: string | null | undefined) {
   pane?.scrollTo(0, 0);
 }
 
+function isDigestNotesPath(relativePath: string): boolean {
+  return relativePath.includes("/digests/") && relativePath.endsWith(".md");
+}
+
+function digestPathFromNotes(relativePath: string): string | null {
+  const marker = "digests/";
+  const index = relativePath.indexOf(marker);
+  if (index < 0 || !relativePath.endsWith(".md")) return null;
+  return relativePath.slice(index);
+}
+
+function collapseSelectionText(text: string, maxLen: number): string {
+  const collapsed = text.trim().replace(/\s+/g, " ");
+  return collapsed.length <= maxLen ? collapsed : collapsed.slice(0, maxLen);
+}
+
+function headingForSelectionNode(node: Node | null): string | null {
+  if (!node) return null;
+  let current: Node | null = node;
+  while (current && current !== readingArticleEl) {
+    if (current instanceof HTMLElement) {
+      const tag = current.tagName;
+      if (tag === "H1" || tag === "H2" || tag === "H3") {
+        const text = current.textContent?.trim() ?? "";
+        return text || null;
+      }
+    }
+    current = current.parentNode;
+  }
+  const article = readingArticleEl;
+  let nearest: string | null = null;
+  for (const heading of article.querySelectorAll("h1, h2, h3")) {
+    if (heading.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING) {
+      const text = heading.textContent?.trim() ?? "";
+      if (text) nearest = text;
+    }
+  }
+  return nearest;
+}
+
+function pageForSelectionNode(node: Node | null): string | null {
+  let current: Node | null = node;
+  while (current && current !== readingArticleEl) {
+    if (current instanceof HTMLElement && current.dataset.arborPage) {
+      return current.dataset.arborPage;
+    }
+    current = current.parentNode;
+  }
+  return null;
+}
+
+function clearMakeCardDraft() {
+  makeCardDraft = null;
+}
+
+function clearMakeCardSnapshot() {
+  makeCardSelectionText = "";
+  makeCardHeading = null;
+  makeCardPage = null;
+  makeCardDigest = null;
+}
+
+function makeCardButtonEngaged(): boolean {
+  return makeCardBtn.matches(":hover") || makeCardBtn.matches(":active");
+}
+
+/** Returns true when the live selection updates the snapshot. */
+function tryUpdateMakeCardSnapshotFromSelection(): boolean {
+  const path = currentNotesPath;
+  if (!path || !isDigestNotesPath(path)) {
+    return false;
+  }
+  const selection = window.getSelection();
+  if (!selection || selection.isCollapsed) {
+    return false;
+  }
+  const anchor = selection.anchorNode;
+  if (!anchor || !readingArticleEl.contains(anchor)) {
+    return false;
+  }
+  const text = collapseSelectionText(selection.toString(), 2000).trim();
+  if (!text) {
+    return false;
+  }
+  makeCardSelectionText = text;
+  makeCardHeading = headingForSelectionNode(selection.anchorNode);
+  makeCardPage = pageForSelectionNode(selection.anchorNode);
+  makeCardDigest = digestPathFromNotes(path);
+  return true;
+}
+
+function refreshMakeCardButton() {
+  const path = currentNotesPath;
+  if (!path || !isDigestNotesPath(path)) {
+    if (!makeCardDialogEl.open) {
+      clearMakeCardSnapshot();
+      clearMakeCardDraft();
+    }
+    makeCardBtn.disabled = true;
+    return;
+  }
+  if (tryUpdateMakeCardSnapshotFromSelection()) {
+    makeCardBtn.disabled = false;
+    return;
+  }
+  if (makeCardButtonEngaged() && makeCardSelectionText) {
+    makeCardBtn.disabled = false;
+    return;
+  }
+  if (!makeCardDialogEl.open) {
+    clearMakeCardSnapshot();
+  }
+  makeCardBtn.disabled = true;
+}
+
+function updateNotesChrome(relativePath: string) {
+  const isCourseOverview = relativePath.endsWith("/course.md");
+  studyOverviewEl.hidden = !isCourseOverview;
+  if (isCourseOverview) {
+    notesActionsEl.hidden = true;
+  } else {
+    notesActionsEl.hidden = !isDigestNotesPath(relativePath);
+  }
+  refreshMakeCardButton();
+}
+
+async function loadStudyPlan(course: string, relativePath: string) {
+  if (!knowledgeRoot) return;
+  studyPlanBodyEl.replaceChildren();
+  studyPlanStatusEl.textContent = "";
+  studyPlanGenerateBtn.textContent = "Generate";
+  const planPath = `${course}/study/plan.md`;
+  try {
+    const raw = await invoke<string>("read_markdown", {
+      root: knowledgeRoot,
+      relativePath: planPath,
+    });
+    if (currentNotesPath !== relativePath) return;
+    const { html } = renderMarkdown(raw);
+    studyPlanBodyEl.innerHTML = html;
+    studyPlanGenerateBtn.textContent = "Regenerate";
+  } catch {
+    if (currentNotesPath !== relativePath) return;
+    studyPlanStatusEl.textContent = "No study plan yet.";
+  }
+}
+
+type StudyRecommendItem = {
+  kind: string;
+  label: string;
+  digest?: string | null;
+  heading?: string | null;
+};
+
+async function loadStudyRecommendations(course: string, relativePath: string) {
+  if (!knowledgeRoot) return;
+  studyRecommendationListEl.replaceChildren();
+  weakestRecommendTopic = null;
+  explainWeakestBtn.disabled = true;
+  try {
+    const payload = await invoke<{ items: StudyRecommendItem[] }>("study_progress", {
+      root: knowledgeRoot,
+      course,
+      action: "recommend",
+    });
+    if (currentNotesPath !== relativePath) return;
+    if (payload.items.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "weak-topic-empty";
+      empty.textContent = "No recommendations yet.";
+      studyRecommendationListEl.append(empty);
+      return;
+    }
+    for (const item of payload.items) {
+      if (item.kind === "weakest_topic") {
+        weakestRecommendTopic = { label: item.label };
+        explainWeakestBtn.disabled = false;
+      }
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "weak-topic-btn";
+      btn.textContent = item.label;
+      btn.addEventListener("click", () => {
+        if (item.kind === "due_cards") {
+          setCourseView(course, "flashcards");
+          return;
+        }
+        if (item.kind === "weakest_topic" || item.kind === "unreviewed_digest") {
+          const digest = item.digest;
+          if (typeof digest === "string" && digest.trim() !== "") {
+            setCourseView(
+              course,
+              "notes",
+              notePathForStudyDigest(course, digest),
+              item.heading ?? null,
+            );
+          }
+        }
+      });
+      studyRecommendationListEl.append(btn);
+    }
+  } catch {
+    if (currentNotesPath !== relativePath) return;
+    const failed = document.createElement("p");
+    failed.className = "weak-topic-empty";
+    failed.textContent = "Could not load recommendations.";
+    studyRecommendationListEl.append(failed);
+  }
+}
+
 async function loadDigestPreview(
   course: string,
   relativePath: string,
@@ -698,18 +941,22 @@ async function loadDigestPreview(
 ) {
   if (!knowledgeRoot) return;
   currentNotesPath = relativePath;
+  updateNotesChrome(relativePath);
   courseIndexLink.classList.toggle("active", relativePath === `${course}/course.md`);
   digestListEl.querySelectorAll(".digest-link").forEach((el) => {
     el.classList.toggle("active", (el as HTMLElement).dataset.path === relativePath);
   });
   try {
     const raw = await invoke<string>("read_markdown", { root: knowledgeRoot, relativePath });
-    const { html, pageChip } = renderMarkdown(raw);
+    const { html, pageChip, pageChipRange } = renderMarkdown(raw);
     readingArticleEl.innerHTML = html;
     if (pageChip) {
       const chip = document.createElement("div");
       chip.className = "page-chip";
       chip.textContent = `Pages ${pageChip}`;
+      if (pageChipRange) {
+        chip.dataset.arborPage = pageChipRange;
+      }
       readingArticleEl.prepend(chip);
     }
   } catch (e) {
@@ -733,6 +980,10 @@ async function loadDigestPreview(
   });
   await renderNotesConceptChips(course, relativePath);
   const isCourseOverview = relativePath.endsWith("/course.md");
+  if (isCourseOverview && knowledgeRoot) {
+    void loadStudyPlan(course, relativePath);
+    void loadStudyRecommendations(course, relativePath);
+  }
   if (!isCourseOverview) {
     weakTopicsEl.hidden = true;
   } else if (knowledgeRoot) {
@@ -863,9 +1114,14 @@ function renderCurrentFlashcard() {
   flashcardFaceEl.textContent = flashcardReview.flipped ? card.back : card.front;
   flashcardFaceEl.classList.toggle("flipped", flashcardReview.flipped);
   flashcardFlipBtn.textContent = flashcardReview.flipped ? "Show front" : "Flip";
-  flashcardSourceBtn.textContent = card.source.heading
-    ? `${card.source.digest} · ${card.source.heading}`
-    : card.source.digest;
+  const sourceParts = [card.source.digest];
+  if (card.source.heading) {
+    sourceParts.push(card.source.heading);
+  }
+  if (card.source.page) {
+    sourceParts.push(`p. ${card.source.page}`);
+  }
+  flashcardSourceBtn.textContent = sourceParts.join(" · ");
   flashcardTagsEl.textContent = card.tags.join(" · ");
   const failed = failedIdsFor(citationsReport, "study/flashcards.json");
   flashcardCitationEl.hidden = !failed.has(card.id);
@@ -917,6 +1173,15 @@ async function loadFlashcards(course: string) {
     flashcardsDeckEl.hidden = false;
     flashcardStaleEl.hidden = !stale;
     renderCurrentFlashcard();
+    if (pendingFocusCardId && flashcardReview) {
+      const focusId = pendingFocusCardId;
+      pendingFocusCardId = null;
+      const focusIndex = flashcardReview.cards.findIndex((c) => c.id === focusId);
+      if (focusIndex >= 0) {
+        flashcardReview = { ...flashcardReview, index: focusIndex, flipped: false };
+        renderCurrentFlashcard();
+      }
+    }
   } catch {
     if (currentCourse !== course) return;
     flashcardReview = null;
@@ -2035,6 +2300,129 @@ chatNewBtn.addEventListener("click", () => {
     renderChatTranscript(currentCourse!);
     chatStatusEl.textContent = "";
   })();
+});
+
+studyPlanGenerateBtn.addEventListener("click", () => {
+  void (async () => {
+    if (!knowledgeRoot || !currentCourse) return;
+    const course = currentCourse;
+    const pathAtStart = currentNotesPath;
+    if (!modelSel.value) {
+      studyPlanStatusEl.textContent = "Select a model in Settings.";
+      return;
+    }
+    await refreshAuth();
+    if (abortIfSignedOut()) {
+      studyPlanStatusEl.textContent = signedOutJobMessage(
+        currentProviderLabel(),
+        authCheckReason,
+      );
+      return;
+    }
+    studyPlanGenerateBtn.disabled = true;
+    studyPlanStatusEl.textContent = "Generating study plan…";
+    const examDate = studyPlanExamEl.value.trim();
+    try {
+      await invoke("study_plan", {
+        root: knowledgeRoot,
+        course,
+        provider: providerId,
+        model: modelSel.value,
+        examDate: examDate || null,
+      });
+      if (currentNotesPath !== pathAtStart) return;
+      await loadStudyPlan(course, pathAtStart ?? `${course}/course.md`);
+      studyPlanStatusEl.textContent = "";
+    } catch (error) {
+      if (currentNotesPath !== pathAtStart) return;
+      studyPlanStatusEl.textContent = String(error);
+    } finally {
+      studyPlanGenerateBtn.disabled = false;
+    }
+  })();
+});
+
+explainWeakestBtn.addEventListener("click", () => {
+  void (async () => {
+    if (!weakestRecommendTopic || !currentCourse) return;
+    const course = currentCourse;
+    const label = weakestRecommendTopic.label;
+    setChatModeButtons("explain");
+    setCourseView(course, "chat");
+    await loadChat(course);
+    chatInputEl.value = `Explain the weakest topic "${label}". Stay inside this course and cite sources.`;
+    await sendChatMessage();
+  })();
+});
+
+makeCardBtn.addEventListener("mousedown", (event) => {
+  event.preventDefault();
+  tryUpdateMakeCardSnapshotFromSelection();
+});
+
+makeCardBtn.addEventListener("click", () => {
+  const text = makeCardSelectionText;
+  const digest = makeCardDigest;
+  if (!text || !digest) return;
+  makeCardDraft = {
+    digest,
+    heading: makeCardHeading,
+    page: makeCardPage,
+  };
+  makeCardFrontEl.value = text;
+  makeCardBackEl.value = text;
+  makeCardErrorEl.textContent = "";
+  const citationParts: string[] = [];
+  citationParts.push(makeCardDraft.digest);
+  if (makeCardDraft.heading) citationParts.push(makeCardDraft.heading);
+  if (makeCardDraft.page) citationParts.push(`p. ${makeCardDraft.page}`);
+  makeCardCitationEl.textContent = citationParts.join(" · ");
+  makeCardDialogEl.showModal();
+});
+
+makeCardCancelBtn.addEventListener("click", () => {
+  makeCardDialogEl.close();
+});
+
+makeCardDialogEl.addEventListener("close", () => {
+  clearMakeCardDraft();
+});
+
+makeCardSaveBtn.addEventListener("click", () => {
+  void (async () => {
+    const draft = makeCardDraft;
+    if (!knowledgeRoot || !currentCourse || !draft) return;
+    const front = makeCardFrontEl.value.trim();
+    const back = makeCardBackEl.value.trim();
+    if (!front || !back) {
+      makeCardErrorEl.textContent = "Front and back are required.";
+      return;
+    }
+    makeCardSaveBtn.disabled = true;
+    makeCardErrorEl.textContent = "";
+    try {
+      const card = await invoke<{ id: string }>("append_card", {
+        root: knowledgeRoot,
+        course: currentCourse,
+        front,
+        back,
+        digest: draft.digest,
+        heading: draft.heading,
+        page: draft.page,
+      });
+      makeCardDialogEl.close();
+      pendingFocusCardId = card.id;
+      setCourseView(currentCourse, "flashcards");
+    } catch (error) {
+      makeCardErrorEl.textContent = String(error);
+    } finally {
+      makeCardSaveBtn.disabled = false;
+    }
+  })();
+});
+
+document.addEventListener("selectionchange", () => {
+  refreshMakeCardButton();
 });
 
 chatClearBtn.addEventListener("click", () => {
