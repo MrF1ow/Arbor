@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from arbor_worker.page_markers import PageRange, parse_page_markers
 from arbor_worker.prepare import PrepareResult
 
@@ -10,6 +12,25 @@ _MIN_BODY_CHARS = 40
 
 class DigestError(Exception):
     pass
+
+
+_HEADING_LINE = re.compile(r"^(#{1,6})[ \t]+\S", re.MULTILINE)
+
+
+def strip_preamble_before_heading(markdown: str) -> str:
+    marker = re.search(r"<!--\s*arbor-pages:", markdown)
+    if marker is not None and marker.start() > 0:
+        prefix = markdown[: marker.start()]
+        if prefix.strip() and _HEADING_LINE.search(prefix) is None:
+            return markdown[marker.start() :]
+
+    match = _HEADING_LINE.search(markdown)
+    if match is None:
+        return markdown
+    before_heading = markdown[: match.start()]
+    if "<!-- arbor-pages:" in before_heading:
+        return markdown
+    return markdown[match.start() :]
 
 
 _RULES = """Source rules:

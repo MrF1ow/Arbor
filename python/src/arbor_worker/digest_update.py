@@ -6,7 +6,12 @@ from typing import Literal, Mapping, Sequence
 
 from arbor_worker.alignment import PageRange
 from arbor_worker.course_manifest import DigestRecord
-from arbor_worker.digest import DigestError, build_prompt, validate_digest
+from arbor_worker.digest import (
+    DigestError,
+    build_prompt,
+    strip_preamble_before_heading,
+    validate_digest,
+)
 from arbor_worker.page_markers import (
     PageRange as MarkerPageRange,
     parse_page_markers,
@@ -123,7 +128,7 @@ def _generate_marked_digest(
         prep=prep,
         cwd=cwd,
     )
-    markdown = result.markdown
+    markdown = strip_preamble_before_heading(result.markdown)
     validate_digest(markdown, page_range=_to_marker_range(page_range))
     return markdown if markdown.endswith("\n") else markdown + "\n"
 
@@ -161,6 +166,7 @@ def _apply_patch(
             prep=prep,
             cwd=cwd,
         ).markdown
+        generated = strip_preamble_before_heading(generated)
         validate_digest(generated, page_range=_to_marker_range(block))
         inner = _extract_inner(generated, block)
         patched = replace_page_marker(markdown, span.page_range, inner)
