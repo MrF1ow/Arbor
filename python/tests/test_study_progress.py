@@ -469,6 +469,54 @@ def test_cli_study_progress_show(git_repo: Path):
     assert data["course"] == "Biology"
 
 
+def test_cli_study_progress_grade_commits_then_show_is_noop(git_repo: Path, git):
+    _course_dir(git_repo)
+    g = git(git_repo)
+    init_count = len(g("log", "--oneline").splitlines())
+    code, out, err = _run_cli(
+        [
+            "study-progress",
+            "--root",
+            str(git_repo),
+            "--course",
+            "Biology",
+            "grade",
+            "--id",
+            "fc_cli",
+            "--result",
+            "mastered",
+            "--digest",
+            "digests/a.md",
+            "--heading",
+            "Cells",
+        ]
+    )
+    assert code == 0
+    assert err == ""
+    json.loads(out.strip())
+    assert g("log", "-1", "--format=%s").strip() == "study: Biology progress"
+    assert (
+        g("ls-files", "Biology/study/progress.json").strip()
+        == "Biology/study/progress.json"
+    )
+    after_grade = len(g("log", "--oneline").splitlines())
+    code, out, err = _run_cli(
+        [
+            "study-progress",
+            "--root",
+            str(git_repo),
+            "--course",
+            "Biology",
+            "show",
+        ]
+    )
+    assert code == 0
+    assert err == ""
+    json.loads(out.strip())
+    assert len(g("log", "--oneline").splitlines()) == after_grade
+    assert after_grade == init_count + 1
+
+
 def test_quiz_updates_questions(git_repo: Path):
     _course_dir(git_repo)
     doc = study_progress_quiz(git_repo, "Biology", "q1", "wrong")

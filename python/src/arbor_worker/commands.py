@@ -11,7 +11,7 @@ from arbor_worker.alignment import PageRange
 from arbor_worker.auth import AuthResult, check_codex_auth
 from arbor_worker.cache import ensure_gitignored
 from arbor_worker.events import EventEmitter
-from arbor_worker.gitstate import GitStateError, commit_and_note
+from arbor_worker.gitstate import GitStateError, commit_and_note, path_has_pending_changes
 from arbor_worker.provider.base import ProviderRequest
 from arbor_worker.provider.fake import FakeProvider
 from arbor_worker.provider.registry import PROVIDERS, PROVIDER_ORDER, make_provider
@@ -604,11 +604,22 @@ def cmd_embed_search(args) -> int:
     return 0
 
 
+def _commit_study_file_if_dirty(
+    root: Path,
+    rel_path: Path,
+    message: str,
+    emitter: EventEmitter,
+) -> None:
+    if path_has_pending_changes(root, rel_path):
+        commit_and_note(root, [rel_path], message, emitter)
+
+
 def cmd_study_progress(args) -> int:
     from arbor_worker.study_progress import (
         StudyProgressError,
         emit_json_line,
         parse_utc_now,
+        progress_path,
         study_progress_due,
         study_progress_grade,
         study_progress_quiz,
@@ -622,18 +633,31 @@ def cmd_study_progress(args) -> int:
         return 2
     root = Path(args.root)
     course = args.course
+    emitter = EventEmitter(sys.stderr)
+    progress_rel = progress_path(root, course).relative_to(root)
+
+    def finish(doc: dict) -> int:
+        try:
+            _commit_study_file_if_dirty(
+                root,
+                progress_rel,
+                f"study: {course} progress",
+                emitter,
+            )
+        except GitStateError as error:
+            print(str(error), file=sys.stderr)
+            return 1
+        emit_json_line(doc)
+        return 0
+
     try:
         if action == "show":
-            doc = study_progress_show(root, course)
-            emit_json_line(doc)
-            return 0
+            return finish(study_progress_show(root, course))
         if action == "weak":
-            emit_json_line(study_progress_weak(root, course))
-            return 0
+            return finish(study_progress_weak(root, course))
         if action == "due":
             now = parse_utc_now(args.now) if args.now else None
-            emit_json_line(study_progress_due(root, course, now=now))
-            return 0
+            return finish(study_progress_due(root, course, now=now))
         if action == "grade":
             now = parse_utc_now(args.now) if args.now else None
             doc = study_progress_grade(
@@ -645,8 +669,7 @@ def cmd_study_progress(args) -> int:
                 digest=args.digest,
                 heading=args.heading,
             )
-            emit_json_line(doc)
-            return 0
+            return finish(doc)
         if action == "quiz":
             now = parse_utc_now(args.now) if args.now else None
             doc = study_progress_quiz(
@@ -658,14 +681,12 @@ def cmd_study_progress(args) -> int:
                 digest=args.digest,
                 heading=args.heading,
             )
-            emit_json_line(doc)
-            return 0
+            return finish(doc)
         if action == "recommend":
             from arbor_worker.recommendations import study_recommendations
 
             now = parse_utc_now(args.now) if getattr(args, "now", None) else None
-            emit_json_line(study_recommendations(root, course, now=now))
-            return 0
+            return finish(study_recommendations(root, course, now=now))
     except ValueError as error:
         message = str(error)
         print(message, file=sys.stderr)
@@ -731,6 +752,17 @@ def cmd_study_plan(args) -> int:
     except ValueError as error:
         print(str(error), file=sys.stderr)
         return 1
+    plan_rel = Path(result["path"])
+    try:
+        _commit_study_file_if_dirty(
+            root,
+            plan_rel,
+            f"study: {args.course} plan",
+            emitter,
+        )
+    except GitStateError as error:
+        print(str(error), file=sys.stderr)
+        return 1
     emit_json_line(result)
     return 0
 
@@ -740,6 +772,7 @@ def cmd_append_card(args) -> int:
     from arbor_worker.study_progress import emit_json_line
 
     root = Path(args.root)
+    emitter = EventEmitter(sys.stderr)
     try:
         card = append_flashcard(
             root,
@@ -751,6 +784,17 @@ def cmd_append_card(args) -> int:
             page=args.page,
         )
     except ValueError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    deck_rel = Path(args.course) / "study" / "flashcards.json"
+    try:
+        _commit_study_file_if_dirty(
+            root,
+            deck_rel,
+            f"study: {args.course} flashcard",
+            emitter,
+        )
+    except GitStateError as error:
         print(str(error), file=sys.stderr)
         return 1
     emit_json_line(card)

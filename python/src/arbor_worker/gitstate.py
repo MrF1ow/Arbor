@@ -105,3 +105,14 @@ def commit_and_note(
     if result.notice is not None:
         emitter.warning(message=result.notice)
     return result.rev
+
+
+def path_has_pending_changes(
+    root: Path,
+    rel_path: Path,
+    runner: _Runner = subprocess.run,
+) -> bool:
+    proc = _git(root, ["status", "--porcelain", "--", str(rel_path)], runner)
+    if proc.returncode != 0:
+        raise GitStateError(f"git status failed: {(proc.stderr or '').strip()}")
+    return bool((proc.stdout or "").strip())

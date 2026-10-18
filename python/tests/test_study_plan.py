@@ -242,7 +242,7 @@ def test_invalid_course_name_rejected(git_repo: Path):
         )
 
 
-def test_study_plan_cli_json_stdout(git_repo: Path, monkeypatch):
+def test_study_plan_cli_json_stdout(git_repo: Path, monkeypatch, git):
     _course(git_repo)
     monkeypatch.setenv("ARBOR_FAKE_MD", FAKE_PLAN)
     code, out, err = _run_cli(
@@ -261,3 +261,6 @@ def test_study_plan_cli_json_stdout(git_repo: Path, monkeypatch):
     payload = json.loads(out.strip())
     assert payload["path"] == "Biology/study/plan.md"
     assert payload["bytes"] == len(FAKE_PLAN.encode("utf-8"))
+    g = git(git_repo)
+    assert g("log", "-1", "--format=%s").strip() == "study: Biology plan"
+    assert g("ls-files", "Biology/study/plan.md").strip() == "Biology/study/plan.md"
