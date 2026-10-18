@@ -13,14 +13,6 @@ FALLBACK_IDENTITY_NOTICE = (
     "No git user.email is configured. Committed as Arbor <arbor@localhost>."
 )
 
-_COMMIT_IDENTITY_ENV_KEYS = (
-    "GIT_AUTHOR_NAME",
-    "GIT_AUTHOR_EMAIL",
-    "GIT_COMMITTER_NAME",
-    "GIT_COMMITTER_EMAIL",
-)
-
-
 class GitStateError(Exception):
     pass
 
@@ -49,11 +41,11 @@ def _git(root: Path, args: list[str], runner: _Runner) -> subprocess.CompletedPr
     )
 
 
-def _env_for_fallback_commit() -> dict[str, str]:
-    env = os.environ.copy()
-    for key in _COMMIT_IDENTITY_ENV_KEYS:
-        env.pop(key, None)
-    return env
+def _env_git_email_set() -> bool:
+    for key in ("GIT_AUTHOR_EMAIL", "GIT_COMMITTER_EMAIL"):
+        if (os.environ.get(key) or "").strip():
+            return True
+    return False
 
 
 def _effective_user_email(root: Path, runner: _Runner) -> str | None:
@@ -76,7 +68,7 @@ def commit_batch(
     if add.returncode != 0:
         raise GitStateError(f"git add failed: {(add.stderr or '').strip()}")
     notice: str | None = None
-    if _effective_user_email(root, runner):
+    if _effective_user_email(root, runner) or _env_git_email_set():
         commit = _git(root, ["commit", "-m", message], runner)
     else:
         notice = FALLBACK_IDENTITY_NOTICE
@@ -95,7 +87,6 @@ def commit_batch(
             ],
             capture_output=True,
             text=True,
-            env=_env_for_fallback_commit(),
         )
     if commit.returncode != 0:
         raise GitStateError(f"git commit failed: {(commit.stderr or '').strip()}")

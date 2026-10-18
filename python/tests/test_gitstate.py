@@ -84,6 +84,34 @@ def test_commit_batch_fallback_without_user_email(tmp_path: Path, monkeypatch):
     assert email.returncode != 0 or not (email.stdout or "").strip()
 
 
+def test_commit_batch_keeps_env_git_identity_without_config_email(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    global_cfg = _isolated_git_env(monkeypatch, tmp_path)
+    assert global_cfg.read_text() == ""
+
+    monkeypatch.setenv("GIT_AUTHOR_NAME", "CI Bot")
+    monkeypatch.setenv("GIT_AUTHOR_EMAIL", "ci@example.test")
+    monkeypatch.setenv("GIT_COMMITTER_NAME", "CI Bot")
+    monkeypatch.setenv("GIT_COMMITTER_EMAIL", "ci@example.test")
+
+    root = tmp_path / "repo"
+    root.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    (root / "note.txt").write_text("hello\n")
+
+    result = commit_batch(root, [Path("note.txt")], "digest: env identity")
+
+    assert result.notice is None
+    author = subprocess.run(
+        ["git", "-C", str(root), "log", "-1", "--format=%an <%ae>"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    assert author == "CI Bot <ci@example.test>"
+
+
 def test_commit_batch_keeps_configured_local_email(
     git_repo: Path, monkeypatch: pytest.MonkeyPatch
 ):
