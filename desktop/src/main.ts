@@ -297,6 +297,12 @@ let makeCardSelectionText = "";
 let makeCardHeading: string | null = null;
 let makeCardPage: string | null = null;
 let makeCardDigest: string | null = null;
+type MakeCardDraft = {
+  digest: string;
+  heading: string | null;
+  page: string | null;
+};
+let makeCardDraft: MakeCardDraft | null = null;
 let chatLoadGeneration = 0;
 
 function logLine(text: string) {
@@ -769,6 +775,10 @@ function pageForSelectionNode(node: Node | null): string | null {
   return null;
 }
 
+function clearMakeCardDraft() {
+  makeCardDraft = null;
+}
+
 function clearMakeCardSnapshot() {
   makeCardSelectionText = "";
   makeCardHeading = null;
@@ -808,7 +818,10 @@ function tryUpdateMakeCardSnapshotFromSelection(): boolean {
 function refreshMakeCardButton() {
   const path = currentNotesPath;
   if (!path || !isDigestNotesPath(path)) {
-    clearMakeCardSnapshot();
+    if (!makeCardDialogEl.open) {
+      clearMakeCardSnapshot();
+      clearMakeCardDraft();
+    }
     makeCardBtn.disabled = true;
     return;
   }
@@ -820,7 +833,9 @@ function refreshMakeCardButton() {
     makeCardBtn.disabled = false;
     return;
   }
-  clearMakeCardSnapshot();
+  if (!makeCardDialogEl.open) {
+    clearMakeCardSnapshot();
+  }
   makeCardBtn.disabled = true;
 }
 
@@ -2349,13 +2364,18 @@ makeCardBtn.addEventListener("click", () => {
   const text = makeCardSelectionText;
   const digest = makeCardDigest;
   if (!text || !digest) return;
+  makeCardDraft = {
+    digest,
+    heading: makeCardHeading,
+    page: makeCardPage,
+  };
   makeCardFrontEl.value = text;
   makeCardBackEl.value = text;
   makeCardErrorEl.textContent = "";
   const citationParts: string[] = [];
-  citationParts.push(digest);
-  if (makeCardHeading) citationParts.push(makeCardHeading);
-  if (makeCardPage) citationParts.push(`p. ${makeCardPage}`);
+  citationParts.push(makeCardDraft.digest);
+  if (makeCardDraft.heading) citationParts.push(makeCardDraft.heading);
+  if (makeCardDraft.page) citationParts.push(`p. ${makeCardDraft.page}`);
   makeCardCitationEl.textContent = citationParts.join(" · ");
   makeCardDialogEl.showModal();
 });
@@ -2364,9 +2384,14 @@ makeCardCancelBtn.addEventListener("click", () => {
   makeCardDialogEl.close();
 });
 
+makeCardDialogEl.addEventListener("close", () => {
+  clearMakeCardDraft();
+});
+
 makeCardSaveBtn.addEventListener("click", () => {
   void (async () => {
-    if (!knowledgeRoot || !currentCourse || !makeCardDigest) return;
+    const draft = makeCardDraft;
+    if (!knowledgeRoot || !currentCourse || !draft) return;
     const front = makeCardFrontEl.value.trim();
     const back = makeCardBackEl.value.trim();
     if (!front || !back) {
@@ -2381,9 +2406,9 @@ makeCardSaveBtn.addEventListener("click", () => {
         course: currentCourse,
         front,
         back,
-        digest: makeCardDigest,
-        heading: makeCardHeading,
-        page: makeCardPage,
+        digest: draft.digest,
+        heading: draft.heading,
+        page: draft.page,
       });
       makeCardDialogEl.close();
       pendingFocusCardId = card.id;

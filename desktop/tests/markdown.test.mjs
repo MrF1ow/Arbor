@@ -141,3 +141,24 @@ test("renders a GFM table", async () => {
   assert.match(html, /<td>Atenolol<\/td>/);
   assert.doesNotMatch(html, /<p>\| Drug/);
 });
+
+test("recognizes inline arbor-pages markers on a prose line", async () => {
+  const { renderMarkdown } = await subject();
+  const source =
+    "Preface.<!-- arbor-pages:1-1 -->\n# Title\nBody.\n<!-- /arbor-pages:1-1 -->\n";
+  const { html } = renderMarkdown(source);
+  assert.doesNotMatch(html, /arbor-pages/);
+  assert.doesNotMatch(html, /<!--/);
+  assert.match(html, /Preface\./);
+  assert.match(html, /data-arbor-page="1-1"/);
+});
+
+test("inline marker mid-line splits page range for following text", async () => {
+  const { renderMarkdown } = await subject();
+  const { html } = renderMarkdown("before<!-- arbor-pages:2-3 -->after\n");
+  assert.match(html, /before/);
+  assert.match(html, /after/);
+  assert.doesNotMatch(html, /<!--/);
+  assert.doesNotMatch(html, /arbor-pages/);
+  assert.match(html, /data-arbor-page="2-3">after/);
+});

@@ -161,13 +161,32 @@ function renderTable(table: MarkdownTable, pageAttr: () => string): string {
   return `<table${pageAttr()}><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table>`;
 }
 
-function isArborPagesOpen(line: string): string | null {
-  const match = line.match(/^<!--\s*arbor-pages:([^>]+)\s*-->$/);
-  return match ? match[1].trim() : null;
-}
+type LineSegment =
+  | { kind: "text"; text: string }
+  | { kind: "open"; range: string }
+  | { kind: "close" };
 
-function isArborPagesClose(line: string): boolean {
-  return /^<!--\s*\/arbor-pages:[^>]+\s*-->$/i.test(line);
+function splitLineByArborMarkers(line: string): LineSegment[] {
+  const segments: LineSegment[] = [];
+  const re = /<!--\s*(\/?)(arbor-pages:[^>]+)\s*-->/gi;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(line)) !== null) {
+    if (match.index > lastIndex) {
+      segments.push({ kind: "text", text: line.slice(lastIndex, match.index) });
+    }
+    if (match[1] === "/") {
+      segments.push({ kind: "close" });
+    } else {
+      const range = match[2].replace(/^arbor-pages:/i, "").trim();
+      segments.push({ kind: "open", range });
+    }
+    lastIndex = re.lastIndex;
+  }
+  if (lastIndex < line.length) {
+    segments.push({ kind: "text", text: line.slice(lastIndex) });
+  }
+  return segments;
 }
 
 export function renderMarkdown(source: string): {
@@ -198,77 +217,111 @@ export function renderMarkdown(source: string): {
     paragraph = [];
   };
 
+  const applyPagesOpen = (range: string) => {
+    flushParagraph();
+    closeAllLists(lists, parts, pageAttr);
+    currentPageRange = range;
+  };
+
+  const applyPagesClose = () => {
+    flushParagraph();
+    closeAllLists(lists, parts, pageAttr);
+    currentPageRange = null;
+  };
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].replace(/\s+$/, "");
-    const trimmed = line.trim();
-    const listItem = matchListItem(line);
+    const segments = splitLineByArborMarkers(line);
     const nextLine = i + 1 < lines.length ? lines[i + 1].replace(/\s+$/, "") : "";
 
-    const pagesOpen = isArborPagesOpen(trimmed);
-    if (pagesOpen !== null) {
-      flushParagraph();
-      closeAllLists(lists, parts, pageAttr);
-      currentPageRange = pagesOpen;
-      continue;
-    }
-    if (isArborPagesClose(trimmed)) {
-      flushParagraph();
-      closeAllLists(lists, parts, pageAttr);
-      currentPageRange = null;
-      continue;
-    }
-
-    if (trimmed === "") {
+    if (segments.length === 0) {
       flushParagraph();
       closeAllLists(lists, parts, pageAttr);
       continue;
     }
 
-    if (isPipeRow(line) && isTableSeparator(nextLine)) {
+    const lineHasOnlyWhitespace =
+      segments.every((seg) => seg.kind !== "text" || seg.text.trim() === "") &&
+      !segments.some((seg) => seg.kind === "open" || seg.kind === "close");
+    if (lineHasOnlyWhitespace && line.trim() === "") {
       flushParagraph();
       closeAllLists(lists, parts, pageAttr);
-      const header = splitCells(line);
-      i += 2;
-      const rows: string[][] = [];
-      while (i < lines.length) {
-        const bodyLine = lines[i].replace(/\s+$/, "");
-        if (!isPipeRow(bodyLine)) break;
-        rows.push(splitCells(bodyLine));
-        i += 1;
+      continue;
+    }
+
+    let atLineStart = true;
+    for (const segment of segments) {
+      if (segment.kind === "open") {
+        applyPagesOpen(segment.range);
+        atLineStart = false;
+        continue;
       }
-      i -= 1;
-      parts.push(renderTable({ header, rows }, pageAttr));
-      continue;
-    }
+      if (segment.kind === "close") {
+        applyPagesClose();
+        atLineStart = false;
+        continue;
+      }
 
-    if (trimmed.startsWith("# ")) {
-      flushParagraph();
-      closeAllLists(lists, parts, pageAttr);
-      parts.push(`<h1${pageAttr()}>${inlineFormat(trimmed.slice(2))}</h1>`);
-      continue;
-    }
-    if (trimmed.startsWith("## ")) {
-      flushParagraph();
-      closeAllLists(lists, parts, pageAttr);
-      const heading = trimmed.slice(3);
-      parts.push(`<h2${pageAttr()} id="${headingId(heading)}">${inlineFormat(heading)}</h2>`);
-      continue;
-    }
-    if (trimmed.startsWith("### ")) {
-      flushParagraph();
-      closeAllLists(lists, parts, pageAttr);
-      const heading = trimmed.slice(4);
-      parts.push(`<h3${pageAttr()} id="${headingId(heading)}">${inlineFormat(heading)}</h3>`);
-      continue;
-    }
-    if (listItem) {
-      flushParagraph();
-      appendListItem(lists, listItem, parts, pageAttr);
-      continue;
-    }
+      const segmentLine = segment.text;
+      const trimmed = segmentLine.trim();
+      if (trimmed === "") {
+        continue;
+      }
 
-    closeAllLists(lists, parts, pageAttr);
-    paragraph.push(trimmed);
+      const listItem = atLineStart ? matchListItem(segmentLine) : null;
+
+      if (atLineStart && isPipeRow(segmentLine) && isTableSeparator(nextLine)) {
+        flushParagraph();
+        closeAllLists(lists, parts, pageAttr);
+        const header = splitCells(segmentLine);
+        i += 2;
+        const rows: string[][] = [];
+        while (i < lines.length) {
+          const bodyLine = lines[i].replace(/\s+$/, "");
+          if (!isPipeRow(bodyLine)) break;
+          rows.push(splitCells(bodyLine));
+          i += 1;
+        }
+        i -= 1;
+        parts.push(renderTable({ header, rows }, pageAttr));
+        atLineStart = false;
+        break;
+      }
+
+      if (atLineStart && trimmed.startsWith("# ")) {
+        flushParagraph();
+        closeAllLists(lists, parts, pageAttr);
+        parts.push(`<h1${pageAttr()}>${inlineFormat(trimmed.slice(2))}</h1>`);
+        atLineStart = false;
+        continue;
+      }
+      if (atLineStart && trimmed.startsWith("## ")) {
+        flushParagraph();
+        closeAllLists(lists, parts, pageAttr);
+        const heading = trimmed.slice(3);
+        parts.push(`<h2${pageAttr()} id="${headingId(heading)}">${inlineFormat(heading)}</h2>`);
+        atLineStart = false;
+        continue;
+      }
+      if (atLineStart && trimmed.startsWith("### ")) {
+        flushParagraph();
+        closeAllLists(lists, parts, pageAttr);
+        const heading = trimmed.slice(4);
+        parts.push(`<h3${pageAttr()} id="${headingId(heading)}">${inlineFormat(heading)}</h3>`);
+        atLineStart = false;
+        continue;
+      }
+      if (listItem) {
+        flushParagraph();
+        appendListItem(lists, listItem, parts, pageAttr);
+        atLineStart = false;
+        continue;
+      }
+
+      closeAllLists(lists, parts, pageAttr);
+      paragraph.push(trimmed);
+      atLineStart = false;
+    }
   }
 
   flushParagraph();
