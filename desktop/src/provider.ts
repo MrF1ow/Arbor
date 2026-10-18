@@ -13,6 +13,9 @@ export function isWorkerUnavailableAuthReason(reason: string): boolean {
 
 export function signedOutJobMessage(providerLabel: string, reason: string): string {
   const trimmed = reason.trim();
+  if (isWorkerUnavailableAuthReason(trimmed)) {
+    return trimmed;
+  }
   if (trimmed === "") {
     return `${providerLabel} is not authenticated`;
   }
@@ -27,6 +30,9 @@ export function providerBadge(
 ): string {
   if (available) {
     return `${modelLabel} · ready`;
+  }
+  if (reason && isWorkerUnavailableAuthReason(reason)) {
+    return reason;
   }
   if (reason === "key missing") {
     return `${providerLabel} · key missing`;

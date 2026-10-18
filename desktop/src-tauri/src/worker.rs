@@ -39,14 +39,21 @@ pub fn parse_worker_json_output(
     }
     if let Some(code) = exit_code.filter(|code| *code != 0) {
         let trimmed = stderr.trim();
-        let tail = if trimmed.len() > 600 {
-            &trimmed[trimmed.len() - 600..]
-        } else {
-            trimmed
-        };
+        let tail = stderr_tail(trimmed, 600);
         return Err(format!("worker failed to start (exit {code}): {tail}"));
     }
     Err(format!("worker produced no output (stderr: {stderr})"))
+}
+
+fn stderr_tail(trimmed: &str, max_bytes: usize) -> &str {
+    if trimmed.len() <= max_bytes {
+        return trimmed;
+    }
+    let mut start = trimmed.len() - max_bytes;
+    while !trimmed.is_char_boundary(start) {
+        start += 1;
+    }
+    &trimmed[start..]
 }
 
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
@@ -1175,6 +1182,16 @@ mod tests {
             .unwrap_err();
         assert!(err.contains("worker failed to start (exit 255)"));
         assert!(err.contains("Python shared library load failed"));
+    }
+
+    #[test]
+    fn parse_worker_json_startup_tail_does_not_split_a_char() {
+        let stderr = format!("{}{}", "é", "a".repeat(599));
+        assert_eq!(stderr.len(), 601);
+        assert!(!stderr.is_char_boundary(1));
+        let err = parse_worker_json_output("", &stderr, Some(255)).unwrap_err();
+        assert!(err.contains("worker failed to start (exit 255)"));
+        assert!(err.contains('é') || err.contains('a'));
     }
 
     #[test]
