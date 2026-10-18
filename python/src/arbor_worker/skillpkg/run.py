@@ -137,6 +137,9 @@ def _build_child_env(scratch: Path, grants: set[str]) -> dict[str, str]:
     return env
 
 
+_WRITE_SKILL_PERMISSIONS = frozenset({"write_course_study", "write_export_dir"})
+
+
 def run_installed_skill(
     skill_id: str,
     commit: str,
@@ -148,12 +151,17 @@ def run_installed_skill(
     confirmed: bool,
     data_home: Path | None = None,
 ) -> None:
+    grant_set = set(grants)
+    if grant_set & _WRITE_SKILL_PERMISSIONS:
+        from arbor_worker.library import assert_can_write
+
+        assert_can_write(knowledge_root)
+
     install_dir, manifest = _load_installed_tree(skill_id, commit, data_home=data_home)
 
     if not confirmed:
         raise SkillPermissionError("skill permissions were not confirmed")
 
-    grant_set = set(grants)
     manifest_perms = set(manifest.permissions)
     if grant_set != manifest_perms:
         raise SkillPermissionError("permission grants do not match manifest")
@@ -198,8 +206,17 @@ def run_installed_skill(
 def cmd_skill_run(args) -> int:
     from pathlib import Path as PathType
 
+    from arbor_worker.library import LibraryError, assert_can_write
+
     data_home = PathType(args.data_home) if args.data_home else None
     grants = list(args.grant or [])
+    grant_set = set(grants)
+    if grant_set & _WRITE_SKILL_PERMISSIONS:
+        try:
+            assert_can_write(PathType(args.root))
+        except LibraryError as error:
+            print(str(error), file=sys.stderr)
+            return 1
     try:
         run_installed_skill(
             args.id,
@@ -211,6 +228,9 @@ def cmd_skill_run(args) -> int:
             confirmed=bool(args.confirmed),
             data_home=data_home,
         )
+    except LibraryError as error:
+        print(str(error), file=sys.stderr)
+        return 1
     except SkillPermissionError as error:
         print(str(error), file=sys.stderr)
         return 1

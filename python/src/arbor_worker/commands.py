@@ -171,11 +171,19 @@ def cmd_plan_update(args) -> int:
 
 
 def cmd_update(args) -> int:
+    from arbor_worker.library import LibraryError, assert_can_write
     from arbor_worker.pipeline import run_update
 
     root = Path(args.root)
     settings = load_settings(root)
     emitter = EventEmitter(sys.stdout)
+
+    try:
+        assert_can_write(root)
+    except LibraryError as error:
+        emitter.error(message=str(error))
+        emitter.run_done(processed=0, failed=0, skipped=0)
+        return 1
 
     resolved, code = _resolve_llm_provider(args.provider, root, args.model, emitter)
     if code is not None:
@@ -201,11 +209,23 @@ def cmd_update(args) -> int:
 
 
 def cmd_generate(args) -> int:
+    from arbor_worker.library import LibraryError, assert_can_write
+
     root = Path(args.root)
     course_dir = root / args.course
     emitter = EventEmitter(sys.stdout)
     settings = load_settings(root)
     skill = SKILLS.get(args.skill)
+
+    try:
+        assert_can_write(root)
+    except LibraryError as error:
+        emitter.skill_failed(
+            course=args.course,
+            skill=args.skill,
+            message=str(error),
+        )
+        return 1
 
     if not course_dir.is_dir():
         emitter.skill_failed(
@@ -735,10 +755,16 @@ def cmd_study_progress(args) -> int:
 
 
 def cmd_study_plan(args) -> int:
+    from arbor_worker.library import LibraryError, assert_can_write
     from arbor_worker.study_progress import emit_json_line
     from arbor_worker.study_plan import generate_study_plan
 
     root = Path(args.root)
+    try:
+        assert_can_write(root)
+    except LibraryError as error:
+        print(str(error), file=sys.stderr)
+        return 1
     emitter = EventEmitter(sys.stderr)
     if args.provider == "fake":
         fake_markdown = os.environ.get(
@@ -803,10 +829,16 @@ def cmd_study_plan(args) -> int:
 
 def cmd_append_card(args) -> int:
     from arbor_worker.append_card import append_flashcard
+    from arbor_worker.library import LibraryError, assert_can_write
     from arbor_worker.study_progress import emit_json_line
 
     root = Path(args.root)
     emitter = EventEmitter(sys.stderr)
+    try:
+        assert_can_write(root)
+    except LibraryError as error:
+        print(str(error), file=sys.stderr)
+        return 1
     try:
         card = append_flashcard(
             root,
