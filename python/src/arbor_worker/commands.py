@@ -330,10 +330,12 @@ def cmd_generate(args) -> int:
             generated_at=datetime.now(timezone.utc),
         )
         write_manifest(manifest_path, manifest)
+        from arbor_worker.sync import derived_gitignore_extras
+
         ensure_gitignored(
             root,
             settings.cache_dir_name,
-            [".arbor/progress/", ".arbor/vectors.sqlite"],
+            derived_gitignore_extras(settings.cache_dir_name),
         )
         artifact_rel = artifact_path.relative_to(root)
         manifest_rel = manifest_path.relative_to(root)
@@ -361,6 +363,9 @@ def cmd_generate(args) -> int:
             courses=[args.course],
             skill=skill.name,
         )
+        from arbor_worker.sync import maybe_sync_after_commit
+
+        maybe_sync_after_commit(root, emitter)
         return 0
 
     if args.provider == "fake":
@@ -510,10 +515,12 @@ def cmd_generate(args) -> int:
             generated_at=datetime.now(timezone.utc),
         )
     write_manifest(manifest_path, manifest)
+    from arbor_worker.sync import derived_gitignore_extras
+
     ensure_gitignored(
         root,
         settings.cache_dir_name,
-        [".arbor/progress/", ".arbor/vectors.sqlite"],
+        derived_gitignore_extras(settings.cache_dir_name),
     )
 
     manifest_rel = manifest_path.relative_to(root)
@@ -542,6 +549,9 @@ def cmd_generate(args) -> int:
         courses=[args.course],
         skill=skill.name,
     )
+    from arbor_worker.sync import maybe_sync_after_commit
+
+    maybe_sync_after_commit(root, emitter)
     return 0
 
 
@@ -612,6 +622,9 @@ def _commit_study_file_if_dirty(
 ) -> None:
     if path_has_pending_changes(root, rel_path):
         commit_and_note(root, [rel_path], message, emitter)
+        from arbor_worker.sync import maybe_sync_after_commit
+
+        maybe_sync_after_commit(root, emitter)
 
 
 def cmd_study_progress(args) -> int:
@@ -840,4 +853,78 @@ def cmd_chat(_args) -> int:
     except Exception as error:
         emitter.error(message=str(error))
         return 1
+    return 0
+
+
+def _sync_report_json(report) -> dict:
+    payload: dict = {"ok": report.ok, "action": report.action}
+    if report.commit is not None:
+        payload["commit"] = report.commit
+    if report.files is not None:
+        payload["files"] = report.files
+    return payload
+
+
+def cmd_sync(args) -> int:
+    from arbor_worker.sync import (
+        GitSyncError,
+        remote_url,
+        set_remote,
+        set_shared,
+        sync_root,
+    )
+
+    root = Path(args.root)
+    if args.set_remote is not None:
+        try:
+            set_remote(root, args.set_remote)
+        except GitSyncError as error:
+            print(str(error), file=sys.stderr)
+            return 1
+        print(json.dumps({"remote": remote_url(root)}))
+        return 0
+    if args.shared is not None:
+        set_shared(root, args.shared)
+        print(json.dumps({"shared": args.shared}))
+        return 0
+    try:
+        report = sync_root(root)
+    except GitSyncError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    print(json.dumps(_sync_report_json(report)))
+    return 2 if not report.ok and report.action == "conflict" else 0
+
+
+def cmd_sync_resolve(args) -> int:
+    from arbor_worker.sync import GitSyncError, SyncConflictError, resolve_conflict
+
+    root = Path(args.root)
+    content = args.content
+    if args.side == "edit" and content is None:
+        content = sys.stdin.read()
+    try:
+        resolve_conflict(root, args.path, args.side, content=content)
+    except (SyncConflictError, GitSyncError) as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    print(json.dumps({"ok": True, "path": args.path}))
+    return 0
+
+
+def cmd_sync_continue(args) -> int:
+    from arbor_worker.sync import GitSyncError, SyncConflictError, continue_sync
+
+    root = Path(args.root)
+    try:
+        report = continue_sync(root)
+    except SyncConflictError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    except GitSyncError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    print(json.dumps(_sync_report_json(report)))
+    if not report.ok and report.action == "conflict":
+        return 2
     return 0

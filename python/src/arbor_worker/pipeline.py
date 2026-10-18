@@ -418,12 +418,21 @@ def run_update(
 
     commit = None
     if commit_paths:
-        ensure_gitignored(root, settings.cache_dir_name)
+        from arbor_worker.sync import derived_gitignore_extras
+
+        ensure_gitignored(
+            root,
+            settings.cache_dir_name,
+            derived_gitignore_extras(settings.cache_dir_name),
+        )
         commit_paths.append(Path(".gitignore"))
         message = "digest: " + ", ".join(done_courses)
         try:
             commit = commit_and_note(root, commit_paths, message, emitter)
             emitter.committed(commit=commit, courses=done_courses)
+            from arbor_worker.sync import maybe_sync_after_commit
+
+            maybe_sync_after_commit(root, emitter)
             if done_courses:
                 from arbor_worker.indexer import index_courses
 

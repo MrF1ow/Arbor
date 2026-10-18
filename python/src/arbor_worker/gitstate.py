@@ -56,6 +56,12 @@ def _effective_user_email(root: Path, runner: _Runner) -> str | None:
     return email if email else None
 
 
+def git_identity_args(root: Path, runner: _Runner = subprocess.run) -> list[str]:
+    if _effective_user_email(root, runner) or _env_git_email_set():
+        return []
+    return ["-c", "user.name=Arbor", "-c", "user.email=arbor@localhost"]
+
+
 def commit_batch(
     root: Path,
     rel_paths: list[Path],
@@ -68,26 +74,14 @@ def commit_batch(
     if add.returncode != 0:
         raise GitStateError(f"git add failed: {(add.stderr or '').strip()}")
     notice: str | None = None
-    if _effective_user_email(root, runner) or _env_git_email_set():
-        commit = _git(root, ["commit", "-m", message], runner)
-    else:
+    identity = git_identity_args(root, runner)
+    if identity:
         notice = FALLBACK_IDENTITY_NOTICE
-        commit = runner(
-            [
-                "git",
-                "-C",
-                str(root),
-                "-c",
-                "user.name=Arbor",
-                "-c",
-                "user.email=arbor@localhost",
-                "commit",
-                "-m",
-                message,
-            ],
-            capture_output=True,
-            text=True,
-        )
+    commit = runner(
+        ["git", "-C", str(root), *identity, "commit", "-m", message],
+        capture_output=True,
+        text=True,
+    )
     if commit.returncode != 0:
         raise GitStateError(f"git commit failed: {(commit.stderr or '').strip()}")
     rev = _git(root, ["rev-parse", "--short", "HEAD"], runner)

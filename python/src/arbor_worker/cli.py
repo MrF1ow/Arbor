@@ -123,6 +123,44 @@ def build_parser() -> argparse.ArgumentParser:
     ac.add_argument("--heading", default=None, help="Source heading.")
     ac.add_argument("--page", default=None, help="Source page or page range.")
 
+    sync = sub.add_parser("sync", help="Sync a Knowledge root with its arbor remote.")
+    sync.add_argument("--root", required=True, help="Path to the Knowledge git repo.")
+    sync.add_argument(
+        "--set-remote",
+        default=None,
+        dest="set_remote",
+        metavar="URL",
+        help="Configure the arbor remote and exit.",
+    )
+    shared = sync.add_mutually_exclusive_group()
+    shared.add_argument(
+        "--shared",
+        action="store_true",
+        dest="shared",
+        default=None,
+        help="Mark the root as shared (merge instead of rebase).",
+    )
+    shared.add_argument(
+        "--no-shared",
+        action="store_false",
+        dest="shared",
+        help="Mark the root as not shared (rebase on sync).",
+    )
+
+    sr = sub.add_parser("sync-resolve", help="Record a sync conflict resolution.")
+    sr.add_argument("--root", required=True, help="Path to the Knowledge git repo.")
+    sr.add_argument("--path", required=True, help="Conflicted file path relative to root.")
+    sr.add_argument(
+        "--side",
+        required=True,
+        choices=["mine", "theirs", "edit"],
+        help="Resolution side.",
+    )
+    sr.add_argument("--content", default=None, help="Full file text when side is edit.")
+
+    sc = sub.add_parser("sync-continue", help="Continue sync after resolving conflicts.")
+    sc.add_argument("--root", required=True, help="Path to the Knowledge git repo.")
+
     return parser
 
 
@@ -175,4 +213,13 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "append-card":
         from arbor_worker.commands import cmd_append_card
         return cmd_append_card(args)
+    if args.command == "sync":
+        from arbor_worker.commands import cmd_sync
+        return cmd_sync(args)
+    if args.command == "sync-resolve":
+        from arbor_worker.commands import cmd_sync_resolve
+        return cmd_sync_resolve(args)
+    if args.command == "sync-continue":
+        from arbor_worker.commands import cmd_sync_continue
+        return cmd_sync_continue(args)
     return 2
