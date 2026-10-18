@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_serializer
 
 from arbor_worker.schemas.study.digest import normalize_study_digest
 
@@ -12,6 +12,7 @@ class CardSource(BaseModel):
 
     digest: str
     heading: str | None = None
+    page: str | None = None
 
     @field_validator("digest")
     @classmethod
@@ -19,6 +20,13 @@ class CardSource(BaseModel):
         if not value.strip():
             raise ValueError("source.digest must not be blank")
         return normalize_study_digest(value)
+
+    @model_serializer(mode="wrap")
+    def _serialize(self, serializer):
+        data = serializer(self)
+        if data.get("page") is None:
+            data.pop("page", None)
+        return data
 
 
 class Flashcard(BaseModel):

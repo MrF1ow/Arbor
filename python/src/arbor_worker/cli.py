@@ -105,6 +105,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="Source heading.",
     )
 
+    sp_sub.add_parser("recommend", help="Print deterministic study recommendations.")
+
+    plan = sub.add_parser("study-plan", help="Generate study/plan.md for a course.")
+    plan.add_argument("--root", required=True, help="Path to the Knowledge git repo.")
+    plan.add_argument("--course", required=True, help="Course directory name.")
+    plan.add_argument("--provider", default="codex", choices=provider_choices())
+    plan.add_argument("--model", default=None, help="Model id passed to the provider.")
+    plan.add_argument("--exam-date", default=None, dest="exam_date", help="Exam date (YYYY-MM-DD).")
+
+    ac = sub.add_parser("append-card", help="Append one flashcard to the course deck.")
+    ac.add_argument("--root", required=True, help="Path to the Knowledge git repo.")
+    ac.add_argument("--course", required=True, help="Course directory name.")
+    ac.add_argument("--front", required=True, help="Card front text.")
+    ac.add_argument("--back", required=True, help="Card back text.")
+    ac.add_argument("--digest", required=True, help="Source digest path (digests/name.md).")
+    ac.add_argument("--heading", default=None, help="Source heading.")
+    ac.add_argument("--page", default=None, help="Source page or page range.")
+
     return parser
 
 
@@ -151,4 +169,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "study-progress":
         from arbor_worker.commands import cmd_study_progress
         return cmd_study_progress(args)
+    if args.command == "study-plan":
+        from arbor_worker.commands import cmd_study_plan
+        return cmd_study_plan(args)
+    if args.command == "append-card":
+        from arbor_worker.commands import cmd_append_card
+        return cmd_append_card(args)
     return 2
