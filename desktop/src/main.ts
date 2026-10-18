@@ -357,9 +357,21 @@ function showPanel(name: string) {
   panels.forEach((p) => p.classList.toggle("active", (p as HTMLElement).dataset.panel === name));
 }
 
+function updateFolderChooseLabels() {
+  const label =
+    knowledgeRoots.length > 0 ? "Add folder…" : "Choose Knowledge folder…";
+  chooseBtn.textContent = label;
+  welcomeChooseBtn.textContent = label;
+}
+
 function setNavActive(place: Place, course?: string) {
   courseListEl.querySelectorAll(".nav-item").forEach((btn) => {
-    btn.classList.toggle("active", place === "course" && btn.getAttribute("data-course") === course);
+    btn.classList.toggle(
+      "active",
+      place === "course" &&
+        btn.getAttribute("data-course") === course &&
+        btn.getAttribute("data-root") === knowledgeRoot,
+    );
   });
   navJobs.classList.toggle("active", place === "jobs");
   navSettings.classList.toggle("active", place === "settings");
@@ -746,10 +758,13 @@ function clearChatTranscriptForRootSwitch() {
 }
 
 async function switchKnowledgeRoot(path: string, course?: string) {
+  if (course === undefined && path === knowledgeRoot) {
+    return;
+  }
   knowledgeRoot = path;
   folderHintEl.textContent = shortenPath(path);
   chatRootEl.textContent = shortenPath(path);
-  chooseBtn.textContent = "Change folder…";
+  updateFolderChooseLabels();
   await invoke("start_folder_watch", { root: path });
   await renderCourseList();
   await loadJobHistory();
@@ -2210,7 +2225,7 @@ async function loadSettings() {
   if (activePath) {
     knowledgeRoot = activePath;
     folderHintEl.textContent = shortenPath(activePath);
-    chooseBtn.textContent = "Change folder…";
+    updateFolderChooseLabels();
     await invoke("start_folder_watch", { root: activePath });
     await renderCourseList();
     await loadJobHistory();

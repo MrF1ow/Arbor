@@ -30,4 +30,30 @@ test("sidebar groups courses under workspace roots", async () => {
   const persistBody = source.slice(persistStart, persistEnd === -1 ? undefined : persistEnd);
   assert.match(persistBody, /knowledge_roots: knowledgeRoots/);
   assert.match(persistBody, /active_root: knowledgeRoot/);
+
+  const setNavStart = source.indexOf("function setNavActive");
+  assert.ok(setNavStart >= 0, "setNavActive must exist");
+  const setNavEnd = source.indexOf("\nfunction setCourseView", setNavStart);
+  const setNavBody = source.slice(setNavStart, setNavEnd === -1 ? undefined : setNavEnd);
+  assert.match(setNavBody, /data-root/);
+  assert.match(setNavBody, /knowledgeRoot/);
+  assert.doesNotMatch(
+    setNavBody,
+    /place === "course" && btn\.getAttribute\("data-course"\) === course\s*\)/,
+    "course highlight must also match data-root to knowledgeRoot",
+  );
+
+  assert.match(
+    switchBody,
+    /if \(course === undefined && path === knowledgeRoot\)\s*\{\s*return;\s*\}/,
+  );
+  const clearChatIdx = switchBody.indexOf("clearChatTranscriptForRootSwitch");
+  const earlyReturnIdx = switchBody.indexOf("path === knowledgeRoot");
+  assert.ok(
+    earlyReturnIdx >= 0 && earlyReturnIdx < clearChatIdx,
+    "switchKnowledgeRoot must return before clearChatTranscriptForRootSwitch when already active",
+  );
+
+  assert.doesNotMatch(source, /Change folder…/);
+  assert.match(source, /Add folder…/);
 });
