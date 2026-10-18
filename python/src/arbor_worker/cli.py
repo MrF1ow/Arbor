@@ -146,6 +146,11 @@ def build_parser() -> argparse.ArgumentParser:
         dest="shared",
         help="Mark the root as not shared (rebase on sync).",
     )
+    sync.add_argument(
+        "--show",
+        action="store_true",
+        help="Print configured remote and shared mode without syncing.",
+    )
 
     sr = sub.add_parser("sync-resolve", help="Record a sync conflict resolution.")
     sr.add_argument("--root", required=True, help="Path to the Knowledge git repo.")

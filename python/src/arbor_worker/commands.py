@@ -887,6 +887,15 @@ def cmd_sync(args) -> int:
         set_shared(root, args.shared)
         print(json.dumps({"shared": args.shared}))
         return 0
+    if args.show:
+        from arbor_worker import sync as sync_mod
+
+        print(
+            json.dumps(
+                {"remote": remote_url(root), "shared": sync_mod._read_shared(root)}
+            )
+        )
+        return 0
     try:
         report = sync_root(root)
     except GitSyncError as error:

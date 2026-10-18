@@ -338,3 +338,23 @@ def test_sync_after_commit_append_card(tmp_path: Path, monkeypatch: pytest.Monke
         cli.main(argv2)
     after = _run_git(bare, "rev-parse", "HEAD").stdout.strip()
     assert before == after
+
+
+def test_sync_show(tmp_path: Path):
+    import contextlib
+
+    bare = tmp_path / "remote.git"
+    subprocess.run(["git", "init", "--bare", "-q", str(bare)], check=True)
+    root = tmp_path / "solo"
+    subprocess.run(["git", "clone", "-q", str(bare), str(root)], check=True)
+    _run_git(root, "config", "user.email", "solo@test.local")
+    _run_git(root, "config", "user.name", "Solo")
+    set_remote(root, str(bare))
+    set_shared(root, True)
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        code = cli.main(["sync", "--root", str(root), "--show"])
+    assert code == 0
+    data = json.loads(buf.getvalue().strip())
+    assert data["remote"] == str(bare)
+    assert data["shared"] is True

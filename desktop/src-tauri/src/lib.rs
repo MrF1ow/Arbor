@@ -62,6 +62,13 @@ pub fn run() {
             commands::append_chat_lines,
             commands::clear_chat_history,
             commands::start_chat,
+            commands::sync_show,
+            commands::sync_set_remote,
+            commands::sync_set_shared,
+            commands::sync_now,
+            commands::sync_resolve,
+            commands::sync_continue,
+            commands::read_sync_conflict,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Arbor");

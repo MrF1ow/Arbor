@@ -67,6 +67,35 @@ export interface KnowledgeSettings {
     flashcards: boolean;
     quiz: boolean;
   };
+  sync_after_commit: boolean;
+}
+
+export interface SyncShowResult {
+  remote: string | null;
+  shared: boolean;
+}
+
+export interface SyncWorkerResult {
+  ok: boolean;
+  action: string;
+  commit?: string;
+  files?: string[];
+}
+
+export interface SyncConflictFile {
+  path: string;
+  binary: boolean;
+  mine?: string | null;
+  theirs?: string | null;
+  choice?: string;
+  edit_content?: string;
+}
+
+export interface SyncConflictSession {
+  strategy: string;
+  upstream: string;
+  branch: string;
+  files: SyncConflictFile[];
 }
 
 export interface CardSource {
@@ -260,4 +289,5 @@ export interface WorkerEvent {
   id?: string;
   attempt?: number;
   attempts?: number;
+  files?: string[];
 }
