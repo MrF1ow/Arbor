@@ -862,6 +862,8 @@ def _sync_report_json(report) -> dict:
         payload["commit"] = report.commit
     if report.files is not None:
         payload["files"] = report.files
+    if report.head_changed:
+        payload["head_changed"] = True
     return payload
 
 

@@ -1724,6 +1724,13 @@ async function reloadSyncConflictDialog() {
   renderSyncConflictSession(session, syncConflictSelectedPath ?? undefined);
 }
 
+function reloadLibraryAfterSync() {
+  void renderCourseList().then(() => {
+    if (currentCourse) void loadCourseContent(currentCourse);
+  });
+  void runSearch(searchInput.value);
+}
+
 async function runSyncNow() {
   if (!knowledgeRoot) return;
   syncStatusEl.textContent = "";
@@ -1736,6 +1743,7 @@ async function runSyncNow() {
     }
     if (result.ok) {
       syncStatusEl.textContent = `Synced (${result.action}).`;
+      if (result.head_changed) reloadLibraryAfterSync();
     }
   } catch (error) {
     syncStatusEl.textContent = String(error);
@@ -2503,6 +2511,7 @@ syncConflictContinueBtn.addEventListener("click", async () => {
     if (result.ok) {
       syncConflictDialogEl.close();
       syncStatusEl.textContent = "Synced (integrated).";
+      if (result.head_changed) reloadLibraryAfterSync();
     }
   } catch (error) {
     syncConflictErrorEl.textContent = String(error);
@@ -3013,10 +3022,11 @@ function renderEvent(ev: WorkerEvent) {
       break;
     case "committed":
       logLine(`Committed ${ev.commit}: ${(ev.courses ?? []).join(", ")}`);
-      void renderCourseList().then(() => {
-        if (currentCourse) void loadCourseContent(currentCourse);
-      });
-      void runSearch(searchInput.value);
+      reloadLibraryAfterSync();
+      break;
+    case "sync_done":
+      logLine(`Synced (${ev.action ?? "ok"})${ev.commit ? `: ${ev.commit}` : ""}`);
+      reloadLibraryAfterSync();
       break;
     case "run_done":
       logLine(`\nDone. processed=${ev.processed} failed=${ev.failed} skipped=${ev.skipped}`);

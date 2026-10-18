@@ -11,6 +11,7 @@ from arbor_worker import cli
 from arbor_worker.embed import embed_root, search_chunks
 from arbor_worker.embedder.hashed import HashedNgramEmbedder
 from arbor_worker.indexer import open_db
+from arbor_worker import sync as sync_mod
 from arbor_worker.sync import (
     GitSyncError,
     SyncConflictError,
@@ -338,6 +339,56 @@ def test_sync_after_commit_append_card(tmp_path: Path, monkeypatch: pytest.Monke
         cli.main(argv2)
     after = _run_git(bare, "rev-parse", "HEAD").stdout.strip()
     assert before == after
+
+
+def test_rebase_failure_keeps_original_error_when_abort_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    bare, a, b = _bare_and_clones(tmp_path)
+    original_git = sync_mod._git
+    real_abort = sync_mod._abort_any_in_progress
+    original_message = "ORIGINAL_REBASE_FAILURE_XYZZY"
+    abort_calls = {"n": 0}
+
+    def fake_git(root: Path, args, *, runner=subprocess.run, identity=False, check=False):
+        if len(args) == 2 and args[0] == "rebase" and args[1].startswith("arbor/"):
+            rebase_dir = root / ".git" / "rebase-merge"
+            rebase_dir.mkdir(parents=True, exist_ok=True)
+            return subprocess.CompletedProcess(
+                args,
+                1,
+                stdout="",
+                stderr=original_message,
+            )
+        return original_git(root, args, runner=runner, identity=identity, check=check)
+
+    def flaky_abort(root: Path, runner=subprocess.run) -> None:
+        abort_calls["n"] += 1
+        if abort_calls["n"] == 1:
+            raise GitSyncError("abort runner failed")
+        for name in ("rebase-merge", "rebase-apply"):
+            stale = root / ".git" / name
+            if stale.is_dir():
+                import shutil
+
+                shutil.rmtree(stale)
+        real_abort(root, runner)
+
+    (a / "only-a.md").write_text("a\n")
+    _commit_all(a, "a only")
+    sync_root(a)
+    (b / "only-b.md").write_text("b\n")
+    _commit_all(b, "b only")
+
+    monkeypatch.setattr(sync_mod, "_git", fake_git)
+    monkeypatch.setattr(sync_mod, "_abort_any_in_progress", flaky_abort)
+
+    with pytest.raises(GitSyncError, match=original_message):
+        sync_root(b)
+
+    assert abort_calls["n"] >= 1
+    assert not (b / ".git" / "rebase-merge").exists()
+    assert not (b / ".git" / "rebase-apply").exists()
 
 
 def test_sync_show(tmp_path: Path):

@@ -58,6 +58,7 @@ class SyncReport:
     action: str
     commit: str | None = None
     files: list[str] | None = None
+    head_changed: bool = False
 
 
 def redact_git_text(text: str) -> str:
@@ -243,6 +244,22 @@ def _abort_any_in_progress(root: Path, runner=subprocess.run) -> None:
         _git(root, ["rebase", "--abort"], runner=runner)
     if _merge_in_progress(root):
         _git(root, ["merge", "--abort"], runner=runner)
+
+
+def _cleanup_incomplete_integration(root: Path, runner=subprocess.run) -> None:
+    """Abort a stuck rebase/merge without masking an exception already in flight."""
+    for _ in range(3):
+        if not (_rebase_in_progress(root, runner) or _merge_in_progress(root)):
+            return
+        try:
+            _abort_any_in_progress(root, runner)
+        except Exception:
+            pass
+    if _rebase_in_progress(root, runner) or _merge_in_progress(root):
+        import sys
+
+        if sys.exc_info()[0] is None:
+            raise GitSyncError("Sync left an incomplete rebase or merge; aborted.")
 
 
 def _current_branch(root: Path, runner=subprocess.run) -> str:
@@ -467,9 +484,7 @@ def sync_root(root: Path, runner=subprocess.run) -> SyncReport:
                 _abort_integration(root, strategy, runner)
                 raise GitSyncError(redact_git_text((rebase.stderr or "").strip()))
     finally:
-        if _rebase_in_progress(root, runner) or _merge_in_progress(root):
-            _abort_any_in_progress(root, runner)
-            raise GitSyncError("Sync left an incomplete rebase or merge; aborted.")
+        _cleanup_incomplete_integration(root, runner)
 
     push = _git(root, ["push", REMOTE_NAME, "HEAD"], runner=runner)
     if push.returncode != 0:
@@ -477,10 +492,16 @@ def sync_root(root: Path, runner=subprocess.run) -> SyncReport:
 
     post_head_proc = _git(root, ["rev-parse", "HEAD"], runner=runner)
     post_head = (post_head_proc.stdout or "").strip()
-    if post_head != pre_fetch_head:
+    head_changed = post_head != pre_fetch_head
+    if head_changed:
         _rebuild_after_sync(root)
 
-    return SyncReport(ok=True, action="integrated", commit=_short_head(root, runner))
+    return SyncReport(
+        ok=True,
+        action="integrated",
+        commit=_short_head(root, runner),
+        head_changed=head_changed,
+    )
 
 
 def resolve_conflict(
@@ -633,9 +654,7 @@ def continue_sync(root: Path, runner=subprocess.run) -> SyncReport:
             _continue_rebase_or_merge(root, strategy, runner)
 
     finally:
-        if _rebase_in_progress(root, runner) or _merge_in_progress(root):
-            _abort_any_in_progress(root, runner)
-            raise GitSyncError("Sync left an incomplete rebase or merge; aborted.")
+        _cleanup_incomplete_integration(root, runner)
 
     push = _git(root, ["push", REMOTE_NAME, "HEAD"], runner=runner)
     if push.returncode != 0:
@@ -643,11 +662,17 @@ def continue_sync(root: Path, runner=subprocess.run) -> SyncReport:
 
     post_head_proc = _git(root, ["rev-parse", "HEAD"], runner=runner)
     post_head = (post_head_proc.stdout or "").strip()
-    if post_head != pre_continue_head:
+    head_changed = post_head != pre_continue_head
+    if head_changed:
         _rebuild_after_sync(root)
 
     _clear_conflict_session(root)
-    return SyncReport(ok=True, action="integrated", commit=_short_head(root, runner))
+    return SyncReport(
+        ok=True,
+        action="integrated",
+        commit=_short_head(root, runner),
+        head_changed=head_changed,
+    )
 
 
 def maybe_sync_after_commit(root: Path, emitter: EventEmitterType) -> None:
@@ -672,4 +697,11 @@ def maybe_sync_after_commit(root: Path, emitter: EventEmitterType) -> None:
             "sync_conflict",
             files=report.files,
             message=f"Sync conflict in: {names}",
+        )
+        return
+    if report.ok and report.head_changed:
+        emitter.emit(
+            "sync_done",
+            action=report.action,
+            commit=report.commit,
         )

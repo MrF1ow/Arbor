@@ -80,6 +80,7 @@ export interface SyncWorkerResult {
   action: string;
   commit?: string;
   files?: string[];
+  head_changed?: boolean;
 }
 
 export interface SyncConflictFile {
