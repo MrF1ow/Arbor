@@ -17,6 +17,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
+#[cfg(test)]
+pub(crate) static WORKER_ENV_TEST_LOCK: Mutex<()> = Mutex::new(());
+
 pub fn parse_worker_json_output(
     stdout: &str,
     stderr: &str,
@@ -421,7 +424,7 @@ fn acquire_worker_spawn_slot() -> WorkerSpawnSlot {
     WorkerSpawnSlot
 }
 
-fn kill_worker_tree(child: &mut std::process::Child) {
+pub(crate) fn kill_worker_tree(child: &mut std::process::Child) {
     #[cfg(unix)]
     {
         // The child leads its own process group (process_group(0) above).
@@ -1696,9 +1699,6 @@ mod tests {
     }
 
     #[cfg(unix)]
-    static WORKER_ENV_TEST_LOCK: Mutex<()> = Mutex::new(());
-
-    #[cfg(unix)]
     fn fake_worker_script(name: &str, body: &str) -> PathBuf {
         use std::os::unix::fs::PermissionsExt;
 
@@ -1711,7 +1711,9 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn run_worker_json_times_out_and_kills_slow_child() {
-        let _guard = WORKER_ENV_TEST_LOCK.lock().unwrap();
+        let _guard = crate::worker::WORKER_ENV_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let start = Instant::now();
         let script = fake_worker_script("slow", "exec sleep 30");
         std::env::set_var("ARBOR_WORKER_CMD", script.to_string_lossy().as_ref());
@@ -1733,7 +1735,9 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn run_worker_json_timeout_kills_grandchild_holding_pipes() {
-        let _guard = WORKER_ENV_TEST_LOCK.lock().unwrap();
+        let _guard = crate::worker::WORKER_ENV_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let start = Instant::now();
         // The shell forks a grandchild that inherits stdout, then waits on it.
         let script = fake_worker_script("grandchild", "sleep 30 &\nwait");
@@ -1756,7 +1760,9 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn run_worker_json_parses_json_from_fake_worker() {
-        let _guard = WORKER_ENV_TEST_LOCK.lock().unwrap();
+        let _guard = crate::worker::WORKER_ENV_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let script = fake_worker_script("json", "echo '{\"ok\":true}'");
         std::env::set_var("ARBOR_WORKER_CMD", script.to_string_lossy().as_ref());
         std::env::set_var("ARBOR_WORKER_NO_SIDECAR", "1");
@@ -1776,7 +1782,9 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn run_worker_json_limits_concurrent_spawns() {
-        let _guard = WORKER_ENV_TEST_LOCK.lock().unwrap();
+        let _guard = crate::worker::WORKER_ENV_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         TEST_SPAWN_HIGH_WATER.store(0, Ordering::SeqCst);
         let script = fake_worker_script("sleep-json", "sleep 2; echo '{\"ok\":true}'");
         std::env::set_var("ARBOR_WORKER_CMD", script.to_string_lossy().as_ref());

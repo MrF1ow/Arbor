@@ -6,6 +6,7 @@ use crate::settings::{self, Settings, SshWorker};
 use crate::transport::{map_ssh_error, validate_ssh, WorkerTransport};
 use crate::watch::WatchState;
 use crate::worker;
+use crate::worker_pool::{self, WorkerPool};
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
@@ -53,6 +54,21 @@ fn run_worker_json_app(
     sub_args: &[&str],
 ) -> Result<serde_json::Value, String> {
     let pairs = worker_env_pairs(app, sub_args);
+    if worker_pool::serve_eligible(sub_args)
+        && std::env::var("ARBOR_WORKER_NO_SERVE").as_deref() != Ok("1")
+    {
+        let pool = app.state::<Arc<WorkerPool>>();
+        let env: HashMap<String, String> = pairs
+            .iter()
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect();
+        return pool.request(
+            &repo_dir(app),
+            sub_args,
+            env,
+            worker::worker_deadline(sub_args),
+        );
+    }
     let refs: Vec<(&str, &str)> = pairs
         .iter()
         .map(|(key, value)| (key.as_str(), value.as_str()))
@@ -64,6 +80,17 @@ fn run_worker_json_inherit(
     app: &tauri::AppHandle,
     sub_args: &[&str],
 ) -> Result<serde_json::Value, String> {
+    if worker_pool::serve_eligible(sub_args)
+        && std::env::var("ARBOR_WORKER_NO_SERVE").as_deref() != Ok("1")
+    {
+        let pool = app.state::<Arc<WorkerPool>>();
+        return pool.request(
+            &repo_dir(app),
+            sub_args,
+            HashMap::new(),
+            worker::worker_deadline(sub_args),
+        );
+    }
     worker::run_worker_json(&repo_dir(app), sub_args, &[])
 }
 
@@ -139,7 +166,7 @@ fn permission_sets_equal(grant: &[String], index: &[serde_json::Value]) -> bool 
     a == b
 }
 
-fn repo_dir(app: &tauri::AppHandle) -> PathBuf {
+pub(crate) fn repo_dir(app: &tauri::AppHandle) -> PathBuf {
     let resource_dir = app.path().resource_dir().ok();
     let current_dir = std::env::current_dir().ok();
     let current_exe = std::env::current_exe().ok();

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 
 from arbor_worker import __version__
 from arbor_worker.provider.registry import provider_choices
@@ -247,6 +248,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    if argv is None:
+        argv = sys.argv[1:]
+    if argv[:1] == ["serve"]:
+        from arbor_worker.serve import main as serve_main
+
+        return serve_main()
     parser = build_parser()
     try:
         args = parser.parse_args(argv)
