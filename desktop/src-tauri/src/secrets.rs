@@ -40,10 +40,12 @@ pub fn account_for_provider(provider_id: &str) -> Result<&'static str, String> {
     }
 }
 
+#[cfg(test)]
 pub struct MemorySecretStore {
     inner: Mutex<HashMap<String, String>>,
 }
 
+#[cfg(test)]
 impl MemorySecretStore {
     pub fn new() -> Self {
         Self {
@@ -52,6 +54,7 @@ impl MemorySecretStore {
     }
 }
 
+#[cfg(test)]
 impl SecretStore for MemorySecretStore {
     fn set(&self, account: &str, secret: &str) -> Result<(), String> {
         validate_account(account)?;
