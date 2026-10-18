@@ -85,18 +85,6 @@ class GrokCliProvider:
                 GROK_DISALLOWED_TOOLS,
             ]
         )
-        if request.image_paths:
-            blocks: list[dict] = [{"type": "text", "text": request.prompt}]
-            for path in request.image_paths:
-                data = base64.standard_b64encode(path.read_bytes()).decode("ascii")
-                blocks.append(
-                    {
-                        "type": "image",
-                        "mimeType": image_media_type(path),
-                        "data": data,
-                    }
-                )
-            argv.extend(["--prompt-json", json.dumps(blocks)])
         return argv
 
     def _parse_stdout(self, stdout: str) -> ProviderResult:
@@ -119,13 +107,24 @@ class GrokCliProvider:
         env = os.environ.copy()
         env["PATH"] = gui_path()
         if request.image_paths:
-            argv = self.build_argv(request, prompt_file=None)
-            proc = self._runner(
-                argv,
-                capture_output=True,
-                text=True,
-                env=env,
-            )
+            blocks: list[dict] = [{"type": "text", "text": request.prompt}]
+            for path in request.image_paths:
+                data = base64.standard_b64encode(path.read_bytes()).decode("ascii")
+                blocks.append(
+                    {
+                        "type": "image",
+                        "mimeType": image_media_type(path),
+                        "data": data,
+                    }
+                )
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                delete=False,
+                suffix=".json",
+            ) as tmp:
+                tmp.write(json.dumps(blocks))
+                prompt_path = Path(tmp.name)
         else:
             with tempfile.NamedTemporaryFile(
                 mode="w",
@@ -135,16 +134,16 @@ class GrokCliProvider:
             ) as tmp:
                 tmp.write(request.prompt)
                 prompt_path = Path(tmp.name)
-            try:
-                argv = self.build_argv(request, prompt_file=prompt_path)
-                proc = self._runner(
-                    argv,
-                    capture_output=True,
-                    text=True,
-                    env=env,
-                )
-            finally:
-                prompt_path.unlink(missing_ok=True)
+        try:
+            argv = self.build_argv(request, prompt_file=prompt_path)
+            proc = self._runner(
+                argv,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+        finally:
+            prompt_path.unlink(missing_ok=True)
         if proc.returncode != 0:
             stdout = proc.stdout or ""
             try:

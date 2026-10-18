@@ -60,7 +60,7 @@ def test_grok_disallowed_tools_list():
     assert GROK_DISALLOWED_TOOLS.split(",") == expected
 
 
-def test_build_argv_image_uses_prompt_json(tmp_path: Path):
+def test_build_argv_image_uses_prompt_file(tmp_path: Path):
     img = tmp_path / "page.jpg"
     img.write_bytes(b"\xff\xd8\xff")
     prov = GrokCliProvider(models=[Model("m", "M")], which=lambda name: "/bin/grok")
@@ -70,12 +70,60 @@ def test_build_argv_image_uses_prompt_json(tmp_path: Path):
         image_paths=[img],
         cwd=tmp_path,
     )
-    argv = prov.build_argv(req, prompt_file=None)
-    assert "--prompt-file" not in argv
-    idx = argv.index("--prompt-json")
-    blocks = json.loads(argv[idx + 1])
-    assert blocks[0]["text"] == "look"
-    assert blocks[1]["mimeType"] == "image/jpeg"
+    prompt_file = tmp_path / "blocks.json"
+    blocks = [
+        {"type": "text", "text": "look"},
+        {"type": "image", "mimeType": "image/jpeg", "data": "f/9/"},
+    ]
+    prompt_file.write_text(json.dumps(blocks))
+    argv = prov.build_argv(req, prompt_file=prompt_file)
+    assert "--prompt-json" not in argv
+    idx = argv.index("--prompt-file")
+    assert argv[idx + 1] == str(prompt_file)
+    loaded = json.loads(prompt_file.read_text())
+    assert loaded[0]["text"] == "look"
+    assert loaded[1]["mimeType"] == "image/jpeg"
+
+
+def test_run_image_argv_under_arg_limit_and_prompt_file_valid(tmp_path: Path):
+    img = tmp_path / "page.png"
+    img.write_bytes(b"\x89PNG\r\n\x1a\n" + b"x" * 8192)
+    fixture_stdout = (FIXTURES / "grok-result.json").read_text()
+    captured: dict = {}
+
+    def runner(argv, **kwargs):
+        captured["argv"] = argv
+        pf_idx = argv.index("--prompt-file")
+        prompt_path = Path(argv[pf_idx + 1])
+        assert prompt_path.is_file()
+        blocks = json.loads(prompt_path.read_text())
+        assert isinstance(blocks, list)
+        assert blocks[0]["type"] == "text"
+        assert any(b.get("mimeType") == "image/png" for b in blocks)
+
+        class R:
+            returncode = 0
+            stdout = fixture_stdout
+            stderr = ""
+
+        return R()
+
+    prov = GrokCliProvider(
+        models=[Model("m", "M")],
+        runner=runner,
+        which=lambda name: "/usr/bin/grok",
+    )
+    prov.run(
+        ProviderRequest(
+            prompt="describe pages",
+            model_id="grok-4.7",
+            image_paths=[img],
+            cwd=tmp_path,
+        )
+    )
+    argv = captured["argv"]
+    assert "--prompt-json" not in argv
+    assert max(len(str(a)) for a in argv) < 100_000
 
 
 def test_run_parses_fixture(tmp_path: Path):
