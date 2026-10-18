@@ -52,7 +52,13 @@ Reinstalling the same id and pin replaces that directory atomically. Different p
 
 The worker passes a **context object** at run time that enforces declared permissions. Host paths are not exposed as attributes on that object. This is not an OS sandbox.
 
-The marketplace index and Settings UI for skills are specified in the v4.3.0 plan and are not part of install itself.
+## Marketplace
+
+The marketplace index is a JSON file listing **skill** and **provider** packages. Each row includes a **git** URL, a pinned full **commit** SHA (40 lowercase hex characters; branch names are rejected in the index), optional **subdir**, and declared **permissions**. Provider rows are metadata only in this release; Arbor does not install or run them from the index.
+
+The default index path in the Arbor repository is **`marketplace/index.json`**. There is no separate marketplace repository in v4.3.0. When loading an index from git, the **ref** argument may be a branch, tag, or commit; package pins inside the JSON remain full SHAs. Fetching an index reads and parses JSON only — Arbor does not import or execute files from a cloned index repository.
+
+The worker command **`arbor-worker skill-index --source PATH [--ref REF]`** prints the parsed index as JSON. When the desktop setting for the index source is empty, it will use **`find_default_index`** starting from the app checkout to locate **`marketplace/index.json`**.
 
 ## Run
 

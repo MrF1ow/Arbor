@@ -185,6 +185,10 @@ def build_parser() -> argparse.ArgumentParser:
     su.add_argument("--id", required=True, dest="id", help="Skill package id.")
     su.add_argument("--data-home", default=None, dest="data_home", help="Arbor data home (XDG data dir).")
 
+    sx = sub.add_parser("skill-index", help="Load a marketplace index from a local source.")
+    sx.add_argument("--source", required=True, help="Local file, directory, or git URL.")
+    sx.add_argument("--ref", default=None, help="Git ref when reading from a repository.")
+
     sr = sub.add_parser("skill-run", help="Run an installed skill package.")
     sr.add_argument("--id", required=True, dest="id", help="Skill package id.")
     sr.add_argument("--commit", required=True, help="Full 40-character lowercase commit SHA.")
@@ -262,6 +266,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "library-join":
         from arbor_worker.commands import cmd_library_join
         return cmd_library_join(args)
+    if args.command == "skill-index":
+        from arbor_worker.skillpkg.index import cmd_skill_index
+        return cmd_skill_index(args)
     if args.command == "skill-install":
         from arbor_worker.skillpkg.install import cmd_skill_install
         return cmd_skill_install(args)
