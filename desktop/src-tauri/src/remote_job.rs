@@ -178,6 +178,17 @@ fn parse_ndjson_line(line: &str, commit_paths: &mut Vec<String>, error: &mut Opt
     }
 }
 
+fn ensure_local_parent_for_sync(local_dir: &Path, rel: &str) -> Result<(), String> {
+    if rel.is_empty() {
+        return Ok(());
+    }
+    let local_path = local_dir.join(rel);
+    let Some(parent) = local_path.parent() else {
+        return Ok(());
+    };
+    std::fs::create_dir_all(parent).map_err(|e| e.to_string())
+}
+
 fn paths_for_course(course: &str, commit_paths: &[String]) -> Vec<String> {
     let prefix = format!("{course}/");
     commit_paths
@@ -479,6 +490,7 @@ impl RemoteOps for SystemRemoteOps {
             let local = if rel.is_empty() {
                 format!("{}/", local_dir.to_string_lossy())
             } else {
+                ensure_local_parent_for_sync(local_dir, rel)?;
                 local_dir.join(rel).to_string_lossy().into_owned()
             };
             self.rsync_with_excludes(&spec, &local)?;
@@ -859,6 +871,20 @@ mod tests {
         assert_eq!(outcome.error.as_deref(), Some("model refused"));
         assert!(!outcome.committed);
         assert!(!commit_called);
+    }
+
+    #[test]
+    fn sync_down_ensure_local_parent_creates_intermediate_dirs() {
+        let base = std::env::temp_dir().join(format!(
+            "arbor-sync-down-parent-{}",
+            std::process::id()
+        ));
+        let course_dir = base.join("Biology");
+        std::fs::create_dir_all(&course_dir).expect("course dir");
+        let rel = "digests/2026-10-18.md";
+        ensure_local_parent_for_sync(&course_dir, rel).expect("ensure parent");
+        assert!(course_dir.join("digests").is_dir());
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]
