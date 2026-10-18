@@ -8,6 +8,7 @@ test("successful sync with head_changed reloads the library like update commit",
   assert.ok(reloadStart >= 0, "reloadLibraryAfterSync must exist");
   const reloadEnd = source.indexOf("\nasync function runSyncNow", reloadStart);
   const reloadBody = source.slice(reloadStart, reloadEnd === -1 ? undefined : reloadEnd);
+  assert.match(reloadBody, /refreshLibraryShow\(\)/);
   assert.match(reloadBody, /renderCourseList\(\)/);
   assert.match(reloadBody, /loadCourseContent\(currentCourse\)/);
   assert.match(reloadBody, /runSearch\(searchInput\.value\)/);

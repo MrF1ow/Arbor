@@ -56,6 +56,22 @@ test("signedOutJobMessage formats auth refusal for the inspector log", async () 
   assert.equal(signedOutJobMessage("Grok", "   "), "Grok is not authenticated");
 });
 
+test("provider change persists library override after loadModels selects a model", async () => {
+  const source = await readFile(new URL("../src/main.ts", import.meta.url), "utf8");
+  const handlerStart = source.indexOf('providerSel.addEventListener("change"');
+  assert.ok(handlerStart >= 0, "provider change handler must exist");
+  const handlerEnd = source.indexOf('providerKeySaveBtn.addEventListener("click"', handlerStart);
+  const handlerBody = source.slice(handlerStart, handlerEnd === -1 ? undefined : handlerEnd);
+  const loadModelsIdx = handlerBody.indexOf("await loadModels");
+  const upsertIdx = handlerBody.indexOf("upsertProviderOverride");
+  assert.ok(loadModelsIdx >= 0, "provider change must await loadModels");
+  assert.ok(upsertIdx >= 0, "provider change must upsert library override");
+  assert.ok(
+    loadModelsIdx < upsertIdx,
+    "override model_id must come from modelSel after loadModels, not the previous provider",
+  );
+});
+
 test("pickerProviders drops fake and keeps grok", async () => {
   const { pickerProviders } = await subject();
 

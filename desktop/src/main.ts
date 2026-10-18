@@ -2255,6 +2255,7 @@ async function reloadSyncConflictDialog() {
 }
 
 function reloadLibraryAfterSync() {
+  void refreshLibraryShow();
   void renderCourseList().then(() => {
     if (currentCourse) void loadCourseContent(currentCourse);
   });
@@ -3262,10 +3263,7 @@ providerSel.addEventListener("change", () => {
   providerId = providerSel.value;
   const prevModel = modelSel.value;
   void (async () => {
-    if (!programmaticProviderChange && knowledgeRoot && libraryProvider) {
-      upsertProviderOverride(knowledgeRoot, providerId, modelSel.value || null);
-      refreshProviderRecommendationUi();
-    } else if (!programmaticProviderChange) {
+    if (!programmaticProviderChange && !(knowledgeRoot && libraryProvider)) {
       settingsProviderId = providerId;
     }
     refreshProviderExtraRows();
@@ -3275,6 +3273,10 @@ providerSel.addEventListener("change", () => {
     } catch (error) {
       modelSel.innerHTML = "";
       logLine(`Could not load models: ${error}`);
+    }
+    if (!programmaticProviderChange && knowledgeRoot && libraryProvider) {
+      upsertProviderOverride(knowledgeRoot, providerId, modelSel.value || null);
+      refreshProviderRecommendationUi();
     }
     refreshStudyEnabled();
     await refreshAuth();
