@@ -170,6 +170,14 @@ def _read_shared(root: Path) -> bool:
     return bool(data.get("shared")) if isinstance(data, dict) else False
 
 
+def sync_pull_strategy(root: Path, runner=subprocess.run) -> str:
+    from arbor_worker.library import is_shared_library
+
+    if _read_shared(root) or is_shared_library(root):
+        return "merge"
+    return "rebase"
+
+
 def set_shared(root: Path, shared: bool) -> None:
     path = root / SYNC_CONFIG
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -472,7 +480,7 @@ def sync_root(root: Path, runner=subprocess.run) -> SyncReport:
             raise GitSyncError(redact_git_text((push.stderr or "").strip()))
         return SyncReport(ok=True, action="pushed", commit=_short_head(root, runner))
 
-    strategy = "merge" if _read_shared(root) else "rebase"
+    strategy = sync_pull_strategy(root, runner)
     try:
         if strategy == "merge":
             merge = _git(

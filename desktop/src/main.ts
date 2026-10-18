@@ -89,6 +89,7 @@ import type {
   SearchHit,
   Selection,
   KnowledgeRootEntry,
+  KnowledgeKind,
   Settings,
   UpdatePlan,
   WorkerEvent,
@@ -258,6 +259,20 @@ const syncRemoteNoteEl = $("sync-remote-note");
 const toggleSyncShared = $("toggle-sync-shared");
 const toggleSyncAfter = $("toggle-sync-after");
 const syncNowBtn = $("sync-now") as HTMLButtonElement;
+const createSharedLibraryBtn = $("create-shared-library") as HTMLButtonElement;
+const joinLibraryBtn = $("join-library") as HTMLButtonElement;
+const libraryCreateDialogEl = $("library-create-dialog") as HTMLDialogElement;
+const libraryCreateNameEl = $("library-create-name") as HTMLInputElement;
+const libraryCreateErrorEl = $("library-create-error");
+const libraryCreateConfirmBtn = $("library-create-confirm") as HTMLButtonElement;
+const libraryCreateCancelBtn = $("library-create-cancel") as HTMLButtonElement;
+const libraryJoinDialogEl = $("library-join-dialog") as HTMLDialogElement;
+const libraryJoinUrlEl = $("library-join-url") as HTMLInputElement;
+const libraryJoinDestEl = $("library-join-dest") as HTMLInputElement;
+const libraryJoinPickBtn = $("library-join-pick") as HTMLButtonElement;
+const libraryJoinErrorEl = $("library-join-error");
+const libraryJoinConfirmBtn = $("library-join-confirm") as HTMLButtonElement;
+const libraryJoinCancelBtn = $("library-join-cancel") as HTMLButtonElement;
 const syncStatusEl = $("sync-status");
 const syncConflictDialogEl = $("sync-conflict-dialog") as HTMLDialogElement;
 const syncConflictFilesEl = $("sync-conflict-files");
@@ -717,6 +732,7 @@ function refreshFolderTools() {
   toggleSyncShared.toggleAttribute("disabled", !ready);
   toggleSyncAfter.toggleAttribute("disabled", !ready);
   syncNowBtn.disabled = !ready;
+  createSharedLibraryBtn.disabled = !ready;
   refreshUpdateEnabled();
   refreshStudyEnabled();
 }
@@ -2545,6 +2561,109 @@ syncRemoteSaveBtn.addEventListener("click", async () => {
 
 syncNowBtn.addEventListener("click", () => {
   void runSyncNow();
+});
+
+function activeRootEntryName(): string {
+  if (!knowledgeRoot) return "";
+  const entry = knowledgeRoots.find((e) => e.path === knowledgeRoot);
+  return entry?.name ?? knowledgePathBasename(knowledgeRoot);
+}
+
+createSharedLibraryBtn.addEventListener("click", () => {
+  if (!knowledgeRoot) return;
+  libraryCreateErrorEl.textContent = "";
+  libraryCreateNameEl.value = activeRootEntryName();
+  libraryCreateDialogEl.showModal();
+});
+
+libraryCreateCancelBtn.addEventListener("click", () => {
+  libraryCreateDialogEl.close();
+});
+
+libraryCreateConfirmBtn.addEventListener("click", async () => {
+  if (!knowledgeRoot) return;
+  libraryCreateErrorEl.textContent = "";
+  const name = libraryCreateNameEl.value.trim();
+  try {
+    const doc = await invoke<{ name: string }>("create_shared_library", {
+      root: knowledgeRoot,
+      name: name || null,
+    });
+    const entry = knowledgeRoots.find((e) => e.path === knowledgeRoot);
+    if (entry) {
+      entry.kind = "shared";
+      entry.name = doc.name;
+    }
+    await persist();
+    await renderCourseList();
+    void refreshSyncUi();
+    libraryCreateDialogEl.close();
+  } catch (error) {
+    libraryCreateErrorEl.textContent = String(error);
+  }
+});
+
+let libraryJoinInFlight = false;
+
+libraryJoinBtn.addEventListener("click", () => {
+  libraryJoinErrorEl.textContent = "";
+  libraryJoinUrlEl.value = "";
+  libraryJoinDestEl.value = "";
+  libraryJoinDialogEl.showModal();
+});
+
+libraryJoinCancelBtn.addEventListener("click", () => {
+  libraryJoinDialogEl.close();
+});
+
+libraryJoinPickBtn.addEventListener("click", async () => {
+  libraryJoinErrorEl.textContent = "";
+  try {
+    const picked = await open({ directory: true, multiple: false });
+    if (typeof picked !== "string") return;
+    libraryJoinDestEl.value = picked;
+  } catch (error) {
+    libraryJoinErrorEl.textContent = String(error);
+  }
+});
+
+libraryJoinConfirmBtn.addEventListener("click", async () => {
+  if (libraryJoinInFlight) return;
+  const url = libraryJoinUrlEl.value.trim();
+  const dest = libraryJoinDestEl.value.trim();
+  if (!url || !dest) {
+    libraryJoinErrorEl.textContent = "Enter a URL and choose a folder.";
+    return;
+  }
+  libraryJoinErrorEl.textContent = "";
+  libraryJoinInFlight = true;
+  joinLibraryBtn.disabled = true;
+  libraryJoinConfirmBtn.disabled = true;
+  try {
+    const result = await invoke<{ path: string; name: string; kind: KnowledgeKind }>(
+      "join_library",
+      { url, dest },
+    );
+    const existing = knowledgeRoots.find((e) => e.path === result.path);
+    if (existing) {
+      existing.kind = "shared";
+      existing.name = result.name;
+    } else {
+      knowledgeRoots.push({
+        path: result.path,
+        kind: "shared",
+        name: result.name,
+      });
+    }
+    libraryJoinDialogEl.close();
+    await switchKnowledgeRoot(result.path);
+  } catch (error) {
+    libraryJoinErrorEl.textContent = String(error);
+  } finally {
+    libraryJoinInFlight = false;
+    joinLibraryBtn.disabled = false;
+    libraryJoinConfirmBtn.disabled = false;
+  }
 });
 
 syncConflictCloseBtn.addEventListener("click", () => {

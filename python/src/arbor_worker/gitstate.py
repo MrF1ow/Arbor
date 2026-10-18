@@ -57,6 +57,10 @@ def _effective_user_email(root: Path, runner: _Runner) -> str | None:
     return email if email else None
 
 
+def effective_git_email(root: Path, runner: _Runner = subprocess.run) -> str:
+    return _effective_user_email(root, runner) or "arbor@localhost"
+
+
 def git_identity_args(root: Path, runner: _Runner = subprocess.run) -> list[str]:
     config_email = _effective_user_email(root, runner)
     author_covered = bool(config_email) or _env_author_email_set()

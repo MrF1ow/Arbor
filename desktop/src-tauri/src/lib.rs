@@ -65,6 +65,8 @@ pub fn run() {
             commands::sync_show,
             commands::sync_set_remote,
             commands::sync_set_shared,
+            commands::create_shared_library,
+            commands::join_library,
             commands::sync_now,
             commands::sync_resolve,
             commands::sync_continue,

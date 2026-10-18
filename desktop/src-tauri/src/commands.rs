@@ -134,6 +134,34 @@ pub fn sync_set_shared(
 }
 
 #[tauri::command]
+pub fn create_shared_library(
+    app: tauri::AppHandle,
+    root: String,
+    name: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let mut args = vec!["library-create", "--root", root.as_str()];
+    let name_arg;
+    if let Some(ref n) = name {
+        name_arg = n.as_str();
+        args.push("--name");
+        args.push(name_arg);
+    }
+    run_worker_json_app(&app, &args)
+}
+
+#[tauri::command]
+pub fn join_library(
+    app: tauri::AppHandle,
+    url: String,
+    dest: String,
+) -> Result<serde_json::Value, String> {
+    run_worker_json_app(
+        &app,
+        &["library-join", "--url", url.as_str(), "--dest", dest.as_str()],
+    )
+}
+
+#[tauri::command]
 pub fn sync_now(app: tauri::AppHandle, root: String) -> Result<serde_json::Value, String> {
     run_worker_json_app(&app, &["sync", "--root", &root])
 }

@@ -166,6 +166,14 @@ def build_parser() -> argparse.ArgumentParser:
     sc = sub.add_parser("sync-continue", help="Continue sync after resolving conflicts.")
     sc.add_argument("--root", required=True, help="Path to the Knowledge git repo.")
 
+    lc = sub.add_parser("library-create", help="Create a shared library at a Knowledge root.")
+    lc.add_argument("--root", required=True, help="Path to the Knowledge git repo.")
+    lc.add_argument("--name", default=None, help="Library display name (default: folder name).")
+
+    lj = sub.add_parser("library-join", help="Clone and join a shared library.")
+    lj.add_argument("--url", required=True, help="Git URL of the shared library.")
+    lj.add_argument("--dest", required=True, help="Empty folder path for the clone.")
+
     return parser
 
 
@@ -227,4 +235,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "sync-continue":
         from arbor_worker.commands import cmd_sync_continue
         return cmd_sync_continue(args)
+    if args.command == "library-create":
+        from arbor_worker.commands import cmd_library_create
+        return cmd_library_create(args)
+    if args.command == "library-join":
+        from arbor_worker.commands import cmd_library_join
+        return cmd_library_join(args)
     return 2

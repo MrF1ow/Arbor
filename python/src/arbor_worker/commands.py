@@ -944,3 +944,28 @@ def cmd_sync_continue(args) -> int:
     if not report.ok and report.action == "conflict":
         return 2
     return 0
+
+
+def cmd_library_create(args) -> int:
+    from arbor_worker.library import LibraryError, create_shared_library
+
+    root = Path(args.root)
+    try:
+        doc = create_shared_library(root, name=args.name)
+    except LibraryError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    print(json.dumps(doc))
+    return 0
+
+
+def cmd_library_join(args) -> int:
+    from arbor_worker.library import LibraryError, join_library
+
+    try:
+        result = join_library(args.url, Path(args.dest))
+    except LibraryError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    print(json.dumps(result))
+    return 0
