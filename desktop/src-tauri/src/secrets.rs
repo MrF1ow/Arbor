@@ -178,6 +178,16 @@ pub fn worker_env_for_provider_id(
             push_base_url(lmstudio, "ARBOR_LMSTUDIO_BASE_URL", &mut pairs);
         }
     }
+    if matches!(provider_id, "openai_api" | "anthropic_api") {
+        let key_env = if provider_id == "openai_api" {
+            "ARBOR_OPENAI_API_KEY"
+        } else {
+            "ARBOR_ANTHROPIC_API_KEY"
+        };
+        if pairs.iter().any(|(k, _)| k == key_env) {
+            pairs.push(("ARBOR_ALLOW_REMOTE_API".to_string(), "1".to_string()));
+        }
+    }
     pairs
 }
 
@@ -261,9 +271,11 @@ mod tests {
         store.set("openai_api", FAKE_TEST_API_KEY).unwrap();
         let settings = Settings::default();
         let pairs = worker_env_for_provider_id("openai_api", &store, &settings);
-        assert_eq!(pairs.len(), 1);
+        assert_eq!(pairs.len(), 2);
         assert_eq!(pairs[0].0, "ARBOR_OPENAI_API_KEY");
         assert_eq!(pairs[0].1, FAKE_TEST_API_KEY);
+        assert_eq!(pairs[1].0, "ARBOR_ALLOW_REMOTE_API");
+        assert_eq!(pairs[1].1, "1");
 
         let argv = resolve_worker_argv(
             &|_| None,
@@ -336,6 +348,48 @@ mod tests {
             provider_secret_status_logic(&store, "openai_api").unwrap(),
             "missing"
         );
+    }
+
+    fn env_map(pairs: &[(String, String)]) -> HashMap<&str, &str> {
+        pairs.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect()
+    }
+
+    #[test]
+    fn openai_api_without_key_sets_no_remote_env() {
+        let store = MemorySecretStore::new();
+        let settings = Settings::default();
+        let pairs = worker_env_for_provider_id("openai_api", &store, &settings);
+        let env = env_map(&pairs);
+        assert!(env.get("ARBOR_OPENAI_API_KEY").is_none());
+        assert!(env.get("ARBOR_ALLOW_REMOTE_API").is_none());
+    }
+
+    #[test]
+    fn grok_and_ollama_never_set_allow_remote_api() {
+        let store = MemorySecretStore::new();
+        store.set("openai_api", FAKE_TEST_API_KEY).unwrap();
+        let settings = Settings {
+            ollama_base_url: Some("http://127.0.0.1:11434".into()),
+            ..Settings::default()
+        };
+        for provider in ["grok", "ollama"] {
+            let pairs = worker_env_for_provider_id(provider, &store, &settings);
+            assert!(
+                !pairs.iter().any(|(k, _)| k == "ARBOR_ALLOW_REMOTE_API"),
+                "provider {provider}"
+            );
+        }
+    }
+
+    #[test]
+    fn anthropic_api_with_key_sets_allow_remote_api() {
+        let store = MemorySecretStore::new();
+        store.set("anthropic_api", FAKE_TEST_API_KEY).unwrap();
+        let settings = Settings::default();
+        let pairs = worker_env_for_provider_id("anthropic_api", &store, &settings);
+        let env = env_map(&pairs);
+        assert_eq!(env.get("ARBOR_ANTHROPIC_API_KEY"), Some(&FAKE_TEST_API_KEY));
+        assert_eq!(env.get("ARBOR_ALLOW_REMOTE_API"), Some(&"1"));
     }
 
     #[test]

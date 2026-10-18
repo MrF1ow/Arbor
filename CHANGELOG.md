@@ -17,6 +17,7 @@ Git tag: `v3.5.0` when this release lands. **Product:** Version 4 in progress (A
 - The API key field is masked; **Save key** and **Clear key** update the keyring without reading the secret back into the UI.
 - The provider badge shows **key missing** or **ready** for API providers and **not running** for local servers when appropriate.
 - Anthropic API is refused with a clear reason when Arbor runs inside a Claude Code session (`CLAUDECODE`).
+- The desktop app sets `ARBOR_ALLOW_REMOTE_API=1` for the worker only when OpenAI API or Anthropic API is selected and a key is saved in the keyring.
 
 ## 3.4.0 — 2026-10-17
 
