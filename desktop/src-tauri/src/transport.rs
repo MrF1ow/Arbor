@@ -410,6 +410,26 @@ pub fn remote_course_dir(remote_root: &str, root_id: &str, course: &str) -> Resu
     Ok(format!("{base}/{course}"))
 }
 
+pub fn remote_mkdir_tokens(remote_abs_dir: &str) -> Result<Vec<String>, String> {
+    validate_rsync_local_path("remote path", remote_abs_dir)?;
+    Ok(vec![
+        "mkdir".to_string(),
+        "-p".to_string(),
+        remote_abs_dir.to_string(),
+    ])
+}
+
+pub fn remote_parent_dir(remote_abs_path: &str) -> Result<String, String> {
+    validate_rsync_local_path("remote path", remote_abs_path)?;
+    let parent = Path::new(remote_abs_path.trim_end_matches('/'))
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .ok_or_else(|| "remote path: no parent".to_string())?;
+    let parent_str = parent.to_string_lossy();
+    validate_rsync_local_path("remote path", &parent_str)?;
+    Ok(parent_str.into_owned())
+}
+
 fn rsync_remote_spec_inner(
     endpoint: &ValidatedSsh,
     remote_path: &str,

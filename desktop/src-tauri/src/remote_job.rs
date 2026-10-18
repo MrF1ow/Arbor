@@ -1,7 +1,7 @@
 use crate::transport::{
-    map_ssh_error, quote_remote_command, remote_course_dir, remote_knowledge_root, root_id_for,
-    rsync_argv, rsync_remote_file_spec, rsync_remote_spec, rsync_ssh_wrapper, ssh_argv,
-    ValidatedSsh,
+    map_ssh_error, quote_remote_command, remote_course_dir, remote_knowledge_root,
+    remote_mkdir_tokens, remote_parent_dir, root_id_for, rsync_argv, rsync_remote_file_spec,
+    rsync_remote_spec, rsync_ssh_wrapper, ssh_argv, ValidatedSsh,
 };
 use serde_json::Value;
 use std::collections::HashSet;
@@ -428,16 +428,33 @@ impl SystemRemoteOps {
             Err(String::from_utf8_lossy(&output.stderr).into_owned())
         }
     }
+
+    fn remote_mkdir(&self, remote_abs_dir: &str) -> Result<(), String> {
+        let tokens = remote_mkdir_tokens(remote_abs_dir)?;
+        let argv = ssh_argv(&self.endpoint, &self.known_hosts, &tokens)?;
+        let output = Command::new(&argv[0])
+            .args(&argv[1..])
+            .output()
+            .map_err(|e| e.to_string())?;
+        if output.status.success() {
+            Ok(())
+        } else {
+            Err(String::from_utf8_lossy(&output.stderr).into_owned())
+        }
+    }
 }
 
 impl RemoteOps for SystemRemoteOps {
     fn sync_up(&mut self, local_dir: &Path, remote_dir: &str) -> Result<(), String> {
+        self.remote_mkdir(remote_dir)?;
         let local = format!("{}/", local_dir.to_string_lossy());
         let spec = rsync_remote_spec(&self.endpoint, remote_dir)?;
         self.rsync_with_excludes(&local, &spec)
     }
 
     fn put_file(&mut self, local_file: &Path, remote_file: &str) -> Result<(), String> {
+        let parent = remote_parent_dir(remote_file)?;
+        self.remote_mkdir(&parent)?;
         let spec = rsync_remote_file_spec(&self.endpoint, remote_file)?;
         self.rsync_with_excludes(&local_file.to_string_lossy(), &spec)
     }
@@ -552,7 +569,10 @@ impl RemoteOps for SystemRemoteOps {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::transport::{arbor_known_hosts_path, ssh_argv, validate_ssh, WorkerTransport};
+    use crate::transport::{
+        arbor_known_hosts_path, remote_course_dir, remote_mkdir_tokens, root_id_for, ssh_argv,
+        validate_ssh, WorkerTransport,
+    };
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex};
@@ -708,6 +728,29 @@ mod tests {
         let paths = committed_paths.unwrap();
         assert_eq!(paths.len(), 3);
         assert_eq!(commit_index, Some(true));
+    }
+
+    #[test]
+    fn sync_up_mkdir_ssh_argv() {
+        let endpoint = test_endpoint();
+        let app_data = PathBuf::from("/tmp/arbor-r14/xdg/data/com.arbor.app");
+        let known = arbor_known_hosts_path(&app_data);
+        let root_id = root_id_for("/tmp/Knowledge");
+        let remote_dir =
+            remote_course_dir("/tmp/arbor-r14/remote", &root_id, "Biology").unwrap();
+        let tokens = remote_mkdir_tokens(&remote_dir).unwrap();
+        let argv = ssh_argv(&endpoint, &known, &tokens).unwrap();
+        let kh = argv
+            .iter()
+            .find(|a| a.starts_with("UserKnownHostsFile="))
+            .expect("UserKnownHostsFile");
+        assert!(kh.contains("/tmp/arbor-r14/xdg/data/com.arbor.app/ssh/known_hosts"));
+        let remote_cmd = argv.last().expect("remote command");
+        assert_eq!(
+            remote_cmd,
+            &format!("'mkdir' '-p' '{remote_dir}'")
+        );
+        assert!(remote_mkdir_tokens("/tmp/arbor-r14/remote/../etc/passwd").is_err());
     }
 
     #[test]
