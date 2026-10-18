@@ -2,6 +2,19 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
+test("main.ts *Btn.addEventListener handlers are declared", async () => {
+  const source = await readFile(new URL("../src/main.ts", import.meta.url), "utf8");
+  const handlerRe = /(\w+Btn)\.addEventListener/g;
+  const seen = new Set();
+  for (const match of source.matchAll(handlerRe)) {
+    seen.add(match[1]);
+  }
+  for (const name of seen) {
+    const declRe = new RegExp(`\\b(?:const|let|var)\\s+${name}\\b`);
+    assert.match(source, declRe, `undeclared handler binding: ${name}`);
+  }
+});
+
 test("shared library sync UI and success paths", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   for (const id of [
@@ -26,7 +39,7 @@ test("shared library sync UI and success paths", async () => {
   const source = await readFile(new URL("../src/main.ts", import.meta.url), "utf8");
   const createConfirm = source.indexOf('libraryCreateConfirmBtn.addEventListener("click"');
   assert.ok(createConfirm >= 0, "library create confirm handler must exist");
-  const createEnd = source.indexOf("\nlibraryJoinBtn.addEventListener", createConfirm);
+  const createEnd = source.indexOf("\njoinLibraryBtn.addEventListener", createConfirm);
   const createBody = source.slice(createConfirm, createEnd === -1 ? undefined : createEnd);
   assert.match(createBody, /entry\.kind = "shared"/);
 

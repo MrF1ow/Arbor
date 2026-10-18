@@ -2605,7 +2605,7 @@ libraryCreateConfirmBtn.addEventListener("click", async () => {
 
 let libraryJoinInFlight = false;
 
-libraryJoinBtn.addEventListener("click", () => {
+joinLibraryBtn.addEventListener("click", () => {
   libraryJoinErrorEl.textContent = "";
   libraryJoinUrlEl.value = "";
   libraryJoinDestEl.value = "";
