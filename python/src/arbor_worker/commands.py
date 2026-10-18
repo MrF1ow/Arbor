@@ -11,7 +11,7 @@ from arbor_worker.alignment import PageRange
 from arbor_worker.auth import AuthResult, check_codex_auth
 from arbor_worker.cache import ensure_gitignored
 from arbor_worker.events import EventEmitter
-from arbor_worker.gitstate import GitStateError, commit_batch
+from arbor_worker.gitstate import GitStateError, commit_and_note
 from arbor_worker.provider.base import ProviderRequest
 from arbor_worker.provider.fake import FakeProvider
 from arbor_worker.provider.registry import PROVIDERS, PROVIDER_ORDER, make_provider
@@ -338,10 +338,11 @@ def cmd_generate(args) -> int:
         artifact_rel = artifact_path.relative_to(root)
         manifest_rel = manifest_path.relative_to(root)
         try:
-            commit = commit_batch(
+            commit = commit_and_note(
                 root,
                 [manifest_rel, artifact_rel],
                 f"study: {args.course} {skill.name}",
+                emitter,
             )
         except GitStateError as error:
             emitter.skill_failed(
@@ -517,10 +518,11 @@ def cmd_generate(args) -> int:
 
     manifest_rel = manifest_path.relative_to(root)
     try:
-        commit = commit_batch(
+        commit = commit_and_note(
             root,
             [manifest_rel, *written_rels],
             f"study: {args.course} {skill.name}",
+            emitter,
         )
     except GitStateError as error:
         emitter.skill_failed(
