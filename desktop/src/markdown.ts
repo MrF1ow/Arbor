@@ -84,15 +84,20 @@ interface OpenList {
   items: string[];
 }
 
-function renderItems(items: string[]): string {
-  return items.map((item) => `<li>${item}</li>`).join("");
+function renderItems(items: string[], pageAttr: () => string): string {
+  return items.map((item) => `<li${pageAttr()}>${item}</li>`).join("");
 }
 
-function closeListsThrough(stack: OpenList[], indent: number, parts: string[]): void {
+function closeListsThrough(
+  stack: OpenList[],
+  indent: number,
+  parts: string[],
+  pageAttr: () => string,
+): void {
   while (stack.length > 0 && stack[stack.length - 1].indent > indent) {
     const closed = stack.pop();
     if (!closed) break;
-    const html = `<${closed.kind}>${renderItems(closed.items)}</${closed.kind}>`;
+    const html = `<${closed.kind}${pageAttr()}>${renderItems(closed.items, pageAttr)}</${closed.kind}>`;
     if (stack.length === 0) {
       parts.push(html);
     } else {
@@ -103,19 +108,24 @@ function closeListsThrough(stack: OpenList[], indent: number, parts: string[]): 
   }
 }
 
-function closeAllLists(stack: OpenList[], parts: string[]): void {
-  closeListsThrough(stack, -1, parts);
+function closeAllLists(stack: OpenList[], parts: string[], pageAttr: () => string): void {
+  closeListsThrough(stack, -1, parts, pageAttr);
 }
 
-function appendListItem(stack: OpenList[], item: ListItemMatch, parts: string[]): void {
-  closeListsThrough(stack, item.indent, parts);
+function appendListItem(
+  stack: OpenList[],
+  item: ListItemMatch,
+  parts: string[],
+  pageAttr: () => string,
+): void {
+  closeListsThrough(stack, item.indent, parts, pageAttr);
   const top = stack.length > 0 ? stack[stack.length - 1] : null;
   if (!top || top.indent < item.indent) {
     stack.push({ kind: item.kind, indent: item.indent, items: [inlineFormat(item.content)] });
     return;
   }
   if (top.kind !== item.kind) {
-    closeListsThrough(stack, item.indent - 1, parts);
+    closeListsThrough(stack, item.indent - 1, parts, pageAttr);
     stack.push({ kind: item.kind, indent: item.indent, items: [inlineFormat(item.content)] });
     return;
   }
@@ -143,21 +153,39 @@ function splitCells(line: string): string[] {
     .map((cell) => cell.trim());
 }
 
-function renderTable(table: MarkdownTable): string {
+function renderTable(table: MarkdownTable, pageAttr: () => string): string {
   const header = table.header.map((cell) => `<th>${inlineFormat(cell)}</th>`).join("");
   const body = table.rows
     .map((row) => `<tr>${row.map((cell) => `<td>${inlineFormat(cell)}</td>`).join("")}</tr>`)
     .join("");
-  return `<table><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table>`;
+  return `<table${pageAttr()}><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table>`;
 }
 
-export function renderMarkdown(source: string): { html: string; pageChip: string | null } {
+function isArborPagesOpen(line: string): string | null {
+  const match = line.match(/^<!--\s*arbor-pages:([^>]+)\s*-->$/);
+  return match ? match[1].trim() : null;
+}
+
+function isArborPagesClose(line: string): boolean {
+  return /^<!--\s*\/arbor-pages:[^>]+\s*-->$/i.test(line);
+}
+
+export function renderMarkdown(source: string): {
+  html: string;
+  pageChip: string | null;
+  pageChipRange: string | null;
+} {
   let pageChip: string | null = null;
+  let pageChipRange: string | null = null;
   const pageMatch = source.match(/<!--\s*arbor-pages:([^>]+)\s*-->/);
   if (pageMatch) {
-    pageChip = pageMatch[1].trim().replace(/-/g, "–");
+    pageChipRange = pageMatch[1].trim();
+    pageChip = pageChipRange.replace(/-/g, "–");
   }
-  source = source.replace(/<!--\s*\/?arbor-pages:[^>]+-->\s*/g, "");
+
+  let currentPageRange: string | null = null;
+  const pageAttr = () =>
+    currentPageRange ? ` data-arbor-page="${escapeHtml(currentPageRange)}"` : "";
 
   const lines = source.replace(/\r\n/g, "\n").split("\n");
   const parts: string[] = [];
@@ -166,7 +194,7 @@ export function renderMarkdown(source: string): { html: string; pageChip: string
 
   const flushParagraph = () => {
     if (paragraph.length === 0) return;
-    parts.push(`<p>${inlineFormat(paragraph.join(" "))}</p>`);
+    parts.push(`<p${pageAttr()}>${inlineFormat(paragraph.join(" "))}</p>`);
     paragraph = [];
   };
 
@@ -176,15 +204,29 @@ export function renderMarkdown(source: string): { html: string; pageChip: string
     const listItem = matchListItem(line);
     const nextLine = i + 1 < lines.length ? lines[i + 1].replace(/\s+$/, "") : "";
 
+    const pagesOpen = isArborPagesOpen(trimmed);
+    if (pagesOpen !== null) {
+      flushParagraph();
+      closeAllLists(lists, parts, pageAttr);
+      currentPageRange = pagesOpen;
+      continue;
+    }
+    if (isArborPagesClose(trimmed)) {
+      flushParagraph();
+      closeAllLists(lists, parts, pageAttr);
+      currentPageRange = null;
+      continue;
+    }
+
     if (trimmed === "") {
       flushParagraph();
-      closeAllLists(lists, parts);
+      closeAllLists(lists, parts, pageAttr);
       continue;
     }
 
     if (isPipeRow(line) && isTableSeparator(nextLine)) {
       flushParagraph();
-      closeAllLists(lists, parts);
+      closeAllLists(lists, parts, pageAttr);
       const header = splitCells(line);
       i += 2;
       const rows: string[][] = [];
@@ -195,42 +237,42 @@ export function renderMarkdown(source: string): { html: string; pageChip: string
         i += 1;
       }
       i -= 1;
-      parts.push(renderTable({ header, rows }));
+      parts.push(renderTable({ header, rows }, pageAttr));
       continue;
     }
 
     if (trimmed.startsWith("# ")) {
       flushParagraph();
-      closeAllLists(lists, parts);
-      parts.push(`<h1>${inlineFormat(trimmed.slice(2))}</h1>`);
+      closeAllLists(lists, parts, pageAttr);
+      parts.push(`<h1${pageAttr()}>${inlineFormat(trimmed.slice(2))}</h1>`);
       continue;
     }
     if (trimmed.startsWith("## ")) {
       flushParagraph();
-      closeAllLists(lists, parts);
+      closeAllLists(lists, parts, pageAttr);
       const heading = trimmed.slice(3);
-      parts.push(`<h2 id="${headingId(heading)}">${inlineFormat(heading)}</h2>`);
+      parts.push(`<h2${pageAttr()} id="${headingId(heading)}">${inlineFormat(heading)}</h2>`);
       continue;
     }
     if (trimmed.startsWith("### ")) {
       flushParagraph();
-      closeAllLists(lists, parts);
+      closeAllLists(lists, parts, pageAttr);
       const heading = trimmed.slice(4);
-      parts.push(`<h3 id="${headingId(heading)}">${inlineFormat(heading)}</h3>`);
+      parts.push(`<h3${pageAttr()} id="${headingId(heading)}">${inlineFormat(heading)}</h3>`);
       continue;
     }
     if (listItem) {
       flushParagraph();
-      appendListItem(lists, listItem, parts);
+      appendListItem(lists, listItem, parts, pageAttr);
       continue;
     }
 
-    closeAllLists(lists, parts);
+    closeAllLists(lists, parts, pageAttr);
     paragraph.push(trimmed);
   }
 
   flushParagraph();
-  closeAllLists(lists, parts);
+  closeAllLists(lists, parts, pageAttr);
 
-  return { html: parts.join("\n"), pageChip };
+  return { html: parts.join("\n"), pageChip, pageChipRange };
 }

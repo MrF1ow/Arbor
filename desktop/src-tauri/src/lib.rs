@@ -51,6 +51,8 @@ pub fn run() {
             commands::read_quiz_progress,
             commands::write_quiz_progress,
             commands::study_progress,
+            commands::study_plan,
+            commands::append_card,
             commands::study_artifact_stale,
             commands::read_chat_history,
             commands::append_chat_lines,

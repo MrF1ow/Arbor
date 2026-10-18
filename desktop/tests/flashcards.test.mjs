@@ -21,6 +21,7 @@ const deck = {
       source: {
         digest: "digests/2026-08-15.md",
         heading: "Cells",
+        page: null,
       },
     },
     {
@@ -31,10 +32,27 @@ const deck = {
       source: {
         digest: "digests/2026-08-15.md",
         heading: null,
+        page: null,
       },
     },
   ],
 };
+
+test("parses source.page when present or absent", async () => {
+  const { parseFlashcardDeck } = await subject();
+  const withPage = {
+    ...deck,
+    cards: [
+      {
+        ...deck.cards[0],
+        source: { ...deck.cards[0].source, page: "4-5" },
+      },
+    ],
+  };
+  const parsed = parseFlashcardDeck(withPage);
+  assert.equal(parsed.cards[0].source.page, "4-5");
+  assert.equal(parseFlashcardDeck(deck).cards[0].source.page, null);
+});
 
 test("parses a flashcard deck at the JSON boundary", async () => {
   const { parseFlashcardDeck } = await subject();
@@ -189,7 +207,7 @@ test("requeueCurrentCard on the last of three cards wraps to the first", async (
         front: "What is meiosis?",
         back: "Gamete formation.",
         tags: [],
-        source: { digest: "digests/2026-08-15.md", heading: null },
+        source: { digest: "digests/2026-08-15.md", heading: null, page: null },
       },
     ],
   };

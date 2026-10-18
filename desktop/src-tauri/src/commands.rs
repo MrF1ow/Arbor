@@ -515,7 +515,7 @@ pub fn build_study_progress_argv(
         course.to_string(),
     ];
     match action {
-        "due" | "weak" => {
+        "due" | "weak" | "recommend" => {
             argv.push(action.to_string());
         }
         "grade" | "quiz" => {
@@ -563,6 +563,151 @@ pub fn study_progress(
         result.as_deref(),
         digest.as_deref(),
         heading.as_deref(),
+    )?;
+    let refs = study_progress_argv_refs(&argv);
+    worker::run_worker_json(&repo_dir(&app), &refs)
+}
+
+fn validate_exam_date(value: &str) -> Result<String, String> {
+    let trimmed = value.trim();
+    if trimmed.len() != 10 {
+        return Err("exam date must be YYYY-MM-DD".into());
+    }
+    let bytes = trimmed.as_bytes();
+    if bytes[4] != b'-' || bytes[7] != b'-' {
+        return Err("exam date must be YYYY-MM-DD".into());
+    }
+    for (index, byte) in bytes.iter().enumerate() {
+        if index == 4 || index == 7 {
+            continue;
+        }
+        if !byte.is_ascii_digit() {
+            return Err("exam date must be YYYY-MM-DD".into());
+        }
+    }
+    Ok(trimmed.to_string())
+}
+
+pub fn build_study_plan_argv(
+    root: &str,
+    course: &str,
+    provider: &str,
+    model: &str,
+    exam_date: Option<&str>,
+) -> Result<Vec<String>, String> {
+    if model.trim().is_empty() {
+        return Err("model is required".into());
+    }
+    let mut argv = vec![
+        "study-plan".to_string(),
+        "--root".to_string(),
+        root.to_string(),
+        "--course".to_string(),
+        course.to_string(),
+        "--provider".to_string(),
+        provider.to_string(),
+        "--model".to_string(),
+        model.to_string(),
+    ];
+    if let Some(date) = exam_date {
+        let trimmed = date.trim();
+        if !trimmed.is_empty() {
+            let validated = validate_exam_date(trimmed)?;
+            argv.push("--exam-date".to_string());
+            argv.push(validated);
+        }
+    }
+    Ok(argv)
+}
+
+#[tauri::command]
+pub fn study_plan(
+    app: tauri::AppHandle,
+    root: String,
+    course: String,
+    provider: Option<String>,
+    model: String,
+    exam_date: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let provider_id = default_provider_id(provider);
+    let argv = build_study_plan_argv(
+        &root,
+        &course,
+        &provider_id,
+        &model,
+        exam_date.as_deref(),
+    )?;
+    let refs = study_progress_argv_refs(&argv);
+    worker::run_worker_json(&repo_dir(&app), &refs)
+}
+
+pub fn build_append_card_argv(
+    root: &str,
+    course: &str,
+    front: &str,
+    back: &str,
+    digest: &str,
+    heading: Option<&str>,
+    page: Option<&str>,
+) -> Result<Vec<String>, String> {
+    if front.trim().is_empty() {
+        return Err("front is required".into());
+    }
+    if back.trim().is_empty() {
+        return Err("back is required".into());
+    }
+    if digest.trim().is_empty() {
+        return Err("digest is required".into());
+    }
+    let mut argv = vec![
+        "append-card".to_string(),
+        "--root".to_string(),
+        root.to_string(),
+        "--course".to_string(),
+        course.to_string(),
+        "--front".to_string(),
+        front.to_string(),
+        "--back".to_string(),
+        back.to_string(),
+        "--digest".to_string(),
+        digest.to_string(),
+    ];
+    if let Some(h) = heading {
+        let trimmed = h.trim();
+        if !trimmed.is_empty() {
+            argv.push("--heading".to_string());
+            argv.push(trimmed.to_string());
+        }
+    }
+    if let Some(p) = page {
+        let trimmed = p.trim();
+        if !trimmed.is_empty() {
+            argv.push("--page".to_string());
+            argv.push(trimmed.to_string());
+        }
+    }
+    Ok(argv)
+}
+
+#[tauri::command]
+pub fn append_card(
+    app: tauri::AppHandle,
+    root: String,
+    course: String,
+    front: String,
+    back: String,
+    digest: String,
+    heading: Option<String>,
+    page: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let argv = build_append_card_argv(
+        &root,
+        &course,
+        &front,
+        &back,
+        &digest,
+        heading.as_deref(),
+        page.as_deref(),
     )?;
     let refs = study_progress_argv_refs(&argv);
     worker::run_worker_json(&repo_dir(&app), &refs)
@@ -1027,6 +1172,108 @@ mod tests {
             build_study_progress_argv("/root", "Bio", "weak", None, None, None, None).unwrap()[5],
             "weak"
         );
+        assert_eq!(
+            build_study_progress_argv("/root", "Bio", "recommend", None, None, None, None)
+                .unwrap()[5],
+            "recommend"
+        );
+    }
+
+    #[test]
+    fn study_plan_argv_builds_and_validates() {
+        assert_eq!(
+            build_study_plan_argv("/root", "Bio", "codex", "gpt-5", None).unwrap(),
+            vec![
+                "study-plan",
+                "--root",
+                "/root",
+                "--course",
+                "Bio",
+                "--provider",
+                "codex",
+                "--model",
+                "gpt-5",
+            ]
+            .into_iter()
+            .map(str::to_string)
+            .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            build_study_plan_argv("/root", "Bio", "codex", "gpt-5", Some(" 2026-12-01 "))
+                .unwrap()
+                .last()
+                .map(String::as_str),
+            Some("2026-12-01")
+        );
+        assert!(build_study_plan_argv("/r", "C", "codex", "  ", None).is_err());
+        assert!(build_study_plan_argv("/r", "C", "codex", "m", Some("bad")).is_err());
+    }
+
+    #[test]
+    fn append_card_argv_builds_and_validates() {
+        assert_eq!(
+            build_append_card_argv(
+                "/root",
+                "Bio",
+                "Q?",
+                "A",
+                "digests/a.md",
+                None,
+                None,
+            )
+            .unwrap(),
+            vec![
+                "append-card",
+                "--root",
+                "/root",
+                "--course",
+                "Bio",
+                "--front",
+                "Q?",
+                "--back",
+                "A",
+                "--digest",
+                "digests/a.md",
+            ]
+            .into_iter()
+            .map(str::to_string)
+            .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            build_append_card_argv(
+                "/root",
+                "Bio",
+                "Q",
+                "A",
+                "digests/a.md",
+                Some(" Cells "),
+                Some(" 4-5 "),
+            )
+            .unwrap(),
+            vec![
+                "append-card",
+                "--root",
+                "/root",
+                "--course",
+                "Bio",
+                "--front",
+                "Q",
+                "--back",
+                "A",
+                "--digest",
+                "digests/a.md",
+                "--heading",
+                "Cells",
+                "--page",
+                "4-5",
+            ]
+            .into_iter()
+            .map(str::to_string)
+            .collect::<Vec<_>>()
+        );
+        assert!(build_append_card_argv("/r", "C", " ", "A", "d.md", None, None).is_err());
+        assert!(build_append_card_argv("/r", "C", "Q", "", "d.md", None, None).is_err());
+        assert!(build_append_card_argv("/r", "C", "Q", "A", "  ", None, None).is_err());
     }
 
     #[test]

@@ -114,6 +114,23 @@ test("strips opening and closing arbor-pages markers", async () => {
   assert.doesNotMatch(html, /&lt;!--/);
 });
 
+test("applies data-arbor-page inside wrapped arbor-pages sections", async () => {
+  const { renderMarkdown } = await subject();
+  const { html } = renderMarkdown(
+    "<!-- arbor-pages:1-4 -->\n# Title\nBody line.\n<!-- /arbor-pages:1-4 -->\n",
+  );
+  assert.match(html, /data-arbor-page="1-4"/);
+  assert.match(html, /<p data-arbor-page="1-4">Body line\.<\/p>/);
+  assert.doesNotMatch(html, /1-4 -->/);
+});
+
+test("escapes raw script tags in paragraph source", async () => {
+  const { renderMarkdown } = await subject();
+  const { html } = renderMarkdown("<script>alert(1)</script>\n");
+  assert.doesNotMatch(html, /<script/i);
+  assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+});
+
 test("renders a GFM table", async () => {
   const { renderMarkdown } = await subject();
   const { html } = renderMarkdown(
