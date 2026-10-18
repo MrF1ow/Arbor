@@ -566,35 +566,7 @@ fn is_safe_user_dir(email: &str) -> bool {
         && !email.contains("..")
 }
 
-#[cfg(test)]
-mod git_user_dirname_test_sync {
-    use std::sync::atomic::{AtomicBool, Ordering};
-    use std::sync::{Mutex, MutexGuard};
-
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
-    static ENV_TEST_ACTIVE: AtomicBool = AtomicBool::new(false);
-
-    pub fn env_test_guard() -> MutexGuard<'static, ()> {
-        ENV_TEST_ACTIVE.store(true, Ordering::SeqCst);
-        ENV_LOCK.lock().unwrap()
-    }
-
-    pub fn finish_env_test() {
-        ENV_TEST_ACTIVE.store(false, Ordering::SeqCst);
-    }
-
-    pub fn sync_guard() -> Option<MutexGuard<'static, ()>> {
-        if ENV_TEST_ACTIVE.load(Ordering::SeqCst) {
-            None
-        } else {
-            Some(ENV_LOCK.lock().unwrap())
-        }
-    }
-}
-
 fn git_user_dirname(root: &str) -> Result<String, String> {
-    #[cfg(test)]
-    let _guard = git_user_dirname_test_sync::sync_guard();
     let output = Command::new("git")
         .args(["-C", root, "config", "--get", "user.email"])
         .stdout(Stdio::piped())
@@ -1285,6 +1257,91 @@ pub fn start_chat(
 mod tests {
     use super::*;
     use std::fs;
+    use std::sync::{Mutex, MutexGuard};
+
+    static GIT_IDENTITY_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    struct IsolatedGitIdentityGuard {
+        _mutex: MutexGuard<'static, ()>,
+        saved_home: Option<String>,
+        saved_git_config_global: Option<String>,
+        saved_git_config_nosystem: Option<String>,
+        _temp_home: PathBuf,
+        _temp_gitconfig: PathBuf,
+    }
+
+    fn restore_optional_env(key: &str, value: Option<String>) {
+        match value {
+            Some(v) => unsafe { std::env::set_var(key, v) },
+            None => unsafe { std::env::remove_var(key) },
+        }
+    }
+
+    impl IsolatedGitIdentityGuard {
+        fn with_empty_identity() -> Self {
+            let mutex = GIT_IDENTITY_TEST_LOCK.lock().unwrap();
+            let saved_home = std::env::var("HOME").ok();
+            let saved_git_config_global = std::env::var("GIT_CONFIG_GLOBAL").ok();
+            let saved_git_config_nosystem = std::env::var("GIT_CONFIG_NOSYSTEM").ok();
+
+            let temp_home = temp_root("git-identity-home");
+            let gitconfig_path = temp_home.join("gitconfig");
+            fs::write(&gitconfig_path, "").unwrap();
+
+            unsafe {
+                std::env::set_var("HOME", &temp_home);
+                std::env::set_var("GIT_CONFIG_GLOBAL", &gitconfig_path);
+                std::env::set_var("GIT_CONFIG_NOSYSTEM", "1");
+            }
+
+            Self {
+                _mutex: mutex,
+                saved_home,
+                saved_git_config_global,
+                saved_git_config_nosystem,
+                _temp_home: temp_home,
+                _temp_gitconfig: gitconfig_path,
+            }
+        }
+
+        fn with_global_email() -> Self {
+            let mutex = GIT_IDENTITY_TEST_LOCK.lock().unwrap();
+            let saved_home = std::env::var("HOME").ok();
+            let saved_git_config_global = std::env::var("GIT_CONFIG_GLOBAL").ok();
+            let saved_git_config_nosystem = std::env::var("GIT_CONFIG_NOSYSTEM").ok();
+
+            let temp_home = temp_root("git-identity-home");
+            let gitconfig_path = temp_home.join("gitconfig");
+            fs::write(
+                &gitconfig_path,
+                "[user]\n\temail = global-only@example.com\n\tname = Global Only\n",
+            )
+            .unwrap();
+
+            unsafe {
+                std::env::set_var("HOME", &temp_home);
+                std::env::set_var("GIT_CONFIG_GLOBAL", &gitconfig_path);
+                std::env::set_var("GIT_CONFIG_NOSYSTEM", "1");
+            }
+
+            Self {
+                _mutex: mutex,
+                saved_home,
+                saved_git_config_global,
+                saved_git_config_nosystem,
+                _temp_home: temp_home,
+                _temp_gitconfig: gitconfig_path,
+            }
+        }
+    }
+
+    impl Drop for IsolatedGitIdentityGuard {
+        fn drop(&mut self) {
+            restore_optional_env("HOME", self.saved_home.take());
+            restore_optional_env("GIT_CONFIG_GLOBAL", self.saved_git_config_global.take());
+            restore_optional_env("GIT_CONFIG_NOSYSTEM", self.saved_git_config_nosystem.take());
+        }
+    }
 
     fn temp_root(label: &str) -> PathBuf {
         let root = std::env::temp_dir().join(format!(
@@ -1610,6 +1667,7 @@ mod tests {
 
     #[test]
     fn flashcard_progress_defaults_empty_and_round_trips() {
+        let _guard = IsolatedGitIdentityGuard::with_empty_identity();
         let root = temp_root("progress");
         let root_string = root.to_string_lossy().into_owned();
         let empty = read_flashcard_progress(root_string.clone(), "Biology".into()).unwrap();
@@ -1635,6 +1693,7 @@ mod tests {
 
     #[test]
     fn quiz_progress_defaults_empty_and_round_trips() {
+        let _guard = IsolatedGitIdentityGuard::with_empty_identity();
         let root = temp_root("quiz-progress");
         let root_string = root.to_string_lossy().into_owned();
         let empty = read_quiz_progress(root_string.clone(), "Biology".into()).unwrap();
@@ -1658,20 +1717,9 @@ mod tests {
             .is_file());
     }
 
-    fn restore_optional_env(key: &str, value: Option<String>) {
-        match value {
-            Some(v) => unsafe { std::env::set_var(key, v) },
-            None => unsafe { std::env::remove_var(key) },
-        }
-    }
-
     #[test]
     fn git_user_dirname_uses_effective_global_email() {
-        let _guard = git_user_dirname_test_sync::env_test_guard();
-
-        let saved_home = std::env::var("HOME").ok();
-        let saved_git_config_global = std::env::var("GIT_CONFIG_GLOBAL").ok();
-        let saved_git_config_nosystem = std::env::var("GIT_CONFIG_NOSYSTEM").ok();
+        let _guard = IsolatedGitIdentityGuard::with_global_email();
 
         let root = temp_root("git-user-global-email");
         let root_str = root.to_string_lossy().into_owned();
@@ -1681,31 +1729,13 @@ mod tests {
             .expect("git init");
         assert!(status.success());
 
-        let fake_home = temp_root("git-user-fake-home");
-        let gitconfig_path = fake_home.join("gitconfig");
-        fs::write(
-            &gitconfig_path,
-            "[user]\n\temail = global-only@example.com\n\tname = Global Only\n",
-        )
-        .unwrap();
-
-        unsafe {
-            std::env::set_var("HOME", &fake_home);
-            std::env::set_var("GIT_CONFIG_GLOBAL", &gitconfig_path);
-            std::env::set_var("GIT_CONFIG_NOSYSTEM", "1");
-        }
-
         let dirname = git_user_dirname(&root_str).unwrap();
         assert_eq!(dirname, "global-only@example.com");
-
-        restore_optional_env("HOME", saved_home);
-        restore_optional_env("GIT_CONFIG_GLOBAL", saved_git_config_global);
-        restore_optional_env("GIT_CONFIG_NOSYSTEM", saved_git_config_nosystem);
-        git_user_dirname_test_sync::finish_env_test();
     }
 
     #[test]
     fn chat_history_uses_fallback_user_dir_without_git_email() {
+        let _guard = IsolatedGitIdentityGuard::with_empty_identity();
         let root = temp_root("chat-fallback-user");
         let root_string = root.to_string_lossy().into_owned();
         let line = serde_json::json!({
@@ -2058,6 +2088,7 @@ mod tests {
 
     #[test]
     fn chat_history_round_trips_and_keeps_session_line() {
+        let _guard = IsolatedGitIdentityGuard::with_empty_identity();
         let root = temp_root("chat-history");
         let root_string = root.to_string_lossy().into_owned();
         let empty = read_chat_history(root_string.clone(), "Biology".into()).unwrap();
@@ -2108,6 +2139,7 @@ mod tests {
 
     #[test]
     fn chat_history_clear_only_removes_one_course() {
+        let _guard = IsolatedGitIdentityGuard::with_empty_identity();
         let root = temp_root("chat-clear");
         let root_string = root.to_string_lossy().into_owned();
         let line = serde_json::json!({
