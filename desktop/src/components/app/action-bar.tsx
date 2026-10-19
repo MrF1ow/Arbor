@@ -1,11 +1,12 @@
-import { useRouterState } from "@tanstack/react-router";
 import { Check, RefreshCw, Terminal, X } from "lucide-react";
+import { toast } from "sonner";
 
 import { StatusPill } from "~/components/app/status-pill";
 import { Button, IconButton } from "~/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/tooltip";
 import { VIEWER_WRITE_REASON, viewerBlocksWrite } from "~/domain/library-role";
+import { PROVIDER_FALLBACK, signedOutJobMessage } from "~/domain/provider";
 import { pickActiveRoot } from "~/lib/knowledge-root";
+import { fetchAuthStatus } from "~/lib/auth-refresh";
 import { useEffectiveProvider } from "~/lib/queries/effective-provider";
 import { useLibrary } from "~/lib/queries/library";
 import {
@@ -38,7 +39,7 @@ function formatRelativeTime(iso: string): string {
   return `${days}d ago`;
 }
 
-export function ActionBar() {
+export function ActionBar({ course }: { course: string }) {
   const settings = useSettings();
   const activeRoot = pickActiveRoot(settings.data);
   const library = useLibrary(activeRoot);
@@ -47,14 +48,14 @@ export function ActionBar() {
   const effective = useEffectiveProvider(activeRoot);
   const jobStatus = useJobStore((s) => s.status);
   const jobStep = useJobStore((s) => s.step);
+  const activeUpdateJobId = useJobStore((s) => s.activeUpdateJobId);
   const unread = useJobStore((s) => s.unread);
+  const appendLog = useJobStore((s) => s.append);
   const toggleLog = useUiStore((s) => s.toggleLog);
   const planUpdate = usePlanUpdateMutation(activeRoot);
   const cancelUpdate = useCancelUpdateMutation();
   const startCitations = useStartCitationJobMutation(activeRoot);
   const jobs = useJobs(activeRoot);
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const course = pathname.match(/\/course\/([^/]+)/)?.[1] ?? null;
 
   const lastOk = jobs.data?.find((j) => j.status === "succeeded");
   const statusLabel = (() => {
@@ -74,9 +75,23 @@ export function ActionBar() {
     if (!activeRoot || viewerBlocked) {
       return;
     }
-    const plan = await planUpdate.mutateAsync();
-    if (plan.pending.length > 0) {
+    try {
+      const auth = await fetchAuthStatus(effective.providerId, true);
+      if (!auth.authenticated) {
+        const label =
+          PROVIDER_FALLBACK.find((p) => p.id === effective.providerId)?.label ??
+          effective.providerId;
+        appendLog(signedOutJobMessage(label, auth.reason ?? ""));
+        return;
+      }
+      const plan = await planUpdate.mutateAsync();
+      if (plan.pending.length === 0) {
+        appendLog("Nothing to process — everything is up to date.");
+        return;
+      }
       useUpdatePlanStore.getState().setPendingPlan(plan.pending, true);
+    } catch (error) {
+      toast.error(String(error));
     }
   };
 
@@ -84,53 +99,62 @@ export function ActionBar() {
     if (!activeRoot || !course || !effective.modelId || viewerBlocked) {
       return;
     }
-    await startCitations.mutateAsync({
-      course,
-      force: false,
-      model: effective.modelId,
-      provider: effective.providerId,
-    });
+    try {
+      await startCitations.mutateAsync({
+        course,
+        force: false,
+        model: effective.modelId,
+        provider: effective.providerId,
+      });
+    } catch (error) {
+      toast.error(String(error));
+    }
   };
 
   const writeDisabled = viewerBlocked || !activeRoot || !course;
+  const updateButton = (
+    <Button
+      variant="default"
+      size="sm"
+      disabled={writeDisabled}
+      onClick={() => void onUpdate()}
+    >
+      <RefreshCw className="size-icon-sm" />
+      Update knowledge
+    </Button>
+  );
+
+  const citationsButton = (
+    <Button variant="ghost" size="sm" disabled={writeDisabled} onClick={() => void onCitations()}>
+      <Check className="size-icon-sm" />
+      Check citations
+    </Button>
+  );
 
   return (
     <div className="flex h-actionbar shrink-0 items-center gap-2 border-b border-dashed border-border px-4">
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Button
-              variant="default"
-              size="sm"
-              disabled={writeDisabled}
-              onClick={() => void onUpdate()}
-            >
-              <RefreshCw className="size-icon-sm" />
-              Update knowledge
-            </Button>
-          }
-        />
-        {viewerBlocked ? <TooltipContent>{VIEWER_WRITE_REASON}</TooltipContent> : null}
-      </Tooltip>
-      {jobStatus === "running" ? (
+      <span
+        className="inline-flex"
+        title={viewerBlocked ? VIEWER_WRITE_REASON : undefined}
+      >
+        {updateButton}
+      </span>
+      {jobStatus === "running" && activeUpdateJobId ? (
         <Button variant="outline" size="sm" onClick={() => void cancelUpdate.mutateAsync()}>
           <X className="size-icon-sm" />
           Cancel
         </Button>
       ) : null}
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Button variant="ghost" size="sm" disabled={writeDisabled} onClick={() => void onCitations()}>
-              <Check className="size-icon-sm" />
-              Check citations
-            </Button>
-          }
-        />
-        {viewerBlocked ? <TooltipContent>{VIEWER_WRITE_REASON}</TooltipContent> : null}
-      </Tooltip>
+      <span
+        className="inline-flex"
+        title={viewerBlocked ? VIEWER_WRITE_REASON : undefined}
+      >
+        {citationsButton}
+      </span>
       {viewerBlocked ? (
-        <span className="text-2xs text-muted-foreground">Viewer role — write jobs disabled</span>
+        <span className="text-2xs text-muted-foreground" data-testid="viewer-write-hint">
+          Viewer role — write jobs disabled
+        </span>
       ) : null}
       <span className="flex-1" />
       <StatusPill
@@ -148,6 +172,7 @@ export function ActionBar() {
         {unread > 0 ? (
           <span
             className="pointer-events-none absolute top-1 right-1 size-1.5 rounded-full bg-primary ring-2 ring-background"
+            data-testid="log-unread-dot"
             aria-hidden
           />
         ) : null}

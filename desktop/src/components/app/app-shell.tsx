@@ -1,37 +1,47 @@
 import { Outlet } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useState } from "react";
 
 import { AppSidebar } from "~/components/app/app-sidebar";
 import { JobFailureToast } from "~/components/app/job-failure-toast";
-import { LogDrawer } from "~/components/app/log-drawer";
-import { SearchPlaceholderDialog } from "~/components/app/search-placeholder-dialog";
 import { ShellContextProvider } from "~/components/app/shell-context";
 import { SidebarInset, SidebarProvider } from "~/components/ui/sidebar";
 import { useGlobalShortcuts } from "~/hooks/use-global-shortcuts";
-import { useUiStore } from "~/stores/ui-store";
+import { useEffectiveSidebarOpen, useUiStore } from "~/stores/ui-store";
+
+const LogDrawer = lazy(() =>
+  import("~/components/app/log-drawer").then((m) => ({ default: m.LogDrawer })),
+);
+
+const SearchPlaceholderDialog = lazy(() =>
+  import("~/components/app/search-placeholder-dialog").then((m) => ({
+    default: m.SearchPlaceholderDialog,
+  })),
+);
 
 export function AppShell() {
-  const sidebarOpen = useUiStore((s) => s.sidebarOpen);
+  const sidebarOpen = useEffectiveSidebarOpen();
   const setSidebarOpen = useUiStore((s) => s.setSidebarOpen);
-  const sidebarTouched = useUiStore((s) => s.sidebarTouched);
   const markSidebarTouched = useUiStore((s) => s.markSidebarTouched);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [searchMounted, setSearchMounted] = useState(false);
 
-  useGlobalShortcuts({ onSearch: () => setSearchOpen(true) });
-
-  useEffect(() => {
-    if (sidebarTouched) {
-      return;
-    }
-    const width = window.innerWidth;
-    if (width >= 768 && width < 1024) {
-      setSidebarOpen(false);
-    }
-  }, [setSidebarOpen, sidebarTouched]);
+  useGlobalShortcuts({
+    onSearch: () => {
+      setSearchMounted(true);
+      setSearchOpen(true);
+    },
+  });
 
   const onSidebarOpenChange = (open: boolean) => {
     markSidebarTouched();
     setSidebarOpen(open);
+  };
+
+  const onSearchOpenChange = (open: boolean) => {
+    if (open) {
+      setSearchMounted(true);
+    }
+    setSearchOpen(open);
   };
 
   return (
@@ -44,13 +54,26 @@ export function AppShell() {
       <AppSidebar />
       <SidebarInset className="flex min-h-0 flex-1 flex-col">
         <div className="relative flex min-h-0 flex-1 flex-col">
-          <ShellContextProvider value={{ onOpenSearch: () => setSearchOpen(true) }}>
+          <ShellContextProvider
+            value={{
+              onOpenSearch: () => {
+                setSearchMounted(true);
+                setSearchOpen(true);
+              },
+            }}
+          >
             <Outlet />
           </ShellContextProvider>
-          <LogDrawer />
+          <Suspense fallback={null}>
+            <LogDrawer />
+          </Suspense>
         </div>
       </SidebarInset>
-      <SearchPlaceholderDialog open={searchOpen} onOpenChange={setSearchOpen} />
+      {searchMounted ? (
+        <Suspense fallback={null}>
+          <SearchPlaceholderDialog open={searchOpen} onOpenChange={onSearchOpenChange} />
+        </Suspense>
+      ) : null}
       <JobFailureToast />
     </SidebarProvider>
   );

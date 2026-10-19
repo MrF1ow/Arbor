@@ -8,6 +8,7 @@ import {
   Search,
   Share2,
 } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "~/components/ui/button";
 import { Kbd } from "~/components/ui/kbd";
@@ -56,15 +57,19 @@ export function CourseHeader({
     if (!activeRoot) {
       return;
     }
-    const picked = await openDialog({
-      multiple: true,
-      filters: [{ name: "Lecture files", extensions: ["pdf", "pptx", "docx"] }],
-    });
-    const paths = typeof picked === "string" ? [picked] : picked;
-    if (!paths || paths.length === 0) {
-      return;
+    try {
+      const picked = await openDialog({
+        multiple: true,
+        filters: [{ name: "Lecture files", extensions: ["pdf", "pptx", "docx"] }],
+      });
+      const paths = typeof picked === "string" ? [picked] : picked;
+      if (!paths || paths.length === 0) {
+        return;
+      }
+      await importSources.mutateAsync({ course, paths });
+    } catch (error) {
+      toast.error(String(error));
     }
-    await importSources.mutateAsync({ course, paths });
   };
 
   return (
@@ -80,7 +85,7 @@ export function CourseHeader({
           {rootLabel} · {digestCount} digests
         </span>
       </div>
-      <nav className="hidden items-end gap-5 self-stretch lg:flex" aria-label="Course modes">
+      <nav className="flex min-w-0 items-end gap-3 self-stretch overflow-x-auto sm:gap-5" aria-label="Course modes">
         {MODES.map((mode) => {
           const active = pathname.includes(`/course/${course}/${mode.segment}`);
           return (
@@ -88,25 +93,28 @@ export function CourseHeader({
               key={mode.id}
               to={mode.to}
               params={{ course }}
+              aria-label={mode.label}
+              aria-current={active ? "page" : undefined}
+              title={mode.label}
               className={cn(
-                "inline-flex items-center gap-1.5 border-b-2 border-transparent px-0.5 pb-2 text-sm text-muted-foreground transition-colors duration-fast ease-out-soft",
+                "inline-flex shrink-0 items-center gap-1.5 border-b-2 border-transparent px-0.5 pb-2 text-sm text-muted-foreground transition-colors duration-fast ease-out-soft",
                 active && "border-primary text-foreground",
               )}
             >
               <mode.icon className={cn("size-icon-sm", active && "text-primary")} />
-              {mode.label}
+              <span className="hidden lg:inline">{mode.label}</span>
             </Link>
           );
         })}
       </nav>
-      <div className="flex items-center gap-2 self-center">
+      <div className="flex shrink-0 items-center gap-2 self-center">
         <Button variant="outline" size="sm" onClick={() => void onAddFiles()}>
           <Plus className="size-icon-sm" />
-          Add files
+          <span className="hidden sm:inline">Add files</span>
         </Button>
         <Button variant="outline" size="sm" onClick={onOpenSearch}>
           <Search className="size-icon-sm" />
-          Search
+          <span className="hidden sm:inline">Search</span>
           <Kbd>{modShortcut("K")}</Kbd>
         </Button>
       </div>

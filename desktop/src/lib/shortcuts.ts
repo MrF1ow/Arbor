@@ -11,12 +11,16 @@ export function modKeyLabel(): "⌘" | "Ctrl" {
 }
 
 export function modShortcut(key: string): string {
-  return `${modKeyLabel()}${key}`;
+  return `${modKeyLabel()}+${key}`;
+}
+
+export function modKeyActive(event: { metaKey: boolean; ctrlKey: boolean }): boolean {
+  return modKeyLabel() === "⌘" ? event.metaKey : event.ctrlKey;
 }
 
 export const SHORTCUT_CATALOG: ShortcutEntry[] = [
   { keys: modShortcut("B"), description: "Toggle sidebar" },
-  { keys: `${modKeyLabel()}+\``, description: "Toggle log" },
+  { keys: modShortcut("`"), description: "Toggle log" },
   { keys: modShortcut("K"), description: "Open search" },
   { keys: modShortcut("1"), description: "Notes mode" },
   { keys: modShortcut("2"), description: "Flashcards mode" },

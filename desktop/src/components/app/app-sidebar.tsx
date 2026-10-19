@@ -1,4 +1,4 @@
-import { useNavigate, useRouterState } from "@tanstack/react-router";
+import { useNavigate, useParams, useRouterState } from "@tanstack/react-router";
 import {
   Activity,
   BookOpen,
@@ -10,6 +10,7 @@ import {
   Settings2,
 } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 
 import { ListRow } from "~/components/app/list-row";
 import { SectionLabel } from "~/components/app/section-label";
@@ -29,7 +30,6 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "~/components/ui/sidebar";
-import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/tooltip";
 import { courseDisplayName, workspaceRootLabel } from "~/domain/course";
 import type { KnowledgeRootEntry } from "~/domain/types";
 import { PROVIDER_FALLBACK, isWorkerUnavailableAuthReason, providerBadge } from "~/domain/provider";
@@ -42,6 +42,7 @@ import { useEffectiveProvider } from "~/lib/queries/effective-provider";
 import { useSettings } from "~/lib/queries/settings";
 import { modShortcut } from "~/lib/shortcuts";
 import { cn } from "~/lib/utils";
+import { useUiStore } from "~/stores/ui-store";
 import markLight from "~/assets/arbor-mark.png";
 import markDark from "~/assets/arbor-mark-dark.png";
 
@@ -50,21 +51,21 @@ function CourseNavRow({
   course,
   activeRoot,
   activeCourse,
+  digestCount,
   onSelect,
 }: {
   root: string;
   course: string;
   activeRoot: string | null;
   activeCourse: string | null;
+  digestCount?: number;
   onSelect: (root: string, course: string) => void;
 }) {
-  const digests = useDigests(root, course);
-  const count = digests.data?.length;
   const active = activeRoot === root && activeCourse === course;
   return (
     <ListRow
       title={courseDisplayName(course)}
-      meta={count != null ? String(count) : undefined}
+      meta={digestCount != null ? String(digestCount) : undefined}
       icon={BookOpen}
       active={active}
       onSelect={() => onSelect(root, course)}
@@ -107,33 +108,46 @@ function ProviderStatusLine({ root }: { root: string | null }) {
 export function AppSidebar() {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const { setOpen } = useSidebar();
+  const params = useParams({ strict: false });
+  const activeCourse = typeof params.course === "string" ? params.course : null;
+  const { setOpen, isMobile } = useSidebar();
+  const markSidebarTouched = useUiStore((s) => s.markSidebarTouched);
+  const setSidebarOpen = useUiStore((s) => s.setSidebarOpen);
   const settings = useSettings();
   const activeRoot = pickActiveRoot(settings.data);
   const roots = settings.data?.knowledge_roots ?? [];
   const switchRoot = useSwitchActiveRootMutation();
   const activateRoot = useActivateKnowledgeRootMutation();
   const createCourse = useCreateCourseMutation(activeRoot);
+  const activeDigests = useDigests(activeRoot, activeCourse ?? "");
   const [addingClass, setAddingClass] = useState(false);
   const [className, setClassName] = useState("");
   const [classError, setClassError] = useState<string | null>(null);
 
-  const activeCourse = pathname.match(/\/course\/([^/]+)/)?.[1] ?? null;
-
   const onCourseSelect = async (root: string, course: string) => {
-    if (root !== activeRoot) {
-      await switchRoot.mutateAsync(root);
+    try {
+      if (root !== activeRoot) {
+        await switchRoot.mutateAsync(root);
+      }
+      void navigate({ to: "/course/$course/notes", params: { course } });
+      if (isMobile) {
+        setOpen(false);
+      }
+    } catch (error) {
+      toast.error(String(error));
     }
-    void navigate({ to: "/course/$course/notes", params: { course } });
-    setOpen(false);
   };
 
   const onPickFolder = async () => {
-    const picked = await openDialog({ directory: true, multiple: false });
-    if (typeof picked !== "string") {
-      return;
+    try {
+      const picked = await openDialog({ directory: true, multiple: false });
+      if (typeof picked !== "string") {
+        return;
+      }
+      await activateRoot.mutateAsync(picked);
+    } catch (error) {
+      toast.error(String(error));
     }
-    await activateRoot.mutateAsync(picked);
   };
 
   const onCreateClass = async () => {
@@ -165,22 +179,18 @@ export function AppSidebar() {
           <img src={markDark} alt="" className="hidden size-7 dark:block" />
           <span className="font-serif text-lg font-medium">Arbor</span>
         </div>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <IconButton
-                icon={PanelLeft}
-                label={`Hide sidebar (${modShortcut("B")})`}
-                size="icon-sm"
-                variant="ghost"
-                onClick={() => {
-                  setOpen(false);
-                }}
-              />
-            }
-          />
-          <TooltipContent>Hide sidebar ({modShortcut("B")})</TooltipContent>
-        </Tooltip>
+        <IconButton
+          icon={PanelLeft}
+          label={`Hide sidebar (${modShortcut("B")})`}
+          size="icon-sm"
+          variant="ghost"
+          tooltip={false}
+          onClick={() => {
+            markSidebarTouched();
+            setSidebarOpen(false);
+            setOpen(false);
+          }}
+        />
       </SidebarHeader>
       <SidebarContent className="gap-1 px-2 py-1">
         <SectionLabel
@@ -191,6 +201,7 @@ export function AppSidebar() {
               label="Add class"
               size="icon-xs"
               variant="ghost"
+              tooltip={false}
               onClick={() => setAddingClass((v) => !v)}
             />
           }
@@ -223,7 +234,11 @@ export function AppSidebar() {
             all={roots}
             activeRoot={activeRoot}
             activeCourse={activeCourse}
+            activeDigestCount={
+              entry.path === activeRoot && activeCourse ? activeDigests.data?.length : undefined
+            }
             onCourseSelect={onCourseSelect}
+            onRootSelect={(root) => void switchRoot.mutateAsync(root).catch((e) => toast.error(String(e)))}
           />
         ))}
       </SidebarContent>
@@ -261,13 +276,17 @@ function RootGroup({
   all,
   activeRoot,
   activeCourse,
+  activeDigestCount,
   onCourseSelect,
+  onRootSelect,
 }: {
   entry: KnowledgeRootEntry;
   all: KnowledgeRootEntry[];
   activeRoot: string | null;
   activeCourse: string | null;
+  activeDigestCount?: number;
   onCourseSelect: (root: string, course: string) => void;
+  onRootSelect: (root: string) => void;
 }) {
   const courses = useCourses(entry.path);
   const label = `${workspaceRootLabel(entry, all)} · ${entry.kind}`;
@@ -275,10 +294,19 @@ function RootGroup({
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger className="flex w-full items-center gap-1 rounded-sm px-2 py-1 text-left text-xs font-medium text-muted-foreground hover:bg-muted">
-        {open ? <ChevronDown className="size-icon-sm" /> : <ChevronRight className="size-icon-sm" />}
-        <span className="truncate">{label}</span>
-      </CollapsibleTrigger>
+      <div className="flex w-full items-center gap-0.5">
+        <CollapsibleTrigger className="flex shrink-0 items-center rounded-sm p-1 text-muted-foreground hover:bg-muted">
+          {open ? <ChevronDown className="size-icon-sm" /> : <ChevronRight className="size-icon-sm" />}
+        </CollapsibleTrigger>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-auto min-w-0 flex-1 justify-start px-1 py-1 text-left text-xs font-medium text-muted-foreground"
+          onClick={() => onRootSelect(entry.path)}
+        >
+          <span className="truncate">{label}</span>
+        </Button>
+      </div>
       <CollapsibleContent className="pb-1">
         {(courses.data ?? []).length === 0 ? (
           <p className="px-4 py-1 text-2xs text-muted-foreground">No classes yet</p>
@@ -290,6 +318,9 @@ function RootGroup({
               course={course}
               activeRoot={activeRoot}
               activeCourse={activeCourse}
+              digestCount={
+                entry.path === activeRoot && course === activeCourse ? activeDigestCount : undefined
+              }
               onSelect={onCourseSelect}
             />
           ))

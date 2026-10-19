@@ -1,7 +1,7 @@
-import { useNavigate, useRouterState } from "@tanstack/react-router";
+import { useNavigate, useParams } from "@tanstack/react-router";
 import { useEffect } from "react";
 
-import { isEditableTarget } from "~/lib/shortcuts";
+import { isEditableTarget, modKeyActive } from "~/lib/shortcuts";
 import { useUiStore } from "~/stores/ui-store";
 
 type GlobalShortcutHandlers = {
@@ -10,18 +10,20 @@ type GlobalShortcutHandlers = {
 
 export function useGlobalShortcuts(handlers: GlobalShortcutHandlers) {
   const navigate = useNavigate();
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const course = pathname.match(/\/course\/([^/]+)/)?.[1];
+  const params = useParams({ strict: false });
+  const course = typeof params.course === "string" ? params.course : undefined;
   const toggleLog = useUiStore((s) => s.toggleLog);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      const mod = event.metaKey || event.ctrlKey;
-      if (!mod) {
+      if (!modKeyActive(event)) {
         return;
       }
 
       if (event.key === "`") {
+        if (isEditableTarget(event.target)) {
+          return;
+        }
         event.preventDefault();
         toggleLog();
         return;

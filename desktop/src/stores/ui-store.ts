@@ -48,6 +48,15 @@ export const useUiStore = create<UiState>()(
     }),
     {
       name: "arbor.ui",
+      partialize: (state) => ({
+        appearance: state.appearance,
+        sidebarOpen: state.sidebarOpen,
+        sidebarTouched: state.sidebarTouched,
+        logOpen: state.logOpen,
+        logHeight: state.logHeight,
+        notesIndexOpen: state.notesIndexOpen,
+        lastCourse: state.lastCourse,
+      }),
       merge: (persisted, current) => {
         const stored = persisted as Partial<UiState> | undefined;
         const parsed =
@@ -62,3 +71,18 @@ export const useUiStore = create<UiState>()(
   ),
 );
 
+/** First-run responsive default: hidden below lg until the user toggles the sidebar. */
+export function useEffectiveSidebarOpen(): boolean {
+  const sidebarOpen = useUiStore((s) => s.sidebarOpen);
+  const sidebarTouched = useUiStore((s) => s.sidebarTouched);
+  if (sidebarTouched) {
+    return sidebarOpen;
+  }
+  if (typeof window === "undefined") {
+    return sidebarOpen;
+  }
+  if (window.innerWidth < 1024) {
+    return false;
+  }
+  return sidebarOpen;
+}

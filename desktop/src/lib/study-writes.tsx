@@ -62,6 +62,13 @@ export function resetStudyWriteQueueForTests() {
   moduleQueueRestored = false;
 }
 
+export async function flushStudyWritesForRootSwitch(timeoutMs = 3000): Promise<void> {
+  if (!moduleStudyWriteQueue) {
+    return;
+  }
+  await moduleStudyWriteQueue.flush(timeoutMs);
+}
+
 export function StudyWritesProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
   const setStatus = useStudyWritesStore((s) => s.setStatus);

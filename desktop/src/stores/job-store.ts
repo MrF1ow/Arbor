@@ -15,11 +15,23 @@ interface JobState {
   lines: string[];
   unread: number;
   append: (line: string) => void;
+  appendBatch: (lines: string[]) => void;
   markRead: () => void;
   clear: () => void;
   start: (jobId: string, opts?: { isUpdate?: boolean }) => void;
   finish: (result: JobFinished) => void;
   setStep: (step: string | null) => void;
+}
+
+export function resetJobStoreForRootSwitch() {
+  useJobStore.setState({
+    activeJobId: null,
+    activeUpdateJobId: null,
+    status: "idle",
+    step: null,
+    lines: [],
+    unread: 0,
+  });
 }
 
 export const useJobStore = create<JobState>((set, get) => ({
@@ -30,13 +42,21 @@ export const useJobStore = create<JobState>((set, get) => ({
   lines: [],
   unread: 0,
   append(line) {
+    get().appendBatch([line]);
+  },
+  appendBatch(batchLines) {
+    if (batchLines.length === 0) {
+      return;
+    }
     const logOpen = useUiStore.getState().logOpen;
     set((state) => {
-      const next = [...state.lines, line];
+      const next = [...state.lines, ...batchLines];
       const trimmed = next.length > MAX_LINES ? next.slice(next.length - MAX_LINES) : next;
+      const dropped = next.length - trimmed.length;
+      const added = batchLines.length - dropped;
       return {
         lines: trimmed,
-        unread: logOpen ? state.unread : state.unread + 1,
+        unread: logOpen ? state.unread : state.unread + Math.max(0, added),
       };
     });
   },
@@ -55,11 +75,12 @@ export const useJobStore = create<JobState>((set, get) => ({
     });
   },
   finish(result) {
+    const cancelled = result.status === "cancelled";
     set((state) => ({
       activeJobId: state.activeJobId === result.job_id ? null : state.activeJobId,
       activeUpdateJobId:
         state.activeUpdateJobId === result.job_id ? null : state.activeUpdateJobId,
-      status: result.status === "succeeded" ? "done" : "failed",
+      status: cancelled ? "idle" : result.status === "succeeded" ? "done" : "failed",
       step: null,
     }));
   },
