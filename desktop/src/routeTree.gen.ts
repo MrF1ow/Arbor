@@ -10,11 +10,41 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as CourseRouteImport } from './routes/_course'
+import { Route as JobsRouteImport } from './routes/jobs'
+import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as WelcomeRouteImport } from './routes/welcome'
 import { Route as DevUiRouteImport } from './routes/dev.ui'
+import { Route as SettingsIndexRouteImport } from './routes/settings.index'
+import { Route as CourseCourseCourseChatRouteImport } from './routes/_course.course.$course.chat'
+import { Route as CourseCourseCourseFlashcardsRouteImport } from './routes/_course.course.$course.flashcards'
+import { Route as CourseCourseCourseGraphRouteImport } from './routes/_course.course.$course.graph'
+import { Route as CourseCourseCourseQuizRouteImport } from './routes/_course.course.$course.quiz'
+import { Route as CourseCourseCourseNotesIndexRouteImport } from './routes/_course.course.$course.notes.index'
+import { Route as CourseCourseCourseNotesDigestRouteImport } from './routes/_course.course.$course.notes.$digest'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CourseRoute = CourseRouteImport.update({
+  id: '/_course',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const JobsRoute = JobsRouteImport.update({
+  id: '/jobs',
+  path: '/jobs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WelcomeRoute = WelcomeRouteImport.update({
+  id: '/welcome',
+  path: '/welcome',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DevUiRoute = DevUiRouteImport.update({
@@ -22,30 +52,139 @@ const DevUiRoute = DevUiRouteImport.update({
   path: '/dev/ui',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SettingsIndexRoute = SettingsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const CourseCourseCourseChatRoute = CourseCourseCourseChatRouteImport.update({
+  id: '/course/$course/chat',
+  path: '/course/$course/chat',
+  getParentRoute: () => CourseRoute,
+} as any)
+const CourseCourseCourseFlashcardsRoute =
+  CourseCourseCourseFlashcardsRouteImport.update({
+    id: '/course/$course/flashcards',
+    path: '/course/$course/flashcards',
+    getParentRoute: () => CourseRoute,
+  } as any)
+const CourseCourseCourseGraphRoute = CourseCourseCourseGraphRouteImport.update({
+  id: '/course/$course/graph',
+  path: '/course/$course/graph',
+  getParentRoute: () => CourseRoute,
+} as any)
+const CourseCourseCourseQuizRoute = CourseCourseCourseQuizRouteImport.update({
+  id: '/course/$course/quiz',
+  path: '/course/$course/quiz',
+  getParentRoute: () => CourseRoute,
+} as any)
+const CourseCourseCourseNotesIndexRoute =
+  CourseCourseCourseNotesIndexRouteImport.update({
+    id: '/course/$course/notes/',
+    path: '/course/$course/notes/',
+    getParentRoute: () => CourseRoute,
+  } as any)
+const CourseCourseCourseNotesDigestRoute =
+  CourseCourseCourseNotesDigestRouteImport.update({
+    id: '/course/$course/notes/$digest',
+    path: '/course/$course/notes/$digest',
+    getParentRoute: () => CourseRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/jobs': typeof JobsRoute
+  '/settings': typeof SettingsRouteWithChildren
+  '/welcome': typeof WelcomeRoute
   '/dev/ui': typeof DevUiRoute
+  '/settings/': typeof SettingsIndexRoute
+  '/course/$course/chat': typeof CourseCourseCourseChatRoute
+  '/course/$course/flashcards': typeof CourseCourseCourseFlashcardsRoute
+  '/course/$course/graph': typeof CourseCourseCourseGraphRoute
+  '/course/$course/quiz': typeof CourseCourseCourseQuizRoute
+  '/course/$course/notes/$digest': typeof CourseCourseCourseNotesDigestRoute
+  '/course/$course/notes/': typeof CourseCourseCourseNotesIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/jobs': typeof JobsRoute
+  '/welcome': typeof WelcomeRoute
   '/dev/ui': typeof DevUiRoute
+  '/settings': typeof SettingsIndexRoute
+  '/course/$course/chat': typeof CourseCourseCourseChatRoute
+  '/course/$course/flashcards': typeof CourseCourseCourseFlashcardsRoute
+  '/course/$course/graph': typeof CourseCourseCourseGraphRoute
+  '/course/$course/quiz': typeof CourseCourseCourseQuizRoute
+  '/course/$course/notes/$digest': typeof CourseCourseCourseNotesDigestRoute
+  '/course/$course/notes': typeof CourseCourseCourseNotesIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_course': typeof CourseRouteWithChildren
+  '/jobs': typeof JobsRoute
+  '/settings': typeof SettingsRouteWithChildren
+  '/welcome': typeof WelcomeRoute
   '/dev/ui': typeof DevUiRoute
+  '/settings/': typeof SettingsIndexRoute
+  '/_course/course/$course/chat': typeof CourseCourseCourseChatRoute
+  '/_course/course/$course/flashcards': typeof CourseCourseCourseFlashcardsRoute
+  '/_course/course/$course/graph': typeof CourseCourseCourseGraphRoute
+  '/_course/course/$course/quiz': typeof CourseCourseCourseQuizRoute
+  '/_course/course/$course/notes/$digest': typeof CourseCourseCourseNotesDigestRoute
+  '/_course/course/$course/notes/': typeof CourseCourseCourseNotesIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/dev/ui'
+  fullPaths:
+    | '/'
+    | '/jobs'
+    | '/settings'
+    | '/welcome'
+    | '/dev/ui'
+    | '/settings/'
+    | '/course/$course/chat'
+    | '/course/$course/flashcards'
+    | '/course/$course/graph'
+    | '/course/$course/quiz'
+    | '/course/$course/notes/$digest'
+    | '/course/$course/notes/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/dev/ui'
-  id: '__root__' | '/' | '/dev/ui'
+  to:
+    | '/'
+    | '/jobs'
+    | '/welcome'
+    | '/dev/ui'
+    | '/settings'
+    | '/course/$course/chat'
+    | '/course/$course/flashcards'
+    | '/course/$course/graph'
+    | '/course/$course/quiz'
+    | '/course/$course/notes/$digest'
+    | '/course/$course/notes'
+  id:
+    | '__root__'
+    | '/'
+    | '/_course'
+    | '/jobs'
+    | '/settings'
+    | '/welcome'
+    | '/dev/ui'
+    | '/settings/'
+    | '/_course/course/$course/chat'
+    | '/_course/course/$course/flashcards'
+    | '/_course/course/$course/graph'
+    | '/_course/course/$course/quiz'
+    | '/_course/course/$course/notes/$digest'
+    | '/_course/course/$course/notes/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  CourseRoute: typeof CourseRouteWithChildren
+  JobsRoute: typeof JobsRoute
+  SettingsRoute: typeof SettingsRouteWithChildren
+  WelcomeRoute: typeof WelcomeRoute
   DevUiRoute: typeof DevUiRoute
 }
 
@@ -58,6 +197,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_course': {
+      id: '/_course'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof CourseRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/jobs': {
+      id: '/jobs'
+      path: '/jobs'
+      fullPath: '/jobs'
+      preLoaderRoute: typeof JobsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/welcome': {
+      id: '/welcome'
+      path: '/welcome'
+      fullPath: '/welcome'
+      preLoaderRoute: typeof WelcomeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/dev/ui': {
       id: '/dev/ui'
       path: '/dev/ui'
@@ -65,11 +232,97 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DevUiRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/settings/': {
+      id: '/settings/'
+      path: '/'
+      fullPath: '/settings/'
+      preLoaderRoute: typeof SettingsIndexRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/_course/course/$course/chat': {
+      id: '/_course/course/$course/chat'
+      path: '/course/$course/chat'
+      fullPath: '/course/$course/chat'
+      preLoaderRoute: typeof CourseCourseCourseChatRouteImport
+      parentRoute: typeof CourseRoute
+    }
+    '/_course/course/$course/flashcards': {
+      id: '/_course/course/$course/flashcards'
+      path: '/course/$course/flashcards'
+      fullPath: '/course/$course/flashcards'
+      preLoaderRoute: typeof CourseCourseCourseFlashcardsRouteImport
+      parentRoute: typeof CourseRoute
+    }
+    '/_course/course/$course/graph': {
+      id: '/_course/course/$course/graph'
+      path: '/course/$course/graph'
+      fullPath: '/course/$course/graph'
+      preLoaderRoute: typeof CourseCourseCourseGraphRouteImport
+      parentRoute: typeof CourseRoute
+    }
+    '/_course/course/$course/quiz': {
+      id: '/_course/course/$course/quiz'
+      path: '/course/$course/quiz'
+      fullPath: '/course/$course/quiz'
+      preLoaderRoute: typeof CourseCourseCourseQuizRouteImport
+      parentRoute: typeof CourseRoute
+    }
+    '/_course/course/$course/notes/': {
+      id: '/_course/course/$course/notes/'
+      path: '/course/$course/notes'
+      fullPath: '/course/$course/notes/'
+      preLoaderRoute: typeof CourseCourseCourseNotesIndexRouteImport
+      parentRoute: typeof CourseRoute
+    }
+    '/_course/course/$course/notes/$digest': {
+      id: '/_course/course/$course/notes/$digest'
+      path: '/course/$course/notes/$digest'
+      fullPath: '/course/$course/notes/$digest'
+      preLoaderRoute: typeof CourseCourseCourseNotesDigestRouteImport
+      parentRoute: typeof CourseRoute
+    }
   }
 }
 
+interface CourseRouteChildren {
+  CourseCourseCourseChatRoute: typeof CourseCourseCourseChatRoute
+  CourseCourseCourseFlashcardsRoute: typeof CourseCourseCourseFlashcardsRoute
+  CourseCourseCourseGraphRoute: typeof CourseCourseCourseGraphRoute
+  CourseCourseCourseQuizRoute: typeof CourseCourseCourseQuizRoute
+  CourseCourseCourseNotesDigestRoute: typeof CourseCourseCourseNotesDigestRoute
+  CourseCourseCourseNotesIndexRoute: typeof CourseCourseCourseNotesIndexRoute
+}
+
+const CourseRouteChildren: CourseRouteChildren = {
+  CourseCourseCourseChatRoute: CourseCourseCourseChatRoute,
+  CourseCourseCourseFlashcardsRoute: CourseCourseCourseFlashcardsRoute,
+  CourseCourseCourseGraphRoute: CourseCourseCourseGraphRoute,
+  CourseCourseCourseQuizRoute: CourseCourseCourseQuizRoute,
+  CourseCourseCourseNotesDigestRoute: CourseCourseCourseNotesDigestRoute,
+  CourseCourseCourseNotesIndexRoute: CourseCourseCourseNotesIndexRoute,
+}
+
+const CourseRouteWithChildren =
+  CourseRoute._addFileChildren(CourseRouteChildren)
+
+interface SettingsRouteChildren {
+  SettingsIndexRoute: typeof SettingsIndexRoute
+}
+
+const SettingsRouteChildren: SettingsRouteChildren = {
+  SettingsIndexRoute: SettingsIndexRoute,
+}
+
+const SettingsRouteWithChildren = SettingsRoute._addFileChildren(
+  SettingsRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  CourseRoute: CourseRouteWithChildren,
+  JobsRoute: JobsRoute,
+  SettingsRoute: SettingsRouteWithChildren,
+  WelcomeRoute: WelcomeRoute,
   DevUiRoute: DevUiRoute,
 }
 export const routeTree = rootRouteImport
