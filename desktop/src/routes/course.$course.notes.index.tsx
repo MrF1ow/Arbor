@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
+import { useRef } from "react";
 import { toast } from "sonner";
 
 import { CourseOverview } from "~/components/notes/course-overview";
@@ -22,6 +23,8 @@ export const Route = createFileRoute("/course/$course/notes/")({
 
 function NotesOverviewRoute() {
   const { course } = Route.useParams();
+  const { heading } = Route.useSearch();
+  const scrollRef = useRef<HTMLDivElement>(null);
   const settings = useSettings();
   const activeRoot = pickActiveRoot(settings.data);
   const digests = useDigests(activeRoot, course);
@@ -82,8 +85,14 @@ function NotesOverviewRoute() {
   }
 
   return (
-    <div className="min-h-0 flex-1 overflow-auto">
-      <CourseOverview course={course} digests={digests.data} />
+    <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
+      <CourseOverview
+        key={`${activeRoot}|${course}`}
+        course={course}
+        digests={digests.data}
+        heading={heading}
+        scrollRef={scrollRef}
+      />
     </div>
   );
 }

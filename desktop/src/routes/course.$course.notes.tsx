@@ -32,8 +32,10 @@ function NotesLayout() {
   const narrow = useNotesMainNarrow(mainRef);
   const [indexSheetOpen, setIndexSheetOpen] = useState(false);
 
+  const indexSheetVisible = narrow && indexSheetOpen;
+
   const showInlineIndex = !narrow && notesIndexOpen;
-  const showIndexButton = narrow ? !indexSheetOpen : !notesIndexOpen;
+  const showIndexButton = narrow ? !indexSheetVisible : !notesIndexOpen;
 
   const hideIndex = () => {
     if (narrow) {
@@ -74,7 +76,14 @@ function NotesLayout() {
         <Outlet />
       </div>
       {narrow ? (
-        <Sheet open={indexSheetOpen} onOpenChange={setIndexSheetOpen}>
+        <Sheet
+          open={indexSheetVisible}
+          onOpenChange={(open) => {
+            if (narrow) {
+              setIndexSheetOpen(open);
+            }
+          }}
+        >
           <SheetContent side="left" className="w-index p-0">
             <SheetHeader className="sr-only">
               <SheetTitle>Course index</SheetTitle>

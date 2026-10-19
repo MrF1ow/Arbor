@@ -5,7 +5,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Chip } from "~/components/app/chip";
 import { Button } from "~/components/ui/button";
 import { Skeleton } from "~/components/ui/skeleton";
-import { nodesForDigest, parseConceptGraph } from "~/domain/concepts";
+import { digestKey, nodesForDigest, parseConceptGraph } from "~/domain/concepts";
 import { VIEWER_WRITE_REASON, viewerBlocksWrite } from "~/domain/library-role";
 import {
   collapseSelectionText,
@@ -14,11 +14,11 @@ import {
   headingForSelectionNode,
   pageForSelectionNode,
 } from "~/domain/notes";
-import { arborDigestTarget, headingId, renderMarkdown } from "~/domain/markdown";
+import { arborDigestTarget, headingId } from "~/domain/markdown";
 import { pickActiveRoot } from "~/lib/knowledge-root";
 import { useAppendCardMutation } from "~/lib/queries/study";
 import { useLibrary } from "~/lib/queries/library";
-import { useMarkdown } from "~/lib/queries/notes";
+import { useRenderedMarkdown } from "~/lib/queries/notes";
 import { useStudyJson } from "~/lib/queries/study";
 import { useSettings } from "~/lib/queries/settings";
 import type { DigestInfo } from "~/domain/types";
@@ -34,13 +34,6 @@ type SelectionSnapshot = {
   digest: string;
 };
 
-function useRenderedMarkdown(source: string | undefined) {
-  if (source == null) {
-    return null;
-  }
-  return renderMarkdown(source);
-}
-
 export function DigestView({
   course,
   digestSlug,
@@ -55,8 +48,8 @@ export function DigestView({
   const navigate = useNavigate();
   const settings = useSettings();
   const activeRoot = pickActiveRoot(settings.data);
-  const relativePath = digestNotesPath(course, digestSlug);
-  const markdown = useMarkdown(activeRoot, relativePath);
+  const relativePath = digestNotesPath(course, digestSlug, digests);
+  const markdown = useRenderedMarkdown(activeRoot, relativePath);
   const conceptsJson = useStudyJson(activeRoot, course, "concepts.json");
   const library = useLibrary(activeRoot);
   const role = library.data?.present === true ? library.data.role : null;
@@ -65,17 +58,22 @@ export function DigestView({
 
   const articleRef = useRef<HTMLElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const makeCardBtnRef = useRef<HTMLButtonElement>(null);
+  const keepSnapshotRef = useRef(false);
   const [snapshot, setSnapshot] = useState<SelectionSnapshot | null>(null);
-  const [keepSnapshot, setKeepSnapshot] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogMounted, setDialogMounted] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const digestMeta = digests.find((d) => digestSlugFromPath(d.path) === digestSlug);
-  const rendered = useRenderedMarkdown(markdown.data);
+  const rendered = markdown.data;
 
   useEffect(() => {
     const onSelectionChange = () => {
+      const keepSnapshot =
+        keepSnapshotRef.current ||
+        dialogOpen ||
+        Boolean(makeCardBtnRef.current?.matches(":active"));
       const article = articleRef.current;
       if (!article) {
         return;
@@ -101,17 +99,17 @@ export function DigestView({
         }
         return;
       }
+      const digestRef = digestMeta ? digestKey(digestMeta.path) : `digests/${digestSlug}.md`;
       setSnapshot({
         text,
         heading: headingForSelectionNode(selection.anchorNode, article),
         page: pageForSelectionNode(selection.anchorNode, article),
-        digest: `digests/${digestSlug}.md`,
+        digest: digestRef,
       });
-      setKeepSnapshot(false);
     };
     document.addEventListener("selectionchange", onSelectionChange);
     return () => document.removeEventListener("selectionchange", onSelectionChange);
-  }, [digestSlug, keepSnapshot]);
+  }, [digestSlug, digestMeta, dialogOpen]);
 
   useEffect(() => {
     const pane = scrollRef.current;
@@ -119,11 +117,11 @@ export function DigestView({
     if (!pane || !article) {
       return;
     }
-    if (!heading) {
+    const id = heading ? headingId(heading) : "";
+    if (!id) {
       pane.scrollTo(0, 0);
       return;
     }
-    const id = headingId(heading);
     const target = article.querySelector(`#${CSS.escape(id)}`);
     if (target instanceof HTMLElement) {
       target.scrollIntoView({ block: "start" });
@@ -188,7 +186,8 @@ export function DigestView({
   if (markdown.isError) {
     return (
       <div className="mx-auto w-full max-w-reading px-8 py-9 text-read text-muted-foreground">
-        Could not load file: {String(markdown.error)}
+        Could not load file:{" "}
+        {markdown.error instanceof Error ? markdown.error.message : String(markdown.error)}
       </div>
     );
   }
@@ -214,7 +213,7 @@ export function DigestView({
             {conceptNodes.map((node) => (
               <Chip
                 key={node.id}
-                variant={node.kind === "figure" ? "plain" : "default"}
+                variant={node.kind === "figure" ? "figure" : "default"}
                 onClick={() => {
                   void navigate({
                     to: "/course/$course/graph",
@@ -228,14 +227,28 @@ export function DigestView({
             ))}
           </div>
           <Button
+            ref={makeCardBtnRef}
             type="button"
             size="sm"
             variant="outline"
             disabled={!snapshot || viewerBlocked}
             title={viewerBlocked ? VIEWER_WRITE_REASON : undefined}
+            onMouseEnter={() => {
+              keepSnapshotRef.current = true;
+            }}
+            onMouseLeave={() => {
+              if (!dialogOpen) {
+                keepSnapshotRef.current = false;
+              }
+            }}
             onMouseDown={(event) => {
               event.preventDefault();
-              setKeepSnapshot(true);
+              keepSnapshotRef.current = true;
+            }}
+            onMouseUp={() => {
+              if (!dialogOpen) {
+                keepSnapshotRef.current = false;
+              }
             }}
             onClick={() => {
               if (viewerBlocked || !snapshot) {

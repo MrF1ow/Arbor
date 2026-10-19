@@ -22,6 +22,7 @@ function DigestRoute() {
 
   return (
     <DigestView
+      key={digest}
       course={course}
       digestSlug={digest}
       digests={digests.data ?? []}

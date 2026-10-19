@@ -6,7 +6,25 @@ export function digestSlugFromPath(path: string): string {
   return file.replace(/\.md$/i, "");
 }
 
-export function digestNotesPath(course: string, digestSlug: string): string {
+/** Resolve a worker digest ref (`digests/foo.md` or stem) to the route slug. */
+export function resolveDigestSlug(digestRef: string, digests: DigestInfo[]): string {
+  const key = digestKey(digestRef);
+  const match = digests.find((d) => digestKey(d.path) === key);
+  if (match) {
+    return digestSlugFromPath(match.path);
+  }
+  return digestSlugFromPath(digestRef);
+}
+
+export function digestNotesPath(
+  course: string,
+  digestSlug: string,
+  digests?: DigestInfo[],
+): string {
+  const match = digests?.find((d) => digestSlugFromPath(d.path) === digestSlug);
+  if (match) {
+    return match.path;
+  }
   return `${course}/digests/${digestSlug}.md`;
 }
 

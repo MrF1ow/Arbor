@@ -18,6 +18,17 @@ import {
 
 const ipcLog: string[] = [];
 const ipcCalls: { cmd: string; args?: InvokeArgs }[] = [];
+const updateJobTimers: ReturnType<typeof setTimeout>[] = [];
+let mockEventsEnabled = true;
+
+export function resetMockHandlerTimers() {
+  mockEventsEnabled = false;
+  for (const timer of updateJobTimers) {
+    clearTimeout(timer);
+  }
+  updateJobTimers.length = 0;
+  mockEventsEnabled = true;
+}
 
 export function getMockIpcLog(): string[] {
   return ipcLog;
@@ -32,12 +43,26 @@ export function clearMockIpcLog() {
   ipcCalls.length = 0;
 }
 
+function scheduleMockEvent(delayMs: number, run: () => void) {
+  const timer = window.setTimeout(() => {
+    if (!mockEventsEnabled) {
+      return;
+    }
+    run();
+  }, delayMs);
+  updateJobTimers.push(timer);
+  return timer;
+}
+
 function simulateUpdateJob(root: string) {
   const jobId = "mock-update-job";
-  window.setTimeout(() => {
+  scheduleMockEvent(200, () => {
+    if (!mockEventsEnabled) {
+      return;
+    }
     void emit("arbor://progress", {
       line: JSON.stringify({ type: "run_started", model_id: "grok-4.7" }),
-    });
+    }).catch(() => undefined);
     void emit("arbor://progress", {
       line: JSON.stringify({
         type: "stage",
@@ -45,20 +70,23 @@ function simulateUpdateJob(root: string) {
         status: "running",
         detail: "page 1",
       }),
-    });
-    window.setTimeout(() => {
+    }).catch(() => undefined);
+    scheduleMockEvent(2800, () => {
+      if (!mockEventsEnabled) {
+        return;
+      }
       void emit("arbor://progress", {
         line: JSON.stringify({ type: "run_done", processed: 1, failed: 0, skipped: 0 }),
-      });
+      }).catch(() => undefined);
       void emit("arbor://job-finished", {
         job_id: jobId,
         status: "succeeded",
         summary: null,
         operation: "update",
         root,
-      });
-    }, 2800);
-  }, 200);
+      }).catch(() => undefined);
+    });
+  });
   return jobId;
 }
 

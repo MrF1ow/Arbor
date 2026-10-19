@@ -44,7 +44,13 @@ export const fixtureCourses: Record<string, string[]> = {
 export const fixtureCourseOverview = {
   due: { due_ids: ["fc-1", "fc-2"], count: 14, deck_count: 86 },
   weak: {
-    topics: [{ label: "Cytoskeleton", digest: "2026-09-12-membranes", heading: "Microtubules" }],
+    topics: [
+      {
+        label: "Cytoskeleton",
+        digest: "digests/2026-09-12-membranes.md",
+        heading: "Microtubules",
+      },
+    ],
   },
   recommend: {
     items: [
@@ -52,13 +58,13 @@ export const fixtureCourseOverview = {
       {
         kind: "weakest_topic",
         label: "Cytoskeleton",
-        digest: "2026-09-12-membranes",
+        digest: "digests/2026-09-12-membranes.md",
         heading: "Microtubules",
       },
       {
         kind: "unreviewed_digest",
         label: "Stem cells",
-        digest: "2026-10-12-stem-cells",
+        digest: "digests/2026-10-12-stem-cells.md",
       },
     ],
   },

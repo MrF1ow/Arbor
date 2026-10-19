@@ -1,6 +1,6 @@
 import { useNavigate } from "@tanstack/react-router";
 import { GraduationCap, House, Info, Layers } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 
 import { Chip } from "~/components/app/chip";
 import { Button } from "~/components/ui/button";
@@ -8,6 +8,7 @@ import { Input } from "~/components/ui/input";
 import { Skeleton } from "~/components/ui/skeleton";
 import { courseDisplayName } from "~/domain/course";
 import { VIEWER_WRITE_REASON, viewerBlocksWrite } from "~/domain/library-role";
+import { headingId } from "~/domain/markdown";
 import {
   daysUntil,
   digestFlags,
@@ -16,10 +17,10 @@ import {
   examFocusCallout,
   firstParagraph,
   quizAccuracy,
+  resolveDigestSlug,
   unreviewedDigestRecommend,
   weakestRecommendTopic,
 } from "~/domain/notes";
-import { renderMarkdown } from "~/domain/markdown";
 import { PROVIDER_FALLBACK, signedOutJobMessage } from "~/domain/provider";
 import { parseQuizProgress } from "~/domain/quiz";
 import type { CourseOverviewPayload, DigestInfo, StudyRecommendItem } from "~/domain/types";
@@ -27,7 +28,7 @@ import { fetchAuthStatus } from "~/lib/auth-refresh";
 import { pickActiveRoot } from "~/lib/knowledge-root";
 import { useEffectiveProvider } from "~/lib/queries/effective-provider";
 import { useLibrary } from "~/lib/queries/library";
-import { useCourseOverview, useMarkdown } from "~/lib/queries/notes";
+import { useCourseOverview, useMarkdown, useRenderedMarkdown } from "~/lib/queries/notes";
 import { useQuizProgress, useStudyPlan, useStudyPlanMutation } from "~/lib/queries/study";
 import { useSettings } from "~/lib/queries/settings";
 import { flushStudyWrites } from "~/lib/study-writes";
@@ -102,30 +103,42 @@ function WeakTopicsList({
   if (error) {
     return <p className="text-sm text-muted-foreground">Could not load weak topics.</p>;
   }
-  const withDigest = (topics ?? []).filter((t) => t.digest);
-  if (withDigest.length === 0) {
+  if (!topics || topics.length === 0) {
     return <p className="text-sm text-muted-foreground">No weak topics yet.</p>;
   }
   return (
     <ul className="flex flex-wrap gap-2">
-      {withDigest.map((topic) => (
-        <li key={topic.label}>
-          <Chip
-            onClick={() => {
-              if (topic.digest) {
-                onNavigateDigest(topic.digest, topic.heading ?? null);
-              }
-            }}
-          >
-            {topic.label}
-          </Chip>
-        </li>
-      ))}
+      {topics.map((topic) => {
+        if (!topic.digest) {
+          return null;
+        }
+        return (
+          <li key={topic.label}>
+            <Chip
+              onClick={() => {
+                onNavigateDigest(topic.digest!, topic.heading ?? null);
+              }}
+            >
+              {topic.label}
+            </Chip>
+          </li>
+        );
+      })}
     </ul>
   );
 }
 
-export function CourseOverview({ course, digests }: { course: string; digests: DigestInfo[] }) {
+export function CourseOverview({
+  course,
+  digests,
+  heading,
+  scrollRef,
+}: {
+  course: string;
+  digests: DigestInfo[];
+  heading?: string;
+  scrollRef?: RefObject<HTMLElement | null>;
+}) {
   const navigate = useNavigate();
   const settings = useSettings();
   const activeRoot = pickActiveRoot(settings.data);
@@ -137,10 +150,16 @@ export function CourseOverview({ course, digests }: { course: string; digests: D
 
   const [examDateOverride, setExamDateOverride] = useState<string | null>(null);
   const [planStatus, setPlanStatus] = useState("");
+  const [planBusy, setPlanBusy] = useState(false);
   const [flushDone, setFlushDone] = useState(false);
+  const courseNotesRef = useRef<HTMLDivElement>(null);
 
-  const courseMd = useMarkdown(activeRoot, `${course}/course.md`);
+  const courseMdPath = `${course}/course.md`;
+  const courseMd = useMarkdown(activeRoot, courseMdPath);
+  const courseRendered = useRenderedMarkdown(activeRoot, courseMdPath);
+  const studyPlanPath = `${course}/study/plan.md`;
   const studyPlan = useStudyPlan(activeRoot, course);
+  const studyPlanRendered = useRenderedMarkdown(activeRoot, studyPlanPath);
   const quizProgress = useQuizProgress(activeRoot, course);
   const overview = useCourseOverview(activeRoot, course, flushDone);
   const studyPlanMutation = useStudyPlanMutation(activeRoot, course);
@@ -159,21 +178,38 @@ export function CourseOverview({ course, digests }: { course: string; digests: D
   }, [course, activeRoot]);
 
   useEffect(() => {
-    if (overview.isError) {
-      appendLog(`Could not load course overview: ${String(overview.error)}`);
+    if (overview.isError && overview.error) {
+      const message =
+        overview.error instanceof Error ? overview.error.message : String(overview.error);
+      appendLog(`Could not load course overview: ${message}`);
     }
   }, [overview.isError, overview.error, appendLog]);
 
-  const goToDigest = (digestRef: string, heading?: string | null) => {
-    const match =
-      digests.find(
-        (d) => digestSlugFromPath(d.path) === digestRef || d.path.endsWith(`/${digestRef}.md`),
-      ) ?? null;
-    const slug = match ? digestSlugFromPath(match.path) : digestRef.replace(/\.md$/i, "");
+  useEffect(() => {
+    const pane = scrollRef?.current;
+    const root = courseNotesRef.current;
+    if (!pane || !root) {
+      return;
+    }
+    const id = heading ? headingId(heading) : "";
+    if (!id) {
+      pane.scrollTo(0, 0);
+      return;
+    }
+    const target = root.querySelector(`#${CSS.escape(id)}`);
+    if (target instanceof HTMLElement) {
+      target.scrollIntoView({ block: "start" });
+      return;
+    }
+    pane.scrollTo(0, 0);
+  }, [heading, courseRendered.data?.html, scrollRef]);
+
+  const goToDigest = (digestRef: string, digestHeading?: string | null) => {
+    const slug = resolveDigestSlug(digestRef, digests);
     void navigate({
       to: "/course/$course/notes/$digest",
       params: { course, digest: slug },
-      search: heading ? { heading } : {},
+      search: digestHeading ? { heading: digestHeading } : {},
     });
   };
 
@@ -206,11 +242,9 @@ export function CourseOverview({ course, digests }: { course: string; digests: D
 
   const courseBody = courseMd.data ?? "";
   const lede = courseMd.isSuccess ? firstParagraph(courseBody) : null;
-  const courseNotesHtml = courseMd.isSuccess ? renderMarkdown(courseBody).html : "";
+  const courseNotesHtml = courseRendered.data?.html ?? "";
   const planHtml =
-    studyPlan.isSuccess && studyPlan.data.trim() !== ""
-      ? renderMarkdown(studyPlan.data).html
-      : null;
+    studyPlan.isSuccess && studyPlan.data.trim() !== "" ? studyPlanRendered.data?.html : null;
 
   const onGeneratePlan = async () => {
     if (viewerBlocked) {
@@ -220,7 +254,6 @@ export function CourseOverview({ course, digests }: { course: string; digests: D
       setPlanStatus("Select a model in Settings.");
       return;
     }
-    setPlanStatus("Generating study plan…");
     try {
       const auth = await fetchAuthStatus(effective.providerId, true);
       if (!auth.authenticated) {
@@ -230,6 +263,8 @@ export function CourseOverview({ course, digests }: { course: string; digests: D
         setPlanStatus(signedOutJobMessage(label, auth.reason ?? ""));
         return;
       }
+      setPlanBusy(true);
+      setPlanStatus("Generating study plan…");
       await studyPlanMutation.mutateAsync({
         provider: effective.providerId,
         model: effective.modelId,
@@ -238,6 +273,8 @@ export function CourseOverview({ course, digests }: { course: string; digests: D
       setPlanStatus("");
     } catch (error) {
       setPlanStatus(String(error));
+    } finally {
+      setPlanBusy(false);
     }
   };
 
@@ -254,10 +291,6 @@ export function CourseOverview({ course, digests }: { course: string; digests: D
         <Skeleton className="mb-6 h-4 w-full max-w-md" />
       ) : lede ? (
         <p className="notes-lede">{lede}</p>
-      ) : courseMd.isError ? (
-        <p className="notes-lede text-muted-foreground">
-          No notes yet. Add lecture files, then Update knowledge.
-        </p>
       ) : null}
 
       {overviewPending ? (
@@ -417,7 +450,7 @@ export function CourseOverview({ course, digests }: { course: string; digests: D
           <Button
             type="button"
             variant="outline"
-            disabled={viewerBlocked || studyPlanMutation.isPending}
+            disabled={viewerBlocked || planBusy || studyPlanMutation.isPending}
             title={viewerBlocked ? VIEWER_WRITE_REASON : undefined}
             onClick={() => void onGeneratePlan()}
           >
@@ -431,8 +464,16 @@ export function CourseOverview({ course, digests }: { course: string; digests: D
       {courseMd.isLoading ? (
         <Skeleton className="h-40 w-full" />
       ) : courseMd.isSuccess ? (
-        <div className="prose-arbor" dangerouslySetInnerHTML={{ __html: courseNotesHtml }} />
-      ) : null}
+        <div
+          ref={courseNotesRef}
+          className="prose-arbor"
+          dangerouslySetInnerHTML={{ __html: courseNotesHtml }}
+        />
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          No notes yet. Add lecture files, then Update knowledge.
+        </p>
+      )}
     </div>
   );
 }

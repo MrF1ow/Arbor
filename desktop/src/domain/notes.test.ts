@@ -12,6 +12,7 @@ import {
   headingForSelectionNode,
   pageForSelectionNode,
   quizAccuracy,
+  resolveDigestSlug,
 } from "~/domain/notes";
 import type { CourseOverviewPayload, DigestInfo } from "~/domain/types";
 
@@ -33,9 +34,28 @@ describe("digest paths", () => {
     expect(digestSlugFromPath("cell-biology/digests/2026-09-12-membranes.md")).toBe(
       "2026-09-12-membranes",
     );
+    expect(digestSlugFromPath("digests/foo bar.md")).toBe("foo bar");
+    expect(digestSlugFromPath("digests/foo.bar.md")).toBe("foo.bar");
+    expect(digestSlugFromPath("cell-biology/digests/report.MD")).toBe("report");
     expect(digestNotesPath("cell-biology", "2026-09-12-membranes")).toBe(
       "cell-biology/digests/2026-09-12-membranes.md",
     );
+    expect(
+      digestNotesPath("cell-biology", "report", [
+        {
+          title: "Report",
+          date: "2026-01-01",
+          path: "cell-biology/digests/report.MD",
+        },
+      ]),
+    ).toBe("cell-biology/digests/report.MD");
+  });
+
+  it("resolves worker digest refs to route slugs", () => {
+    expect(
+      resolveDigestSlug("digests/2026-09-12-membranes.md", digests),
+    ).toBe("2026-09-12-membranes");
+    expect(resolveDigestSlug("2026-09-15-mitochondria", digests)).toBe("2026-09-15-mitochondria");
   });
 });
 
@@ -82,9 +102,13 @@ describe("examDateFromPlan and daysUntil", () => {
 describe("digestFlags", () => {
   const overview: CourseOverviewPayload = {
     due: { due_ids: [], count: 0, deck_count: 0 },
-    weak: { topics: [{ label: "Cytoskeleton", digest: "2026-09-12-membranes" }] },
+    weak: {
+      topics: [{ label: "Cytoskeleton", digest: "digests/2026-09-12-membranes.md" }],
+    },
     recommend: {
-      items: [{ kind: "unreviewed_digest", label: "New", digest: "2026-09-15-mitochondria" }],
+      items: [
+        { kind: "unreviewed_digest", label: "New", digest: "digests/2026-09-15-mitochondria.md" },
+      ],
     },
   };
 

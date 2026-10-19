@@ -290,7 +290,10 @@ export function renderMarkdown(source: string): {
       if (atLineStart && trimmed.startsWith("# ")) {
         flushParagraph();
         closeAllLists(lists, parts, pageAttr);
-        parts.push(`<h1${pageAttr()}>${inlineFormat(trimmed.slice(2))}</h1>`);
+        const heading = trimmed.slice(2);
+        parts.push(
+          `<h1${pageAttr()} id="${headingId(heading)}">${inlineFormat(heading)}</h1>`,
+        );
         atLineStart = false;
         continue;
       }

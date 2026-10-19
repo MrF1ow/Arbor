@@ -1,7 +1,7 @@
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { House, ListCollapse, PanelLeftClose } from "lucide-react";
-import { useRef } from "react";
+import { useRef, type RefObject } from "react";
 
 import { ListRow } from "~/components/app/list-row";
 import { SectionLabel } from "~/components/app/section-label";
@@ -16,18 +16,19 @@ function DigestRows({
   digests,
   course,
   activeDigest,
+  scrollRef,
 }: {
   digests: DigestInfo[];
   course: string;
   activeDigest: string | null;
+  scrollRef: RefObject<HTMLElement | null>;
 }) {
   const navigate = useNavigate();
-  const parentRef = useRef<HTMLDivElement>(null);
   const virtualize = digests.length > 100;
   // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual row sizing is intentional here.
   const virtualizer = useVirtualizer({
     count: digests.length,
-    getScrollElement: () => parentRef.current,
+    getScrollElement: () => scrollRef.current,
     estimateSize: () => 46,
     enabled: virtualize,
   });
@@ -58,24 +59,22 @@ function DigestRows({
   }
 
   return (
-    <div ref={parentRef} className="max-h-full overflow-auto">
-      <div
-        className="relative w-full"
-        style={{ height: `${virtualizer.getTotalSize()}px` }} // style-allow: virtual-list-height
-      >
-        {virtualizer.getVirtualItems().map((item) => {
-          const digest = digests[item.index];
-          return (
-            <div
-              key={digest.path}
-              className="absolute left-0 top-0 w-full"
-              style={{ transform: `translateY(${item.start}px)` }} // style-allow: virtual-row-offset
-            >
-              {renderRow(digest)}
-            </div>
-          );
-        })}
-      </div>
+    <div
+      className="relative w-full"
+      style={{ height: `${virtualizer.getTotalSize()}px` }} // style-allow: virtual-list-height
+    >
+      {virtualizer.getVirtualItems().map((item) => {
+        const digest = digests[item.index];
+        return (
+          <div
+            key={digest.path}
+            className="absolute left-0 top-0 w-full"
+            style={{ transform: `translateY(${item.start}px)` }} // style-allow: virtual-row-offset
+          >
+            {renderRow(digest)}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -97,6 +96,7 @@ export function NotesIndex({
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const setNotesIndexOpen = useUiStore((s) => s.setNotesIndexOpen);
   const hideIndex = onHideIndex ?? (() => setNotesIndexOpen(false));
+  const navScrollRef = useRef<HTMLElement>(null);
   const onOverview = pathname.endsWith("/notes") || pathname.endsWith("/notes/");
   const activeDigest = onOverview
     ? null
@@ -104,9 +104,10 @@ export function NotesIndex({
 
   return (
     <nav
+      ref={navScrollRef}
       aria-label="Course index"
       className={cn(
-        "flex w-index shrink-0 flex-col gap-1 border-r border-border bg-background px-2 py-2",
+        "flex h-full min-h-0 w-index shrink-0 flex-col gap-1 overflow-y-auto border-r border-border bg-background px-2 py-2",
         className,
       )}
     >
@@ -143,7 +144,12 @@ export function NotesIndex({
           <Skeleton className="h-row w-full" />
         </div>
       ) : (
-        <DigestRows digests={digests ?? []} course={course} activeDigest={activeDigest} />
+        <DigestRows
+          digests={digests ?? []}
+          course={course}
+          activeDigest={activeDigest}
+          scrollRef={navScrollRef}
+        />
       )}
     </nav>
   );

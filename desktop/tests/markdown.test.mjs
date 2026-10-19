@@ -60,7 +60,9 @@ test("headingId slugs and renderMarkdown stamps h2 ids", async () => {
   const { html } = renderMarkdown("## Cells\ntext\n### Nested heading!\n");
   assert.match(html, /<h2 id="cells">Cells<\/h2>/);
   assert.match(html, /<h3 id="nested-heading">Nested heading!<\/h3>/);
-  assert.doesNotMatch(html, /<h1 id=/);
+
+  const titleHtml = renderMarkdown("# Glycolysis net yield\nBody.\n").html;
+  assert.match(titleHtml, /<h1 id="glycolysis-net-yield">Glycolysis net yield<\/h1>/);
 });
 
 test("extractDigestTitle reads the H1 and skips page markers", async () => {
