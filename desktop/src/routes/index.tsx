@@ -11,6 +11,13 @@ function IndexPage() {
       <p>
         The legacy UI is available at <code>/legacy.html</code> in dev.
       </p>
+      {import.meta.env.DEV ? (
+        <p>
+          <a href="#/dev/ui" className="text-primary underline-offset-2 hover:underline">
+            Open the dev UI token gallery
+          </a>
+        </p>
+      ) : null}
     </main>
   );
 }
