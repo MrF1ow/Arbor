@@ -1,7 +1,10 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useCallback } from "react";
 
-import { PageHeader } from "~/components/app/page-header";
-import { courseDisplayName } from "~/domain/course";
+import { FlashcardsView } from "~/components/flashcards/flashcards-view";
+import { pickActiveRoot } from "~/lib/knowledge-root";
+import { useDigests } from "~/lib/queries/library";
+import { useSettings } from "~/lib/queries/settings";
 
 export type FlashcardsSearch = {
   card?: string;
@@ -11,14 +14,31 @@ export const Route = createFileRoute("/course/$course/flashcards")({
   validateSearch: (search: Record<string, unknown>): FlashcardsSearch => ({
     card: typeof search.card === "string" ? search.card : undefined,
   }),
-  component: FlashcardsPlaceholder,
+  component: FlashcardsRoute,
 });
 
-function FlashcardsPlaceholder() {
+function FlashcardsRoute() {
   const { course } = Route.useParams();
+  const { card } = Route.useSearch();
+  const navigate = useNavigate({ from: Route.fullPath });
+  const settings = useSettings();
+  const activeRoot = pickActiveRoot(settings.data);
+  const digests = useDigests(activeRoot, course);
+
+  const onFocusCardHandled = useCallback(() => {
+    void navigate({
+      search: (prev) => ({ ...prev, card: undefined }),
+      replace: true,
+    });
+  }, [navigate]);
+
   return (
-    <div className="p-8">
-      <PageHeader title={`${courseDisplayName(course)} flashcards`} description="Flashcards arrive in PR 8." />
-    </div>
+    <FlashcardsView
+      key={`${activeRoot ?? ""}|${course}`}
+      course={course}
+      digests={digests.data ?? []}
+      focusCardId={card}
+      onFocusCardHandled={onFocusCardHandled}
+    />
   );
 }

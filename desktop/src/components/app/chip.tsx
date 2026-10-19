@@ -3,7 +3,7 @@ import { cn } from "~/lib/utils";
 type ChipProps = {
   children: React.ReactNode;
   variant?: "default" | "plain" | "figure";
-  onClick?: () => void;
+  onClick?: (event: React.MouseEvent<HTMLElement>) => void;
   className?: string;
 } & React.HTMLAttributes<HTMLElement>;
 

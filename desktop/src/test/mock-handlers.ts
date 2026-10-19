@@ -205,6 +205,13 @@ export function createMockHandler(
         if (payload.file === "concepts.json") {
           return fixtureConceptGraph;
         }
+        if (payload.file === "citations.json") {
+          return {
+            schema_version: 1,
+            course: String(payload.course),
+            failures: [],
+          };
+        }
         return { schema_version: 1, course: String(payload.course ?? ""), nodes: [], edges: [] };
       case "read_quiz_progress":
         return fixtureQuizProgress;

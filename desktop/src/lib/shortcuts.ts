@@ -28,7 +28,20 @@ export const SHORTCUT_CATALOG: ShortcutEntry[] = [
   { keys: modShortcut("4"), description: "Graph mode" },
   { keys: modShortcut("5"), description: "Chat mode" },
   { keys: modShortcut(","), description: "Settings" },
+  { keys: "Space", description: "Flip flashcard (Flashcards view)" },
+  { keys: "1", description: "Again (Flashcards, when flipped)" },
+  { keys: "2", description: "Wrong (Flashcards, when flipped)" },
+  { keys: "3", description: "Mastered (Flashcards, when flipped)" },
+  { keys: "←", description: "Previous flashcard (Flashcards view)" },
+  { keys: "→", description: "Next flashcard (Flashcards view)" },
 ];
+
+export function isDialogOpen(): boolean {
+  if (typeof document === "undefined") {
+    return false;
+  }
+  return Boolean(document.querySelector('[data-slot="dialog-overlay"][data-open]'));
+}
 
 export function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) {
