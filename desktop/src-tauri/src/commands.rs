@@ -1,3 +1,4 @@
+use crate::auth_cache;
 use crate::jobs::{self, JobTrigger, SharedCoordinator};
 use crate::search::{self, SearchHit};
 use crate::secrets::{self, OsSecretStore};
@@ -13,6 +14,7 @@ use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::Arc;
+use std::time::Instant;
 use tauri::ipc::Channel;
 use tauri::Manager;
 
@@ -41,6 +43,45 @@ fn non_empty_provider(provider: Option<String>) -> Option<String> {
 
 fn default_provider_id(provider: Option<String>) -> String {
     non_empty_provider(provider).unwrap_or_else(|| "codex".to_string())
+}
+
+pub fn invalidate_auth(provider_id: &str) {
+    auth_cache::invalidate_auth(provider_id);
+}
+
+fn cached_auth_with(
+    app: &tauri::AppHandle,
+    transport: &WorkerTransport,
+    provider_id: &str,
+    force: bool,
+    now: Instant,
+) -> Result<serde_json::Value, String> {
+    let key = auth_cache::auth_cache_key(transport, provider_id);
+    if let Some(hit) = auth_cache::get_cached(&key, now, force) {
+        return Ok(hit);
+    }
+    let auth = match transport {
+        WorkerTransport::Local => run_worker_json_app(
+            app,
+            &["check-auth", "--provider", provider_id],
+        )?,
+        WorkerTransport::Ssh { .. } => {
+            worker::run_remote_check_auth(app, transport, provider_id)?
+        }
+    };
+    if auth.get("authenticated").is_some() {
+        auth_cache::store_cached(&key, now, auth.clone());
+    }
+    Ok(auth)
+}
+
+fn cached_auth(
+    app: &tauri::AppHandle,
+    transport: &WorkerTransport,
+    provider_id: &str,
+    force: bool,
+) -> Result<serde_json::Value, String> {
+    cached_auth_with(app, transport, provider_id, force, Instant::now())
 }
 
 fn worker_env_pairs(app: &tauri::AppHandle, sub_args: &[&str]) -> Vec<(String, String)> {
@@ -187,12 +228,16 @@ pub(crate) fn repo_dir(app: &tauri::AppHandle) -> PathBuf {
 pub async fn check_auth(
     app: tauri::AppHandle,
     provider: Option<String>,
+    force: Option<bool>,
 ) -> Result<serde_json::Value, String> {
     spawn_blocking_cmd(move || {
-        match non_empty_provider(provider) {
-            Some(id) => run_worker_json_app(&app, &["check-auth", "--provider", &id]),
-            None => run_worker_json_app(&app, &["check-auth"]),
-        }
+        let provider_id = default_provider_id(provider);
+        cached_auth(
+            &app,
+            &WorkerTransport::Local,
+            &provider_id,
+            force.unwrap_or(false),
+        )
     })
     .await
 }
@@ -555,7 +600,15 @@ pub fn get_settings(app: tauri::AppHandle) -> Settings {
 #[tauri::command]
 pub async fn save_settings(app: tauri::AppHandle, settings: Settings) -> Result<(), String> {
     spawn_blocking_cmd_unit(move || {
-        settings::save(&app, &settings)
+        let prev = settings::load(&app);
+        let prev_id = prev.provider_id.trim().to_string();
+        settings::save(&app, &settings)?;
+        let new_id = settings.provider_id.trim().to_string();
+        if prev_id != new_id {
+            auth_cache::invalidate_auth(&prev_id);
+            auth_cache::invalidate_auth(&new_id);
+        }
+        Ok(())
     })
     .await
 }
@@ -1125,7 +1178,7 @@ pub fn build_study_progress_argv(
         course.to_string(),
     ];
     match action {
-        "due" | "weak" | "recommend" => {
+        "due" | "weak" | "recommend" | "overview" => {
             argv.push(action.to_string());
         }
         "grade" | "quiz" => {
@@ -1567,10 +1620,7 @@ pub async fn start_chat(
         }
         let provider_id = default_provider_id(provider);
         let label = settings::provider_label(&provider_id);
-        let auth = run_worker_json_app(
-            &app,
-            &["check-auth", "--provider", &provider_id],
-        )?;
+        let auth = cached_auth(&app, &WorkerTransport::Local, &provider_id, false)?;
         let authenticated = auth
             .get("authenticated")
             .and_then(|value| value.as_bool())
@@ -1930,6 +1980,11 @@ mod tests {
             build_study_progress_argv("/root", "Bio", "recommend", None, None, None, None)
                 .unwrap()[5],
             "recommend"
+        );
+        assert_eq!(
+            build_study_progress_argv("/root", "Bio", "overview", None, None, None, None)
+                .unwrap()[5],
+            "overview"
         );
     }
 
@@ -2743,15 +2798,7 @@ pub async fn start_update(
         let transport = settings::transport_for_root(&settings, &root)?;
         let provider_id = default_provider_id(provider);
         let label = settings::provider_label(&provider_id);
-        let auth = match &transport {
-            WorkerTransport::Local => run_worker_json_app(
-                &app,
-                &["check-auth", "--provider", &provider_id],
-            )?,
-            WorkerTransport::Ssh { .. } => {
-                worker::run_remote_check_auth(&app, &transport, &provider_id)?
-            }
-        };
+        let auth = cached_auth(&app, &transport, &provider_id, false)?;
         let authenticated = auth
             .get("authenticated")
             .and_then(|v| v.as_bool())
@@ -2877,15 +2924,7 @@ pub async fn start_study_job(
         let provider_id = default_provider_id(provider);
         let label = settings::provider_label(&provider_id);
         if model.is_some() {
-            let auth = match &transport {
-                WorkerTransport::Local => run_worker_json_app(
-                    &app,
-                    &["check-auth", "--provider", &provider_id],
-                )?,
-                WorkerTransport::Ssh { .. } => {
-                    worker::run_remote_check_auth(&app, &transport, &provider_id)?
-                }
-            };
+            let auth = cached_auth(&app, &transport, &provider_id, false)?;
             let authenticated = auth
                 .get("authenticated")
                 .and_then(|value| value.as_bool())

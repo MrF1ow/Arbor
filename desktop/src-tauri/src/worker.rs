@@ -688,6 +688,7 @@ pub fn spawn_update_stream(
         job_id,
         "update",
         label,
+        Some(effective_provider_id(&provider_id).to_string()),
         env_pairs,
     );
 }
@@ -721,6 +722,7 @@ pub fn spawn_generate_stream(
         job_id,
         "generate",
         label,
+        Some(effective_provider_id(&provider_id).to_string()),
         env_pairs,
     );
 }
@@ -745,6 +747,7 @@ pub fn spawn_embed_stream(
         job_id,
         "embed",
         "Provider".to_string(),
+        None,
         env_pairs,
     );
 }
@@ -758,6 +761,7 @@ fn spawn_worker_stream(
     job_id: String,
     operation: &'static str,
     provider_label: String,
+    provider_id: Option<String>,
     env_pairs: Vec<(String, String)>,
 ) {
     use crate::jobs::{self, SharedCoordinator};
@@ -846,6 +850,9 @@ fn spawn_worker_stream(
                                 .or_else(|| {
                                     Some(format!("{provider_label} is not authenticated"))
                                 });
+                            if let Some(ref id) = provider_id {
+                                crate::auth_cache::invalidate_auth(id);
+                            }
                         }
                         Some("error") => {
                             terminal_status = Some(jobs::JobStatus::Failed);
@@ -871,6 +878,9 @@ fn spawn_worker_stream(
                 jobs::resolve_terminal_status(&last_line, code, &provider_label)
             });
         let _ = jobs::finish_job(&knowledge_root, &job_id, status, code, summary.clone());
+        if let Some(ref id) = provider_id {
+            crate::auth_cache::invalidate_if_auth_failure(summary.as_deref(), id);
+        }
         let _ = app.emit("arbor://progress", serde_json::json!({ "line": exit_line }));
         release(&app, &job_id);
         let _ = app.emit(

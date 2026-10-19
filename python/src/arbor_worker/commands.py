@@ -794,6 +794,20 @@ def cmd_study_progress(args) -> int:
 
             now = parse_utc_now(args.now) if getattr(args, "now", None) else None
             return finish(study_recommendations(root, course, now=now))
+        if action == "overview":
+            from arbor_worker.recommendations import study_recommendations
+
+            now = parse_utc_now(args.now) if getattr(args, "now", None) else None
+            due_doc = study_progress_due(root, course, now=now)
+            weak_doc = study_progress_weak(root, course)
+            recommend_doc = study_recommendations(root, course, now=now)
+            return finish(
+                {
+                    "due": due_doc,
+                    "weak": weak_doc,
+                    "recommend": recommend_doc,
+                }
+            )
     except ValueError as error:
         message = str(error)
         print(message, file=sys.stderr)

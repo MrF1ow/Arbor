@@ -1,3 +1,4 @@
+mod auth_cache;
 mod commands;
 mod db;
 mod jobs;

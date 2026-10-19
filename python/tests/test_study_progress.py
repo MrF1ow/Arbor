@@ -497,6 +497,29 @@ def test_cli_study_progress_show(git_repo: Path):
     assert data["course"] == "Biology"
 
 
+def test_cli_study_progress_overview(git_repo: Path):
+    _course_dir(git_repo)
+    code, out, err = _run_cli(
+        [
+            "study-progress",
+            "--root",
+            str(git_repo),
+            "--course",
+            "Biology",
+            "overview",
+        ]
+    )
+    assert code == 0
+    assert err == ""
+    data = json.loads(out.strip())
+    assert "due" in data
+    assert "weak" in data
+    assert "recommend" in data
+    assert "due_ids" in data["due"]
+    assert "topics" in data["weak"]
+    assert "items" in data["recommend"]
+
+
 def test_cli_study_progress_grade_commits_then_show_is_noop(git_repo: Path, git):
     _course_dir(git_repo)
     g = git(git_repo)
