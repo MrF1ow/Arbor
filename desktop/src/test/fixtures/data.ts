@@ -184,6 +184,36 @@ Phospholipid bilayer with embedded proteins.
 
 `;
 
+export const fixturePendingSources = [
+  {
+    path: "/mock/knowledge/fall-2026/cell-biology/sources/lecture-a.pdf",
+    course: "cell-biology",
+    source_type: "pdf",
+    page_count: 300,
+    suggested_ranges: [[151, 300]] as [number, number][],
+    alignment_status: "clean_append" as const,
+    previously_digested: false,
+  },
+  {
+    path: "/mock/knowledge/fall-2026/cell-biology/sources/lecture-b.pdf",
+    course: "cell-biology",
+    source_type: "pdf",
+    page_count: 120,
+    suggested_ranges: [] as [number, number][],
+    alignment_status: "ambiguous" as const,
+    previously_digested: false,
+  },
+  {
+    path: "/mock/knowledge/fall-2026/cell-biology/sources/lecture-c.pdf",
+    course: "cell-biology",
+    source_type: "pdf",
+    page_count: 40,
+    suggested_ranges: [] as [number, number][],
+    alignment_status: "changed" as const,
+    previously_digested: true,
+  },
+];
+
 export const fixtureKnowledgeSettings = {
   delete_sources_after_digest: false,
   auto_update: true,
