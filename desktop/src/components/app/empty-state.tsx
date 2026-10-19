@@ -14,12 +14,14 @@ export function EmptyState({
   icon: Icon,
   media,
   title,
+  titleClassName,
   description,
   actions,
 }: {
   icon?: LucideIcon;
   media?: ReactNode;
   title: string;
+  titleClassName?: string;
   description?: string;
   actions?: ReactNode;
 }) {
@@ -33,7 +35,7 @@ export function EmptyState({
             <Icon className="size-icon text-muted-foreground" />
           </EmptyMedia>
         ) : null}
-        <EmptyTitle className="text-2xl">{title}</EmptyTitle>
+        <EmptyTitle className={titleClassName}>{title}</EmptyTitle>
         {description ? <EmptyDescription>{description}</EmptyDescription> : null}
       </EmptyHeader>
       {actions ? <EmptyContent>{actions}</EmptyContent> : null}

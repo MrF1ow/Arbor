@@ -1,8 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useQueryClient } from "@tanstack/react-query";
 import { FolderOpen } from "lucide-react";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
 
 import { EmptyState } from "~/components/app/empty-state";
 import { SidebarHeaderTrigger } from "~/components/app/sidebar-header-trigger";
@@ -10,28 +8,37 @@ import markLight from "~/assets/arbor-mark.png";
 import markDark from "~/assets/arbor-mark-dark.png";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
-import { canUseDesktopIpc, DESKTOP_ONLY_WELCOME_COPY, TAURI_UNAVAILABLE } from "~/domain/tauri";
-import { openDialog } from "~/lib/ipc";
-import { useActivateKnowledgeRootMutation } from "~/lib/queries/active-root";
+import { DESKTOP_ONLY_WELCOME_COPY, TAURI_UNAVAILABLE } from "~/domain/tauri";
+import { pickActiveRoot } from "~/lib/knowledge-root";
+import { useChooseKnowledgeFolder } from "~/lib/hooks/use-choose-knowledge-folder";
 import { useCreateCourseMutation } from "~/lib/queries/library";
-import { qk } from "~/lib/queries/keys";
+import { useSettings } from "~/lib/queries/settings";
 import { useJobStore } from "~/stores/job-store";
 
+type WelcomeSearch = {
+  addClass?: boolean;
+  root?: string;
+};
+
 export const Route = createFileRoute("/welcome")({
+  validateSearch: (search: Record<string, unknown>): WelcomeSearch => ({
+    addClass: search.addClass === true || search.addClass === "true" || search.addClass === "1",
+    root: typeof search.root === "string" ? search.root : undefined,
+  }),
   component: WelcomePage,
 });
 
 function WelcomePage() {
-  const desktopIpc = canUseDesktopIpc();
-  const activate = useActivateKnowledgeRootMutation();
+  const { addClass, root: searchRoot } = Route.useSearch();
+  const settings = useSettings();
+  const { chooseFolder, isPending, desktopIpc } = useChooseKnowledgeFolder();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const appendLog = useJobStore((s) => s.append);
-  const [awaitingClass, setAwaitingClass] = useState(false);
-  const [activeRoot, setActiveRoot] = useState<string | null>(null);
+  const classRoot = searchRoot ?? pickActiveRoot(settings.data);
+  const showAddClassStep = Boolean(addClass && classRoot);
   const [className, setClassName] = useState("");
   const [classError, setClassError] = useState<string | null>(null);
-  const createCourse = useCreateCourseMutation(activeRoot);
+  const createCourse = useCreateCourseMutation(classRoot);
 
   useEffect(() => {
     if (!desktopIpc) {
@@ -39,44 +46,13 @@ function WelcomePage() {
     }
   }, [appendLog, desktopIpc]);
 
-  const onChoose = async () => {
-    if (!desktopIpc) {
-      return;
-    }
-    try {
-      const picked = await openDialog({ directory: true, multiple: false });
-      if (typeof picked !== "string") {
-        return;
-      }
-      const { root, repoCreated } = await activate.mutateAsync(picked);
-      if (repoCreated) {
-        appendLog(`Initialized Knowledge repo at ${root}`);
-      }
-      const courses = await queryClient.fetchQuery({
-        queryKey: qk.courses(root),
-        queryFn: async () => {
-          const { invoke } = await import("~/lib/ipc");
-          return invoke<string[]>("list_courses", { root });
-        },
-      });
-      if (courses[0]) {
-        void navigate({ to: "/course/$course/notes", params: { course: courses[0] } });
-        return;
-      }
-      setActiveRoot(root);
-      setAwaitingClass(true);
-    } catch (error) {
-      toast.error(String(error));
-    }
-  };
-
   const onCreateClass = async () => {
     const name = className.trim();
     if (!name) {
       setClassError("Enter a class name.");
       return;
     }
-    if (!activeRoot) {
+    if (!classRoot) {
       setClassError("Choose a Knowledge folder first.");
       return;
     }
@@ -100,7 +76,7 @@ function WelcomePage() {
         <SidebarHeaderTrigger />
       </div>
       <div className="flex flex-1 items-center justify-center p-8">
-        {awaitingClass && activeRoot ? (
+        {showAddClassStep && classRoot ? (
           <div className="flex w-full max-w-sm flex-col items-center gap-4 text-center">
             <img src={markLight} alt="" className="size-18 dark:hidden" />
             <img src={markDark} alt="" className="hidden size-18 dark:block" />
@@ -130,6 +106,7 @@ function WelcomePage() {
         ) : (
           <EmptyState
             title="Welcome to Arbor"
+            titleClassName="text-2xl"
             description={description}
             media={
               <>
@@ -140,8 +117,8 @@ function WelcomePage() {
             actions={
               <Button
                 data-testid="welcome-choose-folder"
-                disabled={!desktopIpc || activate.isPending}
-                onClick={() => void onChoose()}
+                disabled={!desktopIpc || isPending}
+                onClick={() => void chooseFolder()}
               >
                 <FolderOpen className="size-icon-sm" />
                 Choose Knowledge folder…

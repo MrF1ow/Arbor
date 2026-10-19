@@ -11,7 +11,7 @@ interface UpdatePlanState {
   setPendingPlan: (
     pending: PendingSource[] | null,
     open: boolean,
-    trigger?: UpdatePlanTrigger,
+    trigger: UpdatePlanTrigger,
   ) => void;
   close: () => void;
 }
@@ -20,7 +20,6 @@ export const useUpdatePlanStore = create<UpdatePlanState>((set) => ({
   pending: null,
   open: false,
   trigger: "manual",
-  setPendingPlan: (pending, open, trigger = "manual") =>
-    set({ pending, open, trigger }),
+  setPendingPlan: (pending, open, trigger) => set({ pending, open, trigger }),
   close: () => set({ pending: null, open: false, trigger: "manual" }),
 }));

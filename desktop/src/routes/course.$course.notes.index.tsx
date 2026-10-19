@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { EmptyState } from "~/components/app/empty-state";
 import { PageHeader } from "~/components/app/page-header";
 import { Button } from "~/components/ui/button";
+import { Skeleton } from "~/components/ui/skeleton";
 import { Spinner } from "~/components/ui/spinner";
 import { courseDisplayName } from "~/domain/course";
 import { pickActiveRoot } from "~/lib/knowledge-root";
@@ -36,12 +37,21 @@ function CourseOverviewPlaceholder() {
       if (!paths || paths.length === 0) {
         return;
       }
-      const imported = await importSources.mutateAsync({ course, paths });
-      toast.success(`Added ${imported.length} file(s)`);
+      await importSources.mutateAsync({ course, paths });
     } catch (error) {
       toast.error(String(error));
     }
   };
+
+  if (digests.isLoading) {
+    return (
+      <div className="flex flex-1 flex-col gap-4 p-8">
+        <Skeleton className="h-8 w-56" />
+        <Skeleton className="h-4 w-full max-w-md" />
+        <Skeleton className="h-32 w-full max-w-lg" />
+      </div>
+    );
+  }
 
   if (digests.isSuccess && digests.data.length === 0) {
     return (

@@ -105,7 +105,7 @@ export type PresentUpdatePlanDeps = {
   setPendingPlan: (
     pending: PendingSource[] | null,
     open: boolean,
-    trigger?: UpdatePlanTrigger,
+    trigger: UpdatePlanTrigger,
   ) => void;
   appendJobLine: (line: string) => void;
   providerId: string;
@@ -216,8 +216,8 @@ export async function presentUpdatePlanAfterImport(root: string) {
     planUpdate: (r) => invoke("plan_update", { root: r }),
     startUpdate: (r, input) => invoke<string>("start_update", { root: r, ...input }),
     checkAuth: (provider) => fetchAuthStatus(provider, true),
-    setPendingPlan: (pending, open) =>
-      useUpdatePlanStore.getState().setPendingPlan(pending, open),
+    setPendingPlan: (pending, open, trigger) =>
+      useUpdatePlanStore.getState().setPendingPlan(pending, open, trigger),
     appendJobLine: (line) => useJobStore.getState().append(line),
   });
 }
@@ -426,8 +426,8 @@ export function WorkerEventsBridge() {
         planUpdate: (root) => invoke("plan_update", { root }),
         startUpdate: (root, input) => invoke<string>("start_update", { root, ...input }),
         checkAuth: (provider) => fetchAuthStatus(provider, true),
-        setPendingPlan: (pending, open) =>
-          useUpdatePlanStore.getState().setPendingPlan(pending, open),
+        setPendingPlan: (pending, open, trigger) =>
+          useUpdatePlanStore.getState().setPendingPlan(pending, open, trigger),
         appendJobLine: (line) => useJobStore.getState().append(line),
         providerId: ctx.providerId,
         modelId: ctx.modelId,

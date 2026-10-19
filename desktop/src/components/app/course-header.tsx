@@ -66,8 +66,7 @@ export function CourseHeader({
       if (!paths || paths.length === 0) {
         return;
       }
-      const imported = await importSources.mutateAsync({ course, paths });
-      toast.success(`Added ${imported.length} file(s)`);
+      await importSources.mutateAsync({ course, paths });
     } catch (error) {
       toast.error(String(error));
     }

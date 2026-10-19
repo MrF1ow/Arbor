@@ -36,8 +36,8 @@ import type { KnowledgeRootEntry } from "~/domain/types";
 import { PROVIDER_FALLBACK, isWorkerUnavailableAuthReason, providerBadge } from "~/domain/provider";
 import { canUseDesktopIpc } from "~/domain/tauri";
 import { pickActiveRoot } from "~/lib/knowledge-root";
-import { openDialog } from "~/lib/ipc";
-import { useActivateKnowledgeRootMutation, useSwitchActiveRootMutation } from "~/lib/queries/active-root";
+import { useChooseKnowledgeFolder } from "~/lib/hooks/use-choose-knowledge-folder";
+import { useSwitchActiveRootMutation } from "~/lib/queries/active-root";
 import { useAuth } from "~/lib/queries/auth";
 import { useCreateCourseMutation, useCourses, useDigests } from "~/lib/queries/library";
 import { useEffectiveProvider } from "~/lib/queries/effective-provider";
@@ -127,7 +127,7 @@ export function AppSidebar() {
   const activeRoot = pickActiveRoot(settings.data);
   const roots = settings.data?.knowledge_roots ?? [];
   const switchRoot = useSwitchActiveRootMutation();
-  const activateRoot = useActivateKnowledgeRootMutation();
+  const { chooseFolder, desktopIpc: sidebarDesktopIpc } = useChooseKnowledgeFolder();
   const createCourse = useCreateCourseMutation(activeRoot);
   const activeDigests = useDigests(activeRoot, activeCourse ?? "");
   const [addingClass, setAddingClass] = useState(false);
@@ -143,18 +143,6 @@ export function AppSidebar() {
       if (isMobile) {
         setOpen(false);
       }
-    } catch (error) {
-      toast.error(String(error));
-    }
-  };
-
-  const onPickFolder = async () => {
-    try {
-      const picked = await openDialog({ directory: true, multiple: false });
-      if (typeof picked !== "string") {
-        return;
-      }
-      await activateRoot.mutateAsync(picked);
     } catch (error) {
       toast.error(String(error));
     }
@@ -274,8 +262,8 @@ export function AppSidebar() {
           variant="ghost"
           size="sm"
           className="w-full justify-start"
-          disabled={!canUseDesktopIpc()}
-          onClick={() => void onPickFolder()}
+          disabled={!sidebarDesktopIpc}
+          onClick={() => void chooseFolder()}
         >
           <FolderOpen className="size-icon-sm" />
           Choose Knowledge folder…

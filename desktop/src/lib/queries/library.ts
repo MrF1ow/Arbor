@@ -1,10 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 import type { DigestInfo, LibraryShowResult } from "~/domain/types";
 import { canUseDesktopIpc } from "~/domain/tauri";
 import { presentUpdatePlanAfterImport, suppressWatch } from "~/lib/events";
 import { invoke } from "~/lib/ipc";
 import { qk } from "~/lib/queries/keys";
+
+export function fetchCourses(root: string) {
+  return invoke<string[]>("list_courses", { root });
+}
 
 export function useLibrary(root: string | null) {
   return useQuery({
@@ -18,7 +23,7 @@ export function useCourses(root: string | null) {
   return useQuery({
     queryKey: qk.courses(root ?? ""),
     enabled: Boolean(root) && canUseDesktopIpc(),
-    queryFn: () => invoke<string[]>("list_courses", { root: root! }),
+    queryFn: () => fetchCourses(root!),
   });
 }
 
@@ -55,8 +60,9 @@ export function useImportSourcesMutation(root: string | null) {
         paths: input.paths,
       });
     },
-    onSuccess: async () => {
+    onSuccess: async (imported) => {
       if (root) {
+        toast.success(`Added ${imported.length} file(s)`);
         void queryClient.invalidateQueries({ queryKey: qk.courses(root) });
         await presentUpdatePlanAfterImport(root);
       }

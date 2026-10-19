@@ -282,13 +282,15 @@ describe("events", () => {
       planUpdate: async () => ({ pending }),
       startUpdate: async () => "job",
       checkAuth: async () => ({ authenticated: true, reason: "", docs_url: "" }),
-      setPendingPlan: (p, open) => useUpdatePlanStore.getState().setPendingPlan(p, open),
+      setPendingPlan: (p, open, trigger) =>
+        useUpdatePlanStore.getState().setPendingPlan(p, open, trigger),
       appendJobLine: (line) => useJobStore.getState().append(line),
       providerId: "grok",
       modelId: "grok-4.7",
     });
     expect(useUpdatePlanStore.getState().open).toBe(true);
     expect(useUpdatePlanStore.getState().pending).toEqual(pending);
+    expect(useUpdatePlanStore.getState().trigger).toBe("watch");
   });
 
   it("progress side effects reload library on committed", () => {
@@ -332,7 +334,8 @@ describe("events", () => {
       }),
       startUpdate: async () => "job",
       checkAuth,
-      setPendingPlan: (p, open) => useUpdatePlanStore.getState().setPendingPlan(p, open),
+      setPendingPlan: (p, open, trigger) =>
+        useUpdatePlanStore.getState().setPendingPlan(p, open, trigger),
       appendJobLine: (line) => useJobStore.getState().append(line),
       providerId: "grok",
       modelId: "grok-4.7",
@@ -382,7 +385,8 @@ describe("events", () => {
       }),
       startUpdate,
       checkAuth: async () => ({ authenticated: true, reason: "", docs_url: "" }),
-      setPendingPlan: (p, open) => useUpdatePlanStore.getState().setPendingPlan(p, open),
+      setPendingPlan: (p, open, trigger) =>
+        useUpdatePlanStore.getState().setPendingPlan(p, open, trigger),
       appendJobLine: (line) => useJobStore.getState().append(line),
       providerId: "grok",
       modelId: "grok-4.7",

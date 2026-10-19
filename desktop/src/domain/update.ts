@@ -51,6 +51,18 @@ export function selectionsFromRangeValues(
   }));
 }
 
+export function validateRangeValue(
+  raw: string,
+  pageCount: number,
+): string | null {
+  try {
+    parseRanges(raw, pageCount);
+    return null;
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+}
+
 export function validateRangeValues(
   pending: PendingSource[],
   rangeValues: Record<string, string>,

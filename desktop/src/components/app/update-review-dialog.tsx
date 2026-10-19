@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 
 import { Button } from "~/components/ui/button";
 import {
@@ -20,13 +20,16 @@ import {
   TableRow,
 } from "~/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/tooltip";
+import { PROVIDER_FALLBACK, signedOutJobMessage } from "~/domain/provider";
 import {
   alignmentNote,
   formatRanges,
   selectionsFromRangeValues,
+  validateRangeValue,
   validateRangeValues,
 } from "~/domain/update";
 import { VIEWER_WRITE_REASON, viewerBlocksWrite } from "~/domain/library-role";
+import { fetchAuthStatus } from "~/lib/auth-refresh";
 import { pickActiveRoot } from "~/lib/knowledge-root";
 import { useEffectiveProvider } from "~/lib/queries/effective-provider";
 import { useLibrary } from "~/lib/queries/library";
@@ -64,6 +67,7 @@ export function UpdateReviewDialog() {
   return (
     <Dialog
       open={open}
+      disablePointerDismissal
       onOpenChange={(next) => {
         if (!next) {
           if (!skipCancelLogRef.current) {
@@ -103,12 +107,27 @@ function UpdateReviewDialogForm({
   const startUpdate = useStartUpdateMutation(activeRoot);
   const appendLog = useJobStore((s) => s.append);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const formId = useId();
 
   const [rangeValues, setRangeValues] = useState(() => initialRangeValues(pending));
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const fileCount = pending.length;
   const hasErrors = Object.keys(errors).length > 0;
+
+  const setFieldError = (path: string, message: string | null) => {
+    setErrors((prev) => {
+      if (!message) {
+        if (!(path in prev)) {
+          return prev;
+        }
+        const next = { ...prev };
+        delete next[path];
+        return next;
+      }
+      return { ...prev, [path]: message };
+    });
+  };
 
   const runValidation = () => {
     const next = validateRangeValues(pending, rangeValues);
@@ -127,6 +146,14 @@ function UpdateReviewDialogForm({
     if (Object.keys(nextErrors).length > 0 || viewerBlocked || !activeRoot || !effective.modelId) {
       return;
     }
+    const providerLabel =
+      PROVIDER_FALLBACK.find((p) => p.id === effective.providerId)?.label ??
+      effective.providerId;
+    const auth = await fetchAuthStatus(effective.providerId, true);
+    if (!auth.authenticated) {
+      appendLog(signedOutJobMessage(providerLabel, auth.reason ?? ""));
+      return;
+    }
     try {
       const selections = selectionsFromRangeValues(pending, rangeValues);
       const jobId = await startUpdate.mutateAsync({
@@ -139,12 +166,18 @@ function UpdateReviewDialogForm({
       skipCancelLogRef.current = true;
       close();
     } catch (error) {
-      appendLog(`Update failed to start: ${error}`);
+      const message = error instanceof Error ? error.message : String(error);
+      appendLog(`Update failed to start: ${message}`);
     }
   };
 
   const onBlurValidate = () => {
     setErrors(validateRangeValues(pending, rangeValues));
+  };
+
+  const onRangeChange = (path: string, pageCount: number, value: string) => {
+    setRangeValues((prev) => ({ ...prev, [path]: value }));
+    setFieldError(path, validateRangeValue(value, pageCount));
   };
 
   const onRangeKeyDown = (index: number, event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -157,14 +190,20 @@ function UpdateReviewDialogForm({
       return;
     }
     event.preventDefault();
-    const nextErrors = validateRangeValues(pending, rangeValues);
-    setErrors(nextErrors);
-    if (Object.keys(nextErrors).length > 0) {
+    const current = pending[index]!;
+    const fieldError = validateRangeValue(rangeValues[current.path] ?? "", current.page_count);
+    setFieldError(current.path, fieldError);
+    if (fieldError) {
       return;
     }
     const nextIndex = index + 1;
     if (nextIndex < pending.length) {
       inputRefs.current[nextIndex]?.focus();
+      return;
+    }
+    const allErrors = validateRangeValues(pending, rangeValues);
+    setErrors(allErrors);
+    if (Object.keys(allErrors).length > 0) {
       return;
     }
     void onConfirm();
@@ -194,6 +233,9 @@ function UpdateReviewDialogForm({
           {pending.map((p, index) => {
             const note = alignmentNote(p);
             const ambiguous = p.alignment_status === "ambiguous";
+            const inputId = `${formId}-range-${index}`;
+            const errorId = `${inputId}-error`;
+            const fieldError = errors[p.path];
             return (
               <TableRow key={p.path}>
                 <TableCell className="max-w-48">
@@ -206,22 +248,24 @@ function UpdateReviewDialogForm({
                 </TableCell>
                 <TableCell className="text-muted-foreground">{p.page_count}</TableCell>
                 <TableCell>
-                  <Field data-invalid={Boolean(errors[p.path])}>
+                  <Field data-invalid={Boolean(fieldError)}>
                     <Input
+                      id={inputId}
                       ref={(el) => {
                         inputRefs.current[index] = el;
                       }}
                       value={rangeValues[p.path] ?? ""}
                       placeholder="all"
                       aria-label={`Ranges for ${p.path}`}
-                      aria-invalid={Boolean(errors[p.path])}
-                      onChange={(e) =>
-                        setRangeValues((prev) => ({ ...prev, [p.path]: e.target.value }))
-                      }
+                      aria-invalid={Boolean(fieldError)}
+                      aria-describedby={fieldError ? errorId : undefined}
+                      onChange={(e) => onRangeChange(p.path, p.page_count, e.target.value)}
                       onBlur={onBlurValidate}
                       onKeyDown={(e) => onRangeKeyDown(index, e)}
                     />
-                    {errors[p.path] ? <FieldError>{errors[p.path]}</FieldError> : null}
+                    {fieldError ? (
+                      <FieldError id={errorId}>{fieldError}</FieldError>
+                    ) : null}
                     {note ? (
                       <p
                         className={cn(

@@ -16,13 +16,19 @@ import {
 } from "~/test/fixtures/data";
 
 const ipcLog: string[] = [];
+const ipcCalls: { cmd: string; args?: InvokeArgs }[] = [];
 
 export function getMockIpcLog(): string[] {
   return ipcLog;
 }
 
+export function getMockIpcCalls(): readonly { cmd: string; args?: InvokeArgs }[] {
+  return ipcCalls;
+}
+
 export function clearMockIpcLog() {
   ipcLog.length = 0;
+  ipcCalls.length = 0;
 }
 
 function simulateUpdateJob(root: string) {
@@ -61,6 +67,7 @@ export function createMockHandler(
   return (cmd: string, args?: InvokeArgs): unknown => {
     const payload = (args ?? {}) as Record<string, unknown>;
     ipcLog.push(cmd);
+    ipcCalls.push({ cmd, args });
     if (cmd in overrides && overrides[cmd]) {
       return overrides[cmd]!(args);
     }
