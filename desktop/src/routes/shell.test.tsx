@@ -1,10 +1,10 @@
 import { emit } from "@tauri-apps/api/event";
 import { cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clearMocks } from "@tauri-apps/api/mocks";
 
-import { FIXTURE_ROOT_FALL, fixtureSettings } from "~/test/fixtures/data";
+import { FIXTURE_ROOT_FALL, FIXTURE_ROOT_SHARED, fixtureSettings } from "~/test/fixtures/data";
 import { clearMockIpcLog, getMockIpcLog } from "~/test/mock-handlers";
 import { renderAppAtRoute } from "~/test/render";
 import { useJobStore } from "~/stores/job-store";
@@ -23,7 +23,7 @@ describe("app shell", () => {
     useUiStore.setState({
       appearance: "system",
       sidebarOpen: true,
-      sidebarTouched: false,
+      sidebarTouched: true,
       logOpen: false,
       logHeight: 200,
       notesIndexOpen: true,
@@ -37,11 +37,13 @@ describe("app shell", () => {
       lines: [],
       unread: 0,
     });
+    vi.spyOn(window, "innerWidth", "get").mockReturnValue(1280);
   });
 
   afterEach(() => {
     cleanup();
     clearMocks();
+    vi.restoreAllMocks();
   });
 
   it("redirects / to last course notes when lastCourse is set", async () => {
@@ -87,15 +89,27 @@ describe("app shell", () => {
   it("switches active root before navigating to a course in another library", async () => {
     const user = userEvent.setup();
     clearMockIpcLog();
-    const { router } = await renderAppAtRoute("/course/cell-biology/notes");
+    const savePayloads: unknown[] = [];
+    const { router } = await renderAppAtRoute("/course/cell-biology/notes", {
+      save_settings: (args) => {
+        savePayloads.push(args);
+        return null;
+      },
+    });
     await waitForCourseOverview();
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /Collab Notes/i })).toBeInTheDocument();
     });
     await user.click(screen.getByRole("button", { name: /Collab Notes/i }));
     await waitFor(() => {
-      expect(getMockIpcLog()).toContain("save_settings");
-      expect(getMockIpcLog()).toContain("start_folder_watch");
+      const log = getMockIpcLog();
+      const saveIdx = log.indexOf("save_settings");
+      const watchIdx = log.indexOf("start_folder_watch");
+      expect(saveIdx).toBeGreaterThanOrEqual(0);
+      expect(watchIdx).toBeGreaterThan(saveIdx);
+      expect(savePayloads.length).toBeGreaterThan(0);
+      const settings = (savePayloads[0] as { settings: { active_root: string } }).settings;
+      expect(settings.active_root).toBe(FIXTURE_ROOT_SHARED);
       expect(router.state.location.pathname).toContain("/course/collab-notes/notes");
     });
   });
@@ -105,9 +119,32 @@ describe("app shell", () => {
     await renderAppAtRoute("/course/cell-biology/notes");
     await waitForCourseOverview();
     await user.click(screen.getByRole("button", { name: /Hide sidebar/i }));
-    expect(useUiStore.getState().sidebarOpen).toBe(false);
+    await waitFor(() => expect(useUiStore.getState().sidebarOpen).toBe(false));
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /Toggle Sidebar/i })).toBeInTheDocument();
+    });
+  });
+
+  it("Mod+B flips sidebarOpen", async () => {
+    const user = userEvent.setup();
+    useUiStore.setState({ sidebarOpen: true, sidebarTouched: true });
+    await renderAppAtRoute("/course/cell-biology/notes");
+    await waitForCourseOverview();
+    await user.keyboard("{Control>}b{/Control}");
+    expect(useUiStore.getState().sidebarOpen).toBe(false);
+  });
+
+  it("keeps sidebar open when selecting a course at desktop width", async () => {
+    const user = userEvent.setup();
+    useUiStore.setState({ sidebarOpen: true, sidebarTouched: true });
+    await renderAppAtRoute("/course/cell-biology/notes");
+    await waitForCourseOverview();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Organic Chemistry/i })).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole("button", { name: /Organic Chemistry/i }));
+    await waitFor(() => {
+      expect(useUiStore.getState().sidebarOpen).toBe(true);
     });
   });
 
@@ -120,6 +157,7 @@ describe("app shell", () => {
     }
     await waitFor(() => expect(useJobStore.getState().unread).toBeGreaterThanOrEqual(3));
     expect(useUiStore.getState().logOpen).toBe(false);
+    expect(screen.getByTestId("log-unread-dot")).toBeInTheDocument();
     await user.keyboard("{Control>}`{/Control}");
     await waitFor(() => expect(useUiStore.getState().logOpen).toBe(true));
     expect(useJobStore.getState().unread).toBe(0);
@@ -148,6 +186,28 @@ describe("app shell", () => {
     });
   });
 
+  it("ignores Mod+2 while an input is focused", async () => {
+    const user = userEvent.setup();
+    const { router } = await renderAppAtRoute("/course/cell-biology/notes");
+    await waitForCourseOverview();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Add class/i })).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole("button", { name: /Add class/i }));
+    const input = await screen.findByLabelText(/Class name/i);
+    await user.click(input);
+    await user.keyboard("{Control>}2{/Control}");
+    expect(router.state.location.pathname).toContain("/course/cell-biology/notes");
+  });
+
+  it("marks the active mode link with aria-current", async () => {
+    await renderAppAtRoute("/course/cell-biology/flashcards");
+    await waitFor(() => {
+      const link = screen.getByRole("link", { name: /Flashcards/i });
+      expect(link).toHaveAttribute("aria-current", "page");
+    });
+  });
+
   it("disables action bar writes for viewer libraries", async () => {
     await renderAppAtRoute("/course/cell-biology/notes", {
       library_show: () => ({
@@ -162,6 +222,7 @@ describe("app shell", () => {
     await waitForCourseOverview();
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /Update knowledge/i })).toBeDisabled();
+      expect(screen.getByTestId("viewer-write-hint")).toHaveTextContent(/Viewer role/i);
     });
   });
 
@@ -179,5 +240,10 @@ describe("app shell", () => {
     await waitFor(() => {
       expect(router.state.location.pathname).toContain("/course/new-seminar/notes");
     });
+  });
+
+  it("renders /dev/ui without the app sidebar", async () => {
+    await renderAppAtRoute("/dev/ui");
+    expect(screen.queryByRole("button", { name: /Hide sidebar/i })).not.toBeInTheDocument();
   });
 });

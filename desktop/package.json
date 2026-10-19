@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "dev:mock": "vite --mode mock",
-    "build": "tsc && vite build",
+    "build": "tsc && vite build && node scripts/check-bundle.mjs",
     "test:node": "node --disable-warning=ExperimentalWarning --experimental-strip-types --test tests/*.test.mjs",
     "test:unit": "vitest run",
     "check:styles": "node scripts/check-styles.mjs",

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -47,7 +47,9 @@ describe("Sidebar", () => {
       </SidebarProvider>,
     );
 
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+    });
     await user.keyboard("{Control>}b{/Control}");
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
