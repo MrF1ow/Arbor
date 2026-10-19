@@ -196,7 +196,7 @@ export function DigestView({
     <div
       ref={scrollRef}
       data-testid="digest-view"
-      className="relative min-h-0 flex-1 overflow-auto px-8 py-9 pb-16"
+      className="notes-reading-pane relative min-h-0 flex-1 overflow-y-auto px-8 py-9 pb-16"
     >
       <div className="mx-auto w-full max-w-reading">
         <div className="notes-eyebrow">

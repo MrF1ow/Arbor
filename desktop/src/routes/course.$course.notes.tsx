@@ -56,7 +56,8 @@ function NotesLayout() {
   return (
     <div
       ref={mainRef}
-      className="@container/notes-main flex min-h-0 flex-1 overflow-hidden"
+      data-testid="notes-layout"
+      className="@container/notes-main flex h-full min-h-0 flex-1 overflow-hidden"
     >
       {showInlineIndex ? (
         <NotesIndex

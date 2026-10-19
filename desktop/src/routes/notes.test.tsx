@@ -481,4 +481,29 @@ describe("notes PR7", { timeout: 15000 }, () => {
     });
     expect(useUiStore.getState().sidebarOpen).toBe(true);
   });
+
+  it("keeps the notes index in a fixed layout with a dedicated reading-pane scroller (structure)", async () => {
+    await renderAppAtRoute("/course/cell-biology/notes");
+    await waitForOverview();
+    const layout = screen.getByTestId("notes-layout");
+    expect(layout).toHaveClass("h-full");
+    expect(layout).toHaveClass("overflow-hidden");
+    const pane = screen.getByTestId("notes-reading-pane");
+    expect(pane).toHaveClass("flex-1");
+    expect(pane).toHaveClass("min-h-0");
+    expect(pane).toHaveClass("overflow-y-auto");
+    const index = screen.getByRole("navigation", { name: /Course index/i });
+    expect(index).toHaveClass("overflow-y-auto");
+    // happy-dom has no layout engine; scroll ownership is asserted via structure/classes only.
+  });
+
+  it("does not duplicate overview headings from embedded markdown", async () => {
+    await renderAppAtRoute("/course/cell-biology/notes");
+    await waitForOverview();
+    expect(screen.getByRole("heading", { level: 3, name: "Study plan" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 1, name: "Study plan" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { level: 1, name: "Cell Biology" })).toHaveLength(1);
+    expect(screen.queryByText(/^Exam date:\s*2026-11-04/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/Syllabus topics/i)).toBeInTheDocument();
+  });
 });

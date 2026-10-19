@@ -1,5 +1,5 @@
 import { Outlet } from "@tanstack/react-router";
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 
 import { AppSidebar } from "~/components/app/app-sidebar";
 import { JobFailureToast } from "~/components/app/job-failure-toast";
@@ -27,14 +27,22 @@ const UpdateReviewDialog = lazy(() =>
 
 export function AppShell() {
   const isMobile = useIsMobile();
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const desktopSidebarOpen = useEffectiveSidebarOpen();
   const setSidebarOpen = useUiStore((s) => s.setSidebarOpen);
   const markSidebarTouched = useUiStore((s) => s.markSidebarTouched);
-  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchMounted, setSearchMounted] = useState(false);
 
   const sidebarOpen = isMobile ? mobileSidebarOpen : desktopSidebarOpen;
+
+  useEffect(() => {
+    if (!isMobile) {
+      // Clear overlay state when leaving the mobile breakpoint so narrowing again does not reopen it.
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- mobile overlay is not persisted desktop sidebar state
+      setMobileSidebarOpen(false);
+    }
+  }, [isMobile]);
 
   useGlobalShortcuts({
     onSearch: () => {

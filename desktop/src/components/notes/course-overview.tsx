@@ -8,8 +8,9 @@ import { Input } from "~/components/ui/input";
 import { Skeleton } from "~/components/ui/skeleton";
 import { courseDisplayName } from "~/domain/course";
 import { VIEWER_WRITE_REASON, viewerBlocksWrite } from "~/domain/library-role";
-import { headingId } from "~/domain/markdown";
+import { headingId, renderMarkdown } from "~/domain/markdown";
 import {
+  courseMarkdownForOverview,
   daysUntil,
   digestFlags,
   digestSlugFromPath,
@@ -18,6 +19,7 @@ import {
   firstParagraph,
   quizAccuracy,
   resolveDigestSlug,
+  studyPlanMarkdownForOverview,
   unreviewedDigestRecommend,
   weakestRecommendTopic,
 } from "~/domain/notes";
@@ -28,7 +30,7 @@ import { fetchAuthStatus } from "~/lib/auth-refresh";
 import { pickActiveRoot } from "~/lib/knowledge-root";
 import { useEffectiveProvider } from "~/lib/queries/effective-provider";
 import { useLibrary } from "~/lib/queries/library";
-import { useCourseOverview, useMarkdown, useRenderedMarkdown } from "~/lib/queries/notes";
+import { useCourseOverview, useMarkdown } from "~/lib/queries/notes";
 import { useQuizProgress, useStudyPlan, useStudyPlanMutation } from "~/lib/queries/study";
 import { useSettings } from "~/lib/queries/settings";
 import { flushStudyWrites } from "~/lib/study-writes";
@@ -156,10 +158,7 @@ export function CourseOverview({
 
   const courseMdPath = `${course}/course.md`;
   const courseMd = useMarkdown(activeRoot, courseMdPath);
-  const courseRendered = useRenderedMarkdown(activeRoot, courseMdPath);
-  const studyPlanPath = `${course}/study/plan.md`;
   const studyPlan = useStudyPlan(activeRoot, course);
-  const studyPlanRendered = useRenderedMarkdown(activeRoot, studyPlanPath);
   const quizProgress = useQuizProgress(activeRoot, course);
   const overview = useCourseOverview(activeRoot, course, flushDone);
   const studyPlanMutation = useStudyPlanMutation(activeRoot, course);
@@ -185,6 +184,17 @@ export function CourseOverview({
     }
   }, [overview.isError, overview.error, appendLog]);
 
+  const courseBody = courseMd.data ?? "";
+  const lede = courseMd.isSuccess ? firstParagraph(courseBody) : null;
+  const courseNotesHtml =
+    courseMd.isSuccess && courseBody.trim() !== ""
+      ? renderMarkdown(lede ? courseMarkdownForOverview(courseBody, lede) : courseBody).html
+      : "";
+  const planHtml =
+    studyPlan.isSuccess && studyPlan.data.trim() !== ""
+      ? renderMarkdown(studyPlanMarkdownForOverview(studyPlan.data)).html
+      : null;
+
   useEffect(() => {
     const pane = scrollRef?.current;
     const root = courseNotesRef.current;
@@ -202,7 +212,7 @@ export function CourseOverview({
       return;
     }
     pane.scrollTo(0, 0);
-  }, [heading, courseRendered.data?.html, scrollRef]);
+  }, [heading, courseNotesHtml, scrollRef]);
 
   const goToDigest = (digestRef: string, digestHeading?: string | null) => {
     const slug = resolveDigestSlug(digestRef, digests);
@@ -239,12 +249,6 @@ export function CourseOverview({
     weakLabel: overviewData?.weak.topics[0]?.label ?? null,
     unreviewedTitle: unreviewedDigest?.title ?? null,
   });
-
-  const courseBody = courseMd.data ?? "";
-  const lede = courseMd.isSuccess ? firstParagraph(courseBody) : null;
-  const courseNotesHtml = courseRendered.data?.html ?? "";
-  const planHtml =
-    studyPlan.isSuccess && studyPlan.data.trim() !== "" ? studyPlanRendered.data?.html : null;
 
   const onGeneratePlan = async () => {
     if (viewerBlocked) {

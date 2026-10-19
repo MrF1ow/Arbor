@@ -85,7 +85,11 @@ function NotesOverviewRoute() {
   }
 
   return (
-    <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto">
+    <div
+      ref={scrollRef}
+      data-testid="notes-reading-pane"
+      className="notes-reading-pane min-h-0 flex-1 overflow-y-auto"
+    >
       <CourseOverview
         key={`${activeRoot}|${course}`}
         course={course}

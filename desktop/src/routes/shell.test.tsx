@@ -255,4 +255,52 @@ describe("app shell", () => {
     await waitForCourseOverview();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
+
+  it("closes the mobile sidebar overlay when the viewport widens past the mobile breakpoint", async () => {
+    type MediaListener = (event: MediaQueryListEvent) => void;
+    const listeners: MediaListener[] = [];
+    let mobile = true;
+    vi.spyOn(window, "innerWidth", "get").mockImplementation(() => (mobile ? 700 : 1280));
+    window.matchMedia = vi.fn((query: string) => {
+      const matches = query === "(max-width: 767px)" ? mobile : false;
+      return {
+        matches,
+        media: query,
+        addEventListener: (_type: string, listener: MediaListener) => {
+          listeners.push(listener);
+        },
+        removeEventListener: (_type: string, listener: MediaListener) => {
+          const index = listeners.indexOf(listener);
+          if (index >= 0) {
+            listeners.splice(index, 1);
+          }
+        },
+        dispatchEvent: () => true,
+        onchange: null,
+        addListener: () => {},
+        removeListener: () => {},
+      } as MediaQueryList;
+    });
+    const setMobile = (next: boolean) => {
+      mobile = next;
+      for (const listener of [...listeners]) {
+        listener({ matches: next } as MediaQueryListEvent);
+      }
+    };
+
+    useUiStore.setState({ sidebarOpen: true, sidebarTouched: true });
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/notes");
+    await waitForCourseOverview();
+    await user.click(screen.getByRole("button", { name: /Toggle Sidebar/i }));
+    await waitFor(() => {
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+    });
+    setMobile(false);
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+    setMobile(true);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
 });

@@ -93,6 +93,88 @@ export function quizAccuracy(progress: unknown): QuizAccuracy {
 }
 
 const EXAM_DATE_LINE = /Exam date:\s*(?:\*\*)?(\d{4}-\d{2}-\d{2})(?:\*\*)?/im;
+const EXAM_DATE_LINE_FULL = /^\s*Exam date:\s*(?:\*\*)?\d{4}-\d{2}-\d{2}(?:\*\*)?\s*$/im;
+const LEADING_H1_LINE = /^#\s+(?!#)/;
+
+function normalizeNewlines(markdown: string): string {
+  return markdown.replace(/\r\n/g, "\n");
+}
+
+/** Remove a single leading ATX h1 (`# Title`), preserving the rest of the document. */
+export function stripLeadingH1(markdown: string): string {
+  const lines = normalizeNewlines(markdown).split("\n");
+  let index = 0;
+  while (index < lines.length && lines[index].trim() === "") {
+    index += 1;
+  }
+  if (index < lines.length && LEADING_H1_LINE.test(lines[index].trim())) {
+    lines.splice(index, 1);
+    while (index < lines.length && lines[index].trim() === "") {
+      lines.splice(index, 1);
+    }
+  }
+  return lines.join("\n");
+}
+
+function removeFirstParagraph(markdown: string): string {
+  const lines = normalizeNewlines(markdown).split("\n");
+  const kept: string[] = [];
+  let index = 0;
+  let removedParagraph = false;
+
+  while (index < lines.length) {
+    const line = lines[index];
+    const trimmed = line.trim();
+    if (trimmed === "" || trimmed.startsWith("<!--")) {
+      if (!removedParagraph) {
+        index += 1;
+        continue;
+      }
+      kept.push(line);
+      index += 1;
+      continue;
+    }
+    if (/^#+\s/.test(trimmed) || /^[-*]\s/.test(trimmed) || /^\d+\.\s/.test(trimmed) || /^\|/.test(trimmed)) {
+      kept.push(...lines.slice(index));
+      break;
+    }
+    if (!removedParagraph) {
+      removedParagraph = true;
+      index += 1;
+      while (index < lines.length && lines[index].trim() !== "") {
+        index += 1;
+      }
+      while (index < lines.length && lines[index].trim() === "") {
+        index += 1;
+      }
+      continue;
+    }
+    kept.push(...lines.slice(index));
+    break;
+  }
+
+  return kept.join("\n");
+}
+
+/** Study plan body for the course overview (section title and exam input are rendered separately). */
+export function studyPlanMarkdownForOverview(markdown: string): string {
+  let body = stripLeadingH1(markdown);
+  body = body.replace(EXAM_DATE_LINE_FULL, "");
+  return body.replace(/^\n+/, "").trimEnd();
+}
+
+/** Course notes body for the overview when the lede already shows the opening paragraph. */
+export function courseMarkdownForOverview(markdown: string, lede: string | null): string {
+  if (!lede) {
+    return markdown;
+  }
+  const withoutTitle = stripLeadingH1(markdown);
+  const opening = firstParagraph(withoutTitle);
+  if (opening !== lede) {
+    return withoutTitle;
+  }
+  return removeFirstParagraph(withoutTitle);
+}
 
 export function examDateFromPlan(markdown: string): string | null {
   const match = markdown.match(EXAM_DATE_LINE);

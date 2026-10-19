@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   collapseSelectionText,
+  courseMarkdownForOverview,
   daysUntil,
   digestFlags,
   digestNotesPath,
@@ -13,6 +14,8 @@ import {
   pageForSelectionNode,
   quizAccuracy,
   resolveDigestSlug,
+  stripLeadingH1,
+  studyPlanMarkdownForOverview,
 } from "~/domain/notes";
 import type { CourseOverviewPayload, DigestInfo } from "~/domain/types";
 
@@ -56,6 +59,36 @@ describe("digest paths", () => {
       resolveDigestSlug("digests/2026-09-12-membranes.md", digests),
     ).toBe("2026-09-12-membranes");
     expect(resolveDigestSlug("2026-09-15-mitochondria", digests)).toBe("2026-09-15-mitochondria");
+  });
+});
+
+describe("overview markdown helpers", () => {
+  it("strips study plan h1 and worker exam date line", () => {
+    const source = `# Study plan
+
+Exam date: **2026-11-04**
+
+- Review cytoskeleton
+`;
+    expect(studyPlanMarkdownForOverview(source)).toBe("- Review cytoskeleton");
+    expect(stripLeadingH1("# Title\n\nBody")).toBe("Body");
+  });
+
+  it("strips course h1 and lede paragraph for overview body", () => {
+    const source = `# Cell Biology
+
+First paragraph line.
+
+## Syllabus topics
+
+More content.
+`;
+    const lede = firstParagraph(source);
+    expect(lede).toBe("First paragraph line.");
+    expect(courseMarkdownForOverview(source, lede).trimEnd()).toBe(
+      "## Syllabus topics\n\nMore content.",
+    );
+    expect(courseMarkdownForOverview(source, null)).toBe(source);
   });
 });
 
