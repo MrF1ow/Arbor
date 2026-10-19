@@ -367,6 +367,8 @@ Events: `arbor://progress`, `arbor://job-finished`, `arbor://files-changed`.
 
 As of 5.1.0 the UI no longer calls `list_providers` (the Rust and CLI command still exists). `study_progress` gained `action: "overview"`.
 
+**Correction (2026-10-19, PR 4):** the list above came from a regex over `invoke("…")` calls and missed four commands the legacy UI calls through other paths: `start_study_job` (flashcard/quiz/concept/diagram/citation jobs), `join_library`, `search_knowledge`, and `search_semantic`. The authoritative list is `generate_handler!` in `desktop/src-tauri/src/lib.rs` intersected with the commands `src/legacy/main.ts` uses.
+
 ## Appendix B: parity checklist (sign-off before cutover)
 1. **First run:** choose a Knowledge folder; init repo/db; welcome state; desktop-only message outside Tauri.
 2. **Library:**
