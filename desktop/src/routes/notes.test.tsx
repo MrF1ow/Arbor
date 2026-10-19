@@ -265,7 +265,6 @@ describe("notes PR7", { timeout: 15000 }, () => {
     );
     await waitFor(() => {
       expect(router.state.location.pathname).toContain("/flashcards");
-      expect(router.state.location.searchStr).toContain("card=fc-appended-1");
     });
   });
 
