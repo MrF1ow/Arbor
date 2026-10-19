@@ -722,22 +722,30 @@ for req in read_requests():
     fn pool_real_python_serve_ten_concurrent() {
         use std::process::Command as StdCommand;
 
-        if StdCommand::new("python3")
-            .arg("--version")
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status()
-            .map(|s| !s.success())
-            .unwrap_or(true)
-        {
-            return;
-        }
-
         let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let repo_root = match manifest.join("../..").canonicalize() {
             Ok(p) if p.join("python/src/arbor_worker/serve.py").is_file() => p,
             _ => return,
         };
+        // Needs a Python with the worker's deps (pydantic, …). The Rust CI job
+        // has none, so prefer the repo venv and skip when the import fails.
+        let venv_python = repo_root.join("python/.venv/bin/python");
+        let python = if venv_python.is_file() {
+            venv_python.to_string_lossy().into_owned()
+        } else {
+            "python3".to_string()
+        };
+        let deps_ok = StdCommand::new(&python)
+            .args(["-c", "import pydantic"])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if !deps_ok {
+            eprintln!("skipping pool_real_python_serve_ten_concurrent: no python with worker deps");
+            return;
+        }
         let python_src = repo_root.join("python/src");
         let src_str = python_src.to_string_lossy();
 
@@ -758,8 +766,9 @@ for req in read_requests():
         let mut launcher_file = fs::File::create(&launcher).unwrap();
         write!(
             launcher_file,
-            "#!/usr/bin/env python3\nimport os, sys\nos.environ['PYTHONPATH'] = {src:?}\nos.execvp('python3', ['python3', '-m', 'arbor_worker'] + sys.argv[1:])\n",
-            src = src_str
+            "#!/usr/bin/env python3\nimport os, sys\nos.environ['PYTHONPATH'] = {src:?}\nos.execvp({py:?}, [{py:?}, '-m', 'arbor_worker'] + sys.argv[1:])\n",
+            src = src_str,
+            py = python
         )
         .unwrap();
         drop(launcher_file);
