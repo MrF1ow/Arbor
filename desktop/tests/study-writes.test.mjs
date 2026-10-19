@@ -31,7 +31,7 @@ function sampleWrite(key, course = "Bio") {
     writeId: `id-${key}`,
     root: "/r",
     course,
-    args: { action: "grade", write_id: `id-${key}` },
+    args: { action: "grade", writeId: `id-${key}` },
   };
 }
 
@@ -197,4 +197,51 @@ test("flush clears backoff and sends immediately", async () => {
 test("isTransientStudyWriteError classifies worker failures", () => {
   assert.equal(isTransientStudyWriteError(new Error("worker timed out after 30s")), true);
   assert.equal(isTransientStudyWriteError(new Error("invalid card id")), false);
+});
+
+test("restore keeps writes enqueued before it ran and sends restored ones first", async () => {
+  const storage = memoryStorage();
+  storage.setItem(PENDING_STUDY_WRITES_KEY, JSON.stringify([sampleWrite("old")]));
+  const sent = [];
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const queue = createStudyWriteQueue({
+    send: async (w) => {
+      await gate;
+      sent.push(w.key);
+    },
+    storage,
+    onStatus: () => {},
+    delays: [5, 5, 5],
+  });
+  queue.enqueue(sampleWrite("new"));
+  queue.restore();
+  assert.equal(queue.pending(), 2);
+  release();
+  await queue.flush(5000);
+  assert.deepEqual(sent.sort(), ["new", "old"]);
+  assert.equal(queue.pending(), 0);
+});
+
+test("invoke args carry writeId in camelCase for Tauri", () => {
+  const storage = memoryStorage();
+  storage.setItem(
+    PENDING_STUDY_WRITES_KEY,
+    JSON.stringify([{ key: "k", root: "/r", course: "Bio", args: { action: "grade" } }]),
+  );
+  const seen = [];
+  const queue = createStudyWriteQueue({
+    send: async (w) => {
+      seen.push(w.args);
+    },
+    storage,
+    onStatus: () => {},
+  });
+  queue.restore();
+  return queue.flush(2000).then(() => {
+    assert.equal(typeof seen[0].writeId, "string");
+    assert.equal("write_id" in seen[0], false);
+  });
 });

@@ -459,7 +459,8 @@ function enqueueStudyWrite(entry: {
     writeId,
     root: entry.root,
     course: entry.course,
-    args: { ...entry.args, write_id: writeId },
+    // Tauri maps camelCase invoke keys to the snake_case Rust parameter.
+    args: { ...entry.args, writeId },
   });
 }
 

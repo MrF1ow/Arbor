@@ -68,7 +68,38 @@ export function createStudyWriteQueue(deps: {
   const setTimer = deps.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
   const clearTimer = deps.clearTimer ?? ((id) => clearTimeout(id));
 
-  let queue: StudyWrite[] = [];
+  function loadStored(): StudyWrite[] {
+    const raw = deps.storage.getItem(PENDING_STUDY_WRITES_KEY);
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw) as StudyWrite[];
+      if (!Array.isArray(parsed)) return [];
+      return parsed
+        .filter(
+          (item) =>
+            item &&
+            typeof item.key === "string" &&
+            typeof item.root === "string" &&
+            typeof item.course === "string" &&
+            item.args &&
+            typeof item.args === "object",
+        )
+        .map((item) => {
+          const writeId =
+            typeof item.writeId === "string" && item.writeId
+              ? item.writeId
+              : globalThis.crypto.randomUUID();
+          // Tauri maps camelCase invoke keys to the snake_case Rust parameter.
+          return { ...item, writeId, args: { ...item.args, writeId } };
+        });
+    } catch {
+      return [];
+    }
+  }
+
+  // Load persisted writes now, so an enqueue before restore() can't
+  // overwrite them in storage. restore() starts sending them.
+  let queue: StudyWrite[] = loadStored();
   const drainingLanes = new Set<string>();
   const laneFailSince = new Map<string, number>();
   const laneWait = new Map<
@@ -262,40 +293,10 @@ export function createStudyWriteQueue(deps: {
       });
     },
     restore() {
-      const raw = deps.storage.getItem(PENDING_STUDY_WRITES_KEY);
-      if (!raw) {
-        queue = [];
-        emitStatus();
-        return;
-      }
-      try {
-        const parsed = JSON.parse(raw) as StudyWrite[];
-        if (Array.isArray(parsed)) {
-          queue = parsed
-            .filter(
-              (item) =>
-                item &&
-                typeof item.key === "string" &&
-                typeof item.root === "string" &&
-                typeof item.course === "string" &&
-                item.args &&
-                typeof item.args === "object",
-            )
-            .map((item) => {
-              const writeId =
-                typeof item.writeId === "string" && item.writeId
-                  ? item.writeId
-                  : globalThis.crypto.randomUUID();
-              return {
-                ...item,
-                writeId,
-                args: { ...item.args, write_id: writeId },
-              };
-            });
-        }
-      } catch {
-        queue = [];
-      }
+      // Pick up anything another session persisted since construction.
+      const known = new Set(queue.map((item) => item.writeId));
+      const extra = loadStored().filter((item) => !known.has(item.writeId));
+      queue = [...extra, ...queue];
       persist();
       emitStatus();
       if (queue.length > 0) {

@@ -582,7 +582,9 @@ def study_progress_grade(
     with progress_lock(root, course):
         applied_path = applied_writes_path(root, course)
         if write_id and write_id in _load_applied_write_ids(applied_path):
-            return _load_progress_document(root, course)
+            # Already applied. The lock is held, so use the unlocked loader:
+            # flock on a second fd in the same process would block forever.
+            return _ensure_document(root, course, write_migration=True)
         clock = now or parse_utc_now(None)
         doc = _ensure_document(root, course, write_migration=True)
         cards = doc["cards"]
@@ -643,7 +645,9 @@ def study_progress_quiz(
     with progress_lock(root, course):
         applied_path = applied_writes_path(root, course)
         if write_id and write_id in _load_applied_write_ids(applied_path):
-            return _load_progress_document(root, course)
+            # Already applied. The lock is held, so use the unlocked loader:
+            # flock on a second fd in the same process would block forever.
+            return _ensure_document(root, course, write_migration=True)
         doc = _ensure_document(root, course, write_migration=True)
         questions = doc["questions"]
         entry = questions.get(question_id)
