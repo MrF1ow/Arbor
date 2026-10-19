@@ -12,7 +12,7 @@ import { useUiStore } from "~/stores/ui-store";
 
 async function waitForCourseOverview() {
   await waitFor(() => {
-    expect(screen.getAllByText("Overview arrives in PR 7.").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Course overview").length).toBeGreaterThan(0);
   });
 }
 
@@ -246,5 +246,13 @@ describe("app shell", () => {
   it("renders /dev/ui without the app sidebar", async () => {
     await renderAppAtRoute("/dev/ui");
     expect(screen.queryByRole("button", { name: /Hide sidebar/i })).not.toBeInTheDocument();
+  });
+
+  it("does not auto-open the mobile sidebar sheet when sidebarOpen is persisted true", async () => {
+    vi.spyOn(window, "innerWidth", "get").mockReturnValue(700);
+    useUiStore.setState({ sidebarOpen: true, sidebarTouched: true });
+    await renderAppAtRoute("/course/cell-biology/notes");
+    await waitForCourseOverview();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });
