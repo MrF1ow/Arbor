@@ -1,13 +1,18 @@
 import type { InvokeArgs } from "@tauri-apps/api/core";
+import { emit } from "@tauri-apps/api/event";
 
 import {
   FIXTURE_ROOT_FALL,
+  fixtureConceptGraph,
   fixtureCourseOverview,
   fixtureCourses,
   fixtureDigests,
   fixtureKnowledgeSettings,
   fixtureMarkdownSample,
+  fixtureQuizProgress,
+  fixtureQuizQuestions,
   fixtureSettings,
+  fixtureStudyPlanMarkdown,
 } from "~/test/fixtures/data";
 
 const ipcLog: string[] = [];
@@ -18,6 +23,36 @@ export function getMockIpcLog(): string[] {
 
 export function clearMockIpcLog() {
   ipcLog.length = 0;
+}
+
+function simulateUpdateJob(root: string) {
+  const jobId = "mock-update-job";
+  window.setTimeout(() => {
+    void emit("arbor://progress", {
+      line: JSON.stringify({ type: "run_started", model_id: "grok-4.7" }),
+    });
+    void emit("arbor://progress", {
+      line: JSON.stringify({
+        type: "stage",
+        stage: "digest",
+        status: "running",
+        detail: "page 1",
+      }),
+    });
+    window.setTimeout(() => {
+      void emit("arbor://progress", {
+        line: JSON.stringify({ type: "run_done", processed: 1, failed: 0, skipped: 0 }),
+      });
+      void emit("arbor://job-finished", {
+        job_id: jobId,
+        status: "succeeded",
+        summary: null,
+        operation: "update",
+        root,
+      });
+    }, 2800);
+  }, 200);
+  return jobId;
 }
 
 export function createMockHandler(
@@ -43,8 +78,13 @@ export function createMockHandler(
           return fixtureDigests;
         }
         return [];
-      case "read_markdown":
+      case "read_markdown": {
+        const path = String(payload.relativePath ?? "");
+        if (path.endsWith("study/plan.md")) {
+          return fixtureStudyPlanMarkdown;
+        }
         return fixtureMarkdownSample;
+      }
       case "study_progress":
         if (payload.action === "overview") {
           return fixtureCourseOverview;
@@ -117,18 +157,36 @@ export function createMockHandler(
           return {
             schema_version: 1,
             course: String(payload.course),
-            questions: [],
+            questions: fixtureQuizQuestions,
           };
+        }
+        if (payload.file === "concepts.json") {
+          return fixtureConceptGraph;
         }
         return { schema_version: 1, course: String(payload.course ?? ""), nodes: [], edges: [] };
       case "read_quiz_progress":
-        return { "q-1": { seen: 10, correct: 7, wrong: 3 } };
+        return fixtureQuizProgress;
       case "study_artifact_stale":
         return false;
       case "skill_index":
         return { packages: [] };
       case "provider_secret_status":
         return "ready";
+      case "search_knowledge":
+      case "search_semantic":
+        return [
+          {
+            course: "cell-biology",
+            path: "2026-09-12-membranes.md",
+            heading: "Membrane structure",
+            snippet: "Phospholipid bilayer",
+            score: 0.9,
+          },
+        ];
+      case "join_library":
+        return { ok: true };
+      case "start_study_job":
+        return "mock-study-job";
       case "init_knowledge_repo":
       case "init_arbor_db":
       case "start_folder_watch":
@@ -139,8 +197,9 @@ export function createMockHandler(
       case "plan_update":
         return { pending: [] };
       case "start_update":
+        return simulateUpdateJob(String(payload.root ?? FIXTURE_ROOT_FALL));
       case "start_embed_job":
-        return "mock-job-id";
+        return "mock-embed-job";
       default:
         return null;
     }

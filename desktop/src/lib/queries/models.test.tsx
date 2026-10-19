@@ -1,6 +1,6 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { clearMocks } from "@tauri-apps/api/mocks";
 
 import { createAppQueryClient } from "~/lib/query-client";
@@ -14,6 +14,7 @@ describe("useModels", () => {
   });
 
   it("does not refetch on remount", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     installMockIpc();
     const client = createAppQueryClient();
     const wrapper = ({ children }: { children: React.ReactNode }) => (
@@ -21,10 +22,13 @@ describe("useModels", () => {
     );
     const first = renderHook(() => useModels("grok", "/mock/a"), { wrapper });
     await waitFor(() => expect(first.result.current.isSuccess).toBe(true));
+    await vi.advanceTimersByTimeAsync(31_000);
     clearMockIpcLog();
     first.unmount();
     renderHook(() => useModels("grok", "/mock/a"), { wrapper });
-    await waitFor(() => expect(getMockIpcLog().filter((c) => c === "list_models")).toHaveLength(0));
+    await vi.advanceTimersByTimeAsync(100);
+    expect(getMockIpcLog().filter((c) => c === "list_models")).toHaveLength(0);
+    vi.useRealTimers();
   });
 
   it("refetches after refreshModels and root changes", async () => {

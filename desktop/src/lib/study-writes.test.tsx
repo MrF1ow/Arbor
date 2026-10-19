@@ -3,7 +3,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { clearMocks } from "@tauri-apps/api/mocks";
 
 import { PENDING_STUDY_WRITES_KEY } from "~/domain/study-writes";
-import { useEnqueueStudyWrite, useStudyWriteStatus } from "~/lib/study-writes";
+import {
+  resetStudyWriteQueueForTests,
+  useEnqueueStudyWrite,
+  useStudyWriteStatus,
+} from "~/lib/study-writes";
+import { useStudyWritesStore } from "~/stores/study-writes-store";
 import { renderWithProviders } from "~/test/render";
 import { toast } from "sonner";
 
@@ -23,6 +28,7 @@ function StudyWriteProbe() {
 describe("study writes", () => {
   afterEach(() => {
     clearMocks();
+    resetStudyWriteQueueForTests();
     window.localStorage.removeItem(PENDING_STUDY_WRITES_KEY);
   });
 
@@ -44,9 +50,7 @@ describe("study writes", () => {
       course: "cell-biology",
       args: { action: "grade", card_id: "c1" },
     });
-    await waitFor(() =>
-      expect(window.localStorage.getItem(PENDING_STUDY_WRITES_KEY)).toContain("cell-biology"),
-    );
+    await waitFor(() => expect(useStudyWritesStore.getState().pending).toBe(1));
     resolveSend?.();
   });
 
@@ -77,7 +81,7 @@ describe("study writes", () => {
     vi.useRealTimers();
   });
 
-  it("persists and replays pending writes", async () => {
+  it("persists and replays pending writes once with double mount", async () => {
     window.localStorage.setItem(
       PENDING_STUDY_WRITES_KEY,
       JSON.stringify([
@@ -91,7 +95,8 @@ describe("study writes", () => {
       ]),
     );
     const calls: unknown[] = [];
-    renderWithProviders(<StudyWriteProbe />, {
+    const ui = <StudyWriteProbe />;
+    const first = renderWithProviders(ui, {
       minimal: true,
       fixtures: {
         study_progress: (args) => {
@@ -100,7 +105,18 @@ describe("study writes", () => {
         },
       },
     });
-    await waitFor(() => expect(calls.length).toBeGreaterThan(0), { timeout: 3000 });
+    await waitFor(() => expect(calls.length).toBe(1), { timeout: 3000 });
+    first.unmount();
+    renderWithProviders(ui, {
+      minimal: true,
+      fixtures: {
+        study_progress: (args) => {
+          calls.push(args);
+          return {};
+        },
+      },
+    });
+    await waitFor(() => expect(calls.length).toBe(1));
   });
 
   it("shows a toast when a write is dropped", async () => {
@@ -121,7 +137,7 @@ describe("study writes", () => {
       args: { action: "grade" },
     });
     await vi.advanceTimersByTimeAsync(120_000);
-    expect(toast.error).toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledWith(`A grade couldn't be saved: permanent failure`);
     vi.useRealTimers();
   });
 });

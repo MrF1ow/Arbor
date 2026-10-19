@@ -4,16 +4,16 @@ import { afterEach, describe, expect, it } from "vitest";
 import { clearMocks } from "@tauri-apps/api/mocks";
 
 import { createAppQueryClient } from "~/lib/query-client";
-import { useAuth } from "~/lib/queries/auth";
+import { useAuth, useProviderSecretStatus } from "~/lib/queries/auth";
 import { useChatHistory } from "~/lib/queries/chat";
-import { useApplyEffectiveProvider } from "~/lib/queries/effective-provider";
-import { useJobs, usePlanUpdate } from "~/lib/queries/jobs";
+import { useJobEvents, useJobs } from "~/lib/queries/jobs";
 import { useCourses, useDigests, useLibrary } from "~/lib/queries/library";
 import { useCourseOverview, useMarkdown } from "~/lib/queries/notes";
+import { useSearch, useSemanticSearch } from "~/lib/queries/search";
 import { useSettings, useKnowledgeSettings } from "~/lib/queries/settings";
 import { useSkillIndex } from "~/lib/queries/skills";
-import { useStudyJson, useQuizProgress } from "~/lib/queries/study";
-import { useSyncState } from "~/lib/queries/sync";
+import { useStudyJson, useQuizProgress, useStudyPlan } from "~/lib/queries/study";
+import { useSyncConflict, useSyncState } from "~/lib/queries/sync";
 import { useModels, useProviderOptions } from "~/lib/queries/workers";
 import { FIXTURE_ROOT_FALL } from "~/test/fixtures/data";
 import { clearMockIpcLog, getMockIpcLog } from "~/test/mock-handlers";
@@ -25,9 +25,9 @@ function AllReadHooks() {
   useProviderOptions();
   useSettings();
   useKnowledgeSettings(root);
-  useAuth("grok", root);
+  useAuth("grok");
+  useProviderSecretStatus("openai_api");
   useModels("grok", root);
-  useApplyEffectiveProvider(root);
   useLibrary(root);
   useCourses(root);
   useDigests(root, course);
@@ -35,11 +35,15 @@ function AllReadHooks() {
   useCourseOverview(root, course);
   useStudyJson(root, course, "flashcards.json");
   useQuizProgress(root, course);
+  useStudyPlan(root, course);
   useJobs(root);
-  usePlanUpdate(root);
+  useJobEvents(root, "job-ok-1");
   useSyncState(root);
+  useSyncConflict(root);
   useSkillIndex();
   useChatHistory(root, course);
+  useSearch(root, "membrane");
+  useSemanticSearch(root, "membrane");
   return null;
 }
 

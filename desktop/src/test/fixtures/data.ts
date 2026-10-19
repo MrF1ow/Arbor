@@ -90,7 +90,81 @@ export const fixtureDigests = [
     date: "2026-10-01",
     path: "cell-biology/2026-10-01-review.md",
   },
+  {
+    title: "DNA replication",
+    date: "2026-10-03",
+    path: "cell-biology/2026-10-03-dna.md",
+  },
+  {
+    title: "Transcription",
+    date: "2026-10-05",
+    path: "cell-biology/2026-10-05-transcription.md",
+  },
+  {
+    title: "Translation",
+    date: "2026-10-08",
+    path: "cell-biology/2026-10-08-translation.md",
+  },
+  {
+    title: "Apoptosis",
+    date: "2026-10-10",
+    path: "cell-biology/2026-10-10-apoptosis.md",
+  },
+  {
+    title: "Stem cells",
+    date: "2026-10-12",
+    path: "cell-biology/2026-10-12-stem-cells.md",
+  },
 ];
+
+export const fixtureCourseDisplayNames: Record<string, string> = {
+  "cell-biology": "Cell Biology",
+  "organic-chemistry-ii": "Organic Chemistry II",
+  "linear-algebra": "Linear Algebra",
+  "medieval-europe": "Medieval Europe",
+};
+
+export const fixtureQuizQuestions = Array.from({ length: 8 }, (_, i) => ({
+  id: `q-${i + 1}`,
+  type: "multiple_choice" as const,
+  prompt: `Which process best describes step ${i + 1} in cell biology?`,
+  choices: ["Endocytosis", "Oxidative phosphorylation", "RNA splicing", "Actin polymerization"],
+  answer_index: i % 4,
+  explanation: "See the membranes digest for context.",
+  source: { digest: "2026-09-12-membranes", heading: "Membrane structure" },
+}));
+
+export const fixtureQuizProgress = {
+  ...Object.fromEntries(
+    fixtureQuizQuestions.slice(0, 7).map((q) => [q.id, { seen: 1, correct: 1, wrong: 0 }]),
+  ),
+  "q-8": { seen: 2, correct: 0, wrong: 2 },
+};
+
+export const fixtureConceptGraph = {
+  schema_version: 1,
+  course: "cell-biology",
+  nodes: Array.from({ length: 10 }, (_, i) => ({
+    id: `concept-${i + 1}`,
+    label: `Concept ${i + 1}`,
+    digest: "2026-09-12-membranes",
+    heading: "Membrane structure",
+    verified: i % 2 === 0,
+  })),
+  edges: Array.from({ length: 12 }, (_, i) => ({
+    from: `concept-${(i % 10) + 1}`,
+    to: `concept-${((i + 2) % 10) + 1}`,
+    kind: "related",
+  })),
+};
+
+export const fixtureStudyPlanMarkdown = `# Study plan
+
+Exam date: **2026-11-04**
+
+- Review cytoskeleton weak topic
+- Complete 14 due flashcards
+`;
 
 export const fixtureMarkdownSample = `# Cell Biology · ${FIXTURE_MARKER}
 

@@ -49,9 +49,9 @@ export function renderWithProviders(
     </QueryClientProvider>
   );
 
-  const rendered = ui ? render(ui, { wrapper: Wrapper, ...opts }) : null;
+  const rendered = render(ui ?? <></>, { wrapper: Wrapper, ...opts });
   return {
-    ...(rendered ?? {}),
+    ...rendered,
     queryClient,
     router,
     Wrapper,

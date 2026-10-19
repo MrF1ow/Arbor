@@ -16,8 +16,8 @@ function wrapper({ children }: { children: React.ReactNode }) {
 }
 
 function DualAuth() {
-  useAuth("grok", "/mock/root");
-  useAuth("grok", "/mock/root");
+  useAuth("grok");
+  useAuth("grok");
   return null;
 }
 
@@ -45,7 +45,7 @@ describe("useAuth", () => {
   });
 
   it("does not refetch on refocus within 60s", async () => {
-    renderHook(() => useAuth("grok", "/mock/root"), { wrapper });
+    renderHook(() => useAuth("grok"), { wrapper });
     await waitFor(() => expect(getMockIpcLog().filter((c) => c === "check_auth").length).toBe(1));
     clearMockIpcLog();
     focusManager.setFocused(false);
@@ -56,19 +56,20 @@ describe("useAuth", () => {
 
   it("refetches on refocus after 60s", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    renderHook(() => useAuth("grok", "/mock/root"), { wrapper });
+    renderHook(() => useAuth("grok"), { wrapper });
     await vi.advanceTimersByTimeAsync(400);
     clearMockIpcLog();
     await vi.advanceTimersByTimeAsync(61_000);
+    expect(getMockIpcLog().filter((c) => c === "check_auth")).toHaveLength(0);
     focusManager.setFocused(false);
     focusManager.setFocused(true);
     await vi.advanceTimersByTimeAsync(400);
-    expect(getMockIpcLog().filter((c) => c === "check_auth").length).toBeGreaterThanOrEqual(1);
+    expect(getMockIpcLog().filter((c) => c === "check_auth")).toHaveLength(1);
   });
 
   it("does not poll on an interval", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    renderHook(() => useAuth("grok", "/mock/root"), { wrapper });
+    renderHook(() => useAuth("grok"), { wrapper });
     await vi.advanceTimersByTimeAsync(400);
     clearMockIpcLog();
     await vi.advanceTimersByTimeAsync(120_000);
