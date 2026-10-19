@@ -6,6 +6,7 @@ import { JobFailureToast } from "~/components/app/job-failure-toast";
 import { ShellContextProvider } from "~/components/app/shell-context";
 import { SidebarInset, SidebarProvider } from "~/components/ui/sidebar";
 import { useGlobalShortcuts } from "~/hooks/use-global-shortcuts";
+import { useIsMobile } from "~/hooks/use-mobile";
 import { useEffectiveSidebarOpen, useUiStore } from "~/stores/ui-store";
 
 const LogDrawer = lazy(() =>
@@ -25,11 +26,15 @@ const UpdateReviewDialog = lazy(() =>
 );
 
 export function AppShell() {
-  const sidebarOpen = useEffectiveSidebarOpen();
+  const isMobile = useIsMobile();
+  const desktopSidebarOpen = useEffectiveSidebarOpen();
   const setSidebarOpen = useUiStore((s) => s.setSidebarOpen);
   const markSidebarTouched = useUiStore((s) => s.markSidebarTouched);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchMounted, setSearchMounted] = useState(false);
+
+  const sidebarOpen = isMobile ? mobileSidebarOpen : desktopSidebarOpen;
 
   useGlobalShortcuts({
     onSearch: () => {
@@ -39,6 +44,10 @@ export function AppShell() {
   });
 
   const onSidebarOpenChange = (open: boolean) => {
+    if (isMobile) {
+      setMobileSidebarOpen(open);
+      return;
+    }
     markSidebarTouched();
     setSidebarOpen(open);
   };

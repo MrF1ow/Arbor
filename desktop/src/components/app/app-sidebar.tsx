@@ -183,6 +183,10 @@ export function AppSidebar() {
           size="icon-sm"
           variant="ghost"
           onClick={() => {
+            if (isMobile) {
+              setOpen(false);
+              return;
+            }
             markSidebarTouched();
             setSidebarOpen(false);
             setOpen(false);
