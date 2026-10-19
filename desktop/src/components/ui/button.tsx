@@ -8,8 +8,30 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/tooltip
 import { cn } from "~/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-sm border border-transparent text-sm font-medium transition-colors duration-fast ease-out-soft outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 data-pressed:bg-selected aria-pressed:bg-selected [&_svg]:pointer-events-none [&_svg]:shrink-0",
+  "inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-sm border border-transparent text-sm font-medium transition-colors duration-fast ease-out-soft outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
+    compoundVariants: [
+      {
+        class:
+          "data-pressed:bg-primary-hover aria-pressed:bg-primary-hover",
+        variant: "default",
+      },
+      {
+        class:
+          "data-pressed:bg-destructive-hover aria-pressed:bg-destructive-hover",
+        variant: "destructive",
+      },
+      {
+        class:
+          "data-pressed:bg-selected data-pressed:text-foreground aria-pressed:bg-selected aria-pressed:text-foreground",
+        variant: ["secondary", "outline", "ghost", "link"],
+      },
+      {
+        class:
+          "data-pressed:bg-selected aria-pressed:bg-selected",
+        variant: "destructive-outline",
+      },
+    ],
     defaultVariants: {
       size: "default",
       variant: "default",
@@ -34,7 +56,7 @@ const buttonVariants = cva(
         ghost:
           "bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground",
         destructive:
-          "bg-destructive text-destructive-foreground hover:bg-destructive",
+          "bg-destructive text-destructive-foreground hover:bg-destructive-hover",
         "destructive-outline":
           "border-border bg-card text-destructive hover:bg-destructive-surface",
         link: "text-primary underline-offset-4 hover:underline",

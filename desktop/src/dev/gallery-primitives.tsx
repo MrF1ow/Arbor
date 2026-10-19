@@ -2,6 +2,7 @@ import {
   BookOpenIcon,
   BrainIcon,
   FileTextIcon,
+  InfoIcon,
   LayersIcon,
   PlusIcon,
   SearchIcon,
@@ -245,6 +246,19 @@ export function GalleryPrimitives() {
             <DialogContent>
               <DialogTitle>Update knowledge</DialogTitle>
               <p className="text-sm text-muted-foreground">Rebuild embeddings for this course.</p>
+              <div className="flex items-center gap-2">
+                <Select defaultValue="full">
+                  <SelectTrigger className="w-40">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="full">Full rebuild</SelectItem>
+                    <SelectItem value="incremental">Incremental</SelectItem>
+                    <SelectItem value="embeddings">Embeddings only</SelectItem>
+                  </SelectContent>
+                </Select>
+                <IconButton icon={InfoIcon} label="Rebuild scope help" variant="ghost" />
+              </div>
               <DialogFooter>
                 <Button variant="secondary">Cancel</Button>
                 <Button>Run job</Button>

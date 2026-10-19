@@ -22,6 +22,17 @@ describe("Button", () => {
     expect(screen.getByRole("button", { name: "Delete" })).toHaveClass("text-destructive");
   });
 
+  it("uses primary-hover background when pressed on the default variant", () => {
+    render(
+      <Button variant="default" aria-pressed>
+        Toggle
+      </Button>,
+    );
+    const button = screen.getByRole("button", { name: "Toggle" });
+    expect(button).toHaveClass("aria-pressed:bg-primary-hover");
+    expect(button).not.toHaveClass("aria-pressed:bg-selected");
+  });
+
   it("does not fire onClick when disabled", async () => {
     const user = userEvent.setup();
     const onClick = vi.fn();

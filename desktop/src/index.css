@@ -26,6 +26,7 @@
   --ring: var(--primary);
   --success: var(--primary);
   --destructive: #b03a2e;
+  --destructive-hover: #962f25;
   --destructive-surface: color-mix(in srgb, var(--destructive) 10%, transparent);
   --info: #4a6f86;
   --backdrop: rgb(43 36 32 / 0.35);
@@ -67,6 +68,7 @@
   --ring: var(--primary);
   --success: var(--primary);
   --destructive: #e2806f;
+  --destructive-hover: #e99686;
   --destructive-surface: color-mix(in srgb, var(--destructive) 10%, transparent);
   --info: #8db1c7;
   --backdrop: rgb(0 0 0 / 0.5);
@@ -93,6 +95,7 @@
   --color-ring: var(--ring);
   --color-success: var(--success);
   --color-destructive: var(--destructive);
+  --color-destructive-hover: var(--destructive-hover);
   --color-destructive-surface: var(--destructive-surface);
   --color-info: var(--info);
   --color-backdrop: var(--backdrop);
