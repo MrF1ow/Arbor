@@ -34,6 +34,7 @@ import {
 import { courseDisplayName, workspaceRootLabel } from "~/domain/course";
 import type { KnowledgeRootEntry } from "~/domain/types";
 import { PROVIDER_FALLBACK, isWorkerUnavailableAuthReason, providerBadge } from "~/domain/provider";
+import { canUseDesktopIpc } from "~/domain/tauri";
 import { pickActiveRoot } from "~/lib/knowledge-root";
 import { openDialog } from "~/lib/ipc";
 import { useActivateKnowledgeRootMutation, useSwitchActiveRootMutation } from "~/lib/queries/active-root";
@@ -78,6 +79,14 @@ function CourseNavRow({
 function ProviderStatusLine({ root }: { root: string | null }) {
   const effective = useEffectiveProvider(root);
   const auth = useAuth(effective.providerId);
+  if (!canUseDesktopIpc()) {
+    return (
+      <div className="flex items-center gap-2 px-2 py-2 text-xs text-muted-foreground">
+        <span className="size-1.5 shrink-0 rounded-full bg-muted-foreground" aria-hidden />
+        <span className="truncate">Desktop app required</span>
+      </div>
+    );
+  }
   const providerLabel =
     PROVIDER_FALLBACK.find((p) => p.id === effective.providerId)?.label ?? effective.providerId;
   const modelLabel = effective.modelId ?? "no model";
@@ -261,7 +270,13 @@ export function AppSidebar() {
           </SidebarMenuItem>
         </SidebarMenu>
         <ProviderStatusLine root={activeRoot} />
-        <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => void onPickFolder()}>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full justify-start"
+          disabled={!canUseDesktopIpc()}
+          onClick={() => void onPickFolder()}
+        >
           <FolderOpen className="size-icon-sm" />
           Choose Knowledge folder…
         </Button>

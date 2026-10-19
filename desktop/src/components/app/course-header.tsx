@@ -3,6 +3,7 @@ import {
   BookOpen,
   CircleHelp,
   Layers,
+  Loader2,
   MessageSquare,
   Plus,
   Search,
@@ -65,11 +66,15 @@ export function CourseHeader({
       if (!paths || paths.length === 0) {
         return;
       }
-      await importSources.mutateAsync({ course, paths });
+      const imported = await importSources.mutateAsync({ course, paths });
+      toast.success(`Added ${imported.length} file(s)`);
     } catch (error) {
       toast.error(String(error));
     }
   };
+
+  const importBusy = importSources.isPending;
+  const AddFilesIcon = importBusy ? Loader2 : Plus;
 
   const searchLabel = `Search (${modShortcut("K")})`;
 
@@ -109,20 +114,25 @@ export function CourseHeader({
       </nav>
       <div className="flex shrink-0 items-center gap-1.5 self-center @[880px]/course-header:gap-2">
         <IconButton
-          icon={Plus}
-          label="Add files"
+          icon={AddFilesIcon}
+          label={importBusy ? "Adding files…" : "Add files"}
           size="icon-sm"
           variant="outline"
-          className="@[880px]/course-header:hidden"
+          className={cn(
+            "@[880px]/course-header:hidden",
+            importBusy && "[&_svg]:animate-spin",
+          )}
+          disabled={importBusy}
           onClick={() => void onAddFiles()}
         />
         <Button
           variant="outline"
           size="sm"
           className="hidden @[880px]/course-header:inline-flex"
+          disabled={importBusy}
           onClick={() => void onAddFiles()}
         >
-          <Plus className="size-icon-sm" />
+          <AddFilesIcon className={cn("size-icon-sm", importBusy && "animate-spin")} />
           Add files
         </Button>
         <IconButton

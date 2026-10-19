@@ -89,7 +89,7 @@ export function ActionBar({ course }: { course: string }) {
         appendLog("Nothing to process — everything is up to date.");
         return;
       }
-      useUpdatePlanStore.getState().setPendingPlan(plan.pending, true);
+      useUpdatePlanStore.getState().setPendingPlan(plan.pending, true, "manual");
     } catch (error) {
       toast.error(String(error));
     }
