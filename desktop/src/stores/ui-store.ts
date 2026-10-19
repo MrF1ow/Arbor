@@ -9,6 +9,7 @@ export type LastCourse = { root: string; course: string };
 interface UiState {
   appearance: Appearance;
   sidebarOpen: boolean;
+  sidebarTouched: boolean;
   logOpen: boolean;
   logHeight: number;
   notesIndexOpen: boolean;
@@ -16,6 +17,7 @@ interface UiState {
   setAppearance: (appearance: Appearance) => void;
   setSidebarOpen: (open: boolean) => void;
   toggleSidebar: () => void;
+  markSidebarTouched: () => void;
   setLogOpen: (open: boolean) => void;
   toggleLog: () => void;
   setLogHeight: (height: number) => void;
@@ -28,13 +30,16 @@ export const useUiStore = create<UiState>()(
     (set) => ({
       appearance: "system",
       sidebarOpen: true,
+      sidebarTouched: false,
       logOpen: false,
       logHeight: 200,
       notesIndexOpen: true,
       lastCourse: null,
       setAppearance: (appearance) => set({ appearance }),
       setSidebarOpen: (sidebarOpen) => set({ sidebarOpen }),
-      toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
+      toggleSidebar: () =>
+        set((s) => ({ sidebarOpen: !s.sidebarOpen, sidebarTouched: true })),
+      markSidebarTouched: () => set({ sidebarTouched: true }),
       setLogOpen: (logOpen) => set({ logOpen }),
       toggleLog: () => set((s) => ({ logOpen: !s.logOpen })),
       setLogHeight: (logHeight) => set({ logHeight }),

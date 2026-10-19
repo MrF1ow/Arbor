@@ -16,6 +16,7 @@ interface JobState {
   unread: number;
   append: (line: string) => void;
   markRead: () => void;
+  clear: () => void;
   start: (jobId: string, opts?: { isUpdate?: boolean }) => void;
   finish: (result: JobFinished) => void;
   setStep: (step: string | null) => void;
@@ -41,6 +42,9 @@ export const useJobStore = create<JobState>((set, get) => ({
   },
   markRead() {
     set({ unread: 0 });
+  },
+  clear() {
+    set({ lines: [], unread: 0 });
   },
   start(jobId, opts) {
     set({
