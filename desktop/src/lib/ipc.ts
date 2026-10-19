@@ -93,6 +93,26 @@ export function listen<T>(
   return tauriListen<T>(event, handler);
 }
 
+/** Cancellation-safe Tauri event subscription; returns a synchronous disposer. */
+export function subscribe<T>(
+  event: string,
+  handler: (event: { payload: T }) => void,
+): () => void {
+  let disposed = false;
+  let unlisten: (() => void) | undefined;
+  void listen<T>(event, handler).then((fn) => {
+    if (disposed) {
+      fn();
+    } else {
+      unlisten = fn;
+    }
+  });
+  return () => {
+    disposed = true;
+    unlisten?.();
+  };
+}
+
 export function openDialog(opts: Parameters<typeof tauriOpen>[0]): Promise<string | string[] | null> {
   if (!hasTauriInvoke(globalThis)) {
     return rejectUnavailable();
@@ -113,6 +133,7 @@ export function confirmDialog(
 export const ipc = {
   invoke,
   listen,
+  subscribe,
   openDialog,
   confirmDialog,
 };

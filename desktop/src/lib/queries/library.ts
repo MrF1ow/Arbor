@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { DigestInfo, LibraryShowResult } from "~/domain/types";
-import { suppressWatch } from "~/lib/events";
+import { presentUpdatePlanAfterImport, suppressWatch } from "~/lib/events";
 import { invoke } from "~/lib/ipc";
 import { qk } from "~/lib/queries/keys";
 
@@ -54,9 +54,10 @@ export function useImportSourcesMutation(root: string | null) {
         paths: input.paths,
       });
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       if (root) {
         void queryClient.invalidateQueries({ queryKey: qk.courses(root) });
+        await presentUpdatePlanAfterImport(root);
       }
     },
   });

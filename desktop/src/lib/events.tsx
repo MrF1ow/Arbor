@@ -6,16 +6,19 @@ import { flashcardJobArgs } from "~/domain/flashcards";
 import { quizJobArgs } from "~/domain/quiz";
 import { selectionsFromPending } from "~/domain/update";
 import { formatWorkerEvent } from "~/domain/worker-events";
-import { PROVIDER_FALLBACK } from "~/domain/provider";
+import { effectiveProvider } from "~/domain/library-role";
+import { PROVIDER_FALLBACK, signedOutJobMessage } from "~/domain/provider";
 import type {
+  AuthStatus,
   JobFinished,
   KnowledgeSettings,
   PendingSource,
+  Settings,
   UpdatePlan,
   WorkerEvent,
 } from "~/domain/types";
 import { fetchAuthStatus } from "~/lib/auth-refresh";
-import { invoke, listen } from "~/lib/ipc";
+import { invoke, subscribe } from "~/lib/ipc";
 import { onJobFinished } from "~/lib/job-finished";
 import { reloadLibraryAfterSync } from "~/lib/library-reload";
 import { useEffectiveProvider } from "~/lib/queries/effective-provider";
@@ -94,15 +97,67 @@ function providerDisplayLabel(providerId: string): string {
   return row?.label ?? providerId;
 }
 
-export type WatchTriggerDeps = {
-  queryClient: QueryClient;
+export type PresentUpdatePlanDeps = {
   getKnowledgeSettings: (root: string) => Promise<KnowledgeSettings>;
   planUpdate: (root: string) => Promise<UpdatePlan>;
   startUpdate: (root: string, input: Record<string, unknown>) => Promise<string>;
-  checkAuth: (provider: string) => Promise<{ authenticated: boolean }>;
+  checkAuth: (provider: string) => Promise<AuthStatus>;
   setPendingPlan: (pending: PendingSource[] | null, open: boolean) => void;
+  appendJobLine: (line: string) => void;
   providerId: string;
   modelId: string | null;
+  reason: "watch" | "import";
+  knowledgeSettings?: KnowledgeSettings;
+};
+
+export async function presentUpdatePlan(root: string, deps: PresentUpdatePlanDeps) {
+  try {
+    const ks = deps.knowledgeSettings ?? (await deps.getKnowledgeSettings(root));
+    const plan = await deps.planUpdate(root);
+    if (plan.pending.length === 0) {
+      return;
+    }
+    deps.appendJobLine(
+      deps.reason === "watch"
+        ? `Folder watch detected ${plan.pending.length} file(s) to process.`
+        : `Added files. ${plan.pending.length} file(s) to process.`,
+    );
+    if (ks.auto_update) {
+      const auth = await deps.checkAuth(deps.providerId);
+      if (!auth.authenticated) {
+        deps.setPendingPlan(plan.pending, true);
+        const label = providerDisplayLabel(deps.providerId);
+        deps.appendJobLine(
+          `Auto-update waiting for ${label} auth. Review and Confirm when ready. ${signedOutJobMessage(label, auth.reason ?? "")}`,
+        );
+        return;
+      }
+      if (!deps.modelId) {
+        deps.setPendingPlan(plan.pending, true);
+        return;
+      }
+      await deps.startUpdate(root, {
+        model: deps.modelId,
+        provider: deps.providerId,
+        selections: selectionsFromPending(plan.pending),
+        trigger: deps.reason === "watch" ? "watch" : "manual",
+      });
+      return;
+    }
+    deps.setPendingPlan(plan.pending, true);
+    deps.appendJobLine("Review the detected files and Confirm when ready.");
+  } catch (error) {
+    deps.appendJobLine(
+      deps.reason === "watch" ? `Watch plan failed: ${error}` : `Plan failed: ${error}`,
+    );
+  }
+}
+
+export type WatchTriggerDeps = Omit<
+  PresentUpdatePlanDeps,
+  "reason" | "appendJobLine" | "knowledgeSettings"
+> & {
+  appendJobLine: PresentUpdatePlanDeps["appendJobLine"];
 };
 
 export async function handleWatchTriggered(root: string, activeRoot: string | null, deps: WatchTriggerDeps) {
@@ -116,29 +171,36 @@ export async function handleWatchTriggered(root: string, activeRoot: string | nu
   if (!ks.watch_enabled) {
     return;
   }
-  const plan = await deps.planUpdate(root);
-  if (plan.pending.length === 0) {
-    return;
-  }
-  if (ks.auto_update) {
-    const auth = await deps.checkAuth(deps.providerId);
-    if (!auth.authenticated) {
-      deps.setPendingPlan(plan.pending, true);
-      return;
-    }
-    if (!deps.modelId) {
-      deps.setPendingPlan(plan.pending, true);
-      return;
-    }
-    await deps.startUpdate(root, {
-      model: deps.modelId,
-      provider: deps.providerId,
-      selections: selectionsFromPending(plan.pending),
-      trigger: "watch",
-    });
-    return;
-  }
-  deps.setPendingPlan(plan.pending, true);
+  await presentUpdatePlan(root, { ...deps, reason: "watch", knowledgeSettings: ks });
+}
+
+export async function presentUpdatePlanAfterImport(root: string) {
+  const settings = await invoke<Settings>("get_settings");
+  const library = await invoke<{ present?: boolean; provider?: { id: string; model: string } }>(
+    "library_show",
+    { root },
+  );
+  const libraryProvider =
+    library.present === true && library.provider ? library.provider : null;
+  const effective = effectiveProvider({
+    root,
+    settingsProviderId: settings.provider_id?.trim() || "codex",
+    settingsModelId: settings.model_id ?? null,
+    overrides: settings.provider_overrides ?? [],
+    libraryProvider,
+  });
+  await presentUpdatePlan(root, {
+    reason: "import",
+    providerId: effective.providerId,
+    modelId: effective.modelId,
+    getKnowledgeSettings: (r) => invoke("get_knowledge_settings", { root: r }),
+    planUpdate: (r) => invoke("plan_update", { root: r }),
+    startUpdate: (r, input) => invoke<string>("start_update", { root: r, ...input }),
+    checkAuth: (provider) => fetchAuthStatus(provider, true),
+    setPendingPlan: (pending, open) =>
+      useUpdatePlanStore.getState().setPendingPlan(pending, open),
+    appendJobLine: (line) => useJobStore.getState().append(line),
+  });
 }
 
 export function handleWorkerProgressSideEffects(
@@ -179,6 +241,17 @@ export function handleWorkerProgressSideEffects(
   return formatWorkerEvent(ev, ctx.providerLabel);
 }
 
+type WorkerEventsBridgeContext = {
+  activeRoot: string | null;
+  providerId: string;
+  modelId: string | null;
+  queryClient: QueryClient;
+  append: (line: string) => void;
+  finish: (payload: JobFinished) => void;
+  setStep: (step: string | null) => void;
+  startJob: (jobId: string) => void;
+};
+
 export function WorkerEventsBridge() {
   const queryClient = useQueryClient();
   const settings = useSettings();
@@ -189,125 +262,132 @@ export function WorkerEventsBridge() {
   const startJob = useJobStore((s) => s.start);
   const setStep = useJobStore((s) => s.setStep);
   const jobStateRef = useRef({ pendingAutoEmbed: false, pendingAutoQuiz: false });
+  const ctxRef = useRef<WorkerEventsBridgeContext>({
+    activeRoot: null,
+    providerId: "codex",
+    modelId: null,
+    queryClient,
+    append,
+    finish,
+    setStep,
+    startJob,
+  });
 
   useEffect(() => {
-    let unlistenProgress: (() => void) | undefined;
-    let unlistenFinished: (() => void) | undefined;
-    let unlistenFiles: (() => void) | undefined;
+    ctxRef.current = {
+      activeRoot,
+      providerId: effective.providerId,
+      modelId: effective.modelId,
+      queryClient,
+      append,
+      finish,
+      setStep,
+      startJob,
+    };
+  });
 
-    void listen<{ line: string }>("arbor://progress", (event) => {
+  useEffect(() => {
+    const disposeProgress = subscribe<{ line: string }>("arbor://progress", (event) => {
+      const ctx = ctxRef.current;
       try {
         const parsed = JSON.parse(event.payload.line) as WorkerEvent;
         const lastCourse = useUiStore.getState().lastCourse;
         const course =
-          lastCourse && lastCourse.root === activeRoot ? lastCourse.course : null;
-        const formatted = handleWorkerProgressSideEffects(queryClient, parsed, {
-          root: activeRoot,
+          lastCourse && lastCourse.root === ctx.activeRoot ? lastCourse.course : null;
+        const formatted = handleWorkerProgressSideEffects(ctx.queryClient, parsed, {
+          root: ctx.activeRoot,
           course,
-          providerLabel: providerDisplayLabel(effective.providerId),
+          providerLabel: providerDisplayLabel(ctx.providerId),
         });
-        append(formatted.line);
-        setStep(formatted.step);
+        ctx.append(formatted.line);
+        ctx.setStep(formatted.step);
       } catch {
-        append(event.payload.line);
+        ctx.append(event.payload.line);
       }
-    }).then((fn) => {
-      unlistenProgress = fn;
     });
 
-    void listen<JobFinished>("arbor://job-finished", (event) => {
+    const disposeFinished = subscribe<JobFinished>("arbor://job-finished", (event) => {
+      const ctx = ctxRef.current;
       const updateJobIdBefore = useJobStore.getState().activeUpdateJobId;
-      finish(event.payload);
+      ctx.finish(event.payload);
       const lastCourse = useUiStore.getState().lastCourse;
       const currentCourse =
-        lastCourse && lastCourse.root === activeRoot ? lastCourse.course : null;
+        lastCourse && lastCourse.root === ctx.activeRoot ? lastCourse.course : null;
       void (async () => {
         jobStateRef.current = await onJobFinished(
           event.payload,
           {
             activeUpdateJobId: updateJobIdBefore,
             currentCourse,
-            activeRoot,
+            activeRoot: ctx.activeRoot,
             getKnowledgeSettings: (root) =>
               invoke("get_knowledge_settings", { root }),
             invalidateAfterJob: (root, course) =>
-              invalidateAfterJobFinished(queryClient, root, course),
+              invalidateAfterJobFinished(ctx.queryClient, root, course),
             startFlashcardsJob: async (force) => {
-              if (!activeRoot || !currentCourse || !effective.modelId) {
+              if (!ctx.activeRoot || !currentCourse || !ctx.modelId) {
                 return;
               }
               const jobId = await invoke<string>(
                 "start_study_job",
                 flashcardJobArgs(
-                  activeRoot,
+                  ctx.activeRoot,
                   currentCourse,
                   force,
-                  effective.modelId,
-                  effective.providerId,
+                  ctx.modelId,
+                  ctx.providerId,
                 ),
               );
-              startJob(jobId);
+              ctx.startJob(jobId);
             },
             startQuizJob: async (force) => {
-              if (!activeRoot || !currentCourse || !effective.modelId) {
+              if (!ctx.activeRoot || !currentCourse || !ctx.modelId) {
                 return;
               }
               const jobId = await invoke<string>(
                 "start_study_job",
                 quizJobArgs(
-                  activeRoot,
+                  ctx.activeRoot,
                   currentCourse,
                   force,
-                  effective.modelId,
-                  effective.providerId,
+                  ctx.modelId,
+                  ctx.providerId,
                 ),
               );
-              startJob(jobId);
+              ctx.startJob(jobId);
             },
             startEmbedJob: async (root) => {
               const jobId = await invoke<string>("start_embed_job", { root, force: false });
-              startJob(jobId);
+              ctx.startJob(jobId);
             },
           },
           jobStateRef.current,
         );
       })();
-    }).then((fn) => {
-      unlistenFinished = fn;
     });
 
-    void listen<{ root: string }>("arbor://files-changed", (event) => {
-      handleFilesChanged(queryClient, event.payload.root, activeRoot);
-      void handleWatchTriggered(event.payload.root, activeRoot, {
-        queryClient,
+    const disposeFiles = subscribe<{ root: string }>("arbor://files-changed", (event) => {
+      const ctx = ctxRef.current;
+      handleFilesChanged(ctx.queryClient, event.payload.root, ctx.activeRoot);
+      void handleWatchTriggered(event.payload.root, ctx.activeRoot, {
         getKnowledgeSettings: (root) => invoke("get_knowledge_settings", { root }),
         planUpdate: (root) => invoke("plan_update", { root }),
         startUpdate: (root, input) => invoke<string>("start_update", { root, ...input }),
-        checkAuth: (provider) => fetchAuthStatus(provider, false),
+        checkAuth: (provider) => fetchAuthStatus(provider, true),
         setPendingPlan: (pending, open) =>
           useUpdatePlanStore.getState().setPendingPlan(pending, open),
-        providerId: effective.providerId,
-        modelId: effective.modelId,
+        appendJobLine: (line) => useJobStore.getState().append(line),
+        providerId: ctx.providerId,
+        modelId: ctx.modelId,
       });
-    }).then((fn) => {
-      unlistenFiles = fn;
     });
 
     return () => {
-      unlistenProgress?.();
-      unlistenFinished?.();
-      unlistenFiles?.();
+      disposeProgress();
+      disposeFinished();
+      disposeFiles();
     };
-  }, [
-    activeRoot,
-    append,
-    effective.modelId,
-    effective.providerId,
-    finish,
-    queryClient,
-    setStep,
-    startJob,
-  ]);
+  }, [queryClient]);
 
   return null;
 }

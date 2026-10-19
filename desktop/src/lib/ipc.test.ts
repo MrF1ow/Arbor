@@ -21,6 +21,7 @@ describe("ipc", () => {
     clearMocks();
     await expect(invoke("get_settings")).rejects.toThrow(TAURI_UNAVAILABLE);
   });
+
 });
 
 // Compile-time guard: list_providers must not be a Command.
