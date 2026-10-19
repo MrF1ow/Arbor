@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 async function subject() {
-  return await import("../src/theme.ts");
+  return await import("../src/domain/theme.ts");
 }
 
 test("resolves system appearance from the OS flag", async () => {

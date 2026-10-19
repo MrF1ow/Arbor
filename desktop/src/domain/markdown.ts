@@ -284,7 +284,6 @@ export function renderMarkdown(source: string): {
         }
         i -= 1;
         parts.push(renderTable({ header, rows }, pageAttr));
-        atLineStart = false;
         break;
       }
 

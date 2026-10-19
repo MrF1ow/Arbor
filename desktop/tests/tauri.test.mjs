@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 async function subject() {
-  return await import("../src/tauri.ts");
+  return await import("../src/domain/tauri.ts");
 }
 
 test("detects a missing Tauri IPC bridge", async () => {

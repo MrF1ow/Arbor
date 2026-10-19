@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 async function subject() {
-  return await import("../src/library-role.ts");
+  return await import("../src/domain/library-role.ts");
 }
 
 test("library recommendation when no override for active root", async () => {
@@ -65,7 +65,7 @@ test("recommendation label is exact", async () => {
 
 test("index.html library and provider chrome", async () => {
   const { readFile } = await import("node:fs/promises");
-  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const html = await readFile(new URL("../legacy.html", import.meta.url), "utf8");
   for (const id of [
     "library-role-note",
     "library-members",

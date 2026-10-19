@@ -3,8 +3,8 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("brand mark assets and dark theme swap in shell chrome", async () => {
-  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
-  const css = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
+  const html = await readFile(new URL("../legacy.html", import.meta.url), "utf8");
+  const css = await readFile(new URL("../src/legacy/styles.css", import.meta.url), "utf8");
 
   const sidebar = html.slice(
     html.indexOf('<aside class="sidebar">'),

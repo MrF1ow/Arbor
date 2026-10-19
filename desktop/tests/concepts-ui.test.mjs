@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("graph tab exists with generate controls after quiz", async () => {
-  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const html = await readFile(new URL("../legacy.html", import.meta.url), "utf8");
 
   assert.match(html, /data-mode="graph"/);
   assert.match(html, /data-panel="graph"/);
@@ -39,7 +39,7 @@ test("graph tab exists with generate controls after quiz", async () => {
 });
 
 test("concept list items select the clicked node", async () => {
-  const source = await readFile(new URL("../src/main.ts", import.meta.url), "utf8");
+  const source = await readFile(new URL("../src/legacy/main.ts", import.meta.url), "utf8");
   const start = source.indexOf("function renderConceptGraph");
   const end = source.indexOf("\nasync function loadGraph", start);
   const body = source.slice(start, end === -1 ? undefined : end);

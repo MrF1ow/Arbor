@@ -6,7 +6,7 @@ import {
   createStudyWriteQueue,
   isTransientStudyWriteError,
   studyWriteFailingStatus,
-} from "../src/study-writes.ts";
+} from "../src/domain/study-writes.ts";
 
 function memoryStorage() {
   let value = null;

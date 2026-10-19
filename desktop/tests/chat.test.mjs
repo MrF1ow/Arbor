@@ -12,7 +12,7 @@ import {
   unsupportedBanner,
   visibleTranscript,
   workerHistory,
-} from "../src/chat.ts";
+} from "../src/domain/chat.ts";
 
 test("visibleTranscript drops lines before the last session boundary", () => {
   const lines = [
@@ -78,7 +78,7 @@ test("renderAnswerHtml escapes script and onerror payloads", () => {
 });
 
 test("sendChatMessage resets chatInFlight when pending append fails on worker_exit", async () => {
-  const source = await readFile(new URL("../src/main.ts", import.meta.url), "utf8");
+  const source = await readFile(new URL("../src/legacy/main.ts", import.meta.url), "utf8");
   const start = source.indexOf("async function sendChatMessage");
   const end = source.indexOf("\nasync function refreshFolderTools", start);
   const body = source.slice(start, end === -1 ? undefined : end);
@@ -92,7 +92,7 @@ test("sendChatMessage resets chatInFlight when pending append fails on worker_ex
 });
 
 test("clear history confirms before deleting chat jsonl", async () => {
-  const source = await readFile(new URL("../src/main.ts", import.meta.url), "utf8");
+  const source = await readFile(new URL("../src/legacy/main.ts", import.meta.url), "utf8");
   const start = source.indexOf('chatClearBtn.addEventListener("click"');
   assert.ok(start >= 0, "chat clear handler must exist");
   const end = source.indexOf("generateStudyArtifactBtn.addEventListener", start);
@@ -105,7 +105,7 @@ test("clear history confirms before deleting chat jsonl", async () => {
 });
 
 test("sendChatMessage snapshots worker history before appending the user line", async () => {
-  const source = await readFile(new URL("../src/main.ts", import.meta.url), "utf8");
+  const source = await readFile(new URL("../src/legacy/main.ts", import.meta.url), "utf8");
   const start = source.indexOf("async function sendChatMessage");
   const end = source.indexOf("\nasync function refreshFolderTools", start);
   const body = source.slice(start, end === -1 ? undefined : end);
@@ -126,14 +126,14 @@ test("CSP string in tauri.conf.json is unchanged", async () => {
 });
 
 test("chat Ask mode button is active by default in HTML", async () => {
-  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const html = await readFile(new URL("../legacy.html", import.meta.url), "utf8");
   const askMatch = html.match(/<button[^>]*id="chat-mode-ask"[^>]*>/);
   assert.ok(askMatch, "chat-mode-ask must exist");
   assert.match(askMatch[0], /\bactive\b/, "Ask button must include active class");
 });
 
 test("chat answers use UI font, not read serif", async () => {
-  const css = await readFile(new URL("../src/styles.css", import.meta.url), "utf8");
+  const css = await readFile(new URL("../src/legacy/styles.css", import.meta.url), "utf8");
   const blockMatch = css.match(
     /\.chat-turn\.chat-assistant \.chat-answer\s*\{[^}]+\}/,
   );
@@ -143,7 +143,7 @@ test("chat answers use UI font, not read serif", async () => {
 });
 
 test("chat tab and panel ids exist after graph tab", async () => {
-  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const html = await readFile(new URL("../legacy.html", import.meta.url), "utf8");
   const graphIndex = html.indexOf('data-mode="graph"');
   const chatIndex = html.indexOf('data-mode="chat"');
   assert.ok(graphIndex >= 0 && chatIndex > graphIndex, "Chat tab must follow Graph");

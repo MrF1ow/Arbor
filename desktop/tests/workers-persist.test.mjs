@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("persist includes workers in saved settings", async () => {
-  const source = await readFile(new URL("../src/main.ts", import.meta.url), "utf8");
+  const source = await readFile(new URL("../src/legacy/main.ts", import.meta.url), "utf8");
   const persistStart = source.indexOf("async function persist()");
   assert.ok(persistStart >= 0, "persist must exist");
   const persistEnd = source.indexOf("\nasync function loadModels", persistStart);

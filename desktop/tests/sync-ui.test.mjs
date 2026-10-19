@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("successful sync with head_changed reloads the library like update commit", async () => {
-  const source = await readFile(new URL("../src/main.ts", import.meta.url), "utf8");
+  const source = await readFile(new URL("../src/legacy/main.ts", import.meta.url), "utf8");
   const reloadStart = source.indexOf("function reloadLibraryAfterSync");
   assert.ok(reloadStart >= 0, "reloadLibraryAfterSync must exist");
   const reloadEnd = source.indexOf("\nasync function runSyncNow", reloadStart);
@@ -31,7 +31,7 @@ test("successful sync with head_changed reloads the library like update commit",
 });
 
 test("sync conflict list marks resolved files and settings show remote note", async () => {
-  const mainSource = await readFile(new URL("../src/main.ts", import.meta.url), "utf8");
+  const mainSource = await readFile(new URL("../src/legacy/main.ts", import.meta.url), "utf8");
   const renderStart = mainSource.indexOf("function renderSyncConflictSession");
   assert.ok(renderStart >= 0, "renderSyncConflictSession must exist");
   const renderEnd = mainSource.indexOf("\nasync function openSyncConflictDialog", renderStart);
@@ -45,6 +45,6 @@ test("sync conflict list marks resolved files and settings show remote note", as
   assert.match(refreshBody, /syncRemoteNoteEl/);
   assert.match(refreshBody, /show\.remote_note/);
 
-  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const html = await readFile(new URL("../legacy.html", import.meta.url), "utf8");
   assert.match(html, /id="sync-remote-note"/);
 });

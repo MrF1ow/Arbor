@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("settings Skills panel markup and button labels", async () => {
-  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const html = await readFile(new URL("../legacy.html", import.meta.url), "utf8");
   assert.match(html, /id="skill-index-source"/);
   assert.match(html, /id="skill-index-ref"/);
   assert.match(html, /id="skill-index-save"/);
@@ -14,7 +14,7 @@ test("settings Skills panel markup and button labels", async () => {
   assert.match(html, />Save index</);
   assert.match(html, />Browse index</);
 
-  const mainSource = await readFile(new URL("../src/main.ts", import.meta.url), "utf8");
+  const mainSource = await readFile(new URL("../src/legacy/main.ts", import.meta.url), "utf8");
   assert.match(mainSource, /textContent = "Install"/);
   assert.match(mainSource, /textContent = "Confirm permissions"/);
   assert.match(mainSource, /textContent = "Run"/);
@@ -23,7 +23,7 @@ test("settings Skills panel markup and button labels", async () => {
 });
 
 test("persist stores skill grants and run respects permission confirmation", async () => {
-  const source = await readFile(new URL("../src/main.ts", import.meta.url), "utf8");
+  const source = await readFile(new URL("../src/legacy/main.ts", import.meta.url), "utf8");
   const persistStart = source.indexOf("async function persist()");
   assert.ok(persistStart >= 0, "persist must exist");
   const persistEnd = source.indexOf("\nasync function loadModels", persistStart);

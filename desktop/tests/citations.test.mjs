@@ -4,7 +4,7 @@ import test from "node:test";
 
 async function subject() {
   try {
-    return await import("../src/citations.ts");
+    return await import("../src/domain/citations.ts");
   } catch (error) {
     assert.fail(`citations module could not load: ${error}`);
   }
@@ -53,7 +53,7 @@ test("builds study job arguments for citations", async () => {
 });
 
 test("jobs panel exposes a citations generate control", async () => {
-  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const html = await readFile(new URL("../legacy.html", import.meta.url), "utf8");
 
   for (const id of [
     "generate-citations",

@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("settings Workers panel markup and heading", async () => {
-  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const html = await readFile(new URL("../legacy.html", import.meta.url), "utf8");
   assert.match(html, /id="worker-list"/);
   assert.match(html, /id="worker-label"/);
   assert.match(html, /id="worker-host"/);
@@ -22,7 +22,7 @@ test("settings Workers panel markup and heading", async () => {
 });
 
 test("workers UI wiring in main.ts", async () => {
-  const source = await readFile(new URL("../src/main.ts", import.meta.url), "utf8");
+  const source = await readFile(new URL("../src/legacy/main.ts", import.meta.url), "utf8");
   assert.match(source, /"test_worker_connection"/);
 
   const removeStart = source.indexOf("async function removeWorker");
