@@ -5,6 +5,7 @@ import { Toaster } from "~/components/ui/toast";
 import { TooltipProvider } from "~/components/ui/tooltip";
 import { AppearanceSync } from "~/lib/appearance-sync";
 import { WorkerEventsBridge } from "~/lib/events";
+import { EffectiveProviderSync } from "~/lib/queries/effective-provider";
 import { StudyWritesProvider } from "~/lib/study-writes";
 
 export const Route = createRootRoute({
@@ -16,6 +17,7 @@ function RootLayout() {
     <ThemeProvider>
       <TooltipProvider>
         <StudyWritesProvider>
+          <EffectiveProviderSync />
           <WorkerEventsBridge />
           <AppearanceSync />
           <Outlet />

@@ -1,5 +1,6 @@
+import type { QueryClient } from "@tanstack/react-query";
 import { useQueryClient } from "@tanstack/react-query";
-import { createContext, useContext, useEffect, useMemo } from "react";
+import { createContext, useContext, useEffect } from "react";
 import { toast } from "sonner";
 
 import { createStudyWriteQueue, type StudyWrite } from "~/domain/study-writes";
@@ -11,6 +12,10 @@ type StudyWriteQueue = ReturnType<typeof createStudyWriteQueue>;
 
 const StudyWritesContext = createContext<StudyWriteQueue | null>(null);
 
+let moduleStudyWriteQueue: StudyWriteQueue | null = null;
+let moduleQueueClient: QueryClient | null = null;
+let moduleQueueRestored = false;
+
 function studyWriteStatusLabel(pending: number, failing: boolean): string | null {
   if (!failing || pending === 0) {
     return null;
@@ -18,36 +23,55 @@ function studyWriteStatusLabel(pending: number, failing: boolean): string | null
   return pending === 1 ? "1 unsaved · Retry" : `${pending} unsaved · Retry`;
 }
 
+function ensureStudyWriteQueue(
+  queryClient: QueryClient,
+  setStatus: (status: { pending: number; failing: boolean }) => void,
+): StudyWriteQueue {
+  if (moduleStudyWriteQueue && moduleQueueClient === queryClient) {
+    return moduleStudyWriteQueue;
+  }
+  moduleQueueClient = queryClient;
+  moduleStudyWriteQueue = createStudyWriteQueue({
+    send: async (w: StudyWrite) => {
+      await invoke("study_progress", w.args);
+    },
+    storage: window.localStorage,
+    onStatus: setStatus,
+    onSent: (w) => {
+      void queryClient.invalidateQueries({
+        queryKey: qk.courseOverview(w.root, w.course),
+      });
+      const action = w.args.action;
+      if (action === "quiz") {
+        void queryClient.invalidateQueries({
+          queryKey: qk.quizProgress(w.root, w.course),
+        });
+      }
+    },
+    onDropped: (_w, error) => {
+      const reason = String(error instanceof Error ? error.message : error);
+      toast.error(`A grade couldn't be saved: ${reason}`);
+    },
+  });
+  return moduleStudyWriteQueue;
+}
+
+export function resetStudyWriteQueueForTests() {
+  moduleStudyWriteQueue = null;
+  moduleQueueClient = null;
+  moduleQueueRestored = false;
+}
+
 export function StudyWritesProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
   const setStatus = useStudyWritesStore((s) => s.setStatus);
-  const queue = useMemo(() => {
-    const q = createStudyWriteQueue({
-      send: async (w: StudyWrite) => {
-        await invoke("study_progress", w.args);
-      },
-      storage: window.localStorage,
-      onStatus: setStatus,
-      onSent: (w) => {
-        void queryClient.invalidateQueries({
-          queryKey: qk.courseOverview(w.root, w.course),
-        });
-        const action = w.args.action;
-        if (action === "quiz_answer" || action === "quiz_progress") {
-          void queryClient.invalidateQueries({
-            queryKey: qk.quizProgress(w.root, w.course),
-          });
-        }
-      },
-      onDropped: (_w, error) => {
-        const reason = String(error instanceof Error ? error.message : error);
-        toast.error(`A grade couldn't be saved: ${reason}`);
-      },
-    });
-    return q;
-  }, [queryClient, setStatus]);
+  const queue = ensureStudyWriteQueue(queryClient, setStatus);
 
   useEffect(() => {
+    if (moduleQueueRestored) {
+      return;
+    }
+    moduleQueueRestored = true;
     queue.restore();
   }, [queue]);
 
