@@ -2,6 +2,18 @@
 
 Tauri v2 shell for Arbor (package **5.1.0**). Drives the `arbor-worker` CLI (see `../python`).
 
+## 6.0 UI rebuild (in progress)
+
+The new React entry is `index.html` → `src/main.tsx`. The previous vanilla UI remains at **`/legacy.html`** in dev for side-by-side comparison (it is not part of the production bundle).
+
+Quality checks from `desktop/`:
+
+```bash
+npm test          # node regression tests + vitest unit tests
+npm run lint
+npm run build
+```
+
 The UI is the Version 3 shell plus the Version 4 tutor. First delivery was **v2.1.0**. Package **2.2.0** adds the study loop. Package **2.3.0** is the Mac-batch fix release. Version 3 completed at **3.0.0** after the 2026-10-17 Linux live run. Package **3.1.0** adds the worker `chat` command without a Chat tab. Package **3.2.0** adds the Chat tab. Package **3.3.0** adds review scheduling and weak topics. Package **3.4.0** adds study plans, recommendations, and make-card-from-selection. Package **3.5.0** adds Ollama, LM Studio, OpenAI API, and Anthropic API with OS keyring storage for API keys. Version 4 closed after the 2026-10-18 Linux live run (prior package in CHANGELOG). Package **4.1.0** adds Settings → Sync (git remote sync). Package **4.2.0** adds shared libraries and team workspaces. Package **4.3.0** added Settings → Skills (skill packages and the in-repo marketplace). Package **4.4.0** adds library roles and a shared provider profile. Package **4.5.0** adds Settings → Workers (SSH remote workers; local commit). Package **5.0.0** closes Version 5 after the collaboration live run. Mac proof does not block the tag. Sidebar library, course workspace with Notes / Flashcards / Quiz / Graph / Chat tabs, in-app digest preview, and a collapsed bottom inspector for Update and job logs.
 
 Design spec: [`docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md`](../docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md). Reference mockup: [`docs/mockups/v3-shell.html`](../docs/mockups/v3-shell.html).
