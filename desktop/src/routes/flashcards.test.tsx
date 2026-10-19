@@ -3,9 +3,10 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clearMocks } from "@tauri-apps/api/mocks";
 
+import * as flashcardsDomain from "~/domain/flashcards";
 import { resetAuthRefreshForTests } from "~/lib/auth-refresh";
 import { resetStudyWriteQueueForTests } from "~/lib/study-writes";
-import { fixtureCourseOverview } from "~/test/fixtures/data";
+import { fixtureCourseOverview, fixtureSettings } from "~/test/fixtures/data";
 import { qk } from "~/lib/queries/keys";
 import { FIXTURE_ROOT_FALL } from "~/test/fixtures/data";
 import {
@@ -109,7 +110,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
 
   it("optimistically advances after mastered grade while study_progress is pending", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/flashcards", {
+    const { queryClient } = await renderAppAtRoute("/course/cell-biology/flashcards", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           return smallDeck;
@@ -133,6 +134,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
     await waitFor(() => {
       expect(screen.getByText("Question two")).toBeInTheDocument();
     });
+    expect(screen.getByText(/Due today · 1/i)).toBeInTheDocument();
     const gradeCall = getMockIpcCalls().find(
       (c) =>
         c.cmd === "study_progress" &&
@@ -146,9 +148,48 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
       heading: "Membrane structure",
     });
     expect((gradeCall?.args as { writeId?: string }).writeId).toBeTruthy();
+    const cached = queryClient.getQueryData<typeof fixtureCourseOverview>(
+      qk.courseOverview(FIXTURE_ROOT_FALL, "cell-biology"),
+    );
+    expect(cached?.due.due_ids).toEqual(["fc-2"]);
+    expect(cached?.due.count).toBe(13);
   });
 
-  it("due again requeues and mastered drops due count", async () => {
+  it("due again requeues with unchanged due count", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/flashcards", {
+      read_study_json: (payload) => {
+        if (readStudyFile(payload) === "flashcards.json") {
+          return smallDeck;
+        }
+        return { schema_version: 1, course: "cell-biology", failures: [] };
+      },
+      study_progress: (args) => {
+        if (studyProgressAction(args) === "overview") {
+          return {
+            ...fixtureCourseOverview,
+            due: { due_ids: ["fc-1", "fc-2"], count: 2, deck_count: 3 },
+          };
+        }
+        return {};
+      },
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/Due today · 2/i)).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole("button", { name: /^Flip$/i }));
+    await user.click(screen.getByRole("button", { name: /^Again/i }));
+    await waitFor(() => {
+      expect(screen.getByText("Question two")).toBeInTheDocument();
+    });
+    expect(screen.getByText(/Due today · 2/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^Next/i }));
+    await waitFor(() => {
+      expect(screen.getByText("Question one")).toBeInTheDocument();
+    });
+  });
+
+  it("due mastered drops due count", async () => {
     const user = userEvent.setup();
     await renderAppAtRoute("/course/cell-biology/flashcards", {
       read_study_json: (payload) => {
@@ -195,6 +236,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
     await waitFor(() => {
       expect(screen.getByText("Question two")).toBeInTheDocument();
     });
+    expect(screen.getByText("2 / 3")).toBeInTheDocument();
   });
 
   it("toggles deck mode and rebuilds the session", async () => {
@@ -316,6 +358,9 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
     });
     await waitForFlashcardsReady();
     expect(screen.getByText("Unverified")).toBeInTheDocument();
+    const user = userEvent.setup();
+    await user.hover(screen.getByText("Unverified"));
+    expect(await screen.findByText("No matching digest span")).toBeInTheDocument();
   });
 
   it("shows stale badge when artifact is stale", async () => {
@@ -490,6 +535,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
     await waitForFlashcardsReady();
     await user.click(screen.getByRole("button", { name: /Next/i }));
     expect(screen.getByText("Question two")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^Flip$/i }));
     const refreshed = {
       ...smallDeck,
       cards: smallDeck.cards.map((c) =>
@@ -499,7 +545,287 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
     queryClient.setQueryData(qk.studyJson(FIXTURE_ROOT_FALL, "cell-biology", "flashcards.json"), refreshed);
     await waitFor(() => {
       expect(screen.getByText("Question two")).toBeInTheDocument();
+      expect(screen.getByText("Answer two refreshed")).toBeInTheDocument();
     });
     expect(screen.getByText("2 / 2")).toBeInTheDocument();
+  });
+
+  it("sends empty heading when source heading is null", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/flashcards", {
+      read_study_json: (payload) => {
+        if (readStudyFile(payload) === "flashcards.json") {
+          return smallDeck;
+        }
+        return { schema_version: 1, course: "cell-biology", failures: [] };
+      },
+      study_progress: (args) => {
+        if (studyProgressAction(args) === "overview") {
+          return {
+            ...fixtureCourseOverview,
+            due: { due_ids: ["fc-1", "fc-2"], count: 2, deck_count: 3 },
+          };
+        }
+        if (studyProgressAction(args) === "grade") {
+          return new Promise(() => {});
+        }
+        return {};
+      },
+    });
+    await waitForFlashcardsReady();
+    await user.click(screen.getByRole("button", { name: /Next/i }));
+    await user.click(screen.getByRole("button", { name: /^Flip$/i }));
+    await user.keyboard("3");
+    const gradeCall = getMockIpcCalls().find(
+      (c) =>
+        c.cmd === "study_progress" &&
+        (c.args as { action?: string; id?: string }).action === "grade" &&
+        (c.args as { id?: string }).id === "fc-2",
+    );
+    expect(gradeCall?.args).toMatchObject({ heading: "" });
+  });
+
+  it("ignores flashcard keys while a dialog is open", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/flashcards", {
+      read_study_json: (payload) => {
+        if (readStudyFile(payload) === "flashcards.json") {
+          return smallDeck;
+        }
+        return { schema_version: 1, course: "cell-biology", failures: [] };
+      },
+    });
+    await waitForFlashcardsReady();
+    await user.keyboard(" ");
+    expect(screen.getByText("Answer one")).toBeInTheDocument();
+    const overlay = document.createElement("div");
+    overlay.setAttribute("data-slot", "dialog-overlay");
+    overlay.setAttribute("data-open", "");
+    document.body.appendChild(overlay);
+    await user.keyboard("1");
+    expect(screen.getByText("Answer one")).toBeInTheDocument();
+    overlay.remove();
+  });
+
+  it("does not grade on Ctrl+1 and navigates to Notes", async () => {
+    const user = userEvent.setup();
+    const { router } = await renderAppAtRoute("/course/cell-biology/flashcards", {
+      read_study_json: (payload) => {
+        if (readStudyFile(payload) === "flashcards.json") {
+          return smallDeck;
+        }
+        return { schema_version: 1, course: "cell-biology", failures: [] };
+      },
+    });
+    await waitForFlashcardsReady();
+    await user.keyboard(" ");
+    const gradesBefore = getMockIpcCalls().filter(
+      (c) => c.cmd === "study_progress" && (c.args as { action?: string }).action === "grade",
+    ).length;
+    await user.keyboard("{Control>}1{/Control}");
+    await waitFor(() => {
+      expect(router.state.location.pathname).toContain("/notes");
+    });
+    const gradesAfter = getMockIpcCalls().filter(
+      (c) => c.cmd === "study_progress" && (c.args as { action?: string }).action === "grade",
+    ).length;
+    expect(gradesAfter).toBe(gradesBefore);
+  });
+
+  it("removes flashcard key listener after leaving the view", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/flashcards", {
+      read_study_json: (payload) => {
+        if (readStudyFile(payload) === "flashcards.json") {
+          return smallDeck;
+        }
+        return { schema_version: 1, course: "cell-biology", failures: [] };
+      },
+    });
+    await waitForFlashcardsReady();
+    await user.click(screen.getByRole("link", { name: /Notes/i }));
+    await waitFor(() => {
+      expect(screen.getByText("Course overview")).toBeInTheDocument();
+    });
+    const gradesBefore = getMockIpcCalls().filter(
+      (c) => c.cmd === "study_progress" && (c.args as { action?: string }).action === "grade",
+    ).length;
+    await user.keyboard("3");
+    const gradesAfter = getMockIpcCalls().filter(
+      (c) => c.cmd === "study_progress" && (c.args as { action?: string }).action === "grade",
+    ).length;
+    expect(gradesAfter).toBe(gradesBefore);
+  });
+
+  it("card focus stays in due mode when the card is already due", async () => {
+    await renderAppAtRoute("/course/cell-biology/flashcards?card=fc-1", {
+      read_study_json: (payload) => {
+        if (readStudyFile(payload) === "flashcards.json") {
+          return smallDeck;
+        }
+        return { schema_version: 1, course: "cell-biology", failures: [] };
+      },
+    });
+    await waitFor(() => {
+      expect(screen.getByText("Question one")).toBeInTheDocument();
+    });
+    expect(screen.getByText(/Due today · 2/i)).toBeInTheDocument();
+    expect(screen.getByText("1 / 2")).toBeInTheDocument();
+  });
+
+  it("unknown card param stays in due mode and clears search", async () => {
+    const { router } = await renderAppAtRoute("/course/cell-biology/flashcards?card=missing-id", {
+      read_study_json: (payload) => {
+        if (readStudyFile(payload) === "flashcards.json") {
+          return smallDeck;
+        }
+        return { schema_version: 1, course: "cell-biology", failures: [] };
+      },
+    });
+    await waitForFlashcardsReady();
+    expect(screen.getByText("1 / 2")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(router.state.location.searchStr).not.toContain("card=");
+    });
+  });
+
+  it("refetches cached deck after flush before focusing card param", async () => {
+    const deckWithNew = {
+      ...smallDeck,
+      cards: [
+        ...smallDeck.cards,
+        {
+          id: "fc-appended-1",
+          front: "Appended question",
+          back: "Appended answer",
+          tags: [],
+          source: { digest: "2026-09-12-membranes", heading: null, page: null },
+        },
+      ],
+    };
+    await renderAppAtRoute("/course/cell-biology/flashcards?card=fc-appended-1", {
+      read_study_json: (payload) => {
+        if (readStudyFile(payload) === "flashcards.json") {
+          return deckWithNew;
+        }
+        return { schema_version: 1, course: "cell-biology", failures: [] };
+      },
+    });
+    await waitFor(
+      () => {
+        expect(screen.getByText("Appended question")).toBeInTheDocument();
+      },
+      { timeout: 8000 },
+    );
+    expect(
+      getMockIpcCalls().some(
+        (call) =>
+          call.cmd === "read_study_json" &&
+          (call.args as { file?: string }).file === "flashcards.json",
+      ),
+    ).toBe(true);
+  });
+
+  it("shows Select a model when generating without a model", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/flashcards", {
+      get_settings: () => ({ ...fixtureSettings, model_id: null }),
+      read_study_json: (payload) => {
+        if (readStudyFile(payload) === "flashcards.json") {
+          throw new Error("ENOENT");
+        }
+        return { schema_version: 1, course: readStudyCourse(payload), failures: [] };
+      },
+    });
+    await waitFor(
+      () => {
+        expect(screen.getByRole("button", { name: /^Generate$/i })).toBeInTheDocument();
+      },
+      { timeout: 8000 },
+    );
+    await user.click(screen.getByRole("button", { name: /^Generate$/i }));
+    expect(screen.getByText("Select a model in Settings.")).toBeInTheDocument();
+  });
+
+  it("disables generate while a study job is running", async () => {
+    useJobStore.setState({ status: "running" });
+    await renderAppAtRoute("/course/cell-biology/flashcards", {
+      read_study_json: (payload) => {
+        if (readStudyFile(payload) === "flashcards.json") {
+          throw new Error("ENOENT");
+        }
+        return { schema_version: 1, course: readStudyCourse(payload), failures: [] };
+      },
+    });
+    await waitFor(
+      () => {
+        expect(screen.getByRole("button", { name: /^Generate$/i })).toBeDisabled();
+      },
+      { timeout: 8000 },
+    );
+  });
+
+  it("shows empty state when deck course mismatches route", async () => {
+    await renderAppAtRoute("/course/cell-biology/flashcards", {
+      read_study_json: (payload) => {
+        if (readStudyFile(payload) === "flashcards.json") {
+          return { ...smallDeck, course: "other-course" };
+        }
+        return { schema_version: 1, course: readStudyCourse(payload), failures: [] };
+      },
+    });
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          /No flashcards yet for Cell Biology\. Generate a deck from your digests\./,
+        ),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("shows No cards in deck in full mode", async () => {
+    const user = userEvent.setup();
+    const createReviewSpy = vi
+      .spyOn(flashcardsDomain, "createReview")
+      .mockReturnValue({ cards: [], index: 0, flipped: false });
+    await renderAppAtRoute("/course/cell-biology/flashcards", {
+      read_study_json: (payload) => {
+        if (readStudyFile(payload) === "flashcards.json") {
+          return smallDeck;
+        }
+        return { schema_version: 1, course: "cell-biology", failures: [] };
+      },
+    });
+    await waitForFlashcardsReady();
+    await user.click(screen.getByText(/Full deck · 86/i));
+    expect(screen.getByText("No cards in deck.")).toBeInTheDocument();
+    createReviewSpy.mockRestore();
+  });
+
+  it("Study full deck switches to the full deck session", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/flashcards", {
+      read_study_json: (payload) => {
+        if (readStudyFile(payload) === "flashcards.json") {
+          return smallDeck;
+        }
+        return { schema_version: 1, course: "cell-biology", failures: [] };
+      },
+      study_progress: (args) => {
+        if (studyProgressAction(args) === "overview") {
+          return {
+            ...fixtureCourseOverview,
+            due: { due_ids: [], count: 0, deck_count: 3 },
+          };
+        }
+        return {};
+      },
+    });
+    await waitFor(() => {
+      expect(screen.getByText("No cards due today.")).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole("button", { name: /Study full deck/i }));
+    expect(screen.getByText("Question one")).toBeInTheDocument();
+    expect(screen.getByText("1 / 3")).toBeInTheDocument();
   });
 });
