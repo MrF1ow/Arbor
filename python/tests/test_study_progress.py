@@ -4,12 +4,16 @@ import io
 import json
 import contextlib
 import subprocess
+import threading
+import uuid
 from datetime import timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
 from arbor_worker import cli
+from arbor_worker.recommendations import _load_progress_doc
 from arbor_worker.study_progress import (
     StudyProgressError,
     parse_utc_now,
@@ -402,7 +406,8 @@ def test_grade_only_touches_progress_json(git_repo: Path, git):
         digest="digests/a.md", heading="Cells",
     )
     status = g("status", "--porcelain", "-uall")
-    assert status.strip() == "?? .arbor/users/test@arbor.local/Biology/progress.json"
+    assert "?? .arbor/users/test@arbor.local/Biology/progress.json" in status
+    assert "?? .arbor/locks/" not in status
     assert g("log", "--oneline", "-1").strip().endswith("biology course")
 
 
@@ -492,6 +497,29 @@ def test_cli_study_progress_show(git_repo: Path):
     assert data["course"] == "Biology"
 
 
+def test_cli_study_progress_overview(git_repo: Path):
+    _course_dir(git_repo)
+    code, out, err = _run_cli(
+        [
+            "study-progress",
+            "--root",
+            str(git_repo),
+            "--course",
+            "Biology",
+            "overview",
+        ]
+    )
+    assert code == 0
+    assert err == ""
+    data = json.loads(out.strip())
+    assert "due" in data
+    assert "weak" in data
+    assert "recommend" in data
+    assert "due_ids" in data["due"]
+    assert "topics" in data["weak"]
+    assert "items" in data["recommend"]
+
+
 def test_cli_study_progress_grade_commits_then_show_is_noop(git_repo: Path, git):
     _course_dir(git_repo)
     g = git(git_repo)
@@ -544,3 +572,186 @@ def test_quiz_updates_questions(git_repo: Path):
     _course_dir(git_repo)
     doc = study_progress_quiz(git_repo, "Biology", "q1", "wrong")
     assert doc["questions"]["q1"] == {"seen": 1, "correct": 0, "wrong": 1}
+
+
+def test_grade_write_id_is_idempotent(git_repo: Path):
+    _course_dir(git_repo)
+    study_progress_grade(
+        git_repo,
+        "Biology",
+        "fc_idem",
+        "mastered",
+        now=CLOCK,
+        write_id="write-once",
+    )
+    study_progress_grade(
+        git_repo,
+        "Biology",
+        "fc_idem",
+        "mastered",
+        now=CLOCK,
+        write_id="write-once",
+    )
+    doc = study_progress_show(git_repo, "Biology")
+    card = doc["cards"]["fc_idem"]
+    assert card["seen"] == 1
+    assert card["correct"] == 1
+
+
+def test_cli_grade_commit_failure_still_exits_zero(git_repo: Path, monkeypatch):
+    _course_dir(git_repo)
+    from arbor_worker.gitstate import GitStateError
+
+    def boom(*_args, **_kwargs):
+        raise GitStateError("dirty tree")
+
+    monkeypatch.setattr("arbor_worker.commands._commit_study_progress_if_dirty", boom)
+    code, out, err = _run_cli(
+        [
+            "study-progress",
+            "--root",
+            str(git_repo),
+            "--course",
+            "Biology",
+            "grade",
+            "--id",
+            "fc_commit",
+            "--result",
+            "again",
+            "--write-id",
+            "w-commit",
+        ]
+    )
+    assert code == 0
+    assert "warning:" in err
+    json.loads(out.strip())
+    doc = study_progress_show(git_repo, "Biology")
+    assert doc["cards"]["fc_commit"]["seen"] == 1
+
+
+@pytest.mark.parametrize(
+    "load_progress",
+    [
+        lambda root: study_progress_show(root, "Biology"),
+        lambda root: study_progress_due(root, "Biology", now=CLOCK),
+        lambda root: study_progress_weak(root, "Biology"),
+        lambda root: _load_progress_doc(root, "Biology"),
+    ],
+    ids=["show", "due", "weak", "recommendations_load"],
+)
+def test_legacy_migration_holds_lock_during_build(
+    git_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    load_progress,
+):
+    from arbor_worker import study_progress as sp
+
+    _course_dir(git_repo)
+    legacy_dir = git_repo / ".arbor" / "progress"
+    legacy_dir.mkdir(parents=True)
+    (legacy_dir / "Biology.flashcards.json").write_text(
+        json.dumps({"fc_mig": {"seen": 2, "correct": 1, "wrong": 1}}) + "\n",
+        encoding="utf-8",
+    )
+    _write_deck(
+        git_repo,
+        ["fc_mig", "fc_new"],
+        {"fc_mig": {"digest": "digests/a.md", "heading": "Cells"}},
+    )
+    assert not progress_path(git_repo, "Biology").is_file()
+
+    in_legacy_build = threading.Event()
+    finish_legacy_build = threading.Event()
+    real_build = sp._build_from_legacy
+
+    def blocking_build(root: Path, course: str):
+        in_legacy_build.set()
+        assert finish_legacy_build.wait(timeout=10)
+        return real_build(root, course)
+
+    monkeypatch.setattr(sp, "_build_from_legacy", blocking_build)
+
+    load_errors: list[BaseException] = []
+    grade_errors: list[BaseException] = []
+
+    def run_load() -> None:
+        try:
+            load_progress(git_repo)
+        except BaseException as error:
+            load_errors.append(error)
+
+    def run_grade() -> None:
+        try:
+            assert in_legacy_build.wait(timeout=10)
+            study_progress_grade(git_repo, "Biology", "fc_new", "mastered", now=CLOCK)
+        except BaseException as error:
+            grade_errors.append(error)
+
+    load_thread = threading.Thread(target=run_load)
+    grade_thread = threading.Thread(target=run_grade)
+    load_thread.start()
+    grade_thread.start()
+    assert in_legacy_build.wait(timeout=10)
+    finish_legacy_build.set()
+    load_thread.join(timeout=10)
+    grade_thread.join(timeout=10)
+    assert not load_errors
+    assert not grade_errors
+
+    doc = study_progress_show(git_repo, "Biology")
+    assert doc["cards"]["fc_mig"]["seen"] == 2
+    assert doc["cards"]["fc_new"]["seen"] == 1
+    assert doc["cards"]["fc_new"]["correct"] == 1
+
+
+def test_concurrent_grades_persist_all_entries(git_repo: Path):
+    _course_dir(git_repo)
+    card_ids = [f"fc_{slot}_{index}" for slot in range(2) for index in range(20)]
+    _write_deck(git_repo, card_ids)
+
+    def grade_batch(slot: int) -> None:
+        for index in range(20):
+            study_progress_grade(
+                git_repo,
+                "Biology",
+                f"fc_{slot}_{index}",
+                "mastered",
+                now=CLOCK,
+            )
+
+    threads = [threading.Thread(target=grade_batch, args=(slot,)) for slot in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    doc = study_progress_show(git_repo, "Biology")
+    assert len(doc["cards"]) == 40
+
+
+def test_write_atomic_temp_names_unique(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    from arbor_worker import study_progress as sp
+
+    counter = {"n": 0}
+    captured: list[str] = []
+    real_write_text = Path.write_text
+
+    def fake_uuid4():
+        counter["n"] += 1
+        return type("U", (), {"hex": f"{counter['n']:08x}{'0' * 24}"})()
+
+    def write_text(self, *args, **kwargs):
+        if ".tmp-" in self.name:
+            captured.append(self.name)
+        return real_write_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(sp.uuid, "uuid4", fake_uuid4)
+    monkeypatch.setattr(Path, "write_text", write_text)
+    target = tmp_path / "progress.json"
+    sp._write_atomic(target, '{"a":1}\n')
+    sp._write_atomic(target, '{"a":2}\n')
+    assert len(captured) == 2
+    assert captured[0] != captured[1]
+    assert str(threading.get_ident()) in captured[0]
+    assert "00000001" in captured[0]
+    assert "00000002" in captured[1]

@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import argparse
+import sys
 
 from arbor_worker import __version__
-from arbor_worker.provider.registry import provider_choices
-from arbor_worker.study_progress import _MISSING
 
 
 def build_parser() -> argparse.ArgumentParser:
+    from arbor_worker.provider.registry import provider_choices
+    from arbor_worker.study_progress import _MISSING
     parser = argparse.ArgumentParser(prog="arbor-worker")
     parser.add_argument("--version", action="version", version=__version__)
     sub = parser.add_subparsers(dest="command")
@@ -119,6 +120,12 @@ def build_parser() -> argparse.ArgumentParser:
         const="",
         help="Source heading.",
     )
+    sp_grade.add_argument(
+        "--write-id",
+        default=None,
+        dest="write_id",
+        help="Idempotency token for retried grade writes.",
+    )
 
     sp_quiz = sp_sub.add_parser("quiz", help="Record a quiz answer result.")
     sp_quiz.add_argument("--id", required=True, dest="question_id", help="Question id.")
@@ -132,8 +139,18 @@ def build_parser() -> argparse.ArgumentParser:
         const="",
         help="Source heading.",
     )
+    sp_quiz.add_argument(
+        "--write-id",
+        default=None,
+        dest="write_id",
+        help="Idempotency token for retried quiz writes.",
+    )
 
     sp_sub.add_parser("recommend", help="Print deterministic study recommendations.")
+    sp_sub.add_parser(
+        "overview",
+        help="Print due, weak topics, and recommendations in one JSON object.",
+    )
 
     plan = sub.add_parser("study-plan", help="Generate study/plan.md for a course.")
     plan.add_argument("--root", required=True, help="Path to the Knowledge git repo.")
@@ -247,6 +264,15 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    if argv is None:
+        argv = sys.argv[1:]
+    if argv == ["--version"]:
+        print(__version__)
+        return 0
+    if argv[:1] == ["serve"]:
+        from arbor_worker.serve import main as serve_main
+
+        return serve_main()
     parser = build_parser()
     try:
         args = parser.parse_args(argv)

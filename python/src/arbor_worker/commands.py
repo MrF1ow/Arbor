@@ -757,6 +757,19 @@ def cmd_study_progress(args) -> int:
         emit_json_line(doc)
         return 0
 
+    def finish_mutation(doc: dict) -> int:
+        try:
+            _commit_study_progress_if_dirty(
+                root,
+                course,
+                f"study: {course} progress",
+                emitter,
+            )
+        except GitStateError as error:
+            print(f"warning: {error}", file=sys.stderr)
+        emit_json_line(doc)
+        return 0
+
     try:
         if action == "show":
             return finish(study_progress_show(root, course))
@@ -775,8 +788,9 @@ def cmd_study_progress(args) -> int:
                 now=now,
                 digest=args.digest,
                 heading=args.heading,
+                write_id=getattr(args, "write_id", None),
             )
-            return finish(doc)
+            return finish_mutation(doc)
         if action == "quiz":
             now = parse_utc_now(args.now) if args.now else None
             doc = study_progress_quiz(
@@ -787,13 +801,28 @@ def cmd_study_progress(args) -> int:
                 now=now,
                 digest=args.digest,
                 heading=args.heading,
+                write_id=getattr(args, "write_id", None),
             )
-            return finish(doc)
+            return finish_mutation(doc)
         if action == "recommend":
             from arbor_worker.recommendations import study_recommendations
 
             now = parse_utc_now(args.now) if getattr(args, "now", None) else None
             return finish(study_recommendations(root, course, now=now))
+        if action == "overview":
+            from arbor_worker.recommendations import study_recommendations
+
+            now = parse_utc_now(args.now) if getattr(args, "now", None) else None
+            due_doc = study_progress_due(root, course, now=now)
+            weak_doc = study_progress_weak(root, course)
+            recommend_doc = study_recommendations(root, course, now=now)
+            return finish(
+                {
+                    "due": due_doc,
+                    "weak": weak_doc,
+                    "recommend": recommend_doc,
+                }
+            )
     except ValueError as error:
         message = str(error)
         print(message, file=sys.stderr)

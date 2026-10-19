@@ -4,16 +4,10 @@ from pathlib import Path
 from typing import Any
 
 from arbor_worker.study_progress import (
-    _build_from_legacy,
-    _empty_document,
     _entry_source,
     _load_artifact_sources,
-    _read_document,
-    _serialize_document,
-    _write_atomic,
+    _load_progress_document,
     digest_key,
-    migrate_v41_progress,
-    progress_path,
     study_progress_due,
     study_progress_weak,
     validate_course_name,
@@ -21,15 +15,7 @@ from arbor_worker.study_progress import (
 
 
 def _load_progress_doc(root: Path, course: str) -> dict[str, Any]:
-    migrate_v41_progress(root, course)
-    path = progress_path(root, course)
-    if path.is_file():
-        return _read_document(path, course)
-    migrated = _build_from_legacy(root, course)
-    if migrated is not None:
-        _write_atomic(path, _serialize_document(migrated))
-        return migrated
-    return _empty_document(course)
+    return _load_progress_document(root, course)
 
 
 def _reviewed_digest_keys(root: Path, course: str, doc: dict[str, Any]) -> set[str]:

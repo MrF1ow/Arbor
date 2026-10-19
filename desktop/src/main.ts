@@ -78,6 +78,7 @@ import {
   type LibraryRole,
 } from "./library-role";
 import { parseAppearance, resolvedTheme } from "./theme";
+import { createStudyWriteQueue, type StudyWrite } from "./study-writes";
 import type {
   Appearance,
   AuthStatus,
@@ -95,7 +96,6 @@ import type {
   SyncWorkerResult,
   Mode,
   Model,
-  ProviderInfo,
   PendingSource,
   QuizProgress,
   QuizReview,
@@ -197,6 +197,8 @@ const flashcardNextBtn = $("flashcard-next");
 const flashcardShuffleBtn = $("flashcard-shuffle");
 const flashcardDueBtn = $("flashcard-due") as HTMLButtonElement;
 const flashcardAllBtn = $("flashcard-all") as HTMLButtonElement;
+const flashcardUnsavedBtn = $("flashcard-unsaved") as HTMLButtonElement;
+const quizUnsavedBtn = $("quiz-unsaved") as HTMLButtonElement;
 const weakTopicsEl = $("weak-topics");
 const weakTopicListEl = $("weak-topic-list");
 const studyOverviewEl = $("study-overview");
@@ -399,7 +401,6 @@ let flashcardDueIds: string[] = [];
 let flashcardDeckCount = 0;
 let flashcardDeckMode: "due" | "full" = "due";
 let flashcardCourse: string | null = null;
-let flashcardGradeInFlight = false;
 let quizReview: QuizReview | null = null;
 let quizProgress: QuizProgress = {};
 let chatLines: ChatLine[] = [];
@@ -407,7 +408,84 @@ let chatMode: ChatMode = "ask";
 let chatInFlight = false;
 let chatLiveBubble: HTMLElement | null = null;
 let quizCourse: string | null = null;
-let progressWrite = Promise.resolve();
+const modelsCache = new Map<string, Model[]>();
+const courseOverviewMemo = new Map<string, Promise<CourseOverviewPayload>>();
+
+function invalidateCourseOverview(root: string, course: string) {
+  courseOverviewMemo.delete(`${root}|${course}`);
+}
+
+function invalidateModelsCacheForCurrentRoot() {
+  if (!knowledgeRoot) {
+    return;
+  }
+  const prefix = `${knowledgeRoot}|`;
+  for (const key of modelsCache.keys()) {
+    if (key.startsWith(prefix)) {
+      modelsCache.delete(key);
+    }
+  }
+}
+
+function updateStudyWriteStatus({ pending, failing }: { pending: number; failing: boolean }) {
+  const label =
+    pending === 1 ? "1 unsaved · Retry" : `${pending} unsaved · Retry`;
+  for (const btn of [flashcardUnsavedBtn, quizUnsavedBtn]) {
+    btn.hidden = !failing;
+    if (failing) {
+      btn.textContent = label;
+    }
+  }
+}
+
+function showStudyWriteDroppedNotice(reason: string) {
+  const message = `A grade couldn't be saved: ${reason}`;
+  for (const el of [flashcardStaleEl, quizStaleEl]) {
+    el.textContent = message;
+    el.hidden = false;
+  }
+  logLine(message);
+}
+
+function enqueueStudyWrite(entry: {
+  key: string;
+  root: string;
+  course: string;
+  args: Record<string, unknown>;
+}) {
+  const writeId = crypto.randomUUID();
+  studyWriteQueue.enqueue({
+    key: entry.key,
+    writeId,
+    root: entry.root,
+    course: entry.course,
+    // Tauri maps camelCase invoke keys to the snake_case Rust parameter.
+    args: { ...entry.args, writeId },
+  });
+}
+
+const studyWriteQueue = createStudyWriteQueue({
+  send: async (w: StudyWrite) => {
+    await invoke("study_progress", w.args);
+  },
+  storage: localStorage,
+  onStatus: updateStudyWriteStatus,
+  onSent: (w) => {
+    invalidateCourseOverview(w.root, w.course);
+  },
+  onDropped: (w, error) => {
+    const reason = String(error instanceof Error ? error.message : error);
+    logLine(`Dropped study write ${w.key}: ${reason}`);
+    showStudyWriteDroppedNotice(reason);
+  },
+});
+
+flashcardUnsavedBtn.addEventListener("click", () => {
+  void studyWriteQueue.flush(3000);
+});
+quizUnsavedBtn.addEventListener("click", () => {
+  void studyWriteQueue.flush(3000);
+});
 let conceptGraph: ConceptGraph | null = null;
 let selectedConceptId: string | null = null;
 let currentNotesPath: string | null = null;
@@ -1043,6 +1121,7 @@ async function switchKnowledgeRoot(path: string, course?: string) {
   if (course === undefined && path === knowledgeRoot) {
     return;
   }
+  await studyWriteQueue.flush(3000);
   knowledgeRoot = path;
   folderHintEl.textContent = shortenPath(path);
   chatRootEl.textContent = shortenPath(path);
@@ -1055,7 +1134,7 @@ async function switchKnowledgeRoot(path: string, course?: string) {
   }
   clearChatTranscriptForRootSwitch();
   refreshChatCourseOptions();
-  await refreshSyncUi();
+  await refreshSyncUi({ provider: true });
   await persist();
   if (course) {
     setCourseView(course, "notes");
@@ -1295,59 +1374,123 @@ type StudyRecommendItem = {
   heading?: string | null;
 };
 
-async function loadStudyRecommendations(course: string, relativePath: string) {
-  if (!knowledgeRoot) return;
+type CourseOverviewPayload = {
+  due: { due_ids: string[]; count: number; deck_count: number };
+  weak: {
+    topics: Array<{ label: string; digest?: string; heading?: string | null }>;
+  };
+  recommend: { items: StudyRecommendItem[] };
+};
+
+async function loadCourseOverview(root: string, course: string): Promise<CourseOverviewPayload> {
+  const key = `${root}|${course}`;
+  let pending = courseOverviewMemo.get(key);
+  if (!pending) {
+    pending = invoke<CourseOverviewPayload>("study_progress", {
+      root,
+      course,
+      action: "overview",
+    });
+    courseOverviewMemo.set(key, pending);
+    pending.catch(() => {
+      courseOverviewMemo.delete(key);
+    });
+  }
+  return pending;
+}
+
+function renderStudyRecommendations(
+  payload: { items: StudyRecommendItem[] },
+  course: string,
+  relativePath: string,
+) {
+  if (currentNotesPath !== relativePath) return;
   studyRecommendationListEl.replaceChildren();
   weakestRecommendTopic = null;
   explainWeakestBtn.disabled = true;
-  try {
-    const payload = await invoke<{ items: StudyRecommendItem[] }>("study_progress", {
-      root: knowledgeRoot,
-      course,
-      action: "recommend",
-    });
-    if (currentNotesPath !== relativePath) return;
-    if (payload.items.length === 0) {
-      const empty = document.createElement("p");
-      empty.className = "weak-topic-empty";
-      empty.textContent = "No recommendations yet.";
-      studyRecommendationListEl.append(empty);
-      return;
+  if (payload.items.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "weak-topic-empty";
+    empty.textContent = "No recommendations yet.";
+    studyRecommendationListEl.append(empty);
+    return;
+  }
+  for (const item of payload.items) {
+    if (item.kind === "weakest_topic") {
+      weakestRecommendTopic = { label: item.label };
+      explainWeakestBtn.disabled = false;
     }
-    for (const item of payload.items) {
-      if (item.kind === "weakest_topic") {
-        weakestRecommendTopic = { label: item.label };
-        explainWeakestBtn.disabled = false;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "weak-topic-btn";
+    btn.textContent = item.label;
+    btn.addEventListener("click", () => {
+      if (item.kind === "due_cards") {
+        setCourseView(course, "flashcards");
+        return;
       }
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "weak-topic-btn";
-      btn.textContent = item.label;
-      btn.addEventListener("click", () => {
-        if (item.kind === "due_cards") {
-          setCourseView(course, "flashcards");
-          return;
+      if (item.kind === "weakest_topic" || item.kind === "unreviewed_digest") {
+        const digest = item.digest;
+        if (typeof digest === "string" && digest.trim() !== "") {
+          setCourseView(
+            course,
+            "notes",
+            notePathForStudyDigest(course, digest),
+            item.heading ?? null,
+          );
         }
-        if (item.kind === "weakest_topic" || item.kind === "unreviewed_digest") {
-          const digest = item.digest;
-          if (typeof digest === "string" && digest.trim() !== "") {
-            setCourseView(
-              course,
-              "notes",
-              notePathForStudyDigest(course, digest),
-              item.heading ?? null,
-            );
-          }
-        }
-      });
-      studyRecommendationListEl.append(btn);
-    }
+      }
+    });
+    studyRecommendationListEl.append(btn);
+  }
+}
+
+async function loadStudyRecommendations(course: string, relativePath: string) {
+  if (!knowledgeRoot) return;
+  try {
+    const overview = await loadCourseOverview(knowledgeRoot, course);
+    renderStudyRecommendations(overview.recommend, course, relativePath);
   } catch {
     if (currentNotesPath !== relativePath) return;
+    studyRecommendationListEl.replaceChildren();
     const failed = document.createElement("p");
     failed.className = "weak-topic-empty";
     failed.textContent = "Could not load recommendations.";
     studyRecommendationListEl.append(failed);
+  }
+}
+
+function renderWeakTopics(
+  weak: CourseOverviewPayload["weak"],
+  course: string,
+  relativePath: string,
+) {
+  if (currentNotesPath !== relativePath) return;
+  weakTopicListEl.replaceChildren();
+  if (weak.topics.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "weak-topic-empty";
+    empty.textContent = "No weak topics yet.";
+    weakTopicListEl.append(empty);
+    return;
+  }
+  for (const topic of weak.topics) {
+    if (!topic.digest) continue;
+    const li = document.createElement("li");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "weak-topic-btn";
+    btn.textContent = topic.label;
+    btn.addEventListener("click", () => {
+      setCourseView(
+        course,
+        "notes",
+        notePathForStudyDigest(course, topic.digest!),
+        topic.heading ?? null,
+      );
+    });
+    li.append(btn);
+    weakTopicListEl.append(li);
   }
 }
 
@@ -1399,57 +1542,28 @@ async function loadDigestPreview(
   const isCourseOverview = relativePath.endsWith("/course.md");
   if (isCourseOverview && knowledgeRoot) {
     void loadStudyPlan(course, relativePath);
-    void loadStudyRecommendations(course, relativePath);
-  }
-  if (!isCourseOverview) {
-    weakTopicsEl.hidden = true;
-  } else if (knowledgeRoot) {
-    weakTopicsEl.hidden = false;
-    weakTopicListEl.replaceChildren();
     try {
-      const weak = await invoke<{
-        topics: Array<{
-          label: string;
-          digest?: string;
-          heading?: string | null;
-        }>;
-      }>("study_progress", { root: knowledgeRoot, course, action: "weak" });
+      await studyWriteQueue.flush(3000);
+      const overview = await loadCourseOverview(knowledgeRoot, course);
       if (currentNotesPath !== relativePath) {
         scrollNotesToHeading(heading);
         return;
       }
-      if (weak.topics.length === 0) {
-        const empty = document.createElement("p");
-        empty.className = "weak-topic-empty";
-        empty.textContent = "No weak topics yet.";
-        weakTopicListEl.append(empty);
-      } else {
-        for (const topic of weak.topics) {
-          if (!topic.digest) continue;
-          const li = document.createElement("li");
-          const btn = document.createElement("button");
-          btn.type = "button";
-          btn.className = "weak-topic-btn";
-          btn.textContent = topic.label;
-          btn.addEventListener("click", () => {
-            setCourseView(
-              course,
-              "notes",
-              notePathForStudyDigest(course, topic.digest!),
-              topic.heading ?? null,
-            );
-          });
-          li.append(btn);
-          weakTopicListEl.append(li);
-        }
-      }
+      renderStudyRecommendations(overview.recommend, course, relativePath);
+      weakTopicsEl.hidden = false;
+      renderWeakTopics(overview.weak, course, relativePath);
     } catch (error) {
-      logLine(`Could not load weak topics: ${error}`);
+      logLine(`Could not load course overview: ${error}`);
+      void loadStudyRecommendations(course, relativePath);
+      weakTopicsEl.hidden = false;
+      weakTopicListEl.replaceChildren();
       const failed = document.createElement("p");
       failed.className = "weak-topic-empty";
       failed.textContent = "Could not load weak topics.";
       weakTopicListEl.append(failed);
     }
+  } else {
+    weakTopicsEl.hidden = true;
   }
   scrollNotesToHeading(heading);
 }
@@ -1549,10 +1663,9 @@ function renderCurrentFlashcard() {
   flashcardAgainBtn.hidden = gradesHidden;
   flashcardWrongBtn.hidden = gradesHidden;
   flashcardMasteredBtn.hidden = gradesHidden;
-  const gradeDisabled = gradesHidden || flashcardGradeInFlight;
-  flashcardAgainBtn.disabled = gradeDisabled;
-  flashcardWrongBtn.disabled = gradeDisabled;
-  flashcardMasteredBtn.disabled = gradeDisabled;
+  flashcardAgainBtn.disabled = gradesHidden;
+  flashcardWrongBtn.disabled = gradesHidden;
+  flashcardMasteredBtn.disabled = gradesHidden;
 }
 
 async function loadFlashcards(course: string) {
@@ -1560,23 +1673,23 @@ async function loadFlashcards(course: string) {
   const root = knowledgeRoot;
   await loadCitations(course);
   try {
-    const deckValue = await invoke<unknown>("read_study_json", {
-      root,
-      course,
-      file: "flashcards.json",
-    });
+    await studyWriteQueue.flush(3000);
+    const [deckValue, overview, stale] = await Promise.all([
+      invoke<unknown>("read_study_json", {
+        root,
+        course,
+        file: "flashcards.json",
+      }),
+      loadCourseOverview(root, course),
+      invoke<boolean>("study_artifact_stale", {
+        root,
+        course,
+        skill: "flashcards",
+      }),
+    ]);
     const deck = parseFlashcardDeck(deckValue);
     if (deck.course !== course) throw new Error(`Deck course is ${deck.course}`);
-    const dueValue = await invoke<{
-      due_ids: string[];
-      count: number;
-      deck_count: number;
-    }>("study_progress", { root, course, action: "due" });
-    const stale = await invoke<boolean>("study_artifact_stale", {
-      root,
-      course,
-      skill: "flashcards",
-    });
+    const dueValue = overview.due;
     if (currentCourse !== course) return;
     flashcardFullDeck = deck;
     flashcardDueIds = [...dueValue.due_ids];
@@ -1613,36 +1726,12 @@ async function loadFlashcards(course: string) {
   refreshStudyEnabled();
 }
 
-async function gradeCurrentFlashcard(grade: "again" | "wrong" | "mastered") {
+function gradeCurrentFlashcard(grade: "again" | "wrong" | "mastered") {
   if (!flashcardReview || !flashcardReview.flipped || flashcardReview.cards.length === 0) {
     return;
   }
-  if (flashcardGradeInFlight) return;
   if (!knowledgeRoot || !flashcardCourse) return;
   const card = currentCard(flashcardReview);
-  flashcardGradeInFlight = true;
-  renderCurrentFlashcard();
-  let gradeSaved = false;
-  try {
-    await invoke("study_progress", {
-      root: knowledgeRoot,
-      course: flashcardCourse,
-      action: "grade",
-      id: card.id,
-      result: grade,
-      digest: card.source.digest,
-      heading: card.source.heading ?? "",
-    });
-    gradeSaved = true;
-  } catch (error) {
-    logLine(`Could not save flashcard grade: ${error}`);
-  } finally {
-    flashcardGradeInFlight = false;
-  }
-  if (!gradeSaved) {
-    renderCurrentFlashcard();
-    return;
-  }
   flashcardDueIds = applyGradeToDueIds(flashcardDueIds, card.id, grade);
   refreshFlashcardDueLabel();
   if (flashcardDeckMode === "due") {
@@ -1656,6 +1745,20 @@ async function gradeCurrentFlashcard(grade: "again" | "wrong" | "mastered") {
     flashcardReview = advanceAfterGrade(flashcardReview);
   }
   renderCurrentFlashcard();
+  enqueueStudyWrite({
+    key: `${flashcardCourse}:${card.id}:${Date.now()}`,
+    root: knowledgeRoot,
+    course: flashcardCourse,
+    args: {
+      root: knowledgeRoot,
+      course: flashcardCourse,
+      action: "grade",
+      id: card.id,
+      result: grade,
+      digest: card.source.digest,
+      heading: card.source.heading ?? "",
+    },
+  });
 }
 
 function abortIfSignedOut(): boolean {
@@ -1723,6 +1826,7 @@ function renderCurrentQuiz() {
 async function loadQuiz(course: string) {
   if (!knowledgeRoot) return;
   const root = knowledgeRoot;
+  await studyWriteQueue.flush(3000);
   await loadCitations(course);
   try {
     const packValue = await invoke<unknown>("read_study_json", {
@@ -2010,7 +2114,7 @@ async function activateKnowledgeRoot(picked: string) {
   refreshFolderTools();
 }
 
-async function refreshSyncUi() {
+async function refreshSyncUi(opts: { provider?: boolean } = {}) {
   if (!knowledgeRoot) {
     syncRemoteInput.value = "";
     syncRemoteNoteEl.textContent = "";
@@ -2019,18 +2123,32 @@ async function refreshSyncUi() {
     setToggle(toggleSyncAfter, false);
     return;
   }
-  try {
-    const show = await invoke<SyncShowResult>("sync_show", { root: knowledgeRoot });
-    syncRemoteInput.value = show.remote ?? "";
-    syncRemoteNoteEl.textContent = show.remote_note ?? "";
-    setToggle(toggleSyncShared, show.shared);
-    const ks = await invoke<KnowledgeSettings>("get_knowledge_settings", { root: knowledgeRoot });
-    setToggle(toggleSyncAfter, ks.sync_after_commit);
-  } catch {
-    /* sync config may be unreadable before init */
+  await Promise.allSettled([
+    (async () => {
+      try {
+        const show = await invoke<SyncShowResult>("sync_show", { root: knowledgeRoot });
+        syncRemoteInput.value = show.remote ?? "";
+        syncRemoteNoteEl.textContent = show.remote_note ?? "";
+        setToggle(toggleSyncShared, show.shared);
+      } catch {
+        /* sync config may be unreadable before init */
+      }
+    })(),
+    (async () => {
+      try {
+        const ks = await invoke<KnowledgeSettings>("get_knowledge_settings", {
+          root: knowledgeRoot!,
+        });
+        setToggle(toggleSyncAfter, ks.sync_after_commit);
+      } catch {
+        /* knowledge settings may be unreadable before init */
+      }
+    })(),
+    refreshLibraryShow(),
+  ]);
+  if (opts.provider) {
+    await applyEffectiveProviderForActiveRoot();
   }
-  await refreshLibraryShow();
-  await applyEffectiveProviderForActiveRoot();
 }
 
 function refreshSkillsUi() {
@@ -2869,15 +2987,7 @@ function selectedModelLabel(): string {
 }
 
 async function loadProviders(selectedId: string) {
-  let rows: { id: string; label: string }[];
-  try {
-    const list = await invoke<ProviderInfo[]>("list_providers", {
-      root: knowledgeRoot ?? undefined,
-    });
-    rows = pickerProviders(list.map((p) => ({ id: p.id, label: p.label })));
-  } catch {
-    rows = PROVIDER_FALLBACK;
-  }
+  const rows = pickerProviders(PROVIDER_FALLBACK);
   providerSel.innerHTML = "";
   for (const p of rows) {
     const opt = document.createElement("option");
@@ -2918,7 +3028,8 @@ async function loadSettings() {
       setCourseView(courses[0], "notes");
     }
     refreshFolderTools();
-    await refreshSyncUi();
+    studyWriteQueue.restore();
+    await refreshSyncUi({ provider: true });
   } else {
     knowledgeRoot = null;
     setPlaceView("welcome");
@@ -2956,62 +3067,100 @@ async function persist() {
   });
 }
 
-async function loadModels(selected: string | null) {
-  const res = await invoke<{ models: Model[] }>("list_models", {
-    root: knowledgeRoot ?? undefined,
-    provider: providerId,
-  });
+async function loadModels(selected: string | null, opts: { refresh?: boolean } = {}) {
+  const cacheKey = `${knowledgeRoot ?? ""}|${providerId}`;
+  let models: Model[];
+  if (!opts.refresh && modelsCache.has(cacheKey)) {
+    models = modelsCache.get(cacheKey)!;
+  } else {
+    const res = await invoke<{ models: Model[] }>("list_models", {
+      root: knowledgeRoot ?? undefined,
+      provider: providerId,
+    });
+    models = res.models;
+    modelsCache.set(cacheKey, models);
+  }
   modelSel.innerHTML = "";
-  for (const m of res.models) {
+  for (const m of models) {
     const opt = document.createElement("option");
     opt.value = m.id;
     opt.textContent = m.label;
     modelSel.appendChild(opt);
   }
-  if (selected && res.models.some((m) => m.id === selected)) {
+  if (selected && models.some((m) => m.id === selected)) {
     modelSel.value = selected;
-  } else if (res.models.length > 0) {
-    modelSel.value = res.models[0].id;
+  } else if (models.length > 0) {
+    modelSel.value = models[0].id;
   }
 }
 
 let refreshAuthInFlight: Promise<void> | null = null;
+let refreshAuthActiveKey = "";
+let refreshAuthQueued: { force: boolean } | null = null;
 
-async function refreshAuth() {
-  if (refreshAuthInFlight) return refreshAuthInFlight;
+function refreshAuthRequestKey(force: boolean) {
+  return `${providerId}|${force}`;
+}
+
+async function runRefreshAuth(force: boolean) {
   const label = currentProviderLabel();
-  refreshAuthInFlight = (async () => {
+  const checkingTimer = window.setTimeout(() => {
     providerLabelEl.textContent = `Checking ${label}…`;
-    providerStatusEl.className = "auth-badge";
-    docsLink.hidden = true;
-    const modelLabel = selectedModelLabel();
-    try {
-      const a = await invoke<AuthStatus>("check_auth", { provider: providerId });
-      authed = a.authenticated;
-      if (a.authenticated) {
-        authCheckReason = "";
-        providerLabelEl.textContent = providerBadge(label, modelLabel, true, a.reason);
-        providerStatusEl.className = "auth-badge";
-        docsLink.hidden = true;
-      } else {
-        authCheckReason = a.reason;
-        providerLabelEl.textContent = providerBadge(label, modelLabel, false, a.reason);
-        providerStatusEl.className = "auth-badge bad";
-        docsLink.href = a.docs_url;
-        docsLink.textContent = `Set up ${label}`;
-        docsLink.hidden = false;
-      }
-    } catch (error) {
-      authed = false;
-      authCheckReason = authCheckWorkerFailureReason(error);
-      providerLabelEl.textContent = providerBadge(label, modelLabel, false, authCheckReason);
-      providerStatusEl.className = "auth-badge bad";
+  }, 150);
+  providerStatusEl.className = "auth-badge";
+  docsLink.hidden = true;
+  const modelLabel = selectedModelLabel();
+  try {
+    const a = await invoke<AuthStatus>("check_auth", {
+      provider: providerId,
+      force,
+    });
+    authed = a.authenticated;
+    if (a.authenticated) {
+      authCheckReason = "";
+      providerLabelEl.textContent = providerBadge(label, modelLabel, true, a.reason);
+      providerStatusEl.className = "auth-badge";
       docsLink.hidden = true;
+    } else {
+      authCheckReason = a.reason;
+      providerLabelEl.textContent = providerBadge(label, modelLabel, false, a.reason);
+      providerStatusEl.className = "auth-badge bad";
+      docsLink.href = a.docs_url;
+      docsLink.textContent = `Set up ${label}`;
+      docsLink.hidden = false;
     }
-    refreshUpdateEnabled();
-    refreshStudyEnabled();
-  })().finally(() => {
+  } catch (error) {
+    authed = false;
+    authCheckReason = authCheckWorkerFailureReason(error);
+    providerLabelEl.textContent = providerBadge(label, modelLabel, false, authCheckReason);
+    providerStatusEl.className = "auth-badge bad";
+    docsLink.hidden = true;
+  } finally {
+    window.clearTimeout(checkingTimer);
+  }
+  refreshUpdateEnabled();
+  refreshStudyEnabled();
+}
+
+async function refreshAuth(opts: { force?: boolean } = {}) {
+  const force = opts.force ?? false;
+  const key = refreshAuthRequestKey(force);
+  if (refreshAuthInFlight && refreshAuthActiveKey === key) {
+    return refreshAuthInFlight;
+  }
+  if (refreshAuthInFlight) {
+    refreshAuthQueued = { force };
+    return refreshAuthInFlight;
+  }
+  refreshAuthActiveKey = key;
+  refreshAuthInFlight = runRefreshAuth(force).finally(() => {
     refreshAuthInFlight = null;
+    refreshAuthActiveKey = "";
+    const queued = refreshAuthQueued;
+    refreshAuthQueued = null;
+    if (queued && refreshAuthRequestKey(queued.force) !== key) {
+      void refreshAuth({ force: queued.force });
+    }
   });
   return refreshAuthInFlight;
 }
@@ -3406,6 +3555,7 @@ libraryProviderSaveBtn.addEventListener("click", () => {
         clear: false,
       });
       await refreshLibraryShow();
+      invalidateModelsCacheForCurrentRoot();
       await applyEffectiveProviderForActiveRoot();
     } catch (error) {
       librarySettingsNoteEl.textContent = String(error);
@@ -3425,6 +3575,7 @@ libraryProviderClearBtn.addEventListener("click", () => {
         clear: true,
       });
       await refreshLibraryShow();
+      invalidateModelsCacheForCurrentRoot();
       await applyEffectiveProviderForActiveRoot();
     } catch (error) {
       librarySettingsNoteEl.textContent = String(error);
@@ -3533,7 +3684,7 @@ providerSel.addEventListener("change", () => {
       refreshProviderRecommendationUi();
     }
     refreshStudyEnabled();
-    await refreshAuth();
+    await refreshAuth({ force: true });
     await persist();
   })();
 });
@@ -3569,6 +3720,7 @@ providerKeyClearBtn.addEventListener("click", () => {
 
 providerBaseUrlInput.addEventListener("change", () => {
   syncProviderBaseUrlFromInput();
+  invalidateModelsCacheForCurrentRoot();
   void persist();
 });
 
@@ -3894,10 +4046,12 @@ quizSubmitBtn.addEventListener("click", () => {
       digest: question.source.digest,
       heading: question.source.heading ?? "",
     };
-    progressWrite = progressWrite
-      .then(() => invoke("study_progress", payload))
-      .then(() => undefined)
-      .catch((error) => logLine(`Could not save quiz answer: ${error}`));
+    enqueueStudyWrite({
+      key: `${course}:${question.id}:${Date.now()}`,
+      root,
+      course,
+      args: payload,
+    });
   }
   renderCurrentQuiz();
 });

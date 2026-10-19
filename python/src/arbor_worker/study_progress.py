@@ -3,16 +3,21 @@ from __future__ import annotations
 import json
 import os
 import sys
+import threading
+import uuid
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+from arbor_worker.cache import ensure_gitignored
 from arbor_worker.gitstate import git_user_dirname
 from arbor_worker.schemas.study.digest import normalize_study_digest
 
 DEFAULT_EASE = 2.5
 SCHEMA_VERSION = 1
 WRONG_RETRY_MINUTES = 10
+APPLIED_WRITE_IDS_MAX = 500
 
 
 class StudyProgressError(Exception):
@@ -35,8 +40,7 @@ def progress_path(root: Path, course: str) -> Path:
     return root / ".arbor" / "users" / dirname / course / "progress.json"
 
 
-def migrate_v41_progress(root: Path, course: str) -> None:
-    validate_course_name(course)
+def _migrate_v41_progress_unlocked(root: Path, course: str) -> None:
     new_path = progress_path(root, course)
     if new_path.is_file():
         return
@@ -50,6 +54,12 @@ def migrate_v41_progress(root: Path, course: str) -> None:
         legacy.rename(bak_path)
     else:
         legacy.unlink()
+
+
+def migrate_v41_progress(root: Path, course: str) -> None:
+    validate_course_name(course)
+    with progress_lock(root, course):
+        _migrate_v41_progress_unlocked(root, course)
 
 
 def legacy_flashcards_path(root: Path, course: str) -> Path:
@@ -106,13 +116,78 @@ def _serialize_document(doc: dict[str, Any]) -> str:
 
 def _write_atomic(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(f".{path.name}.tmp-{os.getpid()}")
+    tmp = path.with_name(
+        f".{path.name}.tmp-{os.getpid()}-{threading.get_ident()}-{uuid.uuid4().hex[:8]}"
+    )
     try:
         tmp.write_text(content, encoding="utf-8")
         tmp.replace(path)
     finally:
         if tmp.exists():
             tmp.unlink(missing_ok=True)
+
+
+def applied_writes_path(root: Path, course: str) -> Path:
+    validate_course_name(course)
+    if (root / ".git").is_dir():
+        locks_dir = root / ".git" / "arbor-locks"
+    else:
+        locks_dir = root / ".arbor" / "locks"
+        ensure_gitignored(root, ".arbor/locks")
+    locks_dir.mkdir(parents=True, exist_ok=True)
+    return locks_dir / f"applied-{course}.json"
+
+
+def _load_applied_write_ids(path: Path) -> list[str]:
+    if not path.is_file():
+        return []
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    if not isinstance(raw, list):
+        return []
+    out: list[str] = []
+    for item in raw:
+        if isinstance(item, str) and item:
+            out.append(item)
+    return out
+
+
+def _record_applied_write_id(path: Path, write_id: str) -> None:
+    ids = _load_applied_write_ids(path)
+    if write_id not in ids:
+        ids.append(write_id)
+    if len(ids) > APPLIED_WRITE_IDS_MAX:
+        ids = ids[-APPLIED_WRITE_IDS_MAX:]
+    _write_atomic(path, json.dumps(ids) + "\n")
+
+
+@contextmanager
+def progress_lock(root: Path, course: str):
+    validate_course_name(course)
+    if os.name == "nt":
+        yield
+        return
+    try:
+        import fcntl
+    except ImportError:
+        yield
+        return
+    # Inside .git when possible: never tracked, so the library stays clean.
+    if (root / ".git").is_dir():
+        locks_dir = root / ".git" / "arbor-locks"
+    else:
+        locks_dir = root / ".arbor" / "locks"
+        ensure_gitignored(root, ".arbor/locks")
+    locks_dir.mkdir(parents=True, exist_ok=True)
+    lock_path = locks_dir / f"progress-{course}.lock"
+    with open(lock_path, "a+b") as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
 def _load_legacy_counts(path: Path) -> dict[str, dict[str, int]] | None:
@@ -327,13 +402,26 @@ def _read_document(path: Path, course: str) -> dict[str, Any]:
     return _validate_document(raw, course)
 
 
+def _load_progress_document(root: Path, course: str) -> dict[str, Any]:
+    with progress_lock(root, course):
+        _migrate_v41_progress_unlocked(root, course)
+        path = progress_path(root, course)
+        if path.is_file():
+            return _read_document(path, course)
+        migrated = _build_from_legacy(root, course)
+        if migrated is not None:
+            _write_atomic(path, _serialize_document(migrated))
+            return migrated
+        return _empty_document(course)
+
+
 def _ensure_document(
     root: Path,
     course: str,
     *,
     write_migration: bool,
 ) -> dict[str, Any]:
-    migrate_v41_progress(root, course)
+    _migrate_v41_progress_unlocked(root, course)
     path = progress_path(root, course)
     if path.is_file():
         return _read_document(path, course)
@@ -472,15 +560,7 @@ def _load_deck_ids(root: Path, course: str) -> list[str]:
 
 def study_progress_show(root: Path, course: str) -> dict[str, Any]:
     validate_course_name(course)
-    migrate_v41_progress(root, course)
-    path = progress_path(root, course)
-    if path.is_file():
-        return _read_document(path, course)
-    migrated = _build_from_legacy(root, course)
-    if migrated is not None:
-        _write_atomic(path, _serialize_document(migrated))
-        return migrated
-    return _empty_document(course)
+    return _load_progress_document(root, course)
 
 
 def study_progress_grade(
@@ -492,48 +572,57 @@ def study_progress_grade(
     now: datetime | None = None,
     digest: str | None = None,
     heading: str | None | type[_MISSING] = _MISSING,
+    write_id: str | None = None,
 ) -> dict[str, Any]:
     validate_course_name(course)
     if not card_id:
         raise ValueError("card id must be non-empty")
     if result not in {"again", "wrong", "mastered"}:
         raise ValueError(f"invalid grade result: {result!r}")
-    clock = now or parse_utc_now(None)
-    doc = _ensure_document(root, course, write_migration=True)
-    cards = doc["cards"]
-    entry = cards.get(card_id)
-    if entry is None:
-        entry = _default_card_entry()
-        cards[card_id] = entry
-    _apply_source(
-        entry,
-        digest=digest,
-        heading=heading,
-        lookup=lambda: _lookup_card_source(root, course, card_id),
-    )
-    if result == "again":
-        entry["seen"] += 1
-    elif result == "wrong":
-        entry["seen"] += 1
-        entry["wrong"] += 1
-        entry["interval_days"] = 0
-        entry["due_at"] = format_due_at(clock + timedelta(minutes=WRONG_RETRY_MINUTES))
-    else:
-        entry["seen"] += 1
-        entry["correct"] += 1
-        ease = float(entry["ease"])
-        interval = float(entry["interval_days"])
-        if interval <= 0:
-            interval = 1.0
+    with progress_lock(root, course):
+        applied_path = applied_writes_path(root, course)
+        if write_id and write_id in _load_applied_write_ids(applied_path):
+            # Already applied. The lock is held, so use the unlocked loader:
+            # flock on a second fd in the same process would block forever.
+            return _ensure_document(root, course, write_migration=True)
+        clock = now or parse_utc_now(None)
+        doc = _ensure_document(root, course, write_migration=True)
+        cards = doc["cards"]
+        entry = cards.get(card_id)
+        if entry is None:
+            entry = _default_card_entry()
+            cards[card_id] = entry
+        _apply_source(
+            entry,
+            digest=digest,
+            heading=heading,
+            lookup=lambda: _lookup_card_source(root, course, card_id),
+        )
+        if result == "again":
+            entry["seen"] += 1
+        elif result == "wrong":
+            entry["seen"] += 1
+            entry["wrong"] += 1
+            entry["interval_days"] = 0
+            entry["due_at"] = format_due_at(clock + timedelta(minutes=WRONG_RETRY_MINUTES))
         else:
-            interval = interval * ease
-            if interval < 1:
+            entry["seen"] += 1
+            entry["correct"] += 1
+            ease = float(entry["ease"])
+            interval = float(entry["interval_days"])
+            if interval <= 0:
                 interval = 1.0
-        entry["interval_days"] = interval
-        entry["due_at"] = format_due_at(clock + timedelta(days=interval))
-    path = progress_path(root, course)
-    _write_atomic(path, _serialize_document(doc))
-    return doc
+            else:
+                interval = interval * ease
+                if interval < 1:
+                    interval = 1.0
+            entry["interval_days"] = interval
+            entry["due_at"] = format_due_at(clock + timedelta(days=interval))
+        path = progress_path(root, course)
+        _write_atomic(path, _serialize_document(doc))
+        if write_id:
+            _record_applied_write_id(applied_path, write_id)
+        return doc
 
 
 def study_progress_quiz(
@@ -545,6 +634,7 @@ def study_progress_quiz(
     now: datetime | None = None,
     digest: str | None = None,
     heading: str | None | type[_MISSING] = _MISSING,
+    write_id: str | None = None,
 ) -> dict[str, Any]:
     validate_course_name(course)
     if not question_id:
@@ -552,26 +642,34 @@ def study_progress_quiz(
     if result not in {"correct", "wrong"}:
         raise ValueError(f"invalid quiz result: {result!r}")
     _ = now  # reserved for API symmetry
-    doc = _ensure_document(root, course, write_migration=True)
-    questions = doc["questions"]
-    entry = questions.get(question_id)
-    if entry is None:
-        entry = _default_question_entry()
-        questions[question_id] = entry
-    _apply_source(
-        entry,
-        digest=digest,
-        heading=heading,
-        lookup=lambda: _lookup_question_source(root, course, question_id),
-    )
-    entry["seen"] += 1
-    if result == "correct":
-        entry["correct"] += 1
-    else:
-        entry["wrong"] += 1
-    path = progress_path(root, course)
-    _write_atomic(path, _serialize_document(doc))
-    return doc
+    with progress_lock(root, course):
+        applied_path = applied_writes_path(root, course)
+        if write_id and write_id in _load_applied_write_ids(applied_path):
+            # Already applied. The lock is held, so use the unlocked loader:
+            # flock on a second fd in the same process would block forever.
+            return _ensure_document(root, course, write_migration=True)
+        doc = _ensure_document(root, course, write_migration=True)
+        questions = doc["questions"]
+        entry = questions.get(question_id)
+        if entry is None:
+            entry = _default_question_entry()
+            questions[question_id] = entry
+        _apply_source(
+            entry,
+            digest=digest,
+            heading=heading,
+            lookup=lambda: _lookup_question_source(root, course, question_id),
+        )
+        entry["seen"] += 1
+        if result == "correct":
+            entry["correct"] += 1
+        else:
+            entry["wrong"] += 1
+        path = progress_path(root, course)
+        _write_atomic(path, _serialize_document(doc))
+        if write_id:
+            _record_applied_write_id(applied_path, write_id)
+        return doc
 
 
 def study_progress_due(
@@ -583,17 +681,7 @@ def study_progress_due(
     validate_course_name(course)
     clock = now or parse_utc_now(None)
     deck_ids = _load_deck_ids(root, course)
-    migrate_v41_progress(root, course)
-    path = progress_path(root, course)
-    if path.is_file():
-        doc = _read_document(path, course)
-    else:
-        migrated = _build_from_legacy(root, course)
-        if migrated is not None:
-            _write_atomic(path, _serialize_document(migrated))
-            doc = migrated
-        else:
-            doc = _empty_document(course)
+    doc = _load_progress_document(root, course)
     cards = doc["cards"]
     due_ids = [card_id for card_id in deck_ids if _card_is_due(cards.get(card_id), clock)]
     return {"due_ids": due_ids, "count": len(due_ids), "deck_count": len(deck_ids)}
@@ -633,17 +721,7 @@ def _concept_matches(concept_sources: list[dict], digest: str, heading: str | No
 
 def study_progress_weak(root: Path, course: str) -> dict[str, Any]:
     validate_course_name(course)
-    migrate_v41_progress(root, course)
-    path = progress_path(root, course)
-    if path.is_file():
-        doc = _read_document(path, course)
-    else:
-        migrated = _build_from_legacy(root, course)
-        if migrated is not None:
-            _write_atomic(path, _serialize_document(migrated))
-            doc = migrated
-        else:
-            doc = _empty_document(course)
+    doc = _load_progress_document(root, course)
 
     card_art, quiz_art = _load_artifact_sources(root, course)
     concepts_path = root / course / "study" / "concepts.json"

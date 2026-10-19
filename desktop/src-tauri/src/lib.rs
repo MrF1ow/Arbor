@@ -1,3 +1,4 @@
+mod auth_cache;
 mod commands;
 mod db;
 mod jobs;
@@ -9,16 +10,28 @@ mod watch;
 mod transport;
 mod remote_job;
 mod worker;
+mod worker_pool;
 
 use jobs::JobCoordinator;
 use std::sync::{Arc, Mutex};
+use tauri::Manager;
+use worker_pool::WorkerPool;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let watch_state = Arc::new(watch::WatchState::new());
+    let worker_pool = Arc::new(WorkerPool::new());
     tauri::Builder::default()
         .manage(Mutex::new(JobCoordinator::new()))
         .manage(watch_state)
+        .manage(worker_pool.clone())
+        .setup({
+            let worker_pool = worker_pool.clone();
+            move |app| {
+                worker_pool.prewarm(&commands::repo_dir(app.handle()));
+                Ok(())
+            }
+        })
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![
@@ -82,6 +95,13 @@ pub fn run() {
             commands::skill_uninstall,
             commands::skill_run,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running Arbor");
+        .build(tauri::generate_context!())
+        .expect("error while building Arbor")
+        .run(|app_handle, event| {
+            if let tauri::RunEvent::Exit = event {
+                if let Some(pool) = app_handle.try_state::<Arc<WorkerPool>>() {
+                    pool.shutdown();
+                }
+            }
+        });
 }

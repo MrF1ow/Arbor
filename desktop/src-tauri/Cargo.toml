@@ -1,6 +1,6 @@
 [package]
 name = "desktop"
-version = "5.0.1"
+version = "5.1.0"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
@@ -33,3 +33,5 @@ rusqlite = { version = "0.30", features = ["bundled"] }
 sha2 = "0.11.0"
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
