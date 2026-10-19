@@ -4,6 +4,7 @@ import {
   ChevronLeft,
   ChevronRight,
   RefreshCw,
+  RotateCcw,
   Shuffle,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -44,6 +45,7 @@ import { resolveDigestSlug } from "~/domain/notes";
 import { PROVIDER_FALLBACK, signedOutJobMessage } from "~/domain/provider";
 import type { CourseOverviewPayload, DigestInfo } from "~/domain/types";
 import { fetchAuthStatus } from "~/lib/auth-refresh";
+import { invoke } from "~/lib/ipc";
 import { pickActiveRoot } from "~/lib/knowledge-root";
 import { useEffectiveProvider } from "~/lib/queries/effective-provider";
 import { useStartFlashcardJobMutation } from "~/lib/queries/jobs";
@@ -81,23 +83,27 @@ function sessionWithOptionalFocus(
   deck: FlashcardDeck,
   dueIds: readonly string[],
   focusCardId: string | undefined,
-): { mode: DeckMode; review: FlashcardReview; focused: boolean } {
-  let mode: DeckMode = "due";
+): { mode: DeckMode; review: FlashcardReview; clearFocusParam: boolean } {
+  const mode: DeckMode = "due";
   let review = sessionForMode(deck, mode, dueIds);
   if (!focusCardId) {
-    return { mode, review, focused: false };
+    return { mode, review, clearFocusParam: false };
   }
   let index = review.cards.findIndex((c) => c.id === focusCardId);
-  if (index < 0) {
-    mode = "full";
-    review = sessionForMode(deck, mode, dueIds);
-    index = review.cards.findIndex((c) => c.id === focusCardId);
-  }
   if (index >= 0) {
     review = { ...review, index, flipped: false };
-    return { mode, review, focused: true };
+    return { mode, review, clearFocusParam: true };
   }
-  return { mode, review, focused: false };
+  const fullReview = sessionForMode(deck, "full", dueIds);
+  index = fullReview.cards.findIndex((c) => c.id === focusCardId);
+  if (index >= 0) {
+    return {
+      mode: "full",
+      review: { ...fullReview, index, flipped: false },
+      clearFocusParam: true,
+    };
+  }
+  return { mode, review, clearFocusParam: true };
 }
 
 function formatSourceLabel(card: ReturnType<typeof currentCard>): string {
@@ -136,15 +142,18 @@ export function FlashcardsView({
   const startJob = useStartFlashcardJobMutation(activeRoot);
 
   const [flushDone, setFlushDone] = useState(false);
+  const [postFlushReady, setPostFlushReady] = useState(false);
   const [deckMode, setDeckMode] = useState<DeckMode>("due");
   const [dueIds, setDueIds] = useState<string[]>([]);
   const [deckCount, setDeckCount] = useState(0);
   const [review, setReview] = useState<FlashcardReview | null>(null);
   const [deck, setDeck] = useState<FlashcardDeck | null>(null);
   const [modelHint, setModelHint] = useState<string | null>(null);
+  const [sessionIdentity, setSessionIdentity] = useState<string | null>(null);
+  const [flushAt, setFlushAt] = useState(0);
 
-  const initKeyRef = useRef<string | null>(null);
   const focusClearPendingRef = useRef(false);
+  const lastSyncedDataRef = useRef({ deck: 0, overview: 0 });
 
   const deckQuery = useStudyJson(activeRoot, course, "flashcards.json");
   const citationsQuery = useStudyJson(activeRoot, course, "citations.json");
@@ -154,56 +163,189 @@ export function FlashcardsView({
   useEffect(() => {
     let cancelled = false;
     void (async () => {
+      setFlushDone(false);
+      setPostFlushReady(false);
+      setFlushAt(0);
+      setSessionIdentity(null);
+      setDeck(null);
+      setReview(null);
       await flushStudyWrites(3000);
+      if (cancelled || !activeRoot) {
+        return;
+      }
+      const flushedAt = Date.now();
+      setFlushAt(flushedAt);
+      const deckKey = qk.studyJson(activeRoot, course, "flashcards.json");
+      const overviewKey = qk.courseOverview(activeRoot, course);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: overviewKey }),
+        queryClient.invalidateQueries({ queryKey: deckKey }),
+      ]);
+      await Promise.all([
+        queryClient.fetchQuery({
+          queryKey: overviewKey,
+          queryFn: () =>
+            invoke<CourseOverviewPayload>("study_progress", {
+              root: activeRoot,
+              course,
+              action: "overview",
+            }),
+        }),
+        queryClient
+          .fetchQuery({
+            queryKey: deckKey,
+            queryFn: () =>
+              invoke<unknown>("read_study_json", {
+                root: activeRoot,
+                course,
+                file: "flashcards.json",
+              }),
+          })
+          .catch(() => undefined),
+      ]);
       if (!cancelled) {
+        setPostFlushReady(true);
         setFlushDone(true);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [course, activeRoot]);
+  }, [course, activeRoot, queryClient]);
 
-  useEffect(() => {
-    if (!flushDone || !deckQuery.isSuccess || !overview.isSuccess) {
-      return;
-    }
+  const queriesSettled =
+    flushDone &&
+    postFlushReady &&
+    deckQuery.isSuccess &&
+    !deckQuery.isFetching &&
+    overview.isSuccess &&
+    !overview.isFetching &&
+    flushAt > 0 &&
+    deckQuery.dataUpdatedAt >= flushAt &&
+    overview.dataUpdatedAt >= flushAt;
+
+  let parsedDeck: FlashcardDeck | null = null;
+  let deckLoadError = false;
+  if (queriesSettled) {
     try {
-      /* eslint-disable react-hooks/set-state-in-effect -- hydrate session once per deck identity */
       const parsed = parseFlashcardDeck(deckQuery.data);
       if (parsed.course !== course) {
         throw new Error("course mismatch");
       }
-      const identity = `${activeRoot}|${deckIdentity(parsed)}`;
-      const dueFromOverview = [...overview.data.due.due_ids];
-
-      if (initKeyRef.current !== identity) {
-        initKeyRef.current = identity;
-        const focused = sessionWithOptionalFocus(parsed, dueFromOverview, focusCardId);
-        if (focused.focused) {
-          focusClearPendingRef.current = true;
-        }
-        setDeck(parsed);
-        setDeckMode(focused.mode);
-        setDueIds(dueFromOverview);
-        setDeckCount(overview.data.due.deck_count);
-        setReview(focused.review);
-      }
+      parsedDeck = parsed;
     } catch {
-      initKeyRef.current = null;
+      deckLoadError = true;
+    }
+  }
+
+  const identity =
+    parsedDeck && activeRoot ? `${activeRoot}|${deckIdentity(parsedDeck)}` : null;
+
+  useEffect(() => {
+    if (!queriesSettled) {
+      return;
+    }
+    /* eslint-disable react-hooks/set-state-in-effect -- hydrate session when deck identity settles */
+    if (deckLoadError) {
+      setSessionIdentity("__error__");
       setDeck(null);
       setReview(null);
+      return;
     }
+    if (!parsedDeck || !identity || identity === sessionIdentity) {
+      return;
+    }
+    const dueFromOverview = [...overview.data!.due.due_ids];
+    const focused = sessionWithOptionalFocus(parsedDeck, dueFromOverview, focusCardId);
+    if (focused.clearFocusParam) {
+      focusClearPendingRef.current = true;
+    }
+    setSessionIdentity(identity);
+    setDeck(parsedDeck);
+    setDeckMode(focused.mode);
+    setDueIds(dueFromOverview);
+    setDeckCount(overview.data!.due.deck_count);
+    setReview(focused.review);
+    lastSyncedDataRef.current = {
+      deck: deckQuery.dataUpdatedAt,
+      overview: overview.dataUpdatedAt,
+    };
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [
-    flushDone,
-    deckQuery.isSuccess,
-    deckQuery.data,
-    overview.isSuccess,
-    overview.data,
-    course,
-    activeRoot,
+    queriesSettled,
+    deckLoadError,
+    parsedDeck,
+    identity,
+    sessionIdentity,
     focusCardId,
+    overview.data,
+    deckQuery.dataUpdatedAt,
+    overview.dataUpdatedAt,
+  ]);
+
+  useEffect(() => {
+    if (!queriesSettled || !identity || identity !== sessionIdentity || !review) {
+      return;
+    }
+    const deckAt = deckQuery.dataUpdatedAt;
+    const overAt = overview.dataUpdatedAt;
+    if (
+      deckAt === lastSyncedDataRef.current.deck &&
+      overAt === lastSyncedDataRef.current.overview
+    ) {
+      return;
+    }
+    lastSyncedDataRef.current = { deck: deckAt, overview: overAt };
+
+    let syncedDeck: FlashcardDeck;
+    try {
+      syncedDeck = parseFlashcardDeck(deckQuery.data);
+      if (syncedDeck.course !== course) {
+        return;
+      }
+    } catch {
+      return;
+    }
+
+    /* eslint-disable react-hooks/set-state-in-effect -- merge refreshed deck cards in place */
+    setDeck(syncedDeck);
+    setReview((prev) => {
+      if (!prev) {
+        return prev;
+      }
+      const modeCards =
+        deckMode === "full"
+          ? syncedDeck.cards
+          : cardsForIds(syncedDeck, dueIds);
+      const currentId = prev.cards[prev.index]?.id;
+      let index = prev.index;
+      if (currentId) {
+        const found = modeCards.findIndex((c) => c.id === currentId);
+        if (found >= 0) {
+          index = found;
+        }
+      }
+      if (modeCards.length === 0) {
+        return { cards: [], index: 0, flipped: false };
+      }
+      return {
+        ...prev,
+        cards: modeCards,
+        index: Math.min(index, modeCards.length - 1),
+      };
+    });
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [
+    queriesSettled,
+    identity,
+    sessionIdentity,
+    deckQuery.data,
+    deckQuery.dataUpdatedAt,
+    overview.dataUpdatedAt,
+    deckMode,
+    course,
+    dueIds,
+    review,
   ]);
 
   useEffect(() => {
@@ -249,12 +391,17 @@ export function FlashcardsView({
         if (!old) {
           return old;
         }
+        const wasDue = old.due.due_ids.includes(card.id);
+        const count =
+          grade === "again" || !wasDue
+            ? old.due.count
+            : Math.max(0, old.due.count - 1);
         return {
           ...old,
           due: {
             ...old.due,
             due_ids: nextDueIds,
-            count: grade === "again" ? old.due.count : Math.max(0, old.due.count - 1),
+            count,
           },
         };
       },
@@ -289,6 +436,9 @@ export function FlashcardsView({
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (isEditableTarget(event.target) || isDialogOpen()) {
+        return;
+      }
+      if (event.metaKey || event.ctrlKey || event.altKey) {
         return;
       }
       if (!review || review.cards.length === 0) {
@@ -366,16 +516,21 @@ export function FlashcardsView({
   const hasDeck = deck !== null && review !== null;
   const deckUnavailable =
     deckQuery.isError ||
-    (flushDone && deckQuery.isSuccess && deck === null && !deckQuery.isFetching);
-  const queriesLoading =
+    (queriesSettled && deckLoadError);
+  const awaitingSettled =
     !flushDone ||
-    deckQuery.isLoading ||
-    overview.isLoading ||
-    (deckQuery.isFetching && !hasDeck && !deckUnavailable);
+    !postFlushReady ||
+    !deckQuery.isSuccess ||
+    deckQuery.isFetching ||
+    !overview.isSuccess ||
+    overview.isFetching ||
+    (flushAt > 0 && deckQuery.dataUpdatedAt < flushAt) ||
+    (flushAt > 0 && overview.dataUpdatedAt < flushAt);
+  const queriesLoading = awaitingSettled && !hasDeck && !deckUnavailable;
   const displayName = courseDisplayName(course);
   const jobDisabled = viewerBlocked || studyJobRunning || startJob.isPending;
 
-  if (queriesLoading && !hasDeck && !deckUnavailable) {
+  if (queriesLoading) {
     return (
       <div
         data-testid="flashcards-view"
@@ -419,8 +574,10 @@ export function FlashcardsView({
 
   const session = review;
   const emptySession = session.cards.length === 0;
-  const progress =
-    emptySession ? 0 : ((session.index + 1) / session.cards.length) * 100;
+  const progressRatio = emptySession
+    ? 0
+    : (session.index + 1) / session.cards.length;
+
   const card = emptySession ? null : currentCard(session);
 
   const citationReason =
@@ -449,10 +606,9 @@ export function FlashcardsView({
           </Tabs>
           <div className="flex h-progress min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
             <div
-              className="h-full bg-primary transition-[flex-grow] duration-fast ease-out-soft"
-              style={{ flexGrow: progress === 0 ? 0 : progress }}
+              className="h-full w-full origin-left bg-primary transition-transform duration-fast ease-out-soft"
+              style={{ transform: `scaleX(${progressRatio})` }} // style-allow: live progress ratio
             />
-            <div style={{ flexGrow: progress === 0 ? 1 : 100 - progress }} />
           </div>
           <span className="text-xs whitespace-nowrap text-muted-foreground">
             {emptySession ? "0 / 0" : `${session.index + 1} / ${session.cards.length}`}
@@ -496,19 +652,16 @@ export function FlashcardsView({
           <>
             <div
               data-testid="flashcard-card"
-              className="flex min-h-80 w-full cursor-pointer flex-col rounded-md border border-border bg-card p-7 shadow-card"
+              className="flex min-h-80 w-full cursor-pointer flex-col rounded-md border border-border bg-card px-8 py-7 shadow-card"
               onClick={() => setReview(flipReview(session))}
             >
-              <span className="font-serif text-sm italic text-faint-foreground">
-                {session.flipped ? "Answer" : "Question"}
-              </span>
-              <p className="mt-3 font-serif text-flashcard-q">
-                {card!.front}
-              </p>
+              <span className="font-serif text-sm italic text-faint-foreground">Question</span>
+              <p className="mt-4.5 font-serif text-flashcard-q">{card!.front}</p>
               {session.flipped ? (
-                <p className="mt-4 border-t border-dashed border-border pt-4 font-serif text-read text-muted-foreground">
-                  {card!.back}
-                </p>
+                <div className="mt-4.5 border-t border-dashed border-border pt-4.5">
+                  <span className="font-serif text-sm italic text-faint-foreground">Answer</span>
+                  <p className="mt-4.5 font-serif text-read text-muted-foreground">{card!.back}</p>
+                </div>
               ) : null}
               <div className="mt-auto flex items-center justify-between gap-2 pt-5 text-xs text-faint-foreground">
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -603,6 +756,16 @@ export function FlashcardsView({
                 <ChevronLeft className="size-icon-sm" />
                 Previous
               </Button>
+              {session.flipped ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setReview(flipReview(session))}
+                >
+                  <RotateCcw className="size-icon-sm" />
+                  Show front
+                </Button>
+              ) : null}
               <Button type="button" variant="outline" onClick={() => setReview(nextReview(session))}>
                 Next
                 <ChevronRight className="size-icon-sm" />

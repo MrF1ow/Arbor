@@ -12,8 +12,12 @@ test("flashcard grades enqueue study writes instead of awaiting study_progress",
     new URL("../src/components/flashcards/flashcards-view.tsx", import.meta.url),
     "utf8",
   );
-  assert.doesNotMatch(source, /await invoke\(\s*["']study_progress["']/);
-  assert.match(source, /enqueueWrite\(/);
+  const gradeStart = source.indexOf("function gradeCard");
+  assert.ok(gradeStart >= 0, "gradeCard function missing");
+  const gradeEnd = source.indexOf("\n  useEffect", gradeStart);
+  const gradeBody = source.slice(gradeStart, gradeEnd);
+  assert.doesNotMatch(gradeBody, /await invoke\(\s*["']study_progress["']/);
+  assert.match(gradeBody, /enqueueWrite\(/);
 });
 
 test("quiz grades enqueue study writes instead of awaiting study_progress", async () => {
