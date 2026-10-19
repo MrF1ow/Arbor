@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@source not "../tests";
+
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
@@ -27,7 +29,20 @@
   --destructive-surface: color-mix(in srgb, var(--destructive) 10%, transparent);
   --info: #4a6f86;
   --backdrop: rgb(43 36 32 / 0.35);
-  --shadow-card: 0 1px 2px rgb(43 36 32 / 0.05), 0 8px 24px rgb(43 36 32 / 0.05);
+  --card-shadow: 0 1px 2px rgb(43 36 32 / 0.05), 0 8px 24px rgb(43 36 32 / 0.05);
+
+  --card-foreground: var(--foreground);
+  --popover-foreground: var(--foreground);
+  --secondary: var(--muted);
+  --secondary-foreground: var(--foreground);
+  --destructive-foreground: var(--primary-foreground);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--selected);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
 }
 
 .dark {
@@ -55,7 +70,7 @@
   --destructive-surface: color-mix(in srgb, var(--destructive) 10%, transparent);
   --info: #8db1c7;
   --backdrop: rgb(0 0 0 / 0.5);
-  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px rgb(0 0 0 / 0.25);
+  --card-shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px rgb(0 0 0 / 0.25);
 }
 
 @theme inline {
@@ -82,7 +97,20 @@
   --color-info: var(--info);
   --color-backdrop: var(--backdrop);
 
-  --shadow-card: var(--shadow-card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --shadow-card: var(--card-shadow);
 }
 
 @theme {
@@ -130,8 +158,8 @@
   --spacing-icon: 16px;
 
   --ease-out-soft: cubic-bezier(0.2, 0.7, 0.2, 1);
-  --duration-fast: 120ms;
-  --duration-panel: 200ms;
+  --transition-duration-fast: 120ms;
+  --transition-duration-panel: 200ms;
 
   --z-index-dropdown: 10;
   --z-index-drawer: 20;
@@ -144,6 +172,10 @@
   html,
   body {
     height: 100%;
+  }
+
+  html {
+    @apply bg-background text-foreground;
   }
 
   body {
@@ -185,7 +217,7 @@
     font-size: 2.2em;
     font-weight: 500;
     line-height: 1.15;
-    margin: 0 0 8px;
+    margin: 0 0 calc(var(--spacing) * 2);
     letter-spacing: -0.01em;
   }
 
@@ -194,7 +226,7 @@
     font-size: 1.5em;
     font-weight: 500;
     line-height: 1.15;
-    margin: 0 0 8px;
+    margin: 0 0 calc(var(--spacing) * 2);
     letter-spacing: -0.01em;
   }
 
@@ -203,21 +235,21 @@
     font-size: 1.15em;
     font-weight: 500;
     font-style: italic;
-    margin: 30px 0 8px;
+    margin: calc(var(--spacing) * 7.5) 0 calc(var(--spacing) * 2);
   }
 
   .prose-arbor p {
-    margin: 0 0 14px;
+    margin: 0 0 calc(var(--spacing) * 3.5);
   }
 
   .prose-arbor ul,
   .prose-arbor ol {
-    margin: 0 0 14px;
+    margin: 0 0 calc(var(--spacing) * 3.5);
     padding-left: 1.2em;
   }
 
   .prose-arbor li {
-    margin-bottom: 6px;
+    margin-bottom: calc(var(--spacing) * 1.5);
   }
 
   .prose-arbor li::marker {
@@ -226,7 +258,7 @@
 
   .prose-arbor li ul,
   .prose-arbor li ol {
-    margin: 6px 0 0 1.1em;
+    margin: calc(var(--spacing) * 1.5) 0 0 1.1em;
   }
 
   .prose-arbor strong {
@@ -257,7 +289,7 @@
   .prose-arbor table {
     width: 100%;
     border-collapse: collapse;
-    margin: 0 0 14px;
+    margin: 0 0 calc(var(--spacing) * 3.5);
     font-family: var(--font-sans);
     font-size: var(--text-sm);
   }
@@ -265,7 +297,7 @@
   .prose-arbor th,
   .prose-arbor td {
     border: 1px solid var(--border);
-    padding: 8px 10px;
+    padding: calc(var(--spacing) * 2) calc(var(--spacing) * 2.5);
     text-align: left;
   }
 
@@ -274,17 +306,17 @@
     font-weight: 500;
   }
 
-  .prose-arbor [data-arbor-page] {
+  .page-chip {
     display: inline-flex;
     align-items: center;
-    height: 24px;
-    padding: 0 9px;
-    margin-bottom: 12px;
+    margin-bottom: calc(var(--spacing) * 3);
+    padding: calc(var(--spacing) * 0.75) calc(var(--spacing) * 2);
     border: 1px solid var(--border);
     border-radius: var(--radius-xs);
     font-family: var(--font-sans);
-    font-size: var(--text-2xs);
-    color: var(--faint-foreground);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    color: var(--muted-foreground);
     background: transparent;
   }
 }

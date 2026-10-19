@@ -8,32 +8,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DESKTOP_ROOT = path.resolve(__dirname, "..");
 const SRC_ROOT = path.join(DESKTOP_ROOT, "src");
 
-const ALLOW_SUFFIX = /\/\/\s*style-allow:\s*.+$/;
+const LINE_ALLOW = /(?:\/\/|\/\*)\s*style-allow:\s*\S/;
 
-const RULES = [
-  {
-    id: "hex-color",
-    test: (line) => /#[0-9a-fA-F]{3,8}\b/.test(line) && !/^\s*import\s/.test(line),
-    snippet: (line) => line.match(/#[0-9a-fA-F]{3,8}\b/)?.[0] ?? "hex",
-  },
-  {
-    id: "rgb-hsl",
-    test: (line) => /\b(?:rgb|rgba|hsl)\(/i.test(line),
-    snippet: () => "color function",
-  },
-  {
-    id: "tailwind-arbitrary",
-    test: (line) => /-\[[0-9.]+(?:px|rem|em)\]/.test(line) || /-\[#/.test(line),
-    snippet: (line) => line.match(/-\[[^\]]+\]/)?.[0] ?? "arbitrary",
-  },
-  {
-    id: "inline-style",
-    test: (line) =>
-      /style=\{\{/.test(line) &&
-      /\b(color|background|margin|padding|gap|fontSize|width|height)\b/.test(line),
-    snippet: () => "style={{ … }}",
-  },
-];
+const STYLE_KEY =
+  /\b(color|background[A-Za-z]*|margin[A-Za-z]*|padding[A-Za-z]*|gap|fontSize|width|height|minWidth|maxWidth|minHeight|maxHeight)\s*:/;
+
+const ARBITRARY_UNIT =
+  /-\[(?:[^\]]*(?:[0-9.]+(?:px|rem|em|vh|vw|ms|s|%)|#[0-9a-fA-F]{3,8})[^\]]*)\]/i;
 
 const ALLOWED_PUNCT = new Set(["·", "…", "—", "–", "→"]);
 
@@ -45,6 +26,121 @@ function hasDisallowedUnicode(line) {
     if (code >= 0x1f300 && code <= 0x1faff) return true;
   }
   return false;
+}
+
+function isAllowLine(line) {
+  return LINE_ALLOW.test(line);
+}
+
+function stripHexFalsePositives(line) {
+  let s = line;
+  if (/^\s*import\s/.test(line) || /^\s*export\s+[^;]*\sfrom\s+['"]/.test(line)) {
+    return "";
+  }
+  s = s.replace(/import\s*\(\s*(["'`])(?:\\.|(?!\1)[^\\])*\1\s*\)/g, 'import("")');
+  s = s.replace(/https?:\/\/[^\s'"`)]+/gi, "");
+  s = s.replace(/url\s*\(\s*#[^)]+\)/gi, "");
+  return s;
+}
+
+function hexViolations(line) {
+  const stripped = stripHexFalsePositives(line);
+  if (!stripped) return [];
+  const hits = [];
+  const re = /#[0-9a-fA-F]{3,8}\b/g;
+  let match;
+  while ((match = re.exec(stripped)) !== null) {
+    hits.push(match[0]);
+  }
+  return hits;
+}
+
+function rgbHslViolations(line) {
+  if (/\b(?:rgb|rgba|hsl|hsla)\(/i.test(line)) {
+    return ["color function"];
+  }
+  return [];
+}
+
+function tailwindArbitraryViolations(line) {
+  const hits = [];
+  const re = /-\[[^\]]+\]/g;
+  let match;
+  while ((match = re.exec(line)) !== null) {
+    const inner = match[0].slice(2, -1);
+    if (/[0-9.]+(?:px|rem|em|vh|vw|ms|s|%)|\#[0-9a-fA-F]{3,8}/i.test(inner)) {
+      hits.push(match[0]);
+    }
+  }
+  return hits;
+}
+
+function findMultilineStyleViolations(relativePath, source) {
+  if (!/\.(tsx|jsx)$/.test(relativePath)) return [];
+
+  const violations = [];
+  const re = /style=\{\{/g;
+  let match;
+  while ((match = re.exec(source)) !== null) {
+    const start = match.index;
+    let depth = 2;
+    let i = start + match[0].length;
+    while (i < source.length && depth > 0) {
+      if (source[i] === "{") depth += 1;
+      else if (source[i] === "}") depth -= 1;
+      i += 1;
+    }
+    const block = source.slice(start, i);
+    const line = source.slice(0, start).split("\n").length;
+    const contextLine = source.split("\n")[line - 1] ?? "";
+    if (isAllowLine(contextLine) || isAllowLine(block)) {
+      continue;
+    }
+    if (STYLE_KEY.test(block)) {
+      violations.push({
+        file: relativePath,
+        line,
+        rule: "inline-style",
+        snippet: "style={{ … }}",
+      });
+    }
+  }
+  return violations;
+}
+
+export function checkLine(line, { filePath = "file.tsx" } = {}) {
+  if (isAllowLine(line)) {
+    return [];
+  }
+
+  const violations = [];
+
+  for (const snippet of hexViolations(line)) {
+    violations.push({ file: filePath, line: 0, rule: "hex-color", snippet });
+  }
+
+  for (const snippet of rgbHslViolations(line)) {
+    violations.push({ file: filePath, line: 0, rule: "rgb-hsl", snippet });
+  }
+
+  for (const snippet of tailwindArbitraryViolations(line)) {
+    violations.push({ file: filePath, line: 0, rule: "tailwind-arbitrary", snippet });
+  }
+
+  if (/style=\{\{/.test(line) && STYLE_KEY.test(line)) {
+    violations.push({ file: filePath, line: 0, rule: "inline-style", snippet: "style={{ … }}" });
+  }
+
+  if (/\.tsx$/.test(filePath) && hasDisallowedUnicode(line)) {
+    violations.push({
+      file: filePath,
+      line: 0,
+      rule: "unicode-glyph",
+      snippet: "disallowed unicode",
+    });
+  }
+
+  return violations;
 }
 
 function shouldSkipFile(relativePath) {
@@ -67,35 +163,6 @@ function walk(dir, files = []) {
   return files;
 }
 
-export function checkLine(line, { filePath = "file.tsx" } = {}) {
-  if (ALLOW_SUFFIX.test(line)) {
-    return [];
-  }
-
-  const violations = [];
-  for (const rule of RULES) {
-    if (rule.test(line)) {
-      violations.push({
-        file: filePath,
-        line: 0,
-        rule: rule.id,
-        snippet: rule.snippet(line),
-      });
-    }
-  }
-
-  if (/\.tsx$/.test(filePath) && hasDisallowedUnicode(line)) {
-    violations.push({
-      file: filePath,
-      line: 0,
-      rule: "unicode-glyph",
-      snippet: "disallowed unicode",
-    });
-  }
-
-  return violations;
-}
-
 export function lintFile(relativePath, source) {
   const lines = source.split("\n");
   const violations = [];
@@ -105,6 +172,7 @@ export function lintFile(relativePath, source) {
       violations.push({ ...item, line: index + 1 });
     }
   }
+  violations.push(...findMultilineStyleViolations(relativePath, source));
   return violations;
 }
 

@@ -144,7 +144,7 @@ The dark palette is defined **once** under `.dark`. `domain/theme.ts` (unchanged
   - `--font-mono` for the log only.
 - **Reading:** `--read-size: 17.5px`, `--read-leading: 1.75`, `--read-max: 40rem`. Titles: course title 21px, document title 2.2em, both serif at weight 500.
 - **Layout:** `--sidebar-width: 14.75rem`, `--index-width: 15rem`, header `52px`, action bar `44px`, `--log-min-h`. No icon-rail width; see §6.1.
-- **Motion:** `--ease-out`, `--duration-fast: 120ms`, `--duration-panel: 200ms`. Every panel animation also respects `prefers-reduced-motion`.
+- **Motion:** `--ease-out-soft`, `--transition-duration-fast: 120ms`, `--transition-duration-panel: 200ms` (Tailwind utilities `ease-out-soft`, `duration-fast`, `duration-panel`). Every panel animation also respects `prefers-reduced-motion`.
 
 ### 4.3 Reading typography
 `@layer components { .prose-arbor { … } }` in `index.css` carries over today's `.reading-pane` rules (headings, lists, code, page chips), rewritten with tokens. It's used for digest notes, chat answers, and the study plan. No `@tailwindcss/typography`: we want exact control, and it's small.

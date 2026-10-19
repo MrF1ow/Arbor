@@ -17,11 +17,28 @@ const COLOR_SWATCHES: { token: string; className: string }[] = [
   { token: "accent-foreground", className: "bg-accent-foreground" },
   { token: "selected", className: "bg-selected" },
   { token: "border", className: "bg-border" },
+  { token: "input", className: "bg-input" },
+  { token: "ring", className: "bg-ring" },
   { token: "success", className: "bg-success" },
   { token: "destructive", className: "bg-destructive" },
   { token: "destructive-surface", className: "bg-destructive-surface" },
   { token: "info", className: "bg-info" },
   { token: "backdrop", className: "bg-backdrop" },
+];
+
+const ALIAS_SWATCHES: { token: string; className: string }[] = [
+  { token: "card-foreground", className: "bg-card-foreground" },
+  { token: "popover-foreground", className: "bg-popover-foreground" },
+  { token: "secondary", className: "bg-secondary" },
+  { token: "secondary-foreground", className: "bg-secondary-foreground" },
+  { token: "destructive-foreground", className: "bg-destructive-foreground" },
+  { token: "sidebar-foreground", className: "bg-sidebar-foreground" },
+  { token: "sidebar-primary", className: "bg-sidebar-primary" },
+  { token: "sidebar-primary-foreground", className: "bg-sidebar-primary-foreground" },
+  { token: "sidebar-accent", className: "bg-sidebar-accent" },
+  { token: "sidebar-accent-foreground", className: "bg-sidebar-accent-foreground" },
+  { token: "sidebar-border", className: "bg-sidebar-border" },
+  { token: "sidebar-ring", className: "bg-sidebar-ring" },
 ];
 
 const TYPE_SCALE: { name: string; className: string }[] = [
@@ -57,11 +74,14 @@ const SIZE_BARS = [
   { label: "reading", className: "w-full max-w-reading h-row" },
 ] as const;
 
-const PROSE_SAMPLE = `# Sample digest
+const PROSE_SAMPLE = `<!-- arbor-pages:12-14 -->
+# Sample digest
 
 Intro paragraph with **bold** and a [digest link](./digests/week-1.md).
 
 ## Section
+
+### Subsection detail
 
 - First item
 - Second item
@@ -72,8 +92,7 @@ Intro paragraph with **bold** and a [digest link](./digests/week-1.md).
 | Theme | Ready |
 
 Inline \`code\` span.
-
-<!-- arbor-pages:12-14 -->
+<!-- /arbor-pages:12-14 -->
 `;
 
 const GALLERY_FINGERPRINT = "arbor-dev-ui-token-gallery-6.0";
@@ -87,7 +106,7 @@ export default function DevGallery() {
     <div className="min-h-full bg-background p-6 text-foreground" data-dev-gallery={GALLERY_FINGERPRINT}>
       <header className="mb-8 flex flex-wrap items-center gap-4">
         <h1 className="font-serif text-title font-medium">Arbor UI tokens</h1>
-        <div className="inline-flex gap-1 rounded-lg border border-border bg-muted p-1">
+        <div className="inline-flex gap-1 rounded-lg border border-border bg-muted p-1 transition-colors duration-panel ease-out-soft">
           {(["light", "dark", "system"] as const).map((mode) => (
             <button
               key={mode}
@@ -95,8 +114,8 @@ export default function DevGallery() {
               aria-pressed={appearance === mode}
               className={
                 appearance === mode
-                  ? "rounded-md bg-card px-3 py-1 text-xs capitalize text-foreground shadow-card"
-                  : "rounded-md px-3 py-1 text-xs capitalize text-muted-foreground"
+                  ? "rounded-md bg-card px-3 py-1 text-xs capitalize text-foreground shadow-card transition-colors duration-fast ease-out-soft"
+                  : "rounded-md px-3 py-1 text-xs capitalize text-muted-foreground transition-colors duration-fast ease-out-soft"
               }
               onClick={() => setAppearance(mode)}
             >
@@ -110,6 +129,18 @@ export default function DevGallery() {
         <h2 className="mb-3 text-sm font-semibold">Colors</h2>
         <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
           {COLOR_SWATCHES.map(({ token, className }) => (
+            <li key={token} className="flex items-center gap-2 text-xs">
+              <span className={`size-8 shrink-0 rounded-sm border border-border ${className}`} aria-hidden />
+              <span className="font-mono text-muted-foreground">{token}</span>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="mb-10">
+        <h2 className="mb-3 text-sm font-semibold">Shadcn alias tokens</h2>
+        <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+          {ALIAS_SWATCHES.map(({ token, className }) => (
             <li key={token} className="flex items-center gap-2 text-xs">
               <span className={`size-8 shrink-0 rounded-sm border border-border ${className}`} aria-hidden />
               <span className="font-mono text-muted-foreground">{token}</span>
@@ -166,6 +197,9 @@ export default function DevGallery() {
 
       <section>
         <h2 className="mb-3 text-sm font-semibold">prose-arbor</h2>
+        {prose.pageChip ? (
+          <span className="page-chip">Pages {prose.pageChip}</span>
+        ) : null}
         <div className="prose-arbor" dangerouslySetInnerHTML={{ __html: prose.html }} />
       </section>
     </div>
