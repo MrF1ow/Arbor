@@ -46,13 +46,12 @@ export function AppShell() {
 
   return (
     <SidebarProvider
-      contained
       open={sidebarOpen}
       onOpenChange={onSidebarOpenChange}
-      className="h-full min-h-0"
+      className="h-svh min-h-0 overflow-hidden"
     >
       <AppSidebar />
-      <SidebarInset className="flex min-h-0 flex-1 flex-col">
+      <SidebarInset className="flex min-h-0 min-w-0 flex-1 flex-col">
         <div className="relative flex min-h-0 flex-1 flex-col">
           <ShellContextProvider
             value={{

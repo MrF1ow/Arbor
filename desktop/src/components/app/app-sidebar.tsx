@@ -14,6 +14,7 @@ import { toast } from "sonner";
 
 import { ListRow } from "~/components/app/list-row";
 import { SectionLabel } from "~/components/app/section-label";
+import { Badge } from "~/components/ui/badge";
 import { Button, IconButton } from "~/components/ui/button";
 import {
   Collapsible,
@@ -184,7 +185,6 @@ export function AppSidebar() {
           label={`Hide sidebar (${modShortcut("B")})`}
           size="icon-sm"
           variant="ghost"
-          tooltip={false}
           onClick={() => {
             markSidebarTouched();
             setSidebarOpen(false);
@@ -201,7 +201,6 @@ export function AppSidebar() {
               label="Add class"
               size="icon-xs"
               variant="ghost"
-              tooltip={false}
               onClick={() => setAddingClass((v) => !v)}
             />
           }
@@ -289,7 +288,7 @@ function RootGroup({
   onRootSelect: (root: string) => void;
 }) {
   const courses = useCourses(entry.path);
-  const label = `${workspaceRootLabel(entry, all)} · ${entry.kind}`;
+  const label = workspaceRootLabel(entry, all);
   const [open, setOpen] = useState(true);
 
   return (
@@ -301,10 +300,15 @@ function RootGroup({
         <Button
           variant="ghost"
           size="sm"
-          className="h-auto min-w-0 flex-1 justify-start px-1 py-1 text-left text-xs font-medium text-muted-foreground"
+          className="h-auto min-w-0 flex-1 justify-start gap-1.5 px-1 py-1 text-left text-xs font-medium text-muted-foreground"
           onClick={() => onRootSelect(entry.path)}
         >
           <span className="truncate">{label}</span>
+          {entry.kind === "shared" ? (
+            <Badge variant="outline" className="shrink-0 px-1 py-0 text-2xs font-normal text-faint-foreground">
+              shared
+            </Badge>
+          ) : null}
         </Button>
       </div>
       <CollapsibleContent className="pb-1">

@@ -20,7 +20,7 @@ export function StatusPill({
   return (
     <span
       className={cn(
-        "inline-flex h-6 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium",
+        "inline-flex h-6 max-w-48 min-w-0 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium",
         VARIANTS[variant],
         className,
       )}
@@ -36,7 +36,7 @@ export function StatusPill({
           aria-hidden
         />
       )}
-      {label}
+      <span className="min-w-0 truncate">{label}</span>
     </span>
   );
 }

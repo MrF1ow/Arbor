@@ -4,9 +4,27 @@ type TooltipModule = typeof import("~/components/ui/tooltip");
 
 const TooltipModulePromise = import("~/components/ui/tooltip");
 
+let preloadScheduled = false;
+
+function scheduleTooltipPreload() {
+  if (preloadScheduled || typeof window === "undefined") {
+    return;
+  }
+  preloadScheduled = true;
+  const run = () => {
+    void TooltipModulePromise;
+  };
+  if (typeof requestIdleCallback !== "undefined") {
+    requestIdleCallback(run);
+  } else {
+    setTimeout(run, 0);
+  }
+}
+
+scheduleTooltipPreload();
+
 type LazyTooltipContextValue = {
   mod: TooltipModule | null;
-  activate: () => void;
 };
 
 const LazyTooltipContext = React.createContext<LazyTooltipContextValue | null>(null);
@@ -19,53 +37,20 @@ function useLazyTooltipContext() {
   return ctx;
 }
 
-function useTooltipModule(active: boolean) {
-  const [mod, setMod] = React.useState<TooltipModule | null>(null);
-
-  React.useEffect(() => {
-    if (!active || mod) {
-      return;
-    }
-    void TooltipModulePromise.then(setMod);
-  }, [active, mod]);
-
-  return mod;
-}
-
-function LazyTooltipActivator({
-  children,
-  onActivate,
-}: {
-  children: React.ReactNode;
-  onActivate: () => void;
-}) {
-  return (
-    <span
-      className="contents"
-      onPointerEnter={onActivate}
-      onFocus={onActivate}
-    >
-      {children}
-    </span>
-  );
-}
-
 function LazyTooltip({
   children,
   ...props
 }: React.ComponentProps<TooltipModule["Tooltip"]>) {
-  const [active, setActive] = React.useState(false);
-  const mod = useTooltipModule(active);
-  const activate = () => setActive(true);
+  const [mod, setMod] = React.useState<TooltipModule | null>(null);
 
-  const value = React.useMemo(() => ({ mod, activate }), [mod]);
+  React.useEffect(() => {
+    void TooltipModulePromise.then(setMod);
+  }, []);
+
+  const value = React.useMemo(() => ({ mod }), [mod]);
 
   if (!mod) {
-    return (
-      <LazyTooltipContext.Provider value={value}>
-        <LazyTooltipActivator onActivate={activate}>{children as React.ReactNode}</LazyTooltipActivator>
-      </LazyTooltipContext.Provider>
-    );
+    return <LazyTooltipContext.Provider value={value}>{children as React.ReactNode}</LazyTooltipContext.Provider>;
   }
 
   return (
@@ -79,12 +64,20 @@ function LazyTooltipTrigger(
   props: React.ComponentProps<TooltipModule["TooltipTrigger"]>,
 ): React.ReactElement | null {
   const { mod } = useLazyTooltipContext();
-  if (!mod) {
-    const rendered = props.render;
-    if (rendered == null || typeof rendered === "function") {
-      return null;
+  const { render, ...rest } = props;
+
+  if (typeof render === "function") {
+    if (!mod) {
+      return render({}, { open: false }) as React.ReactElement;
     }
-    return <>{rendered}</>;
+    return React.createElement(mod.TooltipTrigger, { ...rest, render }) as React.ReactElement;
+  }
+
+  if (render != null && !mod) {
+    return <>{render}</>;
+  }
+  if (!mod) {
+    return null;
   }
   return React.createElement(mod.TooltipTrigger, props) as React.ReactElement;
 }

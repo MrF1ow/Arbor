@@ -10,9 +10,9 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { Button } from "~/components/ui/button";
+import { SidebarHeaderTrigger } from "~/components/app/sidebar-header-trigger";
+import { Button, IconButton } from "~/components/ui/button";
 import { Kbd } from "~/components/ui/kbd";
-import { SidebarTrigger, useSidebar } from "~/components/ui/sidebar";
 import { courseDisplayName, workspaceRootLabel } from "~/domain/course";
 import { pickActiveRoot } from "~/lib/knowledge-root";
 import { openDialog } from "~/lib/ipc";
@@ -42,7 +42,6 @@ export function CourseHeader({
   course: string;
   onOpenSearch: () => void;
 }) {
-  const { open: sidebarOpen } = useSidebar();
   const settings = useSettings();
   const activeRoot = pickActiveRoot(settings.data);
   const roots = settings.data?.knowledge_roots ?? [];
@@ -72,20 +71,21 @@ export function CourseHeader({
     }
   };
 
+  const searchLabel = `Search (${modShortcut("K")})`;
+
   return (
-    <header className="flex h-header shrink-0 items-stretch gap-3 border-b border-border px-4">
-      {!sidebarOpen ? (
-        <div className="flex items-center">
-          <SidebarTrigger />
-        </div>
-      ) : null}
+    <header className="@container/course-header flex h-header min-w-0 shrink-0 items-stretch gap-2 border-b border-border px-4 @[880px]/course-header:gap-3">
+      <SidebarHeaderTrigger className="self-center" />
       <div className="flex min-w-0 flex-1 items-baseline gap-2 self-center">
         <h1 className="truncate font-serif text-title font-medium">{courseDisplayName(course)}</h1>
-        <span className="truncate text-xs text-faint-foreground">
+        <span className="min-w-0 truncate text-xs text-faint-foreground">
           {rootLabel} · {digestCount} digests
         </span>
       </div>
-      <nav className="flex min-w-0 items-end gap-3 self-stretch overflow-x-auto sm:gap-5" aria-label="Course modes">
+      <nav
+        className="flex min-w-0 shrink items-end gap-2 self-stretch overflow-x-auto @[880px]/course-header:gap-3"
+        aria-label="Course modes"
+      >
         {MODES.map((mode) => {
           const active = pathname.includes(`/course/${course}/${mode.segment}`);
           return (
@@ -102,19 +102,45 @@ export function CourseHeader({
               )}
             >
               <mode.icon className={cn("size-icon-sm", active && "text-primary")} />
-              <span className="hidden lg:inline">{mode.label}</span>
+              <span className="hidden @[880px]/course-header:inline">{mode.label}</span>
             </Link>
           );
         })}
       </nav>
-      <div className="flex shrink-0 items-center gap-2 self-center">
-        <Button variant="outline" size="sm" onClick={() => void onAddFiles()}>
+      <div className="flex shrink-0 items-center gap-1.5 self-center @[880px]/course-header:gap-2">
+        <IconButton
+          icon={Plus}
+          label="Add files"
+          size="icon-sm"
+          variant="outline"
+          className="@[880px]/course-header:hidden"
+          onClick={() => void onAddFiles()}
+        />
+        <Button
+          variant="outline"
+          size="sm"
+          className="hidden @[880px]/course-header:inline-flex"
+          onClick={() => void onAddFiles()}
+        >
           <Plus className="size-icon-sm" />
-          <span className="hidden sm:inline">Add files</span>
+          Add files
         </Button>
-        <Button variant="outline" size="sm" onClick={onOpenSearch}>
+        <IconButton
+          icon={Search}
+          label={searchLabel}
+          size="icon-sm"
+          variant="outline"
+          className="@[880px]/course-header:hidden"
+          onClick={onOpenSearch}
+        />
+        <Button
+          variant="outline"
+          size="sm"
+          className="hidden @[880px]/course-header:inline-flex"
+          onClick={onOpenSearch}
+        >
           <Search className="size-icon-sm" />
-          <span className="hidden sm:inline">Search</span>
+          Search
           <Kbd>{modShortcut("K")}</Kbd>
         </Button>
       </div>

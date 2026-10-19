@@ -4,6 +4,7 @@ import { FolderOpen } from "lucide-react";
 import { toast } from "sonner";
 
 import { EmptyState } from "~/components/app/empty-state";
+import { SidebarHeaderTrigger } from "~/components/app/sidebar-header-trigger";
 import { Button } from "~/components/ui/button";
 import { invoke, openDialog } from "~/lib/ipc";
 import { useActivateKnowledgeRootMutation } from "~/lib/queries/active-root";
@@ -38,7 +39,11 @@ function WelcomePage() {
   };
 
   return (
-    <div className="flex flex-1 items-center justify-center p-8">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex h-header shrink-0 items-center border-b border-border px-4">
+        <SidebarHeaderTrigger />
+      </div>
+      <div className="flex flex-1 items-center justify-center p-8">
       <EmptyState
         icon={FolderOpen}
         title="Choose a Knowledge folder"
@@ -50,6 +55,7 @@ function WelcomePage() {
           </Button>
         }
       />
+      </div>
     </div>
   );
 }

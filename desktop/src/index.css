@@ -341,4 +341,9 @@
     color: var(--muted-foreground);
     background: transparent;
   }
+
+  #root {
+    height: 100svh;
+    overflow: hidden;
+  }
 }

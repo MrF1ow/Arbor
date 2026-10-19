@@ -24,7 +24,7 @@ function RootLayout() {
           <EffectiveProviderSync />
           <WorkerEventsBridge />
           <AppearanceSync />
-          <div className="flex h-full min-h-svh flex-col">
+          <div className="flex h-svh min-h-0 flex-col overflow-hidden">
             {bareShell ? <Outlet /> : <AppShell />}
           </div>
           <Toaster />

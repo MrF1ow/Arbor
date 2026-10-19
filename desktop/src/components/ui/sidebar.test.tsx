@@ -8,6 +8,8 @@ vi.mock("~/hooks/use-mobile", () => ({
 
 import { useIsMobile } from "~/hooks/use-mobile";
 
+import { SidebarHeaderTrigger } from "~/components/app/sidebar-header-trigger";
+
 import {
   Sidebar,
   SidebarContent,
@@ -31,6 +33,26 @@ describe("Sidebar", () => {
 
     await user.keyboard("{Control>}b{/Control}");
     expect(onOpenChange).toHaveBeenCalled();
+    expect(onOpenChange).toHaveBeenCalledWith(true);
+  });
+
+  it("shows sidebar trigger on mobile when closed and opens the sheet", async () => {
+    vi.mocked(useIsMobile).mockReturnValue(true);
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+
+    render(
+      <SidebarProvider open={false} onOpenChange={onOpenChange}>
+        <SidebarHeaderTrigger />
+        <Sidebar collapsible="offcanvas">
+          <SidebarContent>Mobile nav</SidebarContent>
+        </Sidebar>
+      </SidebarProvider>,
+    );
+
+    const trigger = screen.getByRole("button", { name: /toggle sidebar/i });
+    expect(trigger).toBeVisible();
+    await user.click(trigger);
     expect(onOpenChange).toHaveBeenCalledWith(true);
   });
 

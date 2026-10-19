@@ -108,25 +108,35 @@ function IconButton({
   className,
   ...props
 }: IconButtonProps) {
-  const trigger = (
-    <Button
-      variant={variant}
-      size={size}
-      className={className}
-      aria-label={label}
-      {...props}
-    >
-      <Icon />
-    </Button>
-  );
-
   if (!tooltip) {
-    return trigger;
+    return (
+      <Button
+        variant={variant}
+        size={size}
+        className={className}
+        aria-label={label}
+        {...props}
+      >
+        <Icon />
+      </Button>
+    );
   }
 
   return (
     <LazyTooltip>
-      <LazyTooltipTrigger render={trigger} />
+      <LazyTooltipTrigger
+        render={(tooltipProps, _tooltipState) => (
+          <Button
+            variant={variant}
+            size={size}
+            className={className}
+            aria-label={label}
+            {...mergeProps<"button">(tooltipProps, props)}
+          >
+            <Icon />
+          </Button>
+        )}
+      />
       <LazyTooltipContent>{label}</LazyTooltipContent>
     </LazyTooltip>
   );
