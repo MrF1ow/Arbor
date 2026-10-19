@@ -5,9 +5,15 @@ type ChipProps = {
   variant?: "default" | "plain";
   onClick?: () => void;
   className?: string;
-};
+} & React.HTMLAttributes<HTMLElement>;
 
-export function Chip({ children, variant = "default", onClick, className }: ChipProps) {
+export function Chip({
+  children,
+  variant = "default",
+  onClick,
+  className,
+  ...rest
+}: ChipProps) {
   const classes = cn(
     "inline-flex h-6 items-center rounded-xs border px-2 text-xs transition-colors duration-fast ease-out-soft",
     variant === "plain"
@@ -19,11 +25,15 @@ export function Chip({ children, variant = "default", onClick, className }: Chip
 
   if (onClick) {
     return (
-      <button type="button" className={classes} onClick={onClick}>
+      <button type="button" className={classes} onClick={onClick} {...rest}>
         {children}
       </button>
     );
   }
 
-  return <span className={classes}>{children}</span>;
+  return (
+    <span className={classes} {...rest}>
+      {children}
+    </span>
+  );
 }

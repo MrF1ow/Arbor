@@ -13,10 +13,14 @@ export function useMarkdown(root: string | null, relativePath: string | null) {
   });
 }
 
-export function useCourseOverview(root: string | null, course: string | null) {
+export function useCourseOverview(
+  root: string | null,
+  course: string | null,
+  queryEnabled = true,
+) {
   return useQuery({
     queryKey: qk.courseOverview(root ?? "", course ?? ""),
-    enabled: Boolean(root && course),
+    enabled: Boolean(root && course) && queryEnabled,
     queryFn: () =>
       invoke<CourseOverviewPayload>("study_progress", {
         root: root!,

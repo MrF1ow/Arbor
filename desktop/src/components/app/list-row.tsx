@@ -60,7 +60,7 @@ export function ListRow({
     <button
       type="button"
       className={rowClass}
-      aria-current={active ? "true" : undefined}
+      aria-current={active ? "page" : undefined}
       onClick={onSelect}
     >
       {content}

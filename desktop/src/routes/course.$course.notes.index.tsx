@@ -2,22 +2,25 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
 
+import { CourseOverview } from "~/components/notes/course-overview";
 import { EmptyState } from "~/components/app/empty-state";
-import { PageHeader } from "~/components/app/page-header";
 import { Button } from "~/components/ui/button";
 import { Skeleton } from "~/components/ui/skeleton";
 import { Spinner } from "~/components/ui/spinner";
-import { courseDisplayName } from "~/domain/course";
 import { pickActiveRoot } from "~/lib/knowledge-root";
 import { openDialog } from "~/lib/ipc";
 import { useDigests, useImportSourcesMutation } from "~/lib/queries/library";
 import { useSettings } from "~/lib/queries/settings";
+import type { NotesSearch } from "~/routes/course.$course.notes";
 
 export const Route = createFileRoute("/course/$course/notes/")({
-  component: CourseOverviewPlaceholder,
+  validateSearch: (search: Record<string, unknown>): NotesSearch => ({
+    heading: typeof search.heading === "string" ? search.heading : undefined,
+  }),
+  component: NotesOverviewRoute,
 });
 
-function CourseOverviewPlaceholder() {
+function NotesOverviewRoute() {
   const { course } = Route.useParams();
   const settings = useSettings();
   const activeRoot = pickActiveRoot(settings.data);
@@ -74,12 +77,13 @@ function CourseOverviewPlaceholder() {
     );
   }
 
+  if (!digests.data) {
+    return null;
+  }
+
   return (
-    <div className="p-8">
-      <PageHeader
-        title={courseDisplayName(course)}
-        description="Overview arrives in PR 7."
-      />
+    <div className="min-h-0 flex-1 overflow-auto">
+      <CourseOverview course={course} digests={digests.data} />
     </div>
   );
 }

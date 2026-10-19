@@ -63,6 +63,10 @@ export function resetStudyWriteQueueForTests() {
 }
 
 export async function flushStudyWritesForRootSwitch(timeoutMs = 3000): Promise<void> {
+  await flushStudyWrites(timeoutMs);
+}
+
+export async function flushStudyWrites(timeoutMs = 3000): Promise<void> {
   if (!moduleStudyWriteQueue) {
     return;
   }
