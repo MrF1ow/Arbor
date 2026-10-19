@@ -1,6 +1,6 @@
 use crate::worker::{
     default_python_dir, kill_worker_tree, packaged_sidecar, parse_worker_json_output,
-    process_path_for_spawn, resolve_worker_argv,     run_worker_json, uv_project_missing_error,
+    process_path_for_spawn, resolve_worker_argv, run_worker_json, uv_project_missing_error,
 };
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -72,8 +72,8 @@ impl Default for WorkerPool {
 pub fn serve_eligible(sub_args: &[&str]) -> bool {
     let sub0 = sub_args.first().copied().unwrap_or("");
     match sub0 {
-        "library-show" | "study-progress" | "study-plan" | "append-card" | "list-models"
-        | "skill-index" => true,
+        // Not skill-index: it can fetch over the network, and serve is serial.
+        "library-show" | "study-progress" | "study-plan" | "append-card" | "list-models" => true,
         "sync" => sub_args.iter().any(|arg| *arg == "--show"),
         _ => false,
     }
@@ -429,6 +429,11 @@ def read_requests():
             break
         buf += chunk
 "#;
+
+    #[test]
+    fn skill_index_is_not_serve_eligible() {
+        assert!(!serve_eligible(&["skill-index", "--source", "/x"]));
+    }
 
     #[test]
     fn serve_request_is_write_ignores_course_name_quiz() {

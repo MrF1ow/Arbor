@@ -228,3 +228,45 @@ def test_split_request_across_writes() -> None:
         finally:
             proc.stdin.close()
             proc.wait(timeout=10)
+
+
+def test_child_processes_cannot_read_protocol_stdin(tmp_path):
+    import json
+    import select
+    import subprocess
+    import sys
+
+    env = dict(os.environ, ARBOR_SERVE_TEST="1")
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "arbor_worker", "serve"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=env,
+    )
+    try:
+        # A child reading fd 0 must see /dev/null, not the next request.
+        reader = {"id": 1, "argv": ["--selftest-stdin"], "env": {}}
+        follow = {"id": 2, "argv": ["skill-index", "--source", str(tmp_path)], "env": {}}
+        proc.stdin.write((json.dumps(reader) + "\n" + json.dumps(follow) + "\n").encode())
+        proc.stdin.flush()
+        ids = []
+        buf = b""
+        while len(ids) < 2:
+            ready, _, _ = select.select([proc.stdout], [], [], 10)
+            assert ready, "serve stalled"
+            chunk = os.read(proc.stdout.fileno(), 65536)
+            assert chunk
+            buf += chunk
+            while b"\n" in buf:
+                line, _, buf = buf.partition(b"\n")
+                resp = json.loads(line)
+                ids.append(resp["id"])
+                if resp["id"] == 1:
+                    assert resp["stdout"] == "0\n"
+                if resp["id"] == 2:
+                    assert resp["exit"] == 64
+        assert ids == [1, 2]
+    finally:
+        proc.stdin.close()
+        proc.wait(timeout=20)

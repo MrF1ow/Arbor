@@ -129,7 +129,7 @@ Analysis and decisions: [`2026-10-18-issue-97-performance.md`](2026-10-18-issue-
   - Snapshot `os.environ`, apply `env`, and run `cli.main(argv)` with `contextlib.redirect_stdout/redirect_stderr` into `StringIO`. Catch `SystemExit` (use its code) and `BaseException` (exit 70, traceback on stderr).
   - **Restore `os.environ` exactly**, including removing added keys.
   - Write one response line.
-- **Allow-list:** `library-show`, `sync` **only with** `--show`, `study-progress` (all actions), `study-plan`, `append-card`, `list-models`, `skill-index`. Anything else gets `exit 64` and `stderr: "not serve-eligible"`.
+- **Allow-list:** `library-show`, `sync` **only with** `--show`, `study-progress` (all actions), `study-plan`, `append-card`, `list-models`. (`skill-index` was dropped in the Phase 3 audit: it can fetch over the network and serve is serial.) Anything else gets `exit 64` and `stderr: "not serve-eligible"`.
 - Requests are handled one at a time on the main thread.
 - Idle exit: if there has been no request for 600 s, exit 0. Use `select` on stdin with a timeout. EOF on stdin exits 0.
 - `serve` must not require `--root`.

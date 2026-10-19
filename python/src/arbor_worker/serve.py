@@ -26,7 +26,8 @@ def _serve_eligible(argv: list[str]) -> bool:
         return "--show" in argv[1:]
     if cmd == "study-progress":
         return True
-    if cmd in ("study-plan", "append-card", "list-models", "skill-index"):
+    # Not skill-index: it can fetch over the network, and requests are serial.
+    if cmd in ("study-plan", "append-card", "list-models"):
         return True
     return False
 
@@ -36,6 +37,19 @@ def _run_selftest_fd1() -> int:
     return 0
 
 
+def _run_selftest_stdin() -> str:
+    import subprocess
+
+    # The child inherits fd 0. It must read /dev/null, not the request pipe.
+    proc = subprocess.run(
+        [sys.executable, "-c", "import sys; print(len(sys.stdin.buffer.read()))"],
+        stdout=subprocess.PIPE,
+        text=True,
+        timeout=10,
+    )
+    return proc.stdout
+
+
 def _handle_request(argv: list[str], env: dict[str, str]) -> tuple[int, str, str]:
     if (
         os.environ.get("ARBOR_SERVE_TEST") == "1"
@@ -43,6 +57,8 @@ def _handle_request(argv: list[str], env: dict[str, str]) -> tuple[int, str, str
     ):
         code = _run_selftest_fd1()
         return code, "", ""
+    if os.environ.get("ARBOR_SERVE_TEST") == "1" and argv == ["--selftest-stdin"]:
+        return 0, _run_selftest_stdin(), ""
 
     if not _serve_eligible(argv):
         return 64, "", "not serve-eligible"
@@ -102,12 +118,17 @@ def serve_loop(
     os.dup2(2, 1)
 
     if stdin_fd is None:
-        stdin_fd = sys.stdin.fileno()
+        # Keep the request pipe on a private fd and give fd 0 /dev/null, so
+        # git and other children can't read protocol lines.
+        stdin_fd = os.dup(sys.stdin.fileno())
+        devnull = os.open(os.devnull, os.O_RDONLY)
+        os.dup2(devnull, 0)
+        os.close(devnull)
 
     buf = b""
 
     def dispatch_line(line_bytes: bytes) -> None:
-        text = line_bytes.decode("utf-8").strip()
+        text = line_bytes.decode("utf-8", errors="replace").strip()
         if not text:
             return
         try:
