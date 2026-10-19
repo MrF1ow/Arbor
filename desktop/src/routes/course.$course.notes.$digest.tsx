@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { PageHeader } from "~/components/app/page-header";
 
-export const Route = createFileRoute("/_course/course/$course/notes/$digest")({
+export const Route = createFileRoute("/course/$course/notes/$digest")({
   component: DigestPlaceholder,
 });
 

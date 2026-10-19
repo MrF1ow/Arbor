@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { PageHeader } from "~/components/app/page-header";
 import { courseDisplayName } from "~/domain/course";
 
-export const Route = createFileRoute("/_course/course/$course/flashcards")({
+export const Route = createFileRoute("/course/$course/flashcards")({
   component: FlashcardsPlaceholder,
 });
 

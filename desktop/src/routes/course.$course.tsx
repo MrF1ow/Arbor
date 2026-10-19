@@ -1,4 +1,4 @@
-import { createFileRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
+import { createFileRoute, Link, Outlet } from "@tanstack/react-router";
 import { useEffect } from "react";
 
 import { ActionBar } from "~/components/app/action-bar";
@@ -12,13 +12,12 @@ import { useUiStore } from "~/stores/ui-store";
 import { courseDisplayName } from "~/domain/course";
 import { BookOpen } from "lucide-react";
 
-export const Route = createFileRoute("/_course")({
+export const Route = createFileRoute("/course/$course")({
   component: CourseLayout,
 });
 
 function CourseLayout() {
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const course = pathname.match(/\/course\/([^/]+)/)?.[1];
+  const { course } = Route.useParams();
   const { onOpenSearch } = useShellContext();
   const settings = useSettings();
   const activeRoot = pickActiveRoot(settings.data);
@@ -26,14 +25,17 @@ function CourseLayout() {
   const setLastCourse = useUiStore((s) => s.setLastCourse);
 
   useEffect(() => {
-    if (activeRoot && course) {
+    if (!activeRoot || !course) {
+      return;
+    }
+    const list = courses.data;
+    if (list == null) {
+      return;
+    }
+    if (list.includes(course)) {
       setLastCourse({ root: activeRoot, course });
     }
-  }, [activeRoot, course, setLastCourse]);
-
-  if (!course) {
-    return null;
-  }
+  }, [activeRoot, course, courses.data, setLastCourse]);
 
   const exists = (courses.data ?? []).includes(course);
 
@@ -57,7 +59,7 @@ function CourseLayout() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <CourseHeader course={course} onOpenSearch={onOpenSearch} />
-      <ActionBar />
+      <ActionBar course={course} />
       <div className="min-h-0 flex-1 overflow-auto">
         <Outlet />
       </div>
