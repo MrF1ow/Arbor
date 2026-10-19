@@ -17,6 +17,7 @@ from arbor_worker.schemas.study.digest import normalize_study_digest
 DEFAULT_EASE = 2.5
 SCHEMA_VERSION = 1
 WRONG_RETRY_MINUTES = 10
+APPLIED_WRITE_IDS_MAX = 500
 
 
 class StudyProgressError(Exception):
@@ -124,6 +125,42 @@ def _write_atomic(path: Path, content: str) -> None:
     finally:
         if tmp.exists():
             tmp.unlink(missing_ok=True)
+
+
+def applied_writes_path(root: Path, course: str) -> Path:
+    validate_course_name(course)
+    if (root / ".git").is_dir():
+        locks_dir = root / ".git" / "arbor-locks"
+    else:
+        locks_dir = root / ".arbor" / "locks"
+        ensure_gitignored(root, ".arbor/locks")
+    locks_dir.mkdir(parents=True, exist_ok=True)
+    return locks_dir / f"applied-{course}.json"
+
+
+def _load_applied_write_ids(path: Path) -> list[str]:
+    if not path.is_file():
+        return []
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    if not isinstance(raw, list):
+        return []
+    out: list[str] = []
+    for item in raw:
+        if isinstance(item, str) and item:
+            out.append(item)
+    return out
+
+
+def _record_applied_write_id(path: Path, write_id: str) -> None:
+    ids = _load_applied_write_ids(path)
+    if write_id not in ids:
+        ids.append(write_id)
+    if len(ids) > APPLIED_WRITE_IDS_MAX:
+        ids = ids[-APPLIED_WRITE_IDS_MAX:]
+    _write_atomic(path, json.dumps(ids) + "\n")
 
 
 @contextmanager
@@ -535,6 +572,7 @@ def study_progress_grade(
     now: datetime | None = None,
     digest: str | None = None,
     heading: str | None | type[_MISSING] = _MISSING,
+    write_id: str | None = None,
 ) -> dict[str, Any]:
     validate_course_name(course)
     if not card_id:
@@ -542,6 +580,9 @@ def study_progress_grade(
     if result not in {"again", "wrong", "mastered"}:
         raise ValueError(f"invalid grade result: {result!r}")
     with progress_lock(root, course):
+        applied_path = applied_writes_path(root, course)
+        if write_id and write_id in _load_applied_write_ids(applied_path):
+            return _load_progress_document(root, course)
         clock = now or parse_utc_now(None)
         doc = _ensure_document(root, course, write_migration=True)
         cards = doc["cards"]
@@ -577,6 +618,8 @@ def study_progress_grade(
             entry["due_at"] = format_due_at(clock + timedelta(days=interval))
         path = progress_path(root, course)
         _write_atomic(path, _serialize_document(doc))
+        if write_id:
+            _record_applied_write_id(applied_path, write_id)
         return doc
 
 
@@ -589,6 +632,7 @@ def study_progress_quiz(
     now: datetime | None = None,
     digest: str | None = None,
     heading: str | None | type[_MISSING] = _MISSING,
+    write_id: str | None = None,
 ) -> dict[str, Any]:
     validate_course_name(course)
     if not question_id:
@@ -597,6 +641,9 @@ def study_progress_quiz(
         raise ValueError(f"invalid quiz result: {result!r}")
     _ = now  # reserved for API symmetry
     with progress_lock(root, course):
+        applied_path = applied_writes_path(root, course)
+        if write_id and write_id in _load_applied_write_ids(applied_path):
+            return _load_progress_document(root, course)
         doc = _ensure_document(root, course, write_migration=True)
         questions = doc["questions"]
         entry = questions.get(question_id)
@@ -616,6 +663,8 @@ def study_progress_quiz(
             entry["wrong"] += 1
         path = progress_path(root, course)
         _write_atomic(path, _serialize_document(doc))
+        if write_id:
+            _record_applied_write_id(applied_path, write_id)
         return doc
 
 

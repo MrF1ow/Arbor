@@ -1011,6 +1011,7 @@ fn spawn_remote_job_stream(
     root: String,
     job_id: String,
     operation: &'static str,
+    provider_id: String,
     _provider_label: String,
     transport: WorkerTransport,
     courses: Vec<String>,
@@ -1019,10 +1020,12 @@ fn spawn_remote_job_stream(
     message: String,
     index: bool,
 ) {
+    use crate::auth_cache;
     use crate::jobs::{self, JobStatus, SharedCoordinator};
     use crate::remote_job::{run_remote_job, RemoteJobRequest, SystemRemoteOps};
     use tauri::{Emitter, Manager};
 
+    let auth_cache_key = auth_cache::auth_cache_key(&transport, &provider_id);
     std::thread::spawn(move || {
         let release = |app: &tauri::AppHandle, job_id: &str| {
             if let Some(state) = app.try_state::<SharedCoordinator>() {
@@ -1077,7 +1080,13 @@ fn spawn_remote_job_stream(
         let emit_app = app.clone();
         let emit_root = knowledge_root.clone();
         let emit_job = job_id.clone();
+        let auth_key = auth_cache_key.clone();
         let mut emit_line = move |line: &str| {
+            if let Ok(value) = serde_json::from_str::<serde_json::Value>(line) {
+                if value.get("type").and_then(|t| t.as_str()) == Some("auth_failed") {
+                    auth_cache::invalidate_auth_cache_key(&auth_key);
+                }
+            }
             let _ = jobs::append_event(&emit_root, &emit_job, line);
             let _ = emit_app.emit("arbor://progress", serde_json::json!({ "line": line }));
         };
@@ -1112,6 +1121,7 @@ fn spawn_remote_job_stream(
             0
         };
         let _ = jobs::finish_job(&knowledge_root, &job_id, status, code, summary.clone());
+        auth_cache::invalidate_if_auth_failure_for_key(summary.as_deref(), &auth_cache_key);
         release(&app, &job_id);
         let _ = app.emit(
             "arbor://job-finished",
@@ -1141,7 +1151,8 @@ pub fn spawn_remote_update_stream(
     plan_path: PathBuf,
     message: String,
 ) {
-    let label = crate::settings::provider_label(effective_provider_id(&provider_id));
+    let effective = effective_provider_id(&provider_id);
+    let label = crate::settings::provider_label(effective);
     spawn_remote_job_stream(
         app,
         app_dir,
@@ -1149,6 +1160,7 @@ pub fn spawn_remote_update_stream(
         root,
         job_id,
         "update",
+        effective.to_string(),
         label,
         transport,
         courses,
@@ -1172,7 +1184,8 @@ pub fn spawn_remote_generate_stream(
     skill: String,
     remote_tokens: Vec<String>,
 ) {
-    let label = crate::settings::provider_label(effective_provider_id(&provider_id));
+    let effective = effective_provider_id(&provider_id);
+    let label = crate::settings::provider_label(effective);
     let message = format!("study: {course} {skill}");
     spawn_remote_job_stream(
         app,
@@ -1181,6 +1194,7 @@ pub fn spawn_remote_generate_stream(
         root,
         job_id,
         "generate",
+        effective.to_string(),
         label,
         transport,
         vec![course],

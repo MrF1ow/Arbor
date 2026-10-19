@@ -8,7 +8,7 @@ Package version for the worker, desktop, and Tauri app. See [Version numbering](
 
 Nothing pending above `5.1.0`.
 
-## 5.1.0 — 2026-10-19
+## 5.1.0 — 2026-10-18
 
 Git tag `v5.1.0` when this release lands. **Product:** performance and responsiveness for the desktop study loop ([#97](https://github.com/MrF1ow/Arbor/issues/97)). Worker, desktop, and Tauri report `5.1.0`, including `arbor-worker --version`.
 

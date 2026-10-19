@@ -45,10 +45,6 @@ fn default_provider_id(provider: Option<String>) -> String {
     non_empty_provider(provider).unwrap_or_else(|| "codex".to_string())
 }
 
-pub fn invalidate_auth(provider_id: &str) {
-    auth_cache::invalidate_auth(provider_id);
-}
-
 fn cached_auth_with(
     app: &tauri::AppHandle,
     transport: &WorkerTransport,
@@ -1169,6 +1165,7 @@ pub fn build_study_progress_argv(
     result: Option<&str>,
     digest: Option<&str>,
     heading: Option<&str>,
+    write_id: Option<&str>,
 ) -> Result<Vec<String>, String> {
     let mut argv = vec![
         "study-progress".to_string(),
@@ -1197,6 +1194,12 @@ pub fn build_study_progress_argv(
             }
             argv.push("--heading".to_string());
             argv.push(heading.unwrap_or("").to_string());
+            if let Some(wid) = write_id {
+                if !wid.is_empty() {
+                    argv.push("--write-id".to_string());
+                    argv.push(wid.to_string());
+                }
+            }
         }
         _ => return Err(format!("unknown study-progress action: {action}")),
     }
@@ -1217,6 +1220,7 @@ pub async fn study_progress(
     result: Option<String>,
     digest: Option<String>,
     heading: Option<String>,
+    write_id: Option<String>,
 ) -> Result<serde_json::Value, String> {
     spawn_blocking_cmd(move || {
         let argv = build_study_progress_argv(
@@ -1227,6 +1231,7 @@ pub async fn study_progress(
             result.as_deref(),
             digest.as_deref(),
             heading.as_deref(),
+            write_id.as_deref(),
         )?;
         let refs = study_progress_argv_refs(&argv);
         run_worker_json_app(&app, &refs)
@@ -1959,7 +1964,7 @@ mod tests {
     #[test]
     fn study_progress_argv_due_and_weak() {
         assert_eq!(
-            build_study_progress_argv("/root", "Bio", "due", None, None, None, None).unwrap(),
+            build_study_progress_argv("/root", "Bio", "due", None, None, None, None, None).unwrap(),
             vec![
                 "study-progress",
                 "--root",
@@ -1973,16 +1978,16 @@ mod tests {
             .collect::<Vec<_>>()
         );
         assert_eq!(
-            build_study_progress_argv("/root", "Bio", "weak", None, None, None, None).unwrap()[5],
+            build_study_progress_argv("/root", "Bio", "weak", None, None, None, None, None).unwrap()[5],
             "weak"
         );
         assert_eq!(
-            build_study_progress_argv("/root", "Bio", "recommend", None, None, None, None)
+            build_study_progress_argv("/root", "Bio", "recommend", None, None, None, None, None)
                 .unwrap()[5],
             "recommend"
         );
         assert_eq!(
-            build_study_progress_argv("/root", "Bio", "overview", None, None, None, None)
+            build_study_progress_argv("/root", "Bio", "overview", None, None, None, None, None)
                 .unwrap()[5],
             "overview"
         );
@@ -2096,6 +2101,7 @@ mod tests {
                 Some("mastered"),
                 Some("digests/a.md"),
                 Some("Cells"),
+                Some("wid-1"),
             )
             .unwrap(),
             vec![
@@ -2113,6 +2119,8 @@ mod tests {
                 "digests/a.md",
                 "--heading",
                 "Cells",
+                "--write-id",
+                "wid-1",
             ]
             .into_iter()
             .map(str::to_string)
@@ -2125,6 +2133,7 @@ mod tests {
                 "quiz",
                 Some("q_1"),
                 Some("wrong"),
+                None,
                 None,
                 None,
             )
@@ -2147,9 +2156,9 @@ mod tests {
             .map(str::to_string)
             .collect::<Vec<_>>()
         );
-        assert!(build_study_progress_argv("/r", "C", "nope", None, None, None, None).is_err());
-        assert!(build_study_progress_argv("/r", "C", "grade", None, Some("x"), None, None).is_err());
-        assert!(build_study_progress_argv("/r", "C", "grade", Some("id"), None, None, None).is_err());
+        assert!(build_study_progress_argv("/r", "C", "nope", None, None, None, None, None).is_err());
+        assert!(build_study_progress_argv("/r", "C", "grade", None, Some("x"), None, None, None).is_err());
+        assert!(build_study_progress_argv("/r", "C", "grade", Some("id"), None, None, None, None).is_err());
     }
 
     #[test]

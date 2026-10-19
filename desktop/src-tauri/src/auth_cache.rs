@@ -46,11 +46,26 @@ pub fn invalidate_auth(provider_id: &str) {
         .retain(|key, _| !key.ends_with(&suffix));
 }
 
+pub fn invalidate_auth_cache_key(key: &str) {
+    cache()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .remove(key);
+}
+
 pub fn invalidate_if_auth_failure(summary: Option<&str>, provider_id: &str) {
     if summary
         .is_some_and(|text| text.contains("is not authenticated"))
     {
         invalidate_auth(provider_id);
+    }
+}
+
+pub fn invalidate_if_auth_failure_for_key(summary: Option<&str>, cache_key: &str) {
+    if summary
+        .is_some_and(|text| text.contains("is not authenticated"))
+    {
+        invalidate_auth_cache_key(cache_key);
     }
 }
 
@@ -84,5 +99,33 @@ mod tests {
         invalidate_auth("grok");
         assert!(get_cached("local:codex", t0, false).is_some());
         assert!(get_cached("ssh:host:grok", t0, false).is_none());
+    }
+
+    #[test]
+    fn auth_cache_key_and_invalidate_by_key() {
+        let transport = WorkerTransport::Ssh {
+            host: "remote.example".to_string(),
+            port: 22,
+            user: Some("u".to_string()),
+            identity_file: None,
+            worker_cmd: "arbor-worker".to_string(),
+            remote_root: "/data".to_string(),
+        };
+        let key = auth_cache_key(&transport, "grok");
+        assert_eq!(key, "ssh:remote.example:grok");
+        let t0 = Instant::now();
+        store_cached(&key, t0, serde_json::json!({ "authenticated": true }));
+        assert!(get_cached(&key, t0, false).is_some());
+        invalidate_auth_cache_key(&key);
+        assert!(get_cached(&key, t0, false).is_none());
+        invalidate_if_auth_failure_for_key(
+            Some("Grok is not authenticated"),
+            "ssh:remote.example:grok",
+        );
+        store_cached(&key, t0, serde_json::json!({ "authenticated": true }));
+        invalidate_if_auth_failure_for_key(Some("network error"), &key);
+        assert!(get_cached(&key, t0, false).is_some());
+        invalidate_if_auth_failure_for_key(Some("Grok is not authenticated"), &key);
+        assert!(get_cached(&key, t0, false).is_none());
     }
 }

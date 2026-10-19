@@ -120,6 +120,12 @@ def build_parser() -> argparse.ArgumentParser:
         const="",
         help="Source heading.",
     )
+    sp_grade.add_argument(
+        "--write-id",
+        default=None,
+        dest="write_id",
+        help="Idempotency token for retried grade writes.",
+    )
 
     sp_quiz = sp_sub.add_parser("quiz", help="Record a quiz answer result.")
     sp_quiz.add_argument("--id", required=True, dest="question_id", help="Question id.")
@@ -132,6 +138,12 @@ def build_parser() -> argparse.ArgumentParser:
         nargs="?",
         const="",
         help="Source heading.",
+    )
+    sp_quiz.add_argument(
+        "--write-id",
+        default=None,
+        dest="write_id",
+        help="Idempotency token for retried quiz writes.",
     )
 
     sp_sub.add_parser("recommend", help="Print deterministic study recommendations.")

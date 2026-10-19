@@ -13,11 +13,11 @@ test("flashcard and quiz grades enqueue study writes instead of awaiting study_p
   const gradeEnd = source.indexOf("function abortIfSignedOut", gradeStart);
   const gradeBody = source.slice(gradeStart, gradeEnd);
   assert.doesNotMatch(gradeBody, /await invoke\(\s*["']study_progress["']/);
-  assert.match(gradeBody, /studyWriteQueue\.enqueue/);
+  assert.match(gradeBody, /enqueueStudyWrite\(/);
 
   const quizStart = source.indexOf('quizSubmitBtn.addEventListener("click"');
   const quizEnd = source.indexOf('quizNextBtn.addEventListener("click"', quizStart);
   const quizBody = source.slice(quizStart, quizEnd);
   assert.doesNotMatch(quizBody, /await invoke\(\s*["']study_progress["']/);
-  assert.match(quizBody, /studyWriteQueue\.enqueue/);
+  assert.match(quizBody, /enqueueStudyWrite\(/);
 });

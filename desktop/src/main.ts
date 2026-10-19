@@ -438,6 +438,31 @@ function updateStudyWriteStatus({ pending, failing }: { pending: number; failing
   }
 }
 
+function showStudyWriteDroppedNotice(reason: string) {
+  const message = `A grade couldn't be saved: ${reason}`;
+  for (const el of [flashcardStaleEl, quizStaleEl]) {
+    el.textContent = message;
+    el.hidden = false;
+  }
+  logLine(message);
+}
+
+function enqueueStudyWrite(entry: {
+  key: string;
+  root: string;
+  course: string;
+  args: Record<string, unknown>;
+}) {
+  const writeId = crypto.randomUUID();
+  studyWriteQueue.enqueue({
+    key: entry.key,
+    writeId,
+    root: entry.root,
+    course: entry.course,
+    args: { ...entry.args, write_id: writeId },
+  });
+}
+
 const studyWriteQueue = createStudyWriteQueue({
   send: async (w: StudyWrite) => {
     await invoke("study_progress", w.args);
@@ -446,6 +471,11 @@ const studyWriteQueue = createStudyWriteQueue({
   onStatus: updateStudyWriteStatus,
   onSent: (w) => {
     invalidateCourseOverview(w.root, w.course);
+  },
+  onDropped: (w, error) => {
+    const reason = String(error instanceof Error ? error.message : error);
+    logLine(`Dropped study write ${w.key}: ${reason}`);
+    showStudyWriteDroppedNotice(reason);
   },
 });
 
@@ -1714,7 +1744,7 @@ function gradeCurrentFlashcard(grade: "again" | "wrong" | "mastered") {
     flashcardReview = advanceAfterGrade(flashcardReview);
   }
   renderCurrentFlashcard();
-  studyWriteQueue.enqueue({
+  enqueueStudyWrite({
     key: `${flashcardCourse}:${card.id}:${Date.now()}`,
     root: knowledgeRoot,
     course: flashcardCourse,
@@ -1795,6 +1825,7 @@ function renderCurrentQuiz() {
 async function loadQuiz(course: string) {
   if (!knowledgeRoot) return;
   const root = knowledgeRoot;
+  await studyWriteQueue.flush(3000);
   await loadCitations(course);
   try {
     const packValue = await invoke<unknown>("read_study_json", {
@@ -3063,49 +3094,72 @@ async function loadModels(selected: string | null, opts: { refresh?: boolean } =
 }
 
 let refreshAuthInFlight: Promise<void> | null = null;
+let refreshAuthActiveKey = "";
+let refreshAuthQueued: { force: boolean } | null = null;
+
+function refreshAuthRequestKey(force: boolean) {
+  return `${providerId}|${force}`;
+}
+
+async function runRefreshAuth(force: boolean) {
+  const label = currentProviderLabel();
+  const checkingTimer = window.setTimeout(() => {
+    providerLabelEl.textContent = `Checking ${label}…`;
+  }, 150);
+  providerStatusEl.className = "auth-badge";
+  docsLink.hidden = true;
+  const modelLabel = selectedModelLabel();
+  try {
+    const a = await invoke<AuthStatus>("check_auth", {
+      provider: providerId,
+      force,
+    });
+    authed = a.authenticated;
+    if (a.authenticated) {
+      authCheckReason = "";
+      providerLabelEl.textContent = providerBadge(label, modelLabel, true, a.reason);
+      providerStatusEl.className = "auth-badge";
+      docsLink.hidden = true;
+    } else {
+      authCheckReason = a.reason;
+      providerLabelEl.textContent = providerBadge(label, modelLabel, false, a.reason);
+      providerStatusEl.className = "auth-badge bad";
+      docsLink.href = a.docs_url;
+      docsLink.textContent = `Set up ${label}`;
+      docsLink.hidden = false;
+    }
+  } catch (error) {
+    authed = false;
+    authCheckReason = authCheckWorkerFailureReason(error);
+    providerLabelEl.textContent = providerBadge(label, modelLabel, false, authCheckReason);
+    providerStatusEl.className = "auth-badge bad";
+    docsLink.hidden = true;
+  } finally {
+    window.clearTimeout(checkingTimer);
+  }
+  refreshUpdateEnabled();
+  refreshStudyEnabled();
+}
 
 async function refreshAuth(opts: { force?: boolean } = {}) {
-  if (refreshAuthInFlight) return refreshAuthInFlight;
-  const label = currentProviderLabel();
-  refreshAuthInFlight = (async () => {
-    const checkingTimer = window.setTimeout(() => {
-      providerLabelEl.textContent = `Checking ${label}…`;
-    }, 150);
-    providerStatusEl.className = "auth-badge";
-    docsLink.hidden = true;
-    const modelLabel = selectedModelLabel();
-    try {
-      const a = await invoke<AuthStatus>("check_auth", {
-        provider: providerId,
-        force: opts.force ?? false,
-      });
-      authed = a.authenticated;
-      if (a.authenticated) {
-        authCheckReason = "";
-        providerLabelEl.textContent = providerBadge(label, modelLabel, true, a.reason);
-        providerStatusEl.className = "auth-badge";
-        docsLink.hidden = true;
-      } else {
-        authCheckReason = a.reason;
-        providerLabelEl.textContent = providerBadge(label, modelLabel, false, a.reason);
-        providerStatusEl.className = "auth-badge bad";
-        docsLink.href = a.docs_url;
-        docsLink.textContent = `Set up ${label}`;
-        docsLink.hidden = false;
-      }
-    } catch (error) {
-      authed = false;
-      authCheckReason = authCheckWorkerFailureReason(error);
-      providerLabelEl.textContent = providerBadge(label, modelLabel, false, authCheckReason);
-      providerStatusEl.className = "auth-badge bad";
-      docsLink.hidden = true;
-    } finally {
-      window.clearTimeout(checkingTimer);
-    }
-    refreshUpdateEnabled();
-    refreshStudyEnabled();
-  })().finally(() => {
+  const force = opts.force ?? false;
+  const key = refreshAuthRequestKey(force);
+  if (refreshAuthInFlight && refreshAuthActiveKey === key) {
+    return refreshAuthInFlight;
+  }
+  if (refreshAuthInFlight) {
+    refreshAuthQueued = { force };
+    return refreshAuthInFlight;
+  }
+  refreshAuthActiveKey = key;
+  refreshAuthInFlight = runRefreshAuth(force).finally(() => {
     refreshAuthInFlight = null;
+    refreshAuthActiveKey = "";
+    const queued = refreshAuthQueued;
+    refreshAuthQueued = null;
+    if (queued && refreshAuthRequestKey(queued.force) !== key) {
+      void refreshAuth({ force: queued.force });
+    }
   });
   return refreshAuthInFlight;
 }
@@ -3991,7 +4045,7 @@ quizSubmitBtn.addEventListener("click", () => {
       digest: question.source.digest,
       heading: question.source.heading ?? "",
     };
-    studyWriteQueue.enqueue({
+    enqueueStudyWrite({
       key: `${course}:${question.id}:${Date.now()}`,
       root,
       course,

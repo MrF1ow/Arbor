@@ -574,6 +574,61 @@ def test_quiz_updates_questions(git_repo: Path):
     assert doc["questions"]["q1"] == {"seen": 1, "correct": 0, "wrong": 1}
 
 
+def test_grade_write_id_is_idempotent(git_repo: Path):
+    _course_dir(git_repo)
+    study_progress_grade(
+        git_repo,
+        "Biology",
+        "fc_idem",
+        "mastered",
+        now=CLOCK,
+        write_id="write-once",
+    )
+    study_progress_grade(
+        git_repo,
+        "Biology",
+        "fc_idem",
+        "mastered",
+        now=CLOCK,
+        write_id="write-once",
+    )
+    doc = study_progress_show(git_repo, "Biology")
+    card = doc["cards"]["fc_idem"]
+    assert card["seen"] == 1
+    assert card["correct"] == 1
+
+
+def test_cli_grade_commit_failure_still_exits_zero(git_repo: Path, monkeypatch):
+    _course_dir(git_repo)
+    from arbor_worker.gitstate import GitStateError
+
+    def boom(*_args, **_kwargs):
+        raise GitStateError("dirty tree")
+
+    monkeypatch.setattr("arbor_worker.commands._commit_study_progress_if_dirty", boom)
+    code, out, err = _run_cli(
+        [
+            "study-progress",
+            "--root",
+            str(git_repo),
+            "--course",
+            "Biology",
+            "grade",
+            "--id",
+            "fc_commit",
+            "--result",
+            "again",
+            "--write-id",
+            "w-commit",
+        ]
+    )
+    assert code == 0
+    assert "warning:" in err
+    json.loads(out.strip())
+    doc = study_progress_show(git_repo, "Biology")
+    assert doc["cards"]["fc_commit"]["seen"] == 1
+
+
 @pytest.mark.parametrize(
     "load_progress",
     [
