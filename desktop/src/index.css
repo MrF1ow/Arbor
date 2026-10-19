@@ -248,6 +248,18 @@
     padding-left: 1.2em;
   }
 
+  .prose-arbor ul {
+    list-style-type: disc;
+  }
+
+  .prose-arbor ol {
+    list-style-type: decimal;
+  }
+
+  .prose-arbor ul ul {
+    list-style-type: circle;
+  }
+
   .prose-arbor li {
     margin-bottom: calc(var(--spacing) * 1.5);
   }

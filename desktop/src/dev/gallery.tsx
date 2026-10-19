@@ -85,6 +85,10 @@ Intro paragraph with **bold** and a [digest link](./digests/week-1.md).
 
 - First item
 - Second item
+  - Nested bullet
+
+1. First step
+2. Second step
 
 | Topic | Status |
 | --- | --- |
