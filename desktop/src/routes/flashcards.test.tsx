@@ -63,11 +63,13 @@ const smallDeck = {
   ],
 };
 
-async function waitForFlashcardsReady() {
+async function waitForFlashcardsReady(dueTabCount = 14) {
   await waitFor(
     () => {
       expect(screen.getByTestId("flashcards-view")).toBeInTheDocument();
-      expect(screen.getByText(/Due today · 2/i)).toBeInTheDocument();
+      expect(
+        screen.getByText(new RegExp(`Due today · ${dueTabCount}`, "i")),
+      ).toBeInTheDocument();
     },
     { timeout: 8000 },
   );
@@ -134,7 +136,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
     await waitFor(() => {
       expect(screen.getByText("Question two")).toBeInTheDocument();
     });
-    expect(screen.getByText(/Due today · 1/i)).toBeInTheDocument();
+    expect(screen.getByText(/Due today · 13/i)).toBeInTheDocument();
     const gradeCall = getMockIpcCalls().find(
       (c) =>
         c.cmd === "study_progress" &&
@@ -151,7 +153,9 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
     const cached = queryClient.getQueryData<typeof fixtureCourseOverview>(
       qk.courseOverview(FIXTURE_ROOT_FALL, "cell-biology"),
     );
-    expect(cached?.due.due_ids).toEqual(["fc-2"]);
+    expect(cached?.due.due_ids).toEqual(
+      Array.from({ length: 13 }, (_, i) => `fc-${i + 2}`),
+    );
     expect(cached?.due.count).toBe(13);
   });
 
@@ -325,7 +329,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
     await waitForFlashcardsReady();
     await user.click(
       screen.getByRole("button", {
-        name: /digests\/2026-09-12-membranes\.md · Membrane structure · p\. 12/i,
+        name: /Cell membranes · Membrane structure · p\. 12/i,
       }),
     );
     await waitFor(() => {
@@ -572,7 +576,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
         return {};
       },
     });
-    await waitForFlashcardsReady();
+    await waitForFlashcardsReady(2);
     await user.click(screen.getByRole("button", { name: /Next/i }));
     await user.click(screen.getByRole("button", { name: /^Flip$/i }));
     await user.keyboard("3");
@@ -669,7 +673,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
     await waitFor(() => {
       expect(screen.getByText("Question one")).toBeInTheDocument();
     });
-    expect(screen.getByText(/Due today · 2/i)).toBeInTheDocument();
+    expect(screen.getByText(/Due today · 14/i)).toBeInTheDocument();
     expect(screen.getByText("1 / 2")).toBeInTheDocument();
   });
 

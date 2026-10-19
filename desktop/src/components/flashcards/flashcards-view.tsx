@@ -41,7 +41,7 @@ import {
 } from "~/domain/flashcards";
 import type { FlashcardDeck, FlashcardReview } from "~/domain/types";
 import { VIEWER_WRITE_REASON, viewerBlocksWrite } from "~/domain/library-role";
-import { resolveDigestSlug } from "~/domain/notes";
+import { formatFlashcardSourceLabel, resolveDigestSlug } from "~/domain/notes";
 import { PROVIDER_FALLBACK, signedOutJobMessage } from "~/domain/provider";
 import type { CourseOverviewPayload, DigestInfo } from "~/domain/types";
 import { fetchAuthStatus } from "~/lib/auth-refresh";
@@ -104,17 +104,6 @@ function sessionWithOptionalFocus(
     };
   }
   return { mode, review, clearFocusParam: true };
-}
-
-function formatSourceLabel(card: ReturnType<typeof currentCard>): string {
-  const parts = [card.source.digest];
-  if (card.source.heading) {
-    parts.push(card.source.heading);
-  }
-  if (card.source.page) {
-    parts.push(`p. ${card.source.page}`);
-  }
-  return parts.join(" · ");
 }
 
 export function FlashcardsView({
@@ -679,7 +668,7 @@ export function FlashcardsView({
                       });
                     }}
                   >
-                    {formatSourceLabel(card!)}
+                    {formatFlashcardSourceLabel(card!.source, digests)}
                   </Chip>
                   {failedCitationIds.has(card!.id) ? (
                     <LazyTooltip>
@@ -772,7 +761,7 @@ export function FlashcardsView({
               </Button>
               <Button
                 type="button"
-                variant="ghost"
+                variant="outline"
                 onClick={() =>
                   setReview({
                     ...session,
