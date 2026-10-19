@@ -4,6 +4,7 @@ import { emit } from "@tauri-apps/api/event";
 import {
   FIXTURE_ROOT_FALL,
   fixtureConceptGraph,
+  fixtureCourseMd,
   fixtureCourseOverview,
   fixtureCourses,
   fixtureDigests,
@@ -87,10 +88,16 @@ export function createMockHandler(
         return [];
       case "read_markdown": {
         const path = String(payload.relativePath ?? "");
+        if (path.endsWith("/course.md")) {
+          return fixtureCourseMd;
+        }
         if (path.endsWith("study/plan.md")) {
           return fixtureStudyPlanMarkdown;
         }
-        return fixtureMarkdownSample;
+        if (path.includes("/digests/")) {
+          return fixtureMarkdownSample;
+        }
+        throw new Error(`Missing fixture markdown for ${path}`);
       }
       case "study_progress":
         if (payload.action === "overview") {
@@ -210,6 +217,9 @@ export function createMockHandler(
       case "init_arbor_db":
       case "start_folder_watch":
       case "append_card":
+        return { id: "fc-appended-1" };
+      case "study_plan":
+        return null;
       case "append_chat_lines":
       case "clear_chat_history":
       case "cancel_update":
