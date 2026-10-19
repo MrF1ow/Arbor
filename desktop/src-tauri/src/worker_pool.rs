@@ -30,6 +30,7 @@ struct Server {
 pub struct WorkerPool {
     inner: Mutex<Option<Server>>,
     next_id: AtomicU64,
+    closed: AtomicBool,
 }
 
 impl WorkerPool {
@@ -37,11 +38,12 @@ impl WorkerPool {
         Self {
             inner: Mutex::new(None),
             next_id: AtomicU64::new(1),
+            closed: AtomicBool::new(false),
         }
     }
 
     pub fn prewarm(self: &Arc<Self>, app_dir: &Path) {
-        if serve_disabled() {
+        if serve_disabled() || self.closed.load(Ordering::SeqCst) {
             return;
         }
         let pool = Arc::clone(self);
@@ -52,6 +54,7 @@ impl WorkerPool {
     }
 
     pub fn shutdown(&self) {
+        self.closed.store(true, Ordering::SeqCst);
         let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(mut server) = guard.take() {
             kill_worker_tree(&mut server.child);
@@ -76,10 +79,28 @@ pub fn serve_eligible(sub_args: &[&str]) -> bool {
     }
 }
 
+fn study_progress_action<'a>(sub_args: &'a [&'a str]) -> Option<&'a str> {
+    if sub_args.first() != Some(&"study-progress") {
+        return None;
+    }
+    let mut i = 1usize;
+    while i < sub_args.len() {
+        match sub_args[i] {
+            "--root" | "--course" => i += 2,
+            arg if arg.starts_with('-') => i += 1,
+            action => return Some(action),
+        }
+    }
+    None
+}
+
 fn serve_request_is_write(sub_args: &[&str]) -> bool {
     match sub_args.first() {
         Some(&"append-card") => true,
-        Some(&"study-progress") => sub_args.iter().any(|arg| *arg == "grade" || *arg == "quiz"),
+        Some(&"study-progress") => matches!(
+            study_progress_action(sub_args),
+            Some("grade") | Some("quiz")
+        ),
         _ => false,
     }
 }
@@ -204,6 +225,9 @@ fn spawn_server(app_dir: &Path) -> Result<Server, String> {
 
 impl WorkerPool {
     fn ensure_server(&self, app_dir: &Path) -> Result<(), String> {
+        if self.closed.load(Ordering::SeqCst) {
+            return Err("worker pool shut down".to_string());
+        }
         let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         let needs_spawn = match guard.as_ref() {
             None => true,
@@ -234,6 +258,9 @@ impl WorkerPool {
         env: HashMap<String, String>,
         deadline: Duration,
     ) -> Result<serde_json::Value, String> {
+        if self.closed.load(Ordering::SeqCst) {
+            return Err("worker pool shut down".to_string());
+        }
         if serve_disabled() || !serve_eligible(sub_args) {
             let refs: Vec<(&str, &str)> = env
                 .iter()
@@ -387,6 +414,107 @@ mod tests {
         let _ = fs::remove_dir_all(&tmp);
     }
 
+    const FAKE_SERVE_STDIN: &str = r#"
+def read_requests():
+    fd = sys.stdin.fileno()
+    buf = b""
+    while True:
+        while b"\n" in buf:
+            line, _, buf = buf.partition(b"\n")
+            if not line.strip():
+                continue
+            yield json.loads(line.decode("utf-8"))
+        chunk = os.read(fd, 65536)
+        if chunk == b"":
+            break
+        buf += chunk
+"#;
+
+    #[test]
+    fn serve_request_is_write_ignores_course_name_quiz() {
+        assert!(!serve_request_is_write(&[
+            "study-progress",
+            "--root",
+            "/r",
+            "--course",
+            "quiz",
+            "due"
+        ]));
+        assert!(serve_request_is_write(&[
+            "study-progress",
+            "--root",
+            "/r",
+            "--course",
+            "c",
+            "grade",
+            "--id",
+            "1",
+            "--result",
+            "mastered",
+        ]));
+        assert!(serve_request_is_write(&[
+            "study-progress",
+            "--root",
+            "/r",
+            "--course",
+            "c",
+            "quiz",
+            "--id",
+            "1",
+            "--result",
+            "wrong",
+        ]));
+        assert!(serve_request_is_write(&["append-card", "--root", "/r"]));
+    }
+
+    #[test]
+    fn pool_shutdown_refuses_new_requests() {
+        let pool = WorkerPool::new();
+        pool.shutdown();
+        let err = pool
+            .request(
+                Path::new("."),
+                &["library-show", "--root", "/r"],
+                HashMap::new(),
+                Duration::from_secs(1),
+            )
+            .unwrap_err();
+        assert!(err.contains("worker pool shut down"));
+    }
+
+    #[test]
+    fn pool_shutdown_during_request_does_not_respawn() {
+        let body = format!(
+            r#"
+if "serve" not in sys.argv:
+    sys.exit(0)
+{FAKE_SERVE_STDIN}
+for req in read_requests():
+    time.sleep(0.3)
+    os._exit(1)
+"#
+        );
+        with_fake_serve(&body, |app_dir| {
+            let pool = Arc::new(WorkerPool::new());
+            let pool_req = Arc::clone(&pool);
+            let app_dir = app_dir.to_path_buf();
+            let handle = thread::spawn(move || {
+                pool_req.request(
+                    &app_dir,
+                    &["library-show", "--root", "/r"],
+                    HashMap::new(),
+                    Duration::from_secs(5),
+                )
+            });
+            thread::sleep(Duration::from_millis(80));
+            pool.shutdown();
+            let err = handle.join().unwrap().unwrap_err();
+            assert!(err.contains("worker pool shut down"));
+            let guard = pool.inner.lock().unwrap();
+            assert!(guard.is_none());
+        });
+    }
+
     #[test]
     fn serve_eligible_matches_allow_list() {
         assert!(serve_eligible(&["library-show", "--root", "/r"]));
@@ -406,21 +534,20 @@ mod tests {
 
     #[test]
     fn pool_orders_concurrent_requests() {
-        let body = r#"
+        let body = format!(
+            r#"
 if "serve" not in sys.argv:
-    print(json.dumps({"seq": 0}))
+    print(json.dumps({{"seq": 0}}))
     sys.exit(0)
-while True:
-    line = sys.stdin.readline()
-    if not line:
-        break
-    req = json.loads(line)
+{FAKE_SERVE_STDIN}
+for req in read_requests():
     rid = req["id"]
     time.sleep(0.02)
-    sys.stdout.write(json.dumps({"id": rid, "exit": 0, "stdout": '{"seq":%d}\n' % rid, "stderr": ""}) + "\n")
+    sys.stdout.write(json.dumps({{"id": rid, "exit": 0, "stdout": '{{"seq":%d}}\n' % rid, "stderr": ""}}) + "\n")
     sys.stdout.flush()
-"#;
-        with_fake_serve(body, |app_dir| {
+"#
+        );
+        with_fake_serve(&body, |app_dir| {
             let pool = Arc::new(WorkerPool::new());
             let app_dir = app_dir.to_path_buf();
             let handles: Vec<_> = (0..10)
@@ -449,20 +576,19 @@ while True:
 
     #[test]
     fn pool_timeout_kills_server() {
-        let body = r#"
+        let body = format!(
+            r#"
 if "serve" not in sys.argv:
     sys.exit(0)
-while True:
-    line = sys.stdin.readline()
-    if not line:
-        break
-    req = json.loads(line)
+{FAKE_SERVE_STDIN}
+for req in read_requests():
     if req["argv"] and req["argv"][0] == "library-show":
         time.sleep(30)
-    sys.stdout.write(json.dumps({"id": req["id"], "exit": 0, "stdout": '{"ok":true}\n', "stderr": ""}) + "\n")
+    sys.stdout.write(json.dumps({{"id": req["id"], "exit": 0, "stdout": '{{"ok":true}}\n', "stderr": ""}}) + "\n")
     sys.stdout.flush()
-"#;
-        with_fake_serve(body, |app_dir| {
+"#
+        );
+        with_fake_serve(&body, |app_dir| {
             let pool = WorkerPool::new();
             let err = pool
                 .request(
@@ -480,20 +606,19 @@ while True:
 
     #[test]
     fn pool_retries_read_after_crash() {
-        let body = r#"
+        let body = format!(
+            r#"
 if "serve" not in sys.argv:
     sys.exit(0)
-while True:
-    line = sys.stdin.readline()
-    if not line:
-        break
-    req = json.loads(line)
+{FAKE_SERVE_STDIN}
+for req in read_requests():
     if req["id"] == 1:
         os._exit(1)
-    sys.stdout.write(json.dumps({"id": req["id"], "exit": 0, "stdout": '{"retry":true}\n', "stderr": ""}) + "\n")
+    sys.stdout.write(json.dumps({{"id": req["id"], "exit": 0, "stdout": '{{"retry":true}}\n', "stderr": ""}}) + "\n")
     sys.stdout.flush()
-"#;
-        with_fake_serve(body, |app_dir| {
+"#
+        );
+        with_fake_serve(&body, |app_dir| {
             let pool = WorkerPool::new();
             let value = pool
                 .request(
@@ -509,16 +634,16 @@ while True:
 
     #[test]
     fn pool_does_not_retry_grade() {
-        let body = r#"
+        let body = format!(
+            r#"
 if "serve" not in sys.argv:
     sys.exit(0)
-while True:
-    line = sys.stdin.readline()
-    if not line:
-        break
+{FAKE_SERVE_STDIN}
+for req in read_requests():
     os._exit(1)
-"#;
-        with_fake_serve(body, |app_dir| {
+"#
+        );
+        with_fake_serve(&body, |app_dir| {
             let pool = WorkerPool::new();
             let err = pool
                 .request(
@@ -547,19 +672,18 @@ while True:
 
     #[test]
     fn pool_exit_64_falls_back_to_spawn() {
-        let body = r#"
+        let body = format!(
+            r#"
 if "serve" not in sys.argv:
-    print(json.dumps({"ok": "spawn"}))
+    print(json.dumps({{"ok": "spawn"}}))
     sys.exit(0)
-while True:
-    line = sys.stdin.readline()
-    if not line:
-        break
-    req = json.loads(line)
-    sys.stdout.write(json.dumps({"id": req["id"], "exit": 64, "stdout": "", "stderr": "not serve-eligible"}) + "\n")
+{FAKE_SERVE_STDIN}
+for req in read_requests():
+    sys.stdout.write(json.dumps({{"id": req["id"], "exit": 64, "stdout": "", "stderr": "not serve-eligible"}}) + "\n")
     sys.stdout.flush()
-"#;
-        with_fake_serve(body, |app_dir| {
+"#
+        );
+        with_fake_serve(&body, |app_dir| {
             let pool = WorkerPool::new();
             let value = pool
                 .request(
@@ -571,5 +695,103 @@ while True:
                 .unwrap();
             assert_eq!(value["ok"], "spawn");
         });
+    }
+
+    fn init_git_repo(root: &Path) {
+        let run = |args: &[&str]| {
+            Command::new(args[0])
+                .args(&args[1..])
+                .current_dir(root)
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .expect("git command");
+        };
+        run(&["git", "init"]);
+        run(&["git", "config", "user.email", "serve-test@local"]);
+        run(&["git", "config", "user.name", "serve-test"]);
+        run(&["git", "commit", "--allow-empty", "-m", "init"]);
+    }
+
+    #[test]
+    fn pool_real_python_serve_ten_concurrent() {
+        use std::process::Command as StdCommand;
+
+        if StdCommand::new("python3")
+            .arg("--version")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map(|s| !s.success())
+            .unwrap_or(true)
+        {
+            return;
+        }
+
+        let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let repo_root = match manifest.join("../..").canonicalize() {
+            Ok(p) if p.join("python/src/arbor_worker/serve.py").is_file() => p,
+            _ => return,
+        };
+        let python_src = repo_root.join("python/src");
+        let src_str = python_src.to_string_lossy();
+
+        let _guard = crate::worker::WORKER_ENV_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let tmp = std::env::temp_dir().join(format!(
+            "arbor-real-serve-test-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&tmp);
+        fs::create_dir_all(&tmp).unwrap();
+        let lib_root = tmp.join("lib");
+        fs::create_dir_all(&lib_root).unwrap();
+        init_git_repo(&lib_root);
+
+        let launcher = tmp.join("launch_worker.py");
+        let mut launcher_file = fs::File::create(&launcher).unwrap();
+        write!(
+            launcher_file,
+            "#!/usr/bin/env python3\nimport os, sys\nos.environ['PYTHONPATH'] = {src:?}\nos.execvp('python3', ['python3', '-m', 'arbor_worker'] + sys.argv[1:])\n",
+            src = src_str
+        )
+        .unwrap();
+        drop(launcher_file);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&launcher, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+
+        std::env::set_var("ARBOR_WORKER_CMD", launcher.to_string_lossy().as_ref());
+        std::env::set_var("ARBOR_WORKER_NO_SIDECAR", "1");
+        std::env::remove_var("ARBOR_WORKER_NO_SERVE");
+
+        let root_str = lib_root.to_string_lossy().to_string();
+        let pool = Arc::new(WorkerPool::new());
+        let handles: Vec<_> = (0..10)
+            .map(|_| {
+                let pool = Arc::clone(&pool);
+                let root_str = root_str.clone();
+                thread::spawn(move || {
+                    pool.request(
+                        Path::new("."),
+                        &["library-show", "--root", &root_str],
+                        HashMap::new(),
+                        Duration::from_secs(10),
+                    )
+                    .unwrap()
+                })
+            })
+            .collect();
+        for handle in handles {
+            let value = handle.join().unwrap();
+            assert!(value.get("present").is_some());
+        }
+
+        std::env::remove_var("ARBOR_WORKER_CMD");
+        std::env::remove_var("ARBOR_WORKER_NO_SIDECAR");
+        let _ = fs::remove_dir_all(&tmp);
     }
 }

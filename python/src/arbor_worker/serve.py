@@ -9,7 +9,7 @@ import os
 import select
 import sys
 import traceback
-from typing import Any, TextIO
+from typing import Any
 
 import arbor_worker.commands  # noqa: F401 — pre-import for warm requests
 
@@ -85,7 +85,7 @@ def _handle_request(argv: list[str], env: dict[str, str]) -> tuple[int, str, str
     return exit_code, stdout_buf.getvalue(), stderr_buf.getvalue()
 
 
-def _write_response(proto: TextIO, payload: dict[str, Any]) -> None:
+def _write_response(proto: Any, payload: dict[str, Any]) -> None:
     proto.write(json.dumps(payload, ensure_ascii=False) + "\n")
     proto.flush()
 
@@ -103,18 +103,13 @@ def serve_loop(
 
     if stdin_fd is None:
         stdin_fd = sys.stdin.fileno()
-    stdin_file = os.fdopen(os.dup(stdin_fd), "r", buffering=1)
 
-    while True:
-        ready, _, _ = select.select([stdin_file], [], [], idle_secs)
-        if not ready:
-            return 0
-        line = stdin_file.readline()
-        if not line:
-            return 0
-        text = line.strip()
+    buf = b""
+
+    def dispatch_line(line_bytes: bytes) -> None:
+        text = line_bytes.decode("utf-8").strip()
         if not text:
-            continue
+            return
         try:
             req = json.loads(text)
         except json.JSONDecodeError:
@@ -127,7 +122,7 @@ def serve_loop(
                     "stderr": "invalid request json",
                 },
             )
-            continue
+            return
 
         req_id = req.get("id", -1)
         argv = req.get("argv") or []
@@ -142,7 +137,7 @@ def serve_loop(
                     "stderr": "invalid argv",
                 },
             )
-            continue
+            return
         if not isinstance(env, dict) or not all(
             isinstance(k, str) and isinstance(v, str) for k, v in env.items()
         ):
@@ -155,13 +150,26 @@ def serve_loop(
                     "stderr": "invalid env",
                 },
             )
-            continue
+            return
 
         exit_code, out, err = _handle_request(list(argv), dict(env))
         _write_response(
             proto,
             {"id": req_id, "exit": exit_code, "stdout": out, "stderr": err},
         )
+
+    while True:
+        while b"\n" in buf:
+            line_bytes, _, buf = buf.partition(b"\n")
+            dispatch_line(line_bytes)
+
+        ready, _, _ = select.select([stdin_fd], [], [], idle_secs)
+        if not ready:
+            return 0
+        chunk = os.read(stdin_fd, 65536)
+        if chunk == b"":
+            return 0
+        buf += chunk
 
 
 def main() -> int:

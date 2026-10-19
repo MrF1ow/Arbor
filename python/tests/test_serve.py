@@ -6,6 +6,7 @@ import select
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 import pytest
@@ -147,3 +148,83 @@ def test_fd1_corruption_guard() -> None:
 def test_idle_timeout_exits() -> None:
     proc = _serve_proc("1")
     assert proc.wait(timeout=5) == 0
+
+
+def _read_response_with_timeout(stdout, *, deadline: float = 5.0) -> dict:
+    fd = stdout.fileno()
+    buf = b""
+    end = time.monotonic() + deadline
+    while b"\n" not in buf:
+        remaining = end - time.monotonic()
+        assert remaining > 0, "timed out waiting for serve response"
+        ready, _, _ = select.select([fd], [], [], remaining)
+        assert ready, "timed out waiting for serve response"
+        chunk = os.read(fd, 65536)
+        assert chunk, "serve stdout closed before response"
+        buf += chunk
+    line, _, _ = buf.partition(b"\n")
+    return json.loads(line.decode("utf-8"))
+
+
+def test_pipelined_requests_one_write() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp) / "lib"
+        root.mkdir()
+        _init_repo(root)
+        proc = _serve_proc("600")
+        assert proc.stdin and proc.stdout
+        try:
+            req1 = json.dumps(
+                {
+                    "id": 1,
+                    "argv": ["library-show", "--root", str(root)],
+                    "env": {},
+                }
+            )
+            req2 = json.dumps(
+                {
+                    "id": 2,
+                    "argv": ["library-show", "--root", str(root)],
+                    "env": {},
+                }
+            )
+            proc.stdin.write(f"{req1}\n{req2}\n")
+            proc.stdin.flush()
+            resp1 = _read_response_with_timeout(proc.stdout)
+            resp2 = _read_response_with_timeout(proc.stdout)
+            assert resp1["id"] == 1
+            assert resp2["id"] == 2
+            assert resp1["exit"] == 0
+            assert resp2["exit"] == 0
+        finally:
+            proc.stdin.close()
+            proc.wait(timeout=10)
+
+
+def test_split_request_across_writes() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp) / "lib"
+        root.mkdir()
+        _init_repo(root)
+        proc = _serve_proc("600")
+        assert proc.stdin and proc.stdout
+        try:
+            payload = json.dumps(
+                {
+                    "id": 7,
+                    "argv": ["library-show", "--root", str(root)],
+                    "env": {},
+                }
+            )
+            half = len(payload) // 2
+            proc.stdin.write(payload[:half])
+            proc.stdin.flush()
+            time.sleep(0.1)
+            proc.stdin.write(payload[half:] + "\n")
+            proc.stdin.flush()
+            resp = _read_response_with_timeout(proc.stdout)
+            assert resp["id"] == 7
+            assert resp["exit"] == 0
+        finally:
+            proc.stdin.close()
+            proc.wait(timeout=10)
