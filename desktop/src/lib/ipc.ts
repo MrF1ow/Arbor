@@ -98,6 +98,9 @@ export function subscribe<T>(
   event: string,
   handler: (event: { payload: T }) => void,
 ): () => void {
+  if (!hasTauriInvoke(globalThis)) {
+    return () => {};
+  }
   let disposed = false;
   let unlisten: (() => void) | undefined;
   void listen<T>(event, handler).then((fn) => {

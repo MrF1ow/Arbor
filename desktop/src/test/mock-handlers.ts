@@ -187,11 +187,19 @@ export function createMockHandler(
         return { ok: true };
       case "start_study_job":
         return "mock-study-job";
+      case "import_sources": {
+        const paths = payload.paths;
+        if (Array.isArray(paths)) {
+          return paths.map(String);
+        }
+        return [];
+      }
       case "create_course": {
         const name = String(payload.name ?? "new-class");
         return name.trim().toLowerCase().replace(/\s+/g, "-");
       }
       case "init_knowledge_repo":
+        return true;
       case "init_arbor_db":
       case "start_folder_watch":
       case "append_card":

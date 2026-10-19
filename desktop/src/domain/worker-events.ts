@@ -1,10 +1,7 @@
 import type { WorkerEvent } from "~/domain/types";
+import { formatRanges } from "~/domain/update";
 
-export function formatRanges(ranges: [number, number][]): string {
-  return ranges
-    .map(([start, end]) => (start === end ? String(start) : `${start}-${end}`))
-    .join(", ");
-}
+export { formatRanges };
 
 export type FormattedWorkerEvent = {
   line: string;

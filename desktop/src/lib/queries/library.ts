@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { DigestInfo, LibraryShowResult } from "~/domain/types";
+import { canUseDesktopIpc } from "~/domain/tauri";
 import { presentUpdatePlanAfterImport, suppressWatch } from "~/lib/events";
 import { invoke } from "~/lib/ipc";
 import { qk } from "~/lib/queries/keys";
@@ -8,7 +9,7 @@ import { qk } from "~/lib/queries/keys";
 export function useLibrary(root: string | null) {
   return useQuery({
     queryKey: qk.library(root ?? ""),
-    enabled: Boolean(root),
+    enabled: Boolean(root) && canUseDesktopIpc(),
     queryFn: () => invoke<LibraryShowResult>("library_show", { root: root! }),
   });
 }
@@ -16,7 +17,7 @@ export function useLibrary(root: string | null) {
 export function useCourses(root: string | null) {
   return useQuery({
     queryKey: qk.courses(root ?? ""),
-    enabled: Boolean(root),
+    enabled: Boolean(root) && canUseDesktopIpc(),
     queryFn: () => invoke<string[]>("list_courses", { root: root! }),
   });
 }
@@ -24,7 +25,7 @@ export function useCourses(root: string | null) {
 export function useDigests(root: string | null, course: string | null) {
   return useQuery({
     queryKey: qk.digests(root ?? "", course ?? ""),
-    enabled: Boolean(root && course),
+    enabled: Boolean(root && course) && canUseDesktopIpc(),
     queryFn: () =>
       invoke<DigestInfo[]>("list_digests", { root: root!, course: course! }),
   });

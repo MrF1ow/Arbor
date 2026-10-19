@@ -27,7 +27,7 @@ import { useSettings } from "~/lib/queries/settings";
 import { useJobStore } from "~/stores/job-store";
 import { useSyncUiStore } from "~/stores/sync-ui-store";
 import { useUiStore } from "~/stores/ui-store";
-import { useUpdatePlanStore } from "~/stores/update-plan-store";
+import { useUpdatePlanStore, type UpdatePlanTrigger } from "~/stores/update-plan-store";
 
 let suppressWatchUntil = 0;
 
@@ -102,7 +102,11 @@ export type PresentUpdatePlanDeps = {
   planUpdate: (root: string) => Promise<UpdatePlan>;
   startUpdate: (root: string, input: Record<string, unknown>) => Promise<string>;
   checkAuth: (provider: string) => Promise<AuthStatus>;
-  setPendingPlan: (pending: PendingSource[] | null, open: boolean) => void;
+  setPendingPlan: (
+    pending: PendingSource[] | null,
+    open: boolean,
+    trigger?: UpdatePlanTrigger,
+  ) => void;
   appendJobLine: (line: string) => void;
   providerId: string;
   modelId: string | null;
@@ -115,6 +119,9 @@ export async function presentUpdatePlan(root: string, deps: PresentUpdatePlanDep
     const ks = deps.knowledgeSettings ?? (await deps.getKnowledgeSettings(root));
     const plan = await deps.planUpdate(root);
     if (plan.pending.length === 0) {
+      if (deps.reason === "import") {
+        deps.appendJobLine("Nothing to process");
+      }
       return;
     }
     deps.appendJobLine(
@@ -125,7 +132,11 @@ export async function presentUpdatePlan(root: string, deps: PresentUpdatePlanDep
     if (ks.auto_update) {
       const auth = await deps.checkAuth(deps.providerId);
       if (!auth.authenticated) {
-        deps.setPendingPlan(plan.pending, true);
+        deps.setPendingPlan(
+          plan.pending,
+          true,
+          deps.reason === "watch" ? "watch" : "manual",
+        );
         const label = providerDisplayLabel(deps.providerId);
         deps.appendJobLine(
           `Auto-update waiting for ${label} auth. Review and Confirm when ready. ${signedOutJobMessage(label, auth.reason ?? "")}`,
@@ -133,7 +144,11 @@ export async function presentUpdatePlan(root: string, deps: PresentUpdatePlanDep
         return;
       }
       if (!deps.modelId) {
-        deps.setPendingPlan(plan.pending, true);
+        deps.setPendingPlan(
+          plan.pending,
+          true,
+          deps.reason === "watch" ? "watch" : "manual",
+        );
         return;
       }
       await deps.startUpdate(root, {
@@ -144,7 +159,11 @@ export async function presentUpdatePlan(root: string, deps: PresentUpdatePlanDep
       });
       return;
     }
-    deps.setPendingPlan(plan.pending, true);
+    deps.setPendingPlan(
+      plan.pending,
+      true,
+      deps.reason === "watch" ? "watch" : "manual",
+    );
     deps.appendJobLine("Review the detected files and Confirm when ready.");
   } catch (error) {
     deps.appendJobLine(

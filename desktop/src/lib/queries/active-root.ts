@@ -52,11 +52,12 @@ export function useActivateKnowledgeRootMutation() {
         knowledge_root: picked,
         active_root: picked,
       };
-      await invoke("init_knowledge_repo", { path: picked });
+      const repoCreated = await invoke<boolean>("init_knowledge_repo", { path: picked });
       await invoke("save_settings", { settings: next });
+      await invoke("init_arbor_db", { root: picked });
       await invoke("start_folder_watch", { root: picked });
       await queryClient.invalidateQueries({ queryKey: qk.settings() });
-      return picked;
+      return { root: picked, repoCreated };
     },
   });
 }
