@@ -4,10 +4,10 @@ import { fetchAuthStatus } from "~/lib/auth-refresh";
 import { invoke } from "~/lib/ipc";
 import { qk } from "~/lib/queries/keys";
 
-export function useAuth(provider: string, root: string | null, force = false) {
+export function useAuth(provider: string) {
   return useQuery({
-    queryKey: qk.auth(provider, root, force),
-    queryFn: () => fetchAuthStatus(provider, root, force),
+    queryKey: qk.auth(provider),
+    queryFn: () => fetchAuthStatus(provider, false),
     staleTime: 60_000,
     refetchOnWindowFocus: true,
     enabled: Boolean(provider),

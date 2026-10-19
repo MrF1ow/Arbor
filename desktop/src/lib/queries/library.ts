@@ -1,11 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import type {
-  DigestInfo,
-  KnowledgeKind,
-  LibraryShowResult,
-  Settings,
-} from "~/domain/types";
+import type { DigestInfo, LibraryShowResult } from "~/domain/types";
+import { suppressWatch } from "~/lib/events";
 import { invoke } from "~/lib/ipc";
 import { qk } from "~/lib/queries/keys";
 
@@ -50,12 +46,17 @@ export function useCreateCourseMutation(root: string | null) {
 export function useImportSourcesMutation(root: string | null) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (paths: string[]) =>
-      invoke<string[]>("import_sources", { root: root!, paths }),
+    mutationFn: (input: { course: string; paths: string[] }) => {
+      suppressWatch(5000);
+      return invoke<string[]>("import_sources", {
+        root: root!,
+        course: input.course,
+        paths: input.paths,
+      });
+    },
     onSuccess: () => {
       if (root) {
         void queryClient.invalidateQueries({ queryKey: qk.courses(root) });
-        void queryClient.invalidateQueries({ queryKey: qk.planUpdate(root) });
       }
     },
   });
@@ -89,11 +90,27 @@ export function useLibrarySetMembersMutation(root: string | null) {
 export function useLibrarySetProviderMutation(root: string | null) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { id: string; model: string } | null) =>
-      invoke("library_set_provider", { root: root!, provider: input }),
+    mutationFn: (input: { id: string; model: string } | { clear: true }) => {
+      if ("clear" in input) {
+        return invoke("library_set_provider", {
+          root: root!,
+          id: null,
+          model: null,
+          clear: true,
+        });
+      }
+      return invoke("library_set_provider", {
+        root: root!,
+        id: input.id,
+        model: input.model,
+        clear: false,
+      });
+    },
     onSuccess: () => {
       if (root) {
         void queryClient.invalidateQueries({ queryKey: qk.library(root) });
+        void queryClient.invalidateQueries({ queryKey: ["models", root] });
+        void queryClient.invalidateQueries({ queryKey: ["models"] });
       }
     },
   });
@@ -111,14 +128,11 @@ export function useCreateSharedLibraryMutation() {
   });
 }
 
-export function useJoinSharedLibraryMutation() {
+export function useJoinLibraryMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { path: string; name: string; kind: KnowledgeKind }) =>
-      invoke<{ path: string; name: string; kind: KnowledgeKind }>(
-        "create_shared_library",
-        input,
-      ),
+    mutationFn: (input: { url: string; dest: string }) =>
+      invoke("join_library", input),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: qk.settings() });
     },
@@ -126,8 +140,14 @@ export function useJoinSharedLibraryMutation() {
 }
 
 export function useReindexKnowledgeMutation(root: string | null) {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => invoke<{ documents: number }>("reindex_knowledge", { root: root! }),
+    onSuccess: () => {
+      if (root) {
+        void queryClient.invalidateQueries({ queryKey: ["search", root] });
+      }
+    },
   });
 }
 
@@ -144,6 +164,7 @@ export function useSetProviderSecretMutation() {
       invoke("set_provider_secret", input),
     onSuccess: (_data, vars) => {
       void queryClient.invalidateQueries({ queryKey: qk.providerSecret(vars.providerId) });
+      void queryClient.invalidateQueries({ queryKey: qk.auth(vars.providerId) });
     },
   });
 }
@@ -154,16 +175,7 @@ export function useClearProviderSecretMutation() {
     mutationFn: (providerId: string) => invoke("clear_provider_secret", { providerId }),
     onSuccess: (_data, providerId) => {
       void queryClient.invalidateQueries({ queryKey: qk.providerSecret(providerId) });
-    },
-  });
-}
-
-export function useSaveSettingsPatchMutation() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (settings: Settings) => invoke("save_settings", { settings }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: qk.settings() });
+      void queryClient.invalidateQueries({ queryKey: qk.auth(providerId) });
     },
   });
 }

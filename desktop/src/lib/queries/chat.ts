@@ -1,3 +1,4 @@
+import type { Channel } from "@tauri-apps/api/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { ChatLine } from "~/domain/chat";
@@ -13,9 +14,18 @@ export function useChatHistory(root: string | null, course: string | null) {
   });
 }
 
+export type StartChatInput = {
+  onEvent: Channel<unknown>;
+  question: string;
+  mode: string;
+  model: string;
+  provider?: string;
+  history: unknown[];
+};
+
 export function useStartChatMutation(root: string | null, course: string | null) {
   return useMutation({
-    mutationFn: (input: Record<string, unknown>) =>
+    mutationFn: (input: StartChatInput) =>
       invoke("start_chat", { root: root!, course: course!, ...input }),
   });
 }

@@ -28,7 +28,7 @@ export function useStudyPlan(root: string | null, course: string | null) {
     queryFn: () =>
       invoke<string>("read_markdown", {
         root: root!,
-        relativePath: `${course}/study-plan.md`,
+        relativePath: `${course}/study/plan.md`,
       }),
   });
 }

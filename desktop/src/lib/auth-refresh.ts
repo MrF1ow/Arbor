@@ -6,21 +6,16 @@ type AuthKey = string;
 
 let refreshInFlight: Promise<AuthStatus> | null = null;
 let refreshActiveKey: AuthKey = "";
-let refreshQueued: { key: AuthKey; run: () => Promise<AuthStatus> } | null = null;
+let refreshQueued: { provider: string; force: boolean } | null = null;
 
-function authRequestKey(provider: string, root: string | null, force: boolean): AuthKey {
-  return `${provider}|${root ?? ""}|${force}`;
+function authRequestKey(provider: string, force: boolean): AuthKey {
+  return `${provider}|${force}`;
 }
 
-async function runCheckAuth(
-  provider: string,
-  root: string | null,
-  force: boolean,
-): Promise<AuthStatus> {
+async function runCheckAuth(provider: string, force: boolean): Promise<AuthStatus> {
   try {
     return await invoke<AuthStatus>("check_auth", {
       provider,
-      root: root ?? undefined,
       force,
     });
   } catch (error) {
@@ -33,34 +28,23 @@ async function runCheckAuth(
   }
 }
 
-export function fetchAuthStatus(
-  provider: string,
-  root: string | null,
-  force = false,
-): Promise<AuthStatus> {
-  const key = authRequestKey(provider, root, force);
+export function fetchAuthStatus(provider: string, force = false): Promise<AuthStatus> {
+  const key = authRequestKey(provider, force);
   if (refreshInFlight && refreshActiveKey === key) {
     return refreshInFlight;
   }
   if (refreshInFlight) {
-    refreshQueued = {
-      key,
-      run: () => runCheckAuth(provider, root, force),
-    };
+    refreshQueued = { provider, force };
     return refreshInFlight;
   }
   refreshActiveKey = key;
-  refreshInFlight = runCheckAuth(provider, root, force).finally(() => {
+  refreshInFlight = runCheckAuth(provider, force).finally(() => {
     refreshInFlight = null;
     refreshActiveKey = "";
     const queued = refreshQueued;
     refreshQueued = null;
-    if (queued && queued.key !== key) {
-      void fetchAuthStatus(
-        provider,
-        root,
-        queued.key.endsWith("|true"),
-      );
+    if (queued && authRequestKey(queued.provider, queued.force) !== key) {
+      void fetchAuthStatus(queued.provider, queued.force);
     }
   });
   return refreshInFlight;
