@@ -1,10 +1,28 @@
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 
 describe("Tabs", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("TabsList exposes group/tabs-list and underline variant for triggers", () => {
+    const { container } = render(
+      <Tabs defaultValue="notes">
+        <TabsList variant="underline">
+          <TabsTrigger value="notes">Notes</TabsTrigger>
+        </TabsList>
+      </Tabs>,
+    );
+    const list = container.querySelector('[data-slot="tabs-list"]');
+    expect(list).toHaveClass("group/tabs-list");
+    expect(list).toHaveAttribute("data-variant", "underline");
+    expect(screen.getByRole("tab", { name: "Notes" }).className).toMatch(/group-data-\[variant=underline\]/);
+  });
+
   it("moves selection with arrow keys and sets aria-selected", async () => {
     const user = userEvent.setup();
     render(

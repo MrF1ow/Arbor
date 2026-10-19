@@ -1,7 +1,8 @@
 import * as React from "react";
 import { AlertDialog as AlertDialogPrimitive } from "@base-ui/react/alert-dialog";
 
-import { Button } from "~/components/ui/button";
+import { Button, IconButton } from "~/components/ui/button";
+import { XIcon } from "lucide-react";
 import {
   DIALOG_BACKDROP_CLASS,
   DIALOG_POPUP_CLASS,
@@ -39,6 +40,7 @@ function AlertDialogOverlay({
 
 function AlertDialogContent({
   className,
+  children,
   ...props
 }: AlertDialogPrimitive.Popup.Props) {
   return (
@@ -48,7 +50,16 @@ function AlertDialogContent({
         data-slot="alert-dialog-content"
         className={cn(DIALOG_POPUP_CLASS, className)}
         {...props}
-      />
+      >
+        {children}
+        <AlertDialogPrimitive.Close
+          data-slot="alert-dialog-close"
+          className="absolute top-3 right-3"
+          render={
+            <IconButton icon={XIcon} label="Close" size="icon-sm" variant="ghost" tooltip={false} />
+          }
+        />
+      </AlertDialogPrimitive.Popup>
     </AlertDialogPortal>
   );
 }
@@ -110,7 +121,12 @@ function AlertDialogAction({
   ...props
 }: React.ComponentProps<typeof Button>) {
   return (
-    <Button data-slot="alert-dialog-action" className={cn(className)} {...props} />
+    <AlertDialogPrimitive.Close
+      data-slot="alert-dialog-action"
+      className={cn(className)}
+      render={<Button />}
+      {...props}
+    />
   );
 }
 

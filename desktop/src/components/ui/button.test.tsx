@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { SettingsIcon } from "lucide-react";
+import { PlusIcon, SettingsIcon } from "lucide-react";
 import { describe, expect, it, vi } from "vitest";
 
 import { Button, IconButton } from "~/components/ui/button";
@@ -11,9 +11,15 @@ function renderWithTooltip(ui: React.ReactElement) {
 }
 
 describe("Button", () => {
-  it("renders variant classes", () => {
-    render(<Button variant="destructive-outline">Delete</Button>);
-    expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
+  it("renders distinguishing classes per variant", () => {
+    const { rerender } = render(<Button variant="default">Primary</Button>);
+    expect(screen.getByRole("button", { name: "Primary" })).toHaveClass("bg-primary");
+
+    rerender(<Button variant="ghost">Ghost</Button>);
+    expect(screen.getByRole("button", { name: "Ghost" })).toHaveClass("hover:bg-muted");
+
+    rerender(<Button variant="destructive-outline">Delete</Button>);
+    expect(screen.getByRole("button", { name: "Delete" })).toHaveClass("text-destructive");
   });
 
   it("does not fire onClick when disabled", async () => {
@@ -45,3 +51,7 @@ type IconButtonRequiresLabel = Parameters<typeof IconButton>[0] extends { label:
   : false;
 const _assertIconButtonLabelRequired: IconButtonRequiresLabel = true;
 void _assertIconButtonLabelRequired;
+
+// @ts-expect-error IconButton requires label
+const _missingLabel = <IconButton icon={PlusIcon} />;
+void _missingLabel;

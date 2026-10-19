@@ -3,7 +3,7 @@ import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip";
 import { cn } from "~/lib/utils";
 
 function TooltipProvider({
-  delay = 300,
+  delay = 500,
   ...props
 }: TooltipPrimitive.Provider.Props) {
   return (
@@ -39,13 +39,13 @@ function TooltipContent({
         alignOffset={alignOffset}
         side={side}
         sideOffset={sideOffset}
-        className="isolate z-dropdown"
+        className="isolate z-floating"
       >
         <TooltipPrimitive.Popup
           data-slot="tooltip-content"
           data-testid="tooltip-content"
           className={cn(
-            "z-dropdown max-w-xs rounded-sm bg-foreground px-2 py-1 text-xs text-background",
+            "z-floating max-w-xs rounded-sm bg-foreground px-2 py-1 text-xs text-background",
             className,
           )}
           {...props}

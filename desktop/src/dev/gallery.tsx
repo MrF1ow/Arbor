@@ -208,7 +208,6 @@ export default function DevGallery() {
       </section>
 
       <GalleryPrimitives />
-      <style>{`.gallery-icon-outline [&_svg]:outline [&_svg]:outline-1 [&_svg]:outline-border`}</style>
     </div>
   );
 }

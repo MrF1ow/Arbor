@@ -40,7 +40,8 @@ export function ListRow({
   );
 
   const rowClass = cn(
-    "relative flex h-row w-full items-center gap-2 px-2 text-left text-sm outline-none transition-colors duration-fast ease-out-soft",
+    "relative flex w-full items-center gap-2 px-2 text-left text-sm outline-none transition-colors duration-fast ease-out-soft",
+    twoLine ? "min-h-row py-1.5" : "h-row",
     "before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-transparent",
     active && "before:bg-primary bg-transparent",
     !active && "hover:bg-muted",

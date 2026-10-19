@@ -2,6 +2,12 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
+vi.mock("~/hooks/use-mobile", () => ({
+  useIsMobile: vi.fn(() => false),
+}));
+
+import { useIsMobile } from "~/hooks/use-mobile";
+
 import {
   Sidebar,
   SidebarContent,
@@ -25,6 +31,24 @@ describe("Sidebar", () => {
 
     await user.keyboard("{Control>}b{/Control}");
     expect(onOpenChange).toHaveBeenCalled();
-    expect(screen.getByText("Course nav")).toBeInTheDocument();
+    expect(onOpenChange).toHaveBeenCalledWith(true);
+  });
+
+  it("mobile uses controlled open and Mod+B calls onOpenChange", async () => {
+    vi.mocked(useIsMobile).mockReturnValue(true);
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+
+    render(
+      <SidebarProvider open={true} onOpenChange={onOpenChange}>
+        <Sidebar collapsible="offcanvas">
+          <SidebarContent>Mobile nav</SidebarContent>
+        </Sidebar>
+      </SidebarProvider>,
+    );
+
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    await user.keyboard("{Control>}b{/Control}");
+    expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 });

@@ -1,5 +1,6 @@
-import type { ReactNode } from "react";
+import { cloneElement, isValidElement, useId, type ReactElement, type ReactNode } from "react";
 
+import { Label } from "~/components/ui/label";
 import { cn } from "~/lib/utils";
 
 export function SettingsSection({
@@ -24,6 +25,17 @@ export function SettingsSection({
   );
 }
 
+function associateControl(control: ReactNode, controlId: string): ReactNode {
+  if (!isValidElement(control)) {
+    return control;
+  }
+  const props = control.props as { id?: string };
+  if (props.id) {
+    return control;
+  }
+  return cloneElement(control as ReactElement<{ id?: string }>, { id: controlId });
+}
+
 export function SettingRow({
   label,
   description,
@@ -35,6 +47,8 @@ export function SettingRow({
   control: ReactNode;
   className?: string;
 }) {
+  const controlId = useId();
+
   return (
     <div
       className={cn(
@@ -43,10 +57,12 @@ export function SettingRow({
       )}
     >
       <div className="min-w-0">
-        <div className="text-sm font-medium">{label}</div>
+        <Label htmlFor={controlId} className="text-sm font-medium">
+          {label}
+        </Label>
         {description ? <p className="text-xs text-muted-foreground">{description}</p> : null}
       </div>
-      <div className="shrink-0">{control}</div>
+      <div className="shrink-0">{associateControl(control, controlId)}</div>
     </div>
   );
 }

@@ -33,7 +33,7 @@ describe("Dialog", () => {
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Course name" })).toHaveFocus();
     expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
-    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "Close" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });

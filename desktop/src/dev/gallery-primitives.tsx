@@ -139,16 +139,16 @@ export function GalleryPrimitives() {
             </div>
           ))}
           <div className="flex flex-wrap gap-3">
-            <span className="gallery-icon-outline">
+            <span className="inline-flex [&_svg]:outline [&_svg]:outline-1 [&_svg]:outline-border">
               <IconButton icon={PlusIcon} label="Add card" size="icon-xs" />
             </span>
-            <span className="gallery-icon-outline">
+            <span className="inline-flex [&_svg]:outline [&_svg]:outline-1 [&_svg]:outline-border">
               <IconButton icon={SearchIcon} label="Search library" size="icon-sm" />
             </span>
-            <span className="gallery-icon-outline">
+            <span className="inline-flex [&_svg]:outline [&_svg]:outline-1 [&_svg]:outline-border">
               <IconButton icon={LayersIcon} label="Stack view" size="icon" />
             </span>
-            <span className="gallery-icon-outline">
+            <span className="inline-flex [&_svg]:outline [&_svg]:outline-1 [&_svg]:outline-border">
               <IconButton icon={BrainIcon} label="Concept graph" size="icon-lg" />
             </span>
           </div>
@@ -176,8 +176,10 @@ export function GalleryPrimitives() {
             <Label htmlFor="agree">Include diagrams</Label>
           </div>
           <div className="flex items-center gap-2">
-            <Switch defaultChecked />
-            <span className="text-sm">Notify when digest completes</span>
+            <Switch id="gallery-notify" defaultChecked />
+            <Label htmlFor="gallery-notify" className="text-sm">
+              Notify when digest completes
+            </Label>
           </div>
           <Select defaultValue="ml">
             <SelectTrigger className="max-w-xs">
@@ -345,7 +347,12 @@ export function GalleryPrimitives() {
 
       <GallerySection title="Sidebar demo">
         <div className="h-64 overflow-hidden rounded-md border border-border">
-          <SidebarProvider open={sidebarOpen} onOpenChange={setSidebarOpen} className="flex h-full">
+          <SidebarProvider
+            contained
+            open={sidebarOpen}
+            onOpenChange={setSidebarOpen}
+            className="flex h-full min-h-0"
+          >
             <Sidebar collapsible="offcanvas">
               <SidebarContent>
                 <SidebarGroup>
@@ -399,7 +406,11 @@ export function GalleryPrimitives() {
         </div>
         <div className="mt-6 max-w-lg">
           <SettingsSection title="Worker" description="Local automation settings.">
-            <SettingRow label="Auto-index" description="Watch incoming PDFs." control={<Switch defaultChecked />} />
+            <SettingRow
+              label="Auto-embed"
+              description="Watch incoming PDFs."
+              control={<Switch defaultChecked />}
+            />
             <SettingRow label="OCR" control={<Switch />} />
             <SettingRow label="Course" control={<Input className="w-40" defaultValue="Intro to ML" />} />
           </SettingsSection>

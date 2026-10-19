@@ -165,7 +165,13 @@
   --z-index-drawer: 20;
   --z-index-overlay: 30;
   --z-index-dialog: 40;
+  --z-index-floating: 45;
   --z-index-toast: 50;
+}
+
+/* Referenced so Tailwind emits z-toast and Sonner can use var(--z-index-toast). */
+.z-toast-layer {
+  z-index: var(--z-index-toast);
 }
 
 @layer base {
@@ -182,6 +188,7 @@
     @apply bg-background text-foreground font-sans text-sm antialiased;
   }
 
+  /* Fallback focus ring; interactive components use focus-visible:outline-none + ring-* */
   :focus-visible {
     outline: 2px solid var(--ring);
     outline-offset: 2px;
