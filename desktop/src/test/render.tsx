@@ -58,14 +58,15 @@ export function renderWithProviders(
   };
 }
 
-export function renderAppAtRoute(route: string, fixtures?: FixtureOverrides) {
+export async function renderAppAtRoute(route: string, fixtures?: FixtureOverrides) {
   clearMocks();
   installMockIpc(fixtures);
   const queryClient = createAppQueryClient();
   const history = createMemoryHistory({ initialEntries: [route] });
   const router = getRouter(history);
+  await router.load();
 
-  return render(
+  const rendered = render(
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <TooltipProvider>
@@ -79,4 +80,5 @@ export function renderAppAtRoute(route: string, fixtures?: FixtureOverrides) {
       </ThemeProvider>
     </QueryClientProvider>,
   );
+  return { ...rendered, router, queryClient };
 }
