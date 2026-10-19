@@ -4,6 +4,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { citationJobArgs } from "~/domain/citations";
 import { conceptJobArgs, diagramJobArgs } from "~/domain/concepts";
 import { flashcardJobArgs } from "~/domain/flashcards";
+import { JOB_START_LABEL } from "~/domain/job-labels";
 import { quizJobArgs } from "~/domain/quiz";
 import type { JobEventRow, JobSummary, UpdatePlan } from "~/domain/types";
 import { invoke } from "~/lib/ipc";
@@ -21,8 +22,9 @@ function afterStudyJobStarted(
   queryClient: QueryClient,
   root: string | null,
   jobId: string,
+  label?: string,
 ) {
-  useJobStore.getState().start(jobId);
+  useJobStore.getState().start(jobId, label ? { label } : undefined);
   if (root) {
     void queryClient.invalidateQueries({ queryKey: qk.jobs(root) });
   }
@@ -58,7 +60,7 @@ export function useStartUpdateMutation(root: string | null) {
     mutationFn: (input: Record<string, unknown>) =>
       invoke<string>("start_update", { root: root!, ...input }),
     onSuccess: (jobId) => {
-      start(jobId, { isUpdate: true });
+      start(jobId, { isUpdate: true, label: JOB_START_LABEL.update });
       if (root) {
         void queryClient.invalidateQueries({ queryKey: qk.jobs(root) });
       }
@@ -79,7 +81,7 @@ export function useStartEmbedJobMutation(root: string | null) {
     mutationFn: (input?: { force?: boolean }) =>
       invoke<string>("start_embed_job", { root: root!, force: input?.force ?? false }),
     onSuccess: (jobId) => {
-      start(jobId);
+      start(jobId, { label: JOB_START_LABEL.embed });
       if (root) {
         void queryClient.invalidateQueries({ queryKey: qk.jobs(root) });
       }
@@ -92,7 +94,17 @@ export function useStartStudyJobMutation(root: string | null) {
   return useMutation({
     mutationFn: (args: Record<string, unknown>) =>
       invoke<string>("start_study_job", args),
-    onSuccess: (jobId) => afterStudyJobStarted(queryClient, root, jobId),
+    onSuccess: (jobId, args) => {
+      const skill = typeof args.skill === "string" ? args.skill : "";
+      const labelBySkill: Record<string, string> = {
+        flashcards: JOB_START_LABEL.flashcards,
+        quiz: JOB_START_LABEL.quiz,
+        concepts: JOB_START_LABEL.concepts,
+        diagrams: JOB_START_LABEL.diagrams,
+        citations: JOB_START_LABEL.citations,
+      };
+      afterStudyJobStarted(queryClient, root, jobId, labelBySkill[skill]);
+    },
   });
 }
 
@@ -104,7 +116,8 @@ export function useStartFlashcardJobMutation(root: string | null) {
         "start_study_job",
         flashcardJobArgs(root!, input.course, input.force, input.model, input.provider),
       ),
-    onSuccess: (jobId) => afterStudyJobStarted(queryClient, root, jobId),
+    onSuccess: (jobId) =>
+      afterStudyJobStarted(queryClient, root, jobId, JOB_START_LABEL.flashcards),
   });
 }
 
@@ -116,7 +129,7 @@ export function useStartQuizJobMutation(root: string | null) {
         "start_study_job",
         quizJobArgs(root!, input.course, input.force, input.model, input.provider),
       ),
-    onSuccess: (jobId) => afterStudyJobStarted(queryClient, root, jobId),
+    onSuccess: (jobId) => afterStudyJobStarted(queryClient, root, jobId, JOB_START_LABEL.quiz),
   });
 }
 
@@ -128,7 +141,8 @@ export function useStartConceptJobMutation(root: string | null) {
         "start_study_job",
         conceptJobArgs(root!, input.course, input.force, input.model, input.provider),
       ),
-    onSuccess: (jobId) => afterStudyJobStarted(queryClient, root, jobId),
+    onSuccess: (jobId) =>
+      afterStudyJobStarted(queryClient, root, jobId, JOB_START_LABEL.concepts),
   });
 }
 
@@ -140,7 +154,8 @@ export function useStartDiagramJobMutation(root: string | null) {
         "start_study_job",
         diagramJobArgs(root!, input.course, input.force, input.model, input.provider),
       ),
-    onSuccess: (jobId) => afterStudyJobStarted(queryClient, root, jobId),
+    onSuccess: (jobId) =>
+      afterStudyJobStarted(queryClient, root, jobId, JOB_START_LABEL.diagrams),
   });
 }
 
@@ -152,7 +167,8 @@ export function useStartCitationJobMutation(root: string | null) {
         "start_study_job",
         citationJobArgs(root!, input.course, input.force, input.model, input.provider),
       ),
-    onSuccess: (jobId) => afterStudyJobStarted(queryClient, root, jobId),
+    onSuccess: (jobId) =>
+      afterStudyJobStarted(queryClient, root, jobId, JOB_START_LABEL.citations),
   });
 }
 

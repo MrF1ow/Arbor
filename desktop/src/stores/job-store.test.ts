@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { JOB_START_LABEL } from "~/domain/job-labels";
 import { useJobStore } from "~/stores/job-store";
 import { useUiStore } from "~/stores/ui-store";
 
@@ -10,6 +11,7 @@ describe("job-store", () => {
       activeUpdateJobId: null,
       status: "idle",
       step: null,
+      label: null,
       lines: [],
       unread: 0,
     });
@@ -37,5 +39,26 @@ describe("job-store", () => {
   it("does not toggle logOpen", () => {
     useJobStore.getState().append("event");
     expect(useUiStore.getState().logOpen).toBe(false);
+  });
+
+  it("start stores a job label and finish clears it", () => {
+    useJobStore.getState().start("job-1", { label: JOB_START_LABEL.flashcards });
+    expect(useJobStore.getState().label).toBe(JOB_START_LABEL.flashcards);
+    useJobStore.getState().finish({
+      job_id: "job-1",
+      status: "succeeded",
+      summary: null,
+      root: "/mock/knowledge/fall-2026",
+      operation: "generate",
+    });
+    expect(useJobStore.getState().label).toBeNull();
+  });
+
+  it("start with isUpdate tracks the update job id", () => {
+    useJobStore.getState().start("update-1", {
+      isUpdate: true,
+      label: JOB_START_LABEL.update,
+    });
+    expect(useJobStore.getState().activeUpdateJobId).toBe("update-1");
   });
 });

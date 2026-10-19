@@ -1,5 +1,20 @@
 import type { PendingSource, Selection } from "~/domain/types";
 
+export function relativeToRoot(path: string, root: string | null | undefined): string {
+  if (!root) {
+    return path;
+  }
+  const normalizedRoot = root.replace(/\/+$/, "");
+  if (path === normalizedRoot) {
+    return "";
+  }
+  const prefix = `${normalizedRoot}/`;
+  if (path.startsWith(prefix)) {
+    return path.slice(prefix.length);
+  }
+  return path;
+}
+
 export function formatRanges(ranges: [number, number][]): string {
   return ranges
     .map(([start, end]) => (start === end ? String(start) : `${start}-${end}`))

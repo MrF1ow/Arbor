@@ -24,6 +24,7 @@ import { PROVIDER_FALLBACK, signedOutJobMessage } from "~/domain/provider";
 import {
   alignmentNote,
   formatRanges,
+  relativeToRoot,
   selectionsFromRangeValues,
   validateRangeValue,
   validateRangeValues,
@@ -51,6 +52,22 @@ function initialRangeValues(pending: PendingSource[]): Record<string, string> {
 
 function pendingKey(pending: PendingSource[]): string {
   return pending.map((p) => p.path).join("\0");
+}
+
+function filePathDisplay(
+  absolutePath: string,
+  root: string | null,
+): { relative: string; fileName: string; directory: string } {
+  const relative = relativeToRoot(absolutePath, root);
+  const slash = relative.lastIndexOf("/");
+  if (slash === -1) {
+    return { relative, fileName: relative, directory: "" };
+  }
+  return {
+    relative,
+    fileName: relative.slice(slash + 1),
+    directory: relative.slice(0, slash),
+  };
 }
 
 export function UpdateReviewDialog() {
@@ -224,7 +241,7 @@ function UpdateReviewDialogForm({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>File</TableHead>
+            <TableHead className="w-1/2">File</TableHead>
             <TableHead className="w-16">Pages</TableHead>
             <TableHead>Ranges</TableHead>
           </TableRow>
@@ -236,12 +253,22 @@ function UpdateReviewDialogForm({
             const inputId = `${formId}-range-${index}`;
             const errorId = `${inputId}-error`;
             const fieldError = errors[p.path];
+            const { relative, fileName, directory } = filePathDisplay(p.path, activeRoot);
             return (
               <TableRow key={p.path}>
-                <TableCell className="max-w-48">
+                <TableCell className="w-1/2 min-w-0">
                   <Tooltip>
                     <TooltipTrigger
-                      render={<span className="block truncate text-sm">{p.path}</span>}
+                      render={
+                        <span className="block min-w-0">
+                          <span className="block truncate text-sm font-medium">{fileName}</span>
+                          {directory ? (
+                            <span className="block truncate text-2xs text-faint-foreground">
+                              {directory}
+                            </span>
+                          ) : null}
+                        </span>
+                      }
                     />
                     <TooltipContent>{p.path}</TooltipContent>
                   </Tooltip>
@@ -256,7 +283,7 @@ function UpdateReviewDialogForm({
                       }}
                       value={rangeValues[p.path] ?? ""}
                       placeholder="all"
-                      aria-label={`Ranges for ${p.path}`}
+                      aria-label={`Ranges for ${relative}`}
                       aria-invalid={Boolean(fieldError)}
                       aria-describedby={fieldError ? errorId : undefined}
                       onChange={(e) => onRangeChange(p.path, p.page_count, e.target.value)}

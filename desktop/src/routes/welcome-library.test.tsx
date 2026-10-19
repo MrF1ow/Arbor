@@ -16,6 +16,7 @@ import * as authRefreshModule from "~/lib/auth-refresh";
 import { resetAuthRefreshForTests } from "~/lib/auth-refresh";
 import { clearMockIpcLog, getMockIpcCalls, getMockIpcLog } from "~/test/mock-handlers";
 import { FIXTURE_ROOT_FALL } from "~/test/fixtures/data";
+import { installMockIpc } from "~/test/mock-ipc";
 import { renderAppAtRoute, renderWithProviders } from "~/test/render";
 import { useJobStore } from "~/stores/job-store";
 import { useUiStore } from "~/stores/ui-store";
@@ -41,6 +42,7 @@ describe("welcome and library flows (PR 6)", () => {
       activeUpdateJobId: null,
       status: "idle",
       step: null,
+      label: null,
       lines: [],
       unread: 0,
     });
@@ -208,6 +210,7 @@ describe("welcome and library flows (PR 6)", () => {
 
 describe("update review dialog", () => {
   beforeEach(() => {
+    installMockIpc();
     useUpdatePlanStore.setState({
       pending: fixturePendingSources,
       open: true,
@@ -236,6 +239,8 @@ describe("update review dialog", () => {
     await waitFor(() => {
       expect(screen.getByRole("dialog")).toBeInTheDocument();
     });
+    expect(screen.getByText("lecture-a.pdf")).toBeInTheDocument();
+    expect(screen.getAllByText("cell-biology/sources")).toHaveLength(3);
     expect(screen.getByDisplayValue("151-300")).toBeInTheDocument();
     expect(screen.getByText(/Alignment is uncertain/i)).toBeInTheDocument();
     expect(screen.getByText(/Pages were removed/i)).toBeInTheDocument();

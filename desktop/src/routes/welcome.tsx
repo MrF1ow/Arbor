@@ -8,6 +8,7 @@ import markLight from "~/assets/arbor-mark.png";
 import markDark from "~/assets/arbor-mark-dark.png";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
+import { useSidebar } from "~/components/ui/sidebar";
 import { DESKTOP_ONLY_WELCOME_COPY, TAURI_UNAVAILABLE } from "~/domain/tauri";
 import { pickActiveRoot } from "~/lib/knowledge-root";
 import { useChooseKnowledgeFolder } from "~/lib/hooks/use-choose-knowledge-folder";
@@ -29,6 +30,7 @@ export const Route = createFileRoute("/welcome")({
 });
 
 function WelcomePage() {
+  const { open: sidebarOpen } = useSidebar();
   const { addClass, root: searchRoot } = Route.useSearch();
   const settings = useSettings();
   const { chooseFolder, isPending, desktopIpc } = useChooseKnowledgeFolder();
@@ -72,9 +74,11 @@ function WelcomePage() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex h-header shrink-0 items-center border-b border-border px-4">
-        <SidebarHeaderTrigger />
-      </div>
+      {!sidebarOpen ? (
+        <div className="flex h-header shrink-0 items-center border-b border-border px-4">
+          <SidebarHeaderTrigger />
+        </div>
+      ) : null}
       <div className="flex flex-1 items-center justify-center p-8">
         {showAddClassStep && classRoot ? (
           <div className="flex w-full max-w-sm flex-col items-center gap-4 text-center">

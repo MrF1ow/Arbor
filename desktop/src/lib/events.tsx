@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 
 import { flashcardJobArgs } from "~/domain/flashcards";
+import { JOB_START_LABEL } from "~/domain/job-labels";
 import { quizJobArgs } from "~/domain/quiz";
 import { selectionsFromPending } from "~/domain/update";
 import { formatWorkerEvent } from "~/domain/worker-events";
@@ -151,11 +152,15 @@ export async function presentUpdatePlan(root: string, deps: PresentUpdatePlanDep
         );
         return;
       }
-      await deps.startUpdate(root, {
+      const jobId = await deps.startUpdate(root, {
         model: deps.modelId,
         provider: deps.providerId,
         selections: selectionsFromPending(plan.pending),
         trigger: deps.reason === "watch" ? "watch" : "manual",
+      });
+      useJobStore.getState().start(jobId, {
+        isUpdate: true,
+        label: JOB_START_LABEL.update,
       });
       return;
     }
@@ -268,7 +273,7 @@ type WorkerEventsBridgeContext = {
   append: (line: string) => void;
   finish: (payload: JobFinished) => void;
   setStep: (step: string | null) => void;
-  startJob: (jobId: string) => void;
+  startJob: (jobId: string, opts?: { isUpdate?: boolean; label?: string }) => void;
 };
 
 export function WorkerEventsBridge() {
@@ -390,7 +395,7 @@ export function WorkerEventsBridge() {
                   ctx.providerId,
                 ),
               );
-              ctx.startJob(jobId);
+              ctx.startJob(jobId, { label: JOB_START_LABEL.flashcards });
             },
             startQuizJob: async (force) => {
               if (!ctx.activeRoot || !currentCourse || !ctx.modelId) {
@@ -406,11 +411,11 @@ export function WorkerEventsBridge() {
                   ctx.providerId,
                 ),
               );
-              ctx.startJob(jobId);
+              ctx.startJob(jobId, { label: JOB_START_LABEL.quiz });
             },
             startEmbedJob: async (root) => {
               const jobId = await invoke<string>("start_embed_job", { root, force: false });
-              ctx.startJob(jobId);
+              ctx.startJob(jobId, { label: JOB_START_LABEL.embed });
             },
           },
           jobStateRef.current,

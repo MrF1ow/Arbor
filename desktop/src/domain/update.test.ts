@@ -5,11 +5,34 @@ import {
   alignmentNote,
   formatRanges,
   parseRanges,
+  relativeToRoot,
   selectionsFromRangeValues,
   validateRangeValues,
 } from "~/domain/update";
 
 describe("update range helpers", () => {
+  it("relativeToRoot strips the knowledge root prefix", () => {
+    const root = "/mock/knowledge/fall-2026";
+    expect(relativeToRoot(`${root}/cell-biology/sources/a.pdf`, root)).toBe(
+      "cell-biology/sources/a.pdf",
+    );
+  });
+
+  it("relativeToRoot normalizes trailing slashes on the root", () => {
+    const root = "/mock/knowledge/fall-2026///";
+    expect(relativeToRoot("/mock/knowledge/fall-2026/cell-biology/a.pdf", root)).toBe(
+      "cell-biology/a.pdf",
+    );
+  });
+
+  it("relativeToRoot returns the original path when outside the root", () => {
+    expect(relativeToRoot("/other/a.pdf", "/mock/knowledge/fall-2026")).toBe("/other/a.pdf");
+  });
+
+  it("relativeToRoot returns the path unchanged when root is missing", () => {
+    expect(relativeToRoot("/mock/a.pdf", null)).toBe("/mock/a.pdf");
+  });
+
   it("formatRanges renders singles and spans", () => {
     expect(formatRanges([[3, 3], [5, 8]])).toBe("3, 5-8");
   });

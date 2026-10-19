@@ -34,6 +34,7 @@ describe("app shell", () => {
       activeUpdateJobId: null,
       status: "idle",
       step: null,
+      label: null,
       lines: [],
       unread: 0,
     });
