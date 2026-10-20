@@ -12,7 +12,7 @@ describe("ListRow", () => {
       <ListRow title="Week 3 digest" active onSelect={onSelect} meta="12 cards" />,
     );
     const row = screen.getByRole("button", { name: /Week 3 digest/ });
-    expect(row).toHaveAttribute("aria-current", "true");
+    expect(row).toHaveAttribute("aria-current", "page");
     row.focus();
     await user.keyboard("{Enter}");
     await user.keyboard(" ");

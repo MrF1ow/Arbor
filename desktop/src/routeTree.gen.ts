@@ -19,6 +19,7 @@ import { Route as SettingsIndexRouteImport } from './routes/settings.index'
 import { Route as CourseCourseChatRouteImport } from './routes/course.$course.chat'
 import { Route as CourseCourseFlashcardsRouteImport } from './routes/course.$course.flashcards'
 import { Route as CourseCourseGraphRouteImport } from './routes/course.$course.graph'
+import { Route as CourseCourseNotesRouteImport } from './routes/course.$course.notes'
 import { Route as CourseCourseQuizRouteImport } from './routes/course.$course.quiz'
 import { Route as CourseCourseNotesIndexRouteImport } from './routes/course.$course.notes.index'
 import { Route as CourseCourseNotesDigestRouteImport } from './routes/course.$course.notes.$digest'
@@ -73,20 +74,25 @@ const CourseCourseGraphRoute = CourseCourseGraphRouteImport.update({
   path: '/graph',
   getParentRoute: () => CourseCourseRoute,
 } as any)
+const CourseCourseNotesRoute = CourseCourseNotesRouteImport.update({
+  id: '/notes',
+  path: '/notes',
+  getParentRoute: () => CourseCourseRoute,
+} as any)
 const CourseCourseQuizRoute = CourseCourseQuizRouteImport.update({
   id: '/quiz',
   path: '/quiz',
   getParentRoute: () => CourseCourseRoute,
 } as any)
 const CourseCourseNotesIndexRoute = CourseCourseNotesIndexRouteImport.update({
-  id: '/notes/',
-  path: '/notes/',
-  getParentRoute: () => CourseCourseRoute,
+  id: '/',
+  path: '/',
+  getParentRoute: () => CourseCourseNotesRoute,
 } as any)
 const CourseCourseNotesDigestRoute = CourseCourseNotesDigestRouteImport.update({
-  id: '/notes/$digest',
-  path: '/notes/$digest',
-  getParentRoute: () => CourseCourseRoute,
+  id: '/$digest',
+  path: '/$digest',
+  getParentRoute: () => CourseCourseNotesRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -100,6 +106,7 @@ export interface FileRoutesByFullPath {
   '/course/$course/chat': typeof CourseCourseChatRoute
   '/course/$course/flashcards': typeof CourseCourseFlashcardsRoute
   '/course/$course/graph': typeof CourseCourseGraphRoute
+  '/course/$course/notes': typeof CourseCourseNotesRouteWithChildren
   '/course/$course/quiz': typeof CourseCourseQuizRoute
   '/course/$course/notes/$digest': typeof CourseCourseNotesDigestRoute
   '/course/$course/notes/': typeof CourseCourseNotesIndexRoute
@@ -130,6 +137,7 @@ export interface FileRoutesById {
   '/course/$course/chat': typeof CourseCourseChatRoute
   '/course/$course/flashcards': typeof CourseCourseFlashcardsRoute
   '/course/$course/graph': typeof CourseCourseGraphRoute
+  '/course/$course/notes': typeof CourseCourseNotesRouteWithChildren
   '/course/$course/quiz': typeof CourseCourseQuizRoute
   '/course/$course/notes/$digest': typeof CourseCourseNotesDigestRoute
   '/course/$course/notes/': typeof CourseCourseNotesIndexRoute
@@ -147,6 +155,7 @@ export interface FileRouteTypes {
     | '/course/$course/chat'
     | '/course/$course/flashcards'
     | '/course/$course/graph'
+    | '/course/$course/notes'
     | '/course/$course/quiz'
     | '/course/$course/notes/$digest'
     | '/course/$course/notes/'
@@ -176,6 +185,7 @@ export interface FileRouteTypes {
     | '/course/$course/chat'
     | '/course/$course/flashcards'
     | '/course/$course/graph'
+    | '/course/$course/notes'
     | '/course/$course/quiz'
     | '/course/$course/notes/$digest'
     | '/course/$course/notes/'
@@ -262,6 +272,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CourseCourseGraphRouteImport
       parentRoute: typeof CourseCourseRoute
     }
+    '/course/$course/notes': {
+      id: '/course/$course/notes'
+      path: '/notes'
+      fullPath: '/course/$course/notes'
+      preLoaderRoute: typeof CourseCourseNotesRouteImport
+      parentRoute: typeof CourseCourseRoute
+    }
     '/course/$course/quiz': {
       id: '/course/$course/quiz'
       path: '/quiz'
@@ -271,17 +288,17 @@ declare module '@tanstack/react-router' {
     }
     '/course/$course/notes/': {
       id: '/course/$course/notes/'
-      path: '/notes'
+      path: '/'
       fullPath: '/course/$course/notes/'
       preLoaderRoute: typeof CourseCourseNotesIndexRouteImport
-      parentRoute: typeof CourseCourseRoute
+      parentRoute: typeof CourseCourseNotesRoute
     }
     '/course/$course/notes/$digest': {
       id: '/course/$course/notes/$digest'
-      path: '/notes/$digest'
+      path: '/$digest'
       fullPath: '/course/$course/notes/$digest'
       preLoaderRoute: typeof CourseCourseNotesDigestRouteImport
-      parentRoute: typeof CourseCourseRoute
+      parentRoute: typeof CourseCourseNotesRoute
     }
   }
 }
@@ -298,22 +315,33 @@ const SettingsRouteWithChildren = SettingsRoute._addFileChildren(
   SettingsRouteChildren,
 )
 
+interface CourseCourseNotesRouteChildren {
+  CourseCourseNotesDigestRoute: typeof CourseCourseNotesDigestRoute
+  CourseCourseNotesIndexRoute: typeof CourseCourseNotesIndexRoute
+}
+
+const CourseCourseNotesRouteChildren: CourseCourseNotesRouteChildren = {
+  CourseCourseNotesDigestRoute: CourseCourseNotesDigestRoute,
+  CourseCourseNotesIndexRoute: CourseCourseNotesIndexRoute,
+}
+
+const CourseCourseNotesRouteWithChildren =
+  CourseCourseNotesRoute._addFileChildren(CourseCourseNotesRouteChildren)
+
 interface CourseCourseRouteChildren {
   CourseCourseChatRoute: typeof CourseCourseChatRoute
   CourseCourseFlashcardsRoute: typeof CourseCourseFlashcardsRoute
   CourseCourseGraphRoute: typeof CourseCourseGraphRoute
+  CourseCourseNotesRoute: typeof CourseCourseNotesRouteWithChildren
   CourseCourseQuizRoute: typeof CourseCourseQuizRoute
-  CourseCourseNotesDigestRoute: typeof CourseCourseNotesDigestRoute
-  CourseCourseNotesIndexRoute: typeof CourseCourseNotesIndexRoute
 }
 
 const CourseCourseRouteChildren: CourseCourseRouteChildren = {
   CourseCourseChatRoute: CourseCourseChatRoute,
   CourseCourseFlashcardsRoute: CourseCourseFlashcardsRoute,
   CourseCourseGraphRoute: CourseCourseGraphRoute,
+  CourseCourseNotesRoute: CourseCourseNotesRouteWithChildren,
   CourseCourseQuizRoute: CourseCourseQuizRoute,
-  CourseCourseNotesDigestRoute: CourseCourseNotesDigestRoute,
-  CourseCourseNotesIndexRoute: CourseCourseNotesIndexRoute,
 }
 
 const CourseCourseRouteWithChildren = CourseCourseRoute._addFileChildren(

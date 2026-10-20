@@ -44,78 +44,108 @@ export const fixtureCourses: Record<string, string[]> = {
 export const fixtureCourseOverview = {
   due: { due_ids: ["fc-1", "fc-2"], count: 14, deck_count: 86 },
   weak: {
-    topics: [{ label: "Cytoskeleton", digest: "2026-09-12-membranes", heading: "Microtubules" }],
+    topics: [
+      {
+        label: "Cytoskeleton",
+        digest: "digests/2026-09-12-membranes.md",
+        heading: "Microtubules",
+      },
+    ],
   },
   recommend: {
     items: [
       { kind: "due_cards", label: "Review 14 due flashcards" },
-      { kind: "weakest_topic", label: "Cytoskeleton", digest: "2026-09-12-membranes" },
+      {
+        kind: "weakest_topic",
+        label: "Cytoskeleton",
+        digest: "digests/2026-09-12-membranes.md",
+        heading: "Microtubules",
+      },
+      {
+        kind: "unreviewed_digest",
+        label: "Stem cells",
+        digest: "digests/2026-10-12-stem-cells.md",
+      },
     ],
   },
 };
 
-export const fixtureDigests = [
+export const fixtureCourseMd = `# Cell Biology
+
+BIOL 2410 · twelve lectures digested, from cell chemistry through membrane transport. Midterm on November 4.
+
+## Syllabus topics
+
+See the course map for weekly digests.
+`;
+
+const fixtureDigestsUnsorted = [
   {
     title: "Cell membranes",
     date: "2026-09-12",
-    path: "cell-biology/2026-09-12-membranes.md",
+    path: "cell-biology/digests/2026-09-12-membranes.md",
   },
   {
     title: "Mitochondria",
     date: "2026-09-15",
-    path: "cell-biology/2026-09-15-mitochondria.md",
+    path: "cell-biology/digests/2026-09-15-mitochondria.md",
   },
   {
     title: "Protein trafficking",
     date: "2026-09-18",
-    path: "cell-biology/2026-09-18-trafficking.md",
+    path: "cell-biology/digests/2026-09-18-trafficking.md",
   },
   {
     title: "Cell cycle",
     date: "2026-09-22",
-    path: "cell-biology/2026-09-22-cycle.md",
+    path: "cell-biology/digests/2026-09-22-cycle.md",
   },
   {
     title: "Signal transduction",
     date: "2026-09-25",
-    path: "cell-biology/2026-09-25-signaling.md",
+    path: "cell-biology/digests/2026-09-25-signaling.md",
   },
   {
     title: "Cytoskeleton",
     date: "2026-09-28",
-    path: "cell-biology/2026-09-28-cytoskeleton.md",
+    path: "cell-biology/digests/2026-09-28-cytoskeleton.md",
   },
   {
     title: "Exam review",
     date: "2026-10-01",
-    path: "cell-biology/2026-10-01-review.md",
+    path: "cell-biology/digests/2026-10-01-review.md",
   },
   {
     title: "DNA replication",
     date: "2026-10-03",
-    path: "cell-biology/2026-10-03-dna.md",
+    path: "cell-biology/digests/2026-10-03-dna.md",
   },
   {
     title: "Transcription",
     date: "2026-10-05",
-    path: "cell-biology/2026-10-05-transcription.md",
+    path: "cell-biology/digests/2026-10-05-transcription.md",
   },
   {
     title: "Translation",
     date: "2026-10-08",
-    path: "cell-biology/2026-10-08-translation.md",
+    path: "cell-biology/digests/2026-10-08-translation.md",
   },
   {
     title: "Apoptosis",
     date: "2026-10-10",
-    path: "cell-biology/2026-10-10-apoptosis.md",
+    path: "cell-biology/digests/2026-10-10-apoptosis.md",
   },
   {
     title: "Stem cells",
     date: "2026-10-12",
-    path: "cell-biology/2026-10-12-stem-cells.md",
+    path: "cell-biology/digests/2026-10-12-stem-cells.md",
   },
 ];
+
+/** Same sort order as `list_digests` in the desktop worker (path descending). */
+export const fixtureDigests = [...fixtureDigestsUnsorted].sort((a, b) =>
+  b.path.localeCompare(a.path),
+);
 
 export const fixtureCourseDisplayNames: Record<string, string> = {
   "cell-biology": "Cell Biology",
@@ -144,18 +174,30 @@ export const fixtureQuizProgress = {
 export const fixtureConceptGraph = {
   schema_version: 1,
   course: "cell-biology",
-  nodes: Array.from({ length: 10 }, (_, i) => ({
-    id: `concept-${i + 1}`,
-    label: `Concept ${i + 1}`,
-    digest: "2026-09-12-membranes",
-    heading: "Membrane structure",
-    verified: i % 2 === 0,
-  })),
-  edges: Array.from({ length: 12 }, (_, i) => ({
-    from: `concept-${(i % 10) + 1}`,
-    to: `concept-${((i + 2) % 10) + 1}`,
-    kind: "related",
-  })),
+  nodes: [
+    {
+      id: "concept-1",
+      name: "Facilitated diffusion",
+      summary: "Carrier-mediated passive transport.",
+      kind: "concept",
+      sources: [{ digest: "digests/2026-09-12-membranes.md", heading: "Membrane structure" }],
+    },
+    {
+      id: "concept-2",
+      name: "Figure 3.2",
+      summary: "Bilayer diagram.",
+      kind: "figure",
+      sources: [{ digest: "digests/2026-09-12-membranes.md", heading: "Membrane structure" }],
+    },
+  ],
+  edges: [
+    {
+      from: "concept-1",
+      to: "concept-2",
+      relation: "illustrates",
+      sources: [{ digest: "digests/2026-09-12-membranes.md", heading: null }],
+    },
+  ],
 };
 
 export const fixtureStudyPlanMarkdown = `# Study plan
@@ -180,7 +222,7 @@ Phospholipid bilayer with embedded proteins.
 | Cholesterol | Fluidity buffer |
 
 - Fluid mosaic model
-- See also [[2026-09-15-mitochondria|Mitochondria digest]]
+- See also [Mitochondria digest](digests/2026-09-15-mitochondria.md)
 
 `;
 

@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 
+import { renderMarkdown } from "~/domain/markdown";
 import type { CourseOverviewPayload } from "~/domain/types";
 import { invoke } from "~/lib/ipc";
 import { qk } from "~/lib/queries/keys";
@@ -13,10 +14,24 @@ export function useMarkdown(root: string | null, relativePath: string | null) {
   });
 }
 
-export function useCourseOverview(root: string | null, course: string | null) {
+export function useRenderedMarkdown(root: string | null, relativePath: string | null) {
+  return useQuery({
+    queryKey: qk.markdown(root ?? "", relativePath ?? ""),
+    enabled: Boolean(root && relativePath),
+    queryFn: () =>
+      invoke<string>("read_markdown", { root: root!, relativePath: relativePath! }),
+    select: (source) => renderMarkdown(source),
+  });
+}
+
+export function useCourseOverview(
+  root: string | null,
+  course: string | null,
+  queryEnabled = true,
+) {
   return useQuery({
     queryKey: qk.courseOverview(root ?? "", course ?? ""),
-    enabled: Boolean(root && course),
+    enabled: Boolean(root && course) && queryEnabled,
     queryFn: () =>
       invoke<CourseOverviewPayload>("study_progress", {
         root: root!,
