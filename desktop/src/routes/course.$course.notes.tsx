@@ -32,6 +32,10 @@ function NotesLayout() {
   const narrow = useNotesMainNarrow(mainRef);
   const [indexSheetOpen, setIndexSheetOpen] = useState(false);
 
+  if (!narrow && indexSheetOpen) {
+    setIndexSheetOpen(false);
+  }
+
   const indexSheetVisible = narrow && indexSheetOpen;
 
   const showInlineIndex = !narrow && notesIndexOpen;

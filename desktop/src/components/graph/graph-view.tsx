@@ -1,6 +1,6 @@
 import { useNavigate } from "@tanstack/react-router";
 import { Image, ListCollapse, RefreshCw } from "lucide-react";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { Chip } from "~/components/app/chip";
 import { EmptyState } from "~/components/app/empty-state";
@@ -67,6 +67,7 @@ function ConceptListPane({
             key={node.id}
             title={conceptRowTitle(node)}
             icon={node.kind === "figure" ? Image : undefined}
+            leadingDashed={node.kind === "figure"}
             active={node.id === selectedId}
             className="w-full"
             trailing={
@@ -131,27 +132,32 @@ export function GraphView({
   const narrow = useNotesMainNarrow(mainRef);
   const [listSheetOpen, setListSheetOpen] = useState(false);
 
+  if (!narrow && listSheetOpen) {
+    setListSheetOpen(false);
+  }
+
   const queriesSettled =
     (conceptsQuery.isSuccess || conceptsQuery.isError) && !conceptsQuery.isFetching;
 
   let parsedGraph: ConceptGraph | null = null;
-  let graphMissing = false;
-  if (queriesSettled) {
-    if (conceptsQuery.isError || conceptsQuery.data == null) {
-      graphMissing = true;
-    } else {
-      try {
-        const graph = parseConceptGraph(conceptsQuery.data);
-        if (graph.course !== course) {
-          graphMissing = true;
-        } else {
-          parsedGraph = graph;
-        }
-      } catch {
-        graphMissing = true;
+  let parseFailed = false;
+  let courseMismatch = false;
+  if (conceptsQuery.data != null) {
+    try {
+      const graph = parseConceptGraph(conceptsQuery.data);
+      if (graph.course !== course) {
+        courseMismatch = true;
+      } else {
+        parsedGraph = graph;
       }
+    } catch {
+      parseFailed = true;
     }
   }
+
+  const graphMissing =
+    queriesSettled &&
+    (conceptsQuery.data == null || parseFailed || courseMismatch || parsedGraph === null);
 
   const citationsReport = (() => {
     if (!citationsQuery.isSuccess || citationsQuery.data == null) {
@@ -188,28 +194,58 @@ export function GraphView({
 
   const hasGraph = parsedGraph !== null && selectedId !== null && !graphMissing;
 
-  const selectConcept = (id: string) => {
-    void navigate({
-      to: "/course/$course/graph",
-      params: { course },
-      search: { concept: id },
-      replace: true,
-    });
-    if (narrow) {
-      setListSheetOpen(false);
-    }
-  };
+  const selectConceptFromPointer = useCallback(
+    (id: string) => {
+      void navigate({
+        to: "/course/$course/graph",
+        params: { course },
+        search: { concept: id },
+        replace: true,
+      });
+      if (narrow) {
+        setListSheetOpen(false);
+      }
+    },
+    [course, narrow, navigate],
+  );
+
+  const selectConceptFromKeyboard = useCallback(
+    (id: string) => {
+      void navigate({
+        to: "/course/$course/graph",
+        params: { course },
+        search: { concept: id },
+        replace: true,
+      });
+    },
+    [course, navigate],
+  );
+
+  const parsedGraphRef = useRef(parsedGraph);
+  const selectedIdRef = useRef(selectedId);
+  const selectConceptFromKeyboardRef = useRef(selectConceptFromKeyboard);
 
   useLayoutEffect(() => {
-    if (!hasGraph || !parsedGraph || !selectedId) {
-      return;
-    }
+    parsedGraphRef.current = parsedGraph;
+    selectedIdRef.current = selectedId;
+    selectConceptFromKeyboardRef.current = selectConceptFromKeyboard;
+  }, [parsedGraph, selectedId, selectConceptFromKeyboard]);
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) {
+        return;
+      }
       if (isEditableTarget(event.target) || isDialogOpen()) {
         return;
       }
-      const nodes = parsedGraph!.nodes;
-      const index = nodes.findIndex((n) => n.id === selectedId);
+      const graphAtKey = parsedGraphRef.current;
+      const idAtKey = selectedIdRef.current;
+      if (!graphAtKey || !idAtKey) {
+        return;
+      }
+      const nodes = graphAtKey.nodes;
+      const index = nodes.findIndex((n) => n.id === idAtKey);
       if (index < 0) {
         return;
       }
@@ -217,7 +253,7 @@ export function GraphView({
         event.preventDefault();
         const next = nodes[index + 1];
         if (next) {
-          selectConcept(next.id);
+          selectConceptFromKeyboardRef.current(next.id);
         }
         return;
       }
@@ -225,18 +261,30 @@ export function GraphView({
         event.preventDefault();
         const prev = nodes[index - 1];
         if (prev) {
-          selectConcept(prev.id);
+          selectConceptFromKeyboardRef.current(prev.id);
         }
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-    // selectConcept is stable enough for keyboard navigation; listing it rebinds every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- narrow + navigate wrapper
-  }, [hasGraph, parsedGraph, selectedId, course]);
+  }, []);
 
   const displayName = courseDisplayName(course);
-  const queriesLoading = !queriesSettled && !graphMissing;
+  const queriesLoading = conceptsQuery.data == null && !queriesSettled;
+
+  const anyJobDisabled =
+    conceptLauncher.jobDisabled || diagramLauncher.jobDisabled;
+  const modelHint = conceptLauncher.modelHint ?? diagramLauncher.modelHint;
+
+  const launchConceptJob = (force: boolean) => {
+    diagramLauncher.clearModelHint();
+    void conceptLauncher.launchStudyJob(course, force);
+  };
+
+  const launchDiagramJob = (force: boolean) => {
+    conceptLauncher.clearModelHint();
+    void diagramLauncher.launchStudyJob(course, force);
+  };
 
   const listSheetVisible = narrow && listSheetOpen;
   const showInlineList = !narrow && parsedGraph;
@@ -271,33 +319,31 @@ export function GraphView({
             description={`No concept graph yet for ${displayName}. Generate concepts from your digests.`}
             actions={
               <div className="flex flex-col items-center gap-2">
-                {conceptLauncher.modelHint ?? diagramLauncher.modelHint ? (
-                  <p className="text-sm text-muted-foreground">
-                    {conceptLauncher.modelHint ?? diagramLauncher.modelHint}
-                  </p>
+                {modelHint ? (
+                  <p className="text-sm text-muted-foreground">{modelHint}</p>
                 ) : null}
                 <div className="flex flex-wrap items-center justify-center gap-2">
                   <Button
-                    disabled={conceptLauncher.jobDisabled}
+                    disabled={anyJobDisabled}
                     title={
                       conceptLauncher.viewerBlocked
                         ? conceptLauncher.viewerWriteReason
                         : undefined
                     }
-                    onClick={() => void conceptLauncher.launchStudyJob(course, false)}
+                    onClick={() => launchConceptJob(false)}
                   >
                     Generate concepts
                   </Button>
                   <Button
                     type="button"
                     variant="outline"
-                    disabled={diagramLauncher.jobDisabled}
+                    disabled={anyJobDisabled}
                     title={
                       diagramLauncher.viewerBlocked
                         ? diagramLauncher.viewerWriteReason
                         : undefined
                     }
-                    onClick={() => void diagramLauncher.launchStudyJob(course, false)}
+                    onClick={() => launchDiagramJob(false)}
                   >
                     Generate diagrams
                   </Button>
@@ -315,7 +361,7 @@ export function GraphView({
           selectedId={selected.id}
           failedIds={failedIds}
           citationsReport={citationsReport}
-          onSelect={selectConcept}
+          onSelect={selectConceptFromPointer}
         />
       ) : null}
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
@@ -337,13 +383,13 @@ export function GraphView({
                 type="button"
                 variant="ghost"
                 size="xs"
-                disabled={conceptLauncher.jobDisabled}
+                disabled={anyJobDisabled}
                 title={
                   conceptLauncher.viewerBlocked
                     ? conceptLauncher.viewerWriteReason
                     : undefined
                 }
-                onClick={() => void conceptLauncher.launchStudyJob(course, true)}
+                onClick={() => launchConceptJob(true)}
               >
                 <RefreshCw className="size-icon-sm" />
                 Refresh concepts
@@ -353,13 +399,13 @@ export function GraphView({
                   type="button"
                   variant="outline"
                   size="xs"
-                  disabled={diagramLauncher.jobDisabled}
+                  disabled={anyJobDisabled}
                   title={
                     diagramLauncher.viewerBlocked
                       ? diagramLauncher.viewerWriteReason
                       : undefined
                   }
-                  onClick={() => void diagramLauncher.launchStudyJob(course, false)}
+                  onClick={() => launchDiagramJob(false)}
                 >
                   Generate diagrams
                 </Button>
@@ -367,20 +413,18 @@ export function GraphView({
                   type="button"
                   variant="ghost"
                   size="xs"
-                  disabled={diagramLauncher.jobDisabled}
+                  disabled={anyJobDisabled}
                   title={
                     diagramLauncher.viewerBlocked
                       ? diagramLauncher.viewerWriteReason
                       : undefined
                   }
-                  onClick={() => void diagramLauncher.launchStudyJob(course, true)}
+                  onClick={() => launchDiagramJob(true)}
                 >
                   Refresh diagrams
                 </Button>
               </span>
-              {conceptLauncher.modelHint ?? diagramLauncher.modelHint ? (
-                <span>{conceptLauncher.modelHint ?? diagramLauncher.modelHint}</span>
-              ) : null}
+              {modelHint ? <span>{modelHint}</span> : null}
             </div>
 
             <h1 className="mb-4 font-serif text-3xl font-medium leading-tight">
@@ -393,8 +437,11 @@ export function GraphView({
               <p className="text-sm text-faint-foreground">No linked concepts.</p>
             ) : (
               <div className="flex flex-wrap gap-1.5">
-                {neighborList.map((neighbor) => (
-                  <Chip key={neighbor.id} onClick={() => selectConcept(neighbor.id)}>
+                {neighborList.map((neighbor, index) => (
+                  <Chip
+                    key={`${neighbor.id}-${neighbor.relation}-${index}`}
+                    onClick={() => selectConceptFromPointer(neighbor.id)}
+                  >
                     {neighbor.name} · {neighbor.relation}
                   </Chip>
                 ))}
@@ -427,7 +474,7 @@ export function GraphView({
                   selectedId={selected.id}
                   failedIds={failedIds}
                   citationsReport={citationsReport}
-                  onSelect={selectConcept}
+                  onSelect={selectConceptFromPointer}
                   className="h-full w-full border-r-0"
                 />
               </SheetContent>

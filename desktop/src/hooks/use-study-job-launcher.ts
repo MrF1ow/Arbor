@@ -73,6 +73,7 @@ export function useStudyJobLauncher(
     viewerBlocked,
     viewerWriteReason: VIEWER_WRITE_REASON,
     modelHint,
+    clearModelHint: () => setModelHint(null),
     jobDisabled,
     launchStudyJob,
   };

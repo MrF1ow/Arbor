@@ -50,7 +50,10 @@ export function isDialogOpen(): boolean {
   if (typeof document === "undefined") {
     return false;
   }
-  return Boolean(document.querySelector('[data-slot="dialog-overlay"][data-open]'));
+  return Boolean(
+    document.querySelector('[data-slot="dialog-overlay"][data-open]') ??
+      document.querySelector('[data-slot="sheet-overlay"][data-open]'),
+  );
 }
 
 export function isEditableTarget(target: EventTarget | null): boolean {
