@@ -38,7 +38,7 @@ const mockKnowledgeSearchHits: SearchHit[] = [
   {
     course: "cell-biology",
     path: "cell-biology/course.md",
-    kind: "digest",
+    kind: "course_md",
     title: "Cell Biology",
     snippet: "Course overview and syllabus topics.",
     page_range: null,
@@ -62,11 +62,29 @@ const mockKnowledgeSearchHits: SearchHit[] = [
     page_range: null,
     source_path: null,
   },
+  {
+    course: "cell-biology",
+    path: "cell-biology/misc/notes.txt",
+    kind: "other",
+    title: "Misc notes",
+    snippet: "Unlisted path opens overview with toast.",
+    page_range: null,
+    source_path: null,
+  },
 ];
 
 const mockSemanticSearchHits: SearchHit[] = [
   mockKnowledgeSearchHits[2]!,
   mockKnowledgeSearchHits[0]!,
+  {
+    course: "cell-biology",
+    path: "cell-biology/digests/2026-09-12-membranes.md",
+    kind: "digest",
+    title: "Membrane transport",
+    snippet: "Active transport and pumps in the bilayer.",
+    page_range: "6-7",
+    source_path: null,
+  },
   mockKnowledgeSearchHits[3]!,
   mockKnowledgeSearchHits[1]!,
 ];

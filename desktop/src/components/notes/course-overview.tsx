@@ -197,8 +197,7 @@ export function CourseOverview({
 
   useEffect(() => {
     const pane = scrollRef?.current;
-    const root = courseNotesRef.current;
-    if (!pane || !root) {
+    if (!pane) {
       return;
     }
     const id = heading ? headingId(heading) : "";
@@ -206,13 +205,37 @@ export function CourseOverview({
       pane.scrollTo(0, 0);
       return;
     }
-    const target = root.querySelector(`#${CSS.escape(id)}`);
-    if (target instanceof HTMLElement) {
-      target.scrollIntoView({ block: "start" });
-      return;
+
+    let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const tryScroll = () => {
+      if (cancelled) {
+        return true;
+      }
+      const target = pane.querySelector(`#${CSS.escape(id)}`);
+      if (target instanceof HTMLElement) {
+        target.scrollIntoView({ block: "start" });
+        return true;
+      }
+      return false;
+    };
+
+    if (!tryScroll()) {
+      retryTimer = window.setTimeout(() => {
+        if (!tryScroll() && !cancelled) {
+          pane.scrollTo(0, 0);
+        }
+      }, 0);
     }
-    pane.scrollTo(0, 0);
-  }, [heading, courseNotesHtml, scrollRef]);
+
+    return () => {
+      cancelled = true;
+      if (retryTimer !== undefined) {
+        window.clearTimeout(retryTimer);
+      }
+    };
+  }, [heading, courseNotesHtml, planHtml, scrollRef]);
 
   const goToDigest = (digestRef: string, digestHeading?: string | null) => {
     const slug = resolveDigestSlug(digestRef, digests);
@@ -433,7 +456,9 @@ export function CourseOverview({
         />
       </div>
 
-      <h3 className="notes-section-title">Study plan</h3>
+      <h3 className="notes-section-title" id={headingId("Study plan")}>
+        Study plan
+      </h3>
       <div className="mb-6 space-y-3">
         {studyPlan.isLoading ? (
           <Skeleton className="h-24 w-full" />

@@ -20,6 +20,7 @@ import {
   groupSearchHitsByCourse,
   resolveSearchHitNavigation,
   searchHitItemValue,
+  searchHitKindLabel,
   searchHitMeta,
 } from "~/domain/search-hit";
 import { pickActiveRoot } from "~/lib/knowledge-root";
@@ -37,8 +38,8 @@ function SearchHitRow({ hit }: { hit: import("~/domain/types").SearchHit }) {
       <div className="flex min-w-0 items-center gap-2">
         <span className="min-w-0 truncate font-medium">{hit.title}</span>
         {showKindBadge ? (
-          <Badge variant="outline" className="h-5 shrink-0 px-1.5 text-2xs capitalize">
-            {hit.kind}
+          <Badge variant="outline" className="h-5 shrink-0 px-1.5 text-2xs">
+            {searchHitKindLabel(hit.kind)}
           </Badge>
         ) : null}
       </div>
@@ -51,18 +52,23 @@ function SearchHitRow({ hit }: { hit: import("~/domain/types").SearchHit }) {
 function SearchPaletteBody({
   open,
   onOpenChange,
+  query,
+  setQuery,
+  debouncedQuery,
+  setDebouncedQuery,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  query: string;
+  setQuery: (query: string) => void;
+  debouncedQuery: string;
+  setDebouncedQuery: (query: string) => void;
 }) {
   const navigate = useNavigate();
   const settings = useSettings();
   const activeRoot = pickActiveRoot(settings.data);
   const searchSemantic = useUiStore((s) => s.searchSemantic);
   const setSearchSemantic = useUiStore((s) => s.setSearchSemantic);
-
-  const [query, setQuery] = useState("");
-  const [debouncedQuery, setDebouncedQuery] = useState("");
 
   useEffect(() => {
     if (!open) {
@@ -72,20 +78,13 @@ function SearchPaletteBody({
       setDebouncedQuery(query);
     }, DEBOUNCE_MS);
     return () => window.clearTimeout(timer);
-  }, [query, open]);
-
-  useEffect(() => {
-    if (!open) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset palette text when closed or the root changes
-      setQuery("");
-      setDebouncedQuery("");
-    }
-  }, [open, activeRoot]);
+  }, [query, open, setDebouncedQuery]);
 
   const textSearch = useSearch(activeRoot, searchSemantic ? "" : debouncedQuery);
   const semanticSearch = useSemanticSearch(activeRoot, searchSemantic ? debouncedQuery : "");
   const active = searchSemantic ? semanticSearch : textSearch;
-  const hits = active.data ?? [];
+  const hits =
+    active.data?.query === debouncedQuery.trim() ? (active.data?.hits ?? []) : [];
   const grouped = groupSearchHitsByCourse(hits);
   const multiCourse = grouped.length > 1;
 
@@ -103,7 +102,12 @@ function SearchPaletteBody({
       }
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [open, activeRoot]);
+  }, [open]);
+
+  const onSemanticChange = (checked: boolean) => {
+    setSearchSemantic(checked);
+    setDebouncedQuery(query);
+  };
 
   const openHit = (hit: import("~/domain/types").SearchHit) => {
     onOpenChange(false);
@@ -144,11 +148,11 @@ function SearchPaletteBody({
   const showLoading = Boolean(activeRoot) && debouncedQuery.trim().length > 0 && active.isLoading;
   const showError = Boolean(activeRoot) && active.isError;
 
-  const renderHits = (list: import("~/domain/types").SearchHit[]) =>
-    list.map((hit) => (
+  const renderHits = (list: import("~/domain/types").SearchHit[], indexOffset = 0) =>
+    list.map((hit, index) => (
       <CommandItem
-        key={searchHitItemValue(hit)}
-        value={searchHitItemValue(hit)}
+        key={searchHitItemValue(hit, indexOffset + index)}
+        value={searchHitItemValue(hit, indexOffset + index)}
         className="min-h-0 items-start py-2"
         onSelect={() => openHit(hit)}
       >
@@ -158,7 +162,7 @@ function SearchPaletteBody({
 
   return (
     <Command shouldFilter={false}>
-      <div className="flex items-center gap-2 border-b border-border p-1 pb-0">
+      <div className="flex items-center gap-2 border-b border-border">
         <div className="min-w-0 flex-1">
           <CommandInput
             ref={inputRef}
@@ -172,7 +176,7 @@ function SearchPaletteBody({
           <span>Semantic</span>
           <Switch
             checked={searchSemantic}
-            onCheckedChange={setSearchSemantic}
+            onCheckedChange={onSemanticChange}
             aria-label="Semantic search"
           />
         </Label>
@@ -200,15 +204,18 @@ function SearchPaletteBody({
         {showNoResults ? (
           <p className="py-6 text-center text-xs text-muted-foreground">No results</p>
         ) : null}
-        {hits.length > 0 && !multiCourse
-          ? renderHits(hits)
-          : null}
+        {hits.length > 0 && !multiCourse ? renderHits(hits) : null}
         {hits.length > 0 && multiCourse
-          ? grouped.map(([course, courseHits]) => (
-              <CommandGroup key={course} heading={courseDisplayName(course)}>
-                {renderHits(courseHits)}
-              </CommandGroup>
-            ))
+          ? grouped.map(([course, courseHits], groupIndex) => {
+              const indexOffset = grouped
+                .slice(0, groupIndex)
+                .reduce((sum, [, list]) => sum + list.length, 0);
+              return (
+                <CommandGroup key={course} heading={courseDisplayName(course)}>
+                  {renderHits(courseHits, indexOffset)}
+                </CommandGroup>
+              );
+            })
           : null}
       </CommandList>
     </Command>
@@ -224,6 +231,15 @@ export function SearchPalette({
   onOpenChange: (open: boolean) => void;
   rootKey: string;
 }) {
+  const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- remount search state when the knowledge root changes
+    setQuery("");
+    setDebouncedQuery("");
+  }, [rootKey]);
+
   return (
     <CommandDialog
       open={open}
@@ -233,7 +249,14 @@ export function SearchPalette({
       className={cn("max-w-reading")}
       showCloseButton={false}
     >
-      <SearchPaletteBody key={rootKey} open={open} onOpenChange={onOpenChange} />
+      <SearchPaletteBody
+        open={open}
+        onOpenChange={onOpenChange}
+        query={query}
+        setQuery={setQuery}
+        debouncedQuery={debouncedQuery}
+        setDebouncedQuery={setDebouncedQuery}
+      />
     </CommandDialog>
   );
 }

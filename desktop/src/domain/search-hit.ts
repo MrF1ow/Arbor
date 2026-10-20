@@ -44,8 +44,18 @@ export function searchHitMeta(hit: SearchHit): string {
   return `${courseDisplayName(hit.course)} · ${hit.path}${pages}`;
 }
 
-export function searchHitItemValue(hit: SearchHit): string {
-  return `${hit.course}:${hit.path}`;
+export function searchHitItemValue(hit: SearchHit, index: number): string {
+  return `${hit.course}:${hit.path}:${index}`;
+}
+
+const SEARCH_HIT_KIND_LABELS: Record<string, string> = {
+  course_md: "Course",
+  plan: "Plan",
+  digest: "Digest",
+};
+
+export function searchHitKindLabel(kind: string): string {
+  return SEARCH_HIT_KIND_LABELS[kind] ?? kind;
 }
 
 export function groupSearchHitsByCourse(hits: SearchHit[]): [string, SearchHit[]][] {

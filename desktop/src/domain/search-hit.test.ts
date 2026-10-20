@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   resolveSearchHitNavigation,
+  searchHitItemValue,
+  searchHitKindLabel,
   searchHitMeta,
   searchHitRelativePath,
 } from "~/domain/search-hit";
@@ -40,6 +42,28 @@ describe("searchHitRelativePath", () => {
     expect(searchHitRelativePath({ ...digestHit, path: "notes.md" })).toBe(
       "cell-biology/notes.md",
     );
+  });
+
+  it("does not prefix paths that already contain a slash", () => {
+    expect(searchHitRelativePath(digestHit)).toBe(
+      "cell-biology/digests/2026-09-12-membranes.md",
+    );
+  });
+});
+
+describe("searchHitItemValue", () => {
+  it("includes course, path, and index for cmdk uniqueness", () => {
+    expect(searchHitItemValue(digestHit, 0)).toBe(
+      "cell-biology:cell-biology/digests/2026-09-12-membranes.md:0",
+    );
+    expect(searchHitItemValue(digestHit, 1)).not.toBe(searchHitItemValue(digestHit, 0));
+  });
+});
+
+describe("searchHitKindLabel", () => {
+  it("maps known kinds to display labels", () => {
+    expect(searchHitKindLabel("course_md")).toBe("Course");
+    expect(searchHitKindLabel("plan")).toBe("Plan");
   });
 });
 
