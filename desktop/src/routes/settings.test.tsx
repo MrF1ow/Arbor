@@ -607,18 +607,18 @@ describe("settings", () => {
     expect(getMockIpcLog().filter((c) => c === "list_models")).toHaveLength(0);
   });
 
-  it("renders placeholder routes and highlights the active nav row", async () => {
+  it("renders sharing settings routes and highlights the active nav row", async () => {
     const user = userEvent.setup();
     await renderAppAtRoute("/settings/library");
     await waitFor(() => {
-      expect(within(settingsView()).getByText("This section is coming soon.")).toBeInTheDocument();
+      expect(within(settingsView()).getByTestId("settings-library")).toBeInTheDocument();
     });
     const libraryNav = within(settingsView()).getByRole("button", { name: "Library & sharing" });
     expect(libraryNav.getAttribute("aria-current")).toBe("page");
 
     await user.click(within(settingsView()).getByRole("button", { name: "Sync" }));
     await waitFor(() => {
-      expect(within(settingsView()).getByText("This section is coming soon.")).toBeInTheDocument();
+      expect(within(settingsView()).getByTestId("settings-sync")).toBeInTheDocument();
       expect(within(settingsView()).getByRole("button", { name: "Sync" }).getAttribute("aria-current")).toBe(
         "page",
       );

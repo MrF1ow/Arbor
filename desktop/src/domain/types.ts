@@ -328,6 +328,7 @@ export interface SkillIndexPackage {
   description: string;
   commit: string;
   permissions: string[];
+  installed?: boolean;
 }
 
 export interface WorkerEvent {

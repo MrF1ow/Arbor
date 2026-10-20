@@ -7,8 +7,9 @@ import { clearTauriMocks } from "~/test/mock-ipc";
 
 import { UpdateReviewDialog } from "~/components/app/update-review-dialog";
 import { twMerge as twMergeExtended } from "~/lib/tailwind-merge-config";
-import { fixturePendingSources } from "~/test/fixtures/data";
+import { fixturePendingSources, fixtureSettings } from "~/test/fixtures/data";
 import { renderAppAtRoute, renderWithProviders } from "~/test/render";
+import { useSyncUiStore } from "~/stores/sync-ui-store";
 import { useUiStore } from "~/stores/ui-store";
 import { useUpdatePlanStore } from "~/stores/update-plan-store";
 
@@ -125,9 +126,70 @@ describe("tailwind-merge render audit", { timeout: 120_000 }, () => {
       "/settings/shortcuts",
     ] as const;
 
+    const sharingFixtures = {
+      library_show: () => ({
+        present: true,
+        name: "Fall 2026 library",
+        created_by: "owner@example.com",
+        role: "owner",
+        provider: { id: "grok", model: "grok-4.7" },
+        members: [{ email: "owner@example.com", role: "owner" }],
+      }),
+      sync_show: () => ({
+        remote: "git@example.com:repo.git",
+        shared: true,
+        remote_note: "Mock remote note",
+      }),
+      skill_index: () => ({
+        packages: [
+          {
+            id: "demo-skill",
+            kind: "skill",
+            name: "Demo skill",
+            description: "Mock",
+            commit: "abc",
+            permissions: ["read_course"],
+            installed: true,
+          },
+        ],
+      }),
+      get_settings: () => ({
+        ...fixtureSettings,
+        workers: [
+          {
+            id: "wmock001",
+            label: "Mock worker",
+            host: "mock.local",
+            port: 22,
+            worker_cmd: "cmd",
+            remote_root: "/remote",
+          },
+        ],
+      }),
+    };
+
     for (const route of routes) {
       cleanup();
-      await renderAppAtRoute(route);
+      const fixtures =
+        route === "/settings/library" ||
+        route === "/settings/sync" ||
+        route === "/settings/skills" ||
+        route === "/settings/workers"
+          ? sharingFixtures
+          : undefined;
+      await renderAppAtRoute(route, fixtures);
+      if (route === "/settings/skills") {
+        const skillsPanel = await screen.findByTestId("settings-skills");
+        await user.click(within(skillsPanel).getByRole("button", { name: "Browse index" }));
+        await waitFor(() => {
+          expect(within(skillsPanel).getByText("Demo skill")).toBeInTheDocument();
+        });
+      }
+      if (route === "/settings/sync") {
+        useSyncUiStore.setState({ syncConflictOpen: true });
+        await screen.findByTestId("sync-conflict-dialog");
+        useSyncUiStore.setState({ syncConflictOpen: false });
+      }
       if (route.includes("/notes") && !route.includes("/notes/")) {
         await waitForOverview();
       }

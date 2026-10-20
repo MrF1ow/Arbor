@@ -403,4 +403,21 @@ describe("events", () => {
     );
     expect(useSyncUiStore.getState().syncConflictOpen).toBe(true);
   });
+
+  it("progress sync_conflict shows resolve toast action", async () => {
+    const { toast } = await import("sonner");
+    const toastSpy = vi.spyOn(toast, "error");
+    const client = new QueryClient();
+    handleWorkerProgressSideEffects(
+      client,
+      { type: "sync_conflict", message: "conflict" },
+      { root: FIXTURE_ROOT_FALL, course: null, providerLabel: "Grok" },
+    );
+    expect(toastSpy).toHaveBeenCalledWith(
+      "Sync conflict.",
+      expect.objectContaining({
+        action: expect.objectContaining({ label: "Resolve conflicts" }),
+      }),
+    );
+  });
 });

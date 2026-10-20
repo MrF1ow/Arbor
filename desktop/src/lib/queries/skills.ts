@@ -4,9 +4,19 @@ import type { SkillIndexPackage } from "~/domain/types";
 import { invoke } from "~/lib/ipc";
 import { qk } from "~/lib/queries/keys";
 
+export type SkillRunInput = {
+  root: string;
+  id: string;
+  commit: string;
+  course: string;
+  exportDir: string;
+  confirmed: boolean;
+};
+
 export function useSkillIndex() {
   return useQuery({
     queryKey: qk.skillIndex(),
+    enabled: false,
     queryFn: () => invoke<{ packages: SkillIndexPackage[] }>("skill_index"),
   });
 }
@@ -24,7 +34,7 @@ export function useSkillInstallMutation() {
 
 export function useSkillRunMutation() {
   return useMutation({
-    mutationFn: (input: Record<string, unknown>) => invoke("skill_run", input),
+    mutationFn: (input: SkillRunInput) => invoke("skill_run", input),
   });
 }
 

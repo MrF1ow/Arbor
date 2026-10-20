@@ -1,11 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { SettingsPlaceholder } from "~/components/settings/settings-placeholder";
+import { SettingsSyncPanel } from "~/components/settings/settings-sync-panel";
 
 export const Route = createFileRoute("/settings/sync")({
   component: SettingsSyncPage,
 });
 
 function SettingsSyncPage() {
-  return <SettingsPlaceholder />;
+  return <SettingsSyncPanel />;
 }

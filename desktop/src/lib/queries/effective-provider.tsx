@@ -36,10 +36,19 @@ export function resetEffectiveProviderApplyForTests() {
 
 export function useApplyEffectiveProvider(root: string | null) {
   const effective = useEffectiveProvider(root);
+  const library = useLibrary(root);
   const queryClient = useQueryClient();
 
+  const libraryProvider =
+    library.data?.present === true ? library.data.provider : null;
+  const librarySnapshot = libraryProvider
+    ? `${libraryProvider.id}\0${libraryProvider.model ?? ""}`
+    : "";
+
   useEffect(() => {
-    const key = `${root ?? ""}|${effective.providerId}`;
+    const libraryModelPart =
+      effective.source === "library" ? (effective.modelId ?? "") : "";
+    const key = `${root ?? ""}|${effective.providerId}|${librarySnapshot}|${libraryModelPart}`;
     if (lastAppliedEffectiveKey === key) {
       return;
     }
@@ -47,7 +56,14 @@ export function useApplyEffectiveProvider(root: string | null) {
     void queryClient.invalidateQueries({
       queryKey: qk.models(effective.providerId, root),
     });
-  }, [effective.providerId, queryClient, root]);
+  }, [
+    effective.modelId,
+    effective.providerId,
+    effective.source,
+    librarySnapshot,
+    queryClient,
+    root,
+  ]);
 }
 
 export function EffectiveProviderSync() {

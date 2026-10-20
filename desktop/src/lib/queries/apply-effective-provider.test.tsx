@@ -96,6 +96,54 @@ describe("useApplyEffectiveProvider", () => {
     expect(invalidateSpy.mock.calls.length).toBe(0);
   });
 
+  it("invalidates models when library provider snapshot changes", async () => {
+    installMockIpc();
+    const client = createAppQueryClient();
+    client.setQueryData(qk.settings(), {
+      ...fixtureSettings,
+      provider_id: "codex",
+      model_id: "codex-model",
+    });
+    client.setQueryData(qk.library("/mock/a"), {
+      present: true,
+      name: "Lib",
+      created_by: "o@x.com",
+      role: "owner",
+      provider: { id: "grok", model: "grok-4.7" },
+      members: [],
+    });
+    const invalidateSpy = vi.spyOn(client, "invalidateQueries");
+    const { rerender } = render(
+      <QueryClientProvider client={client}>
+        <Probe root="/mock/a" />
+      </QueryClientProvider>,
+    );
+    await waitFor(() =>
+      expect(invalidateSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ queryKey: qk.models("grok", "/mock/a") }),
+      ),
+    );
+    invalidateSpy.mockClear();
+    client.setQueryData(qk.library("/mock/a"), {
+      present: true,
+      name: "Lib",
+      created_by: "o@x.com",
+      role: "owner",
+      provider: { id: "grok", model: "grok-4.8" },
+      members: [],
+    });
+    rerender(
+      <QueryClientProvider client={client}>
+        <Probe root="/mock/a" />
+      </QueryClientProvider>,
+    );
+    await waitFor(() =>
+      expect(invalidateSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ queryKey: qk.models("grok", "/mock/a") }),
+      ),
+    );
+  });
+
   it("invalidates models for the effective provider", async () => {
     installMockIpc();
     const client = createAppQueryClient();

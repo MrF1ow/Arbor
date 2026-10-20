@@ -6,7 +6,7 @@ import { conceptJobArgs, diagramJobArgs } from "~/domain/concepts";
 import { flashcardJobArgs } from "~/domain/flashcards";
 import { JOB_START_LABEL } from "~/domain/job-labels";
 import { quizJobArgs } from "~/domain/quiz";
-import type { JobEventRow, JobSummary, UpdatePlan } from "~/domain/types";
+import type { JobEventRow, JobSummary, SshWorker, UpdatePlan } from "~/domain/types";
 import { invoke } from "~/lib/ipc";
 import { qk } from "~/lib/queries/keys";
 import { useJobStore } from "~/stores/job-store";
@@ -184,7 +184,6 @@ export function useStartCitationJobMutation(root: string | null) {
 
 export function useTestWorkerConnectionMutation() {
   return useMutation({
-    mutationFn: (worker: Record<string, unknown>) =>
-      invoke<string>("test_worker_connection", { worker }),
+    mutationFn: (worker: SshWorker) => invoke<string>("test_worker_connection", { worker }),
   });
 }

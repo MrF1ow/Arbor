@@ -16,12 +16,35 @@ import {
   fixtureStudyPlanMarkdown,
 } from "~/test/fixtures/data";
 import type { ChatLine } from "~/domain/chat";
-import type { JobEventRow, JobSummary, SearchHit } from "~/domain/types";
+import type {
+  JobEventRow,
+  JobSummary,
+  LibraryShowResult,
+  SearchHit,
+  SyncConflictSession,
+  SyncShowResult,
+} from "~/domain/types";
+import {
+  fixtureLibraryShowOwner,
+  fixtureSkillPackages,
+  fixtureSyncConflictSession,
+} from "~/test/fixtures/settings-sharing";
 import { emitToChannel, parseMockChannelId } from "~/test/emit-to-channel";
 
 let mockSettingsState = structuredClone(fixtureSettings);
 let mockKnowledgeSettingsState = structuredClone(fixtureKnowledgeSettings);
 const mockProviderSecretReady = new Set<string>(["openai_api", "anthropic_api"]);
+let mockLibraryShowState: LibraryShowResult = { present: false };
+let mockSyncShowState: SyncShowResult = { remote: null, shared: false, remote_note: null };
+let mockSyncConflictState: SyncConflictSession = structuredClone(fixtureSyncConflictSession);
+let mockSkillPackagesState = structuredClone(fixtureSkillPackages);
+const mockInstalledSkillIds = new Set<string>(["installed-skill"]);
+let mockSyncNowResult: {
+  ok: boolean;
+  action: string;
+  head_changed?: boolean;
+  files?: string[];
+} = { ok: true, action: "integrated", head_changed: false };
 
 const ipcLog: string[] = [];
 const chatHistoryByKey = new Map<string, ChatLine[]>();
@@ -142,6 +165,29 @@ export function resetMockSettingsForTests() {
   mockProviderSecretReady.clear();
   mockProviderSecretReady.add("openai_api");
   mockProviderSecretReady.add("anthropic_api");
+  mockLibraryShowState = { present: false };
+  mockSyncShowState = { remote: null, shared: false, remote_note: null };
+  mockSyncConflictState = structuredClone(fixtureSyncConflictSession);
+  mockSkillPackagesState = structuredClone(fixtureSkillPackages);
+  mockInstalledSkillIds.clear();
+  mockInstalledSkillIds.add("installed-skill");
+  mockSyncNowResult = { ok: true, action: "integrated", head_changed: false };
+}
+
+export function seedMockLibraryShow(state: LibraryShowResult) {
+  mockLibraryShowState = structuredClone(state);
+}
+
+export function seedMockSyncShow(state: SyncShowResult) {
+  mockSyncShowState = structuredClone(state);
+}
+
+export function seedMockSyncConflict(session: SyncConflictSession) {
+  mockSyncConflictState = structuredClone(session);
+}
+
+export function seedMockSyncNowResult(result: typeof mockSyncNowResult) {
+  mockSyncNowResult = structuredClone(result);
 }
 
 function mockChatHistoryKey(root: string, course: string): string {
@@ -404,7 +450,7 @@ export function createMockHandler(
           models: [{ id: "grok-4.7", label: "Grok 4.7" }],
         };
       case "library_show":
-        return { present: false };
+        return structuredClone(mockLibraryShowState);
       case "get_knowledge_settings":
         return structuredClone(mockKnowledgeSettingsState);
       case "save_knowledge_settings": {
@@ -413,7 +459,104 @@ export function createMockHandler(
         return null;
       }
       case "sync_show":
-        return { remote: null, shared: false };
+        return structuredClone(mockSyncShowState);
+      case "sync_set_remote": {
+        const url = String(payload.url ?? "").trim();
+        mockSyncShowState = {
+          ...mockSyncShowState,
+          remote: url,
+          remote_note: `Saved remote ${url}`,
+        };
+        return { remote: url };
+      }
+      case "sync_set_shared": {
+        const shared = Boolean(payload.shared);
+        mockSyncShowState = { ...mockSyncShowState, shared };
+        return null;
+      }
+      case "sync_now":
+        return structuredClone(mockSyncNowResult);
+      case "sync_continue":
+        return { ok: true, action: "integrated", head_changed: true };
+      case "read_sync_conflict":
+        return structuredClone(mockSyncConflictState);
+      case "sync_resolve": {
+        const path = String(payload.path ?? "");
+        const side = String(payload.side ?? "");
+        mockSyncConflictState = {
+          ...mockSyncConflictState,
+          files: mockSyncConflictState.files.map((file) => {
+            if (file.path !== path) {
+              return file;
+            }
+            if (side === "edit") {
+              return {
+                ...file,
+                choice: "edit",
+                edit_content: String(payload.content ?? ""),
+              };
+            }
+            return { ...file, choice: side };
+          }),
+        };
+        return null;
+      }
+      case "create_shared_library": {
+        const root = String(payload.root ?? FIXTURE_ROOT_FALL);
+        const rawName = payload.name;
+        const name =
+          rawName == null || String(rawName).trim() === ""
+            ? "Shared library"
+            : String(rawName).trim();
+        mockLibraryShowState = {
+          ...fixtureLibraryShowOwner,
+          name,
+        } as LibraryShowResult;
+        mockSettingsState = {
+          ...mockSettingsState,
+          knowledge_roots: (mockSettingsState.knowledge_roots ?? []).map((entry) =>
+            entry.path === root ? { ...entry, kind: "shared", name } : entry,
+          ),
+        };
+        return { name };
+      }
+      case "library_set_members": {
+        const members = payload.members;
+        const currentLibrary = mockLibraryShowState;
+        if (currentLibrary.present === true && Array.isArray(members)) {
+          mockLibraryShowState = {
+            ...currentLibrary,
+            members: members as Extract<LibraryShowResult, { present: true }>["members"],
+          };
+        }
+        return null;
+      }
+      case "library_set_provider": {
+        const currentLibrary = mockLibraryShowState;
+        if (currentLibrary.present !== true) {
+          return null;
+        }
+        if (payload.clear === true) {
+          mockLibraryShowState = { ...currentLibrary, provider: null };
+        } else {
+          mockLibraryShowState = {
+            ...currentLibrary,
+            provider: {
+              id: String(payload.id ?? ""),
+              model: String(payload.model ?? ""),
+            },
+          };
+        }
+        return null;
+      }
+      case "join_library": {
+        const dest = String(payload.dest ?? "/mock/knowledge/joined");
+        const name = "Joined library";
+        mockLibraryShowState = { ...fixtureLibraryShowOwner, name } as LibraryShowResult;
+        return { path: dest, name, kind: "shared" };
+      }
+      case "test_worker_connection":
+        return "arbor-worker 5.17.0 (mock)";
       case "list_jobs":
         return mockJobSummariesList();
       case "get_job_events":
@@ -503,7 +646,24 @@ export function createMockHandler(
       case "study_artifact_stale":
         return false;
       case "skill_index":
-        return { packages: [] };
+        return {
+          packages: mockSkillPackagesState.map((pkg) => ({
+            ...pkg,
+            installed: mockInstalledSkillIds.has(pkg.id),
+          })),
+        };
+      case "skill_install": {
+        const id = String(payload.id ?? "");
+        mockInstalledSkillIds.add(id);
+        return { commit: "mock-commit" };
+      }
+      case "skill_uninstall": {
+        const id = String(payload.id ?? "");
+        mockInstalledSkillIds.delete(id);
+        return null;
+      }
+      case "skill_run":
+        return null;
       case "provider_secret_status": {
         const providerId = String(payload.providerId ?? payload.provider_id ?? "");
         return mockProviderSecretReady.has(providerId) ? "ready" : "key missing";
@@ -523,8 +683,6 @@ export function createMockHandler(
       case "search_knowledge":
       case "search_semantic":
         return mockSearchHits(cmd, payload);
-      case "join_library":
-        return { ok: true };
       case "start_study_job":
         return "mock-study-job";
       case "import_sources": {

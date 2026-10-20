@@ -1,11 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { SettingsPlaceholder } from "~/components/settings/settings-placeholder";
+import { SettingsLibraryPanel } from "~/components/settings/settings-library-panel";
 
 export const Route = createFileRoute("/settings/library")({
   component: SettingsLibraryPage,
 });
 
 function SettingsLibraryPage() {
-  return <SettingsPlaceholder />;
+  return <SettingsLibraryPanel />;
 }

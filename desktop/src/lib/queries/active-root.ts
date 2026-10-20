@@ -5,6 +5,7 @@ import { pickActiveRoot } from "~/lib/knowledge-root";
 import { invoke } from "~/lib/ipc";
 import { flushStudyWritesForRootSwitch } from "~/lib/study-writes";
 import { qk } from "~/lib/queries/keys";
+import { saveSettingsSerialized } from "~/lib/queries/settings";
 import { resetJobStoreForRootSwitch } from "~/stores/job-store";
 
 export function useSwitchActiveRootMutation() {
@@ -22,7 +23,7 @@ export function useSwitchActiveRootMutation() {
         active_root: root,
         knowledge_root: root,
       };
-      await invoke("save_settings", { settings: next });
+      await saveSettingsSerialized(queryClient, () => next);
       await invoke("start_folder_watch", { root });
       // TODO(PR 11): clear chat transcript state when the active root changes.
       await queryClient.invalidateQueries({ queryKey: qk.settings() });
