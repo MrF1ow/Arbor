@@ -274,26 +274,25 @@ export function CourseOverview({
   });
 
   const onGeneratePlan = async () => {
-    if (viewerBlocked) {
+    if (viewerBlocked || !effective.providerId) {
       return;
     }
+    const providerId = effective.providerId;
     if (!effective.modelId) {
       setPlanStatus("Select a model in Settings.");
       return;
     }
     try {
-      const auth = await fetchAuthStatus(effective.providerId, true);
+      const auth = await fetchAuthStatus(providerId, true);
       if (!auth.authenticated) {
-        const label =
-          PROVIDER_FALLBACK.find((p) => p.id === effective.providerId)?.label ??
-          effective.providerId;
+        const label = PROVIDER_FALLBACK.find((p) => p.id === providerId)?.label ?? providerId;
         setPlanStatus(signedOutJobMessage(label, auth.reason ?? ""));
         return;
       }
       setPlanBusy(true);
       setPlanStatus("Generating study plan…");
       await studyPlanMutation.mutateAsync({
-        provider: effective.providerId,
+        provider: providerId,
         model: effective.modelId,
         examDate: examDate.trim() || null,
       });

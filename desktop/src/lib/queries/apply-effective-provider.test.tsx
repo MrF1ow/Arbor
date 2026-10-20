@@ -23,6 +23,23 @@ describe("useApplyEffectiveProvider", () => {
     resetEffectiveProviderApplyForTests();
   });
 
+  it("does not invalidate models before settings resolve", async () => {
+    installMockIpc({
+      get_settings: () => new Promise(() => {}),
+    });
+    const client = createAppQueryClient();
+    const invalidateSpy = vi.spyOn(client, "invalidateQueries");
+    const { unmount } = render(
+      <QueryClientProvider client={client}>
+        <Probe root="/mock/a" />
+      </QueryClientProvider>,
+    );
+    expect(
+      invalidateSpy.mock.calls.some((call) => call[0]?.queryKey?.[0] === "models"),
+    ).toBe(false);
+    unmount();
+  });
+
   it("runs on root change, not on unrelated remounts", async () => {
     installMockIpc();
     const client = createAppQueryClient();

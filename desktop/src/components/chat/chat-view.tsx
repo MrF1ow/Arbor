@@ -155,7 +155,9 @@ export function ChatView({
   const rootEntry = roots.find((r) => r.path === activeRoot);
   const rootLabel = rootEntry ? workspaceRootLabel(rootEntry, roots) : (activeRoot ?? "");
   const providerLabel =
-    PROVIDER_FALLBACK.find((p) => p.id === effective.providerId)?.label ?? effective.providerId;
+    PROVIDER_FALLBACK.find((p) => p.id === effective.providerId)?.label ??
+    effective.providerId ??
+    "Provider";
   const liveKey = activeRoot ? chatLiveKey(activeRoot, course) : "";
 
   const liveSnapshot = useSyncExternalStore(subscribeChatLive, () =>
@@ -254,9 +256,10 @@ export function ChatView({
 
   const sendMessage = async (questionRaw: string, sendMode: ChatMode = mode) => {
     const question = questionRaw.trim();
-    if (!question || !activeRoot || inFlight || sendingRef.current) {
+    if (!question || !activeRoot || inFlight || sendingRef.current || !effective.providerId) {
       return;
     }
+    const providerId = effective.providerId;
 
     sendingRef.current = true;
     const courseAtSend = course;
@@ -266,7 +269,7 @@ export function ChatView({
     try {
       let auth;
       try {
-        auth = await fetchAuthStatus(effective.providerId, true);
+        auth = await fetchAuthStatus(providerId, true);
         lastAuthReasonRef.current = auth.reason ?? "";
       } catch (error) {
         const message = signedOutJobMessage(providerLabel, String(error));
@@ -395,7 +398,7 @@ export function ChatView({
           onEvent: channel,
           question,
           mode: sendMode,
-          provider: effective.providerId,
+          provider: providerId,
           model: modelId,
           history: historySnapshot,
         });

@@ -88,12 +88,17 @@ function ProviderStatusLine({ root }: { root: string | null }) {
     );
   }
   const providerLabel =
-    PROVIDER_FALLBACK.find((p) => p.id === effective.providerId)?.label ?? effective.providerId;
+    PROVIDER_FALLBACK.find((p) => p.id === effective.providerId)?.label ??
+    effective.providerId ??
+    "";
   const modelLabel = effective.modelId ?? "no model";
 
   let text: string;
   let dotClass = "bg-primary";
-  if (auth.isLoading) {
+  if (!effective.ready || !effective.providerId) {
+    text = "Checking provider…";
+    dotClass = "bg-muted-foreground";
+  } else if (auth.isLoading) {
     text = `${providerLabel} · checking…`;
     dotClass = "bg-muted-foreground";
   } else if (auth.data?.authenticated) {

@@ -34,9 +34,10 @@ export function useStudyJobLauncher(
   const jobDisabled = viewerBlocked || studyJobRunning || options.isPending;
 
   async function launchStudyJob(course: string, force: boolean) {
-    if (!activeRoot || viewerBlocked) {
+    if (!activeRoot || viewerBlocked || !effective.providerId) {
       return;
     }
+    const providerId = effective.providerId;
     const modelId = effective.modelId?.trim();
     if (!modelId) {
       setModelHint("Select a model in Settings.");
@@ -44,10 +45,9 @@ export function useStudyJobLauncher(
     }
     setModelHint(null);
     const providerLabel =
-      PROVIDER_FALLBACK.find((p) => p.id === effective.providerId)?.label ??
-      effective.providerId;
+      PROVIDER_FALLBACK.find((p) => p.id === providerId)?.label ?? providerId;
     try {
-      const auth = await fetchAuthStatus(effective.providerId, true);
+      const auth = await fetchAuthStatus(providerId, true);
       if (!auth.authenticated) {
         appendLog(signedOutJobMessage(providerLabel, auth.reason));
         return;
@@ -61,7 +61,7 @@ export function useStudyJobLauncher(
         course,
         force,
         model: modelId,
-        provider: effective.providerId,
+        provider: providerId,
       });
       appendLog(options.startedMessage(jobId));
     } catch (error) {

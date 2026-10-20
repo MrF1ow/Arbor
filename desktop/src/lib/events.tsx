@@ -308,7 +308,7 @@ export function WorkerEventsBridge() {
   useEffect(() => {
     ctxRef.current = {
       activeRoot,
-      providerId: effective.providerId,
+      providerId: effective.providerId ?? ctxRef.current.providerId,
       modelId: effective.modelId,
       queryClient,
       append,

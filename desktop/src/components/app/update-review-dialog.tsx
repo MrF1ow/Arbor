@@ -160,13 +160,18 @@ function UpdateReviewDialogForm({
 
   const onConfirm = async () => {
     const nextErrors = runValidation();
-    if (Object.keys(nextErrors).length > 0 || viewerBlocked || !activeRoot || !effective.modelId) {
+    if (
+      Object.keys(nextErrors).length > 0 ||
+      viewerBlocked ||
+      !activeRoot ||
+      !effective.modelId ||
+      !effective.providerId
+    ) {
       return;
     }
-    const providerLabel =
-      PROVIDER_FALLBACK.find((p) => p.id === effective.providerId)?.label ??
-      effective.providerId;
-    const auth = await fetchAuthStatus(effective.providerId, true);
+    const providerId = effective.providerId;
+    const providerLabel = PROVIDER_FALLBACK.find((p) => p.id === providerId)?.label ?? providerId;
+    const auth = await fetchAuthStatus(providerId, true);
     if (!auth.authenticated) {
       appendLog(signedOutJobMessage(providerLabel, auth.reason ?? ""));
       return;
@@ -175,7 +180,7 @@ function UpdateReviewDialogForm({
       const selections = selectionsFromRangeValues(pending, rangeValues);
       const jobId = await startUpdate.mutateAsync({
         model: effective.modelId,
-        provider: effective.providerId,
+        provider: providerId,
         selections,
         trigger,
       });

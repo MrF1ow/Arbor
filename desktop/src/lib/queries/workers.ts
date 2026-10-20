@@ -9,10 +9,13 @@ export function useProviderOptions() {
   return pickerProviders([...PROVIDER_FALLBACK]);
 }
 
-export function useModels(provider: string, root: string | null) {
+export function useModels(provider: string | null, root: string | null) {
   return useQuery({
-    queryKey: qk.models(provider, root),
+    queryKey: qk.models(provider ?? "", root),
     queryFn: async () => {
+      if (!provider) {
+        return [];
+      }
       const res = await invoke<{ models: Model[] }>("list_models", {
         root: root ?? undefined,
         provider,

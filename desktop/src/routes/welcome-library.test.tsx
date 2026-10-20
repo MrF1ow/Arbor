@@ -1,4 +1,4 @@
-import { cleanup, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clearTauriMocks } from "~/test/mock-ipc";
@@ -24,8 +24,24 @@ import { useUpdatePlanStore } from "~/stores/update-plan-store";
 
 const NEW_ROOT = "/mock/knowledge/new-library";
 
+/** Commands that create or retarget a Knowledge folder. Shell reads are not in this set. */
+const KNOWLEDGE_FOLDER_WRITES = [
+  "init_knowledge_repo",
+  "save_settings",
+  "init_arbor_db",
+  "start_folder_watch",
+] as const;
+
+function knowledgeFolderWrites(log: readonly string[]): string[] {
+  return log.filter((cmd) =>
+    (KNOWLEDGE_FOLDER_WRITES as readonly string[]).includes(cmd),
+  );
+}
+
 describe("welcome and library flows (PR 6)", () => {
   beforeEach(() => {
+    resetAuthRefreshForTests();
+    clearMockIpcLog();
     localStorage.clear();
     useUiStore.persist.clearStorage();
     useUiStore.setState({
@@ -138,8 +154,8 @@ describe("welcome and library flows (PR 6)", () => {
     });
   });
 
-  it("cancelled folder picker performs no ipc calls", async () => {
-    vi.spyOn(ipcModule, "openDialog").mockResolvedValue(null);
+  it("cancelled folder picker does not write a knowledge root", async () => {
+    const openDialog = vi.spyOn(ipcModule, "openDialog").mockResolvedValue(null);
     await renderAppAtRoute("/welcome", {
       get_settings: () => ({
         ...fixtureSettings,
@@ -148,12 +164,43 @@ describe("welcome and library flows (PR 6)", () => {
         knowledge_roots: [],
       }),
     });
+    await screen.findByTestId("welcome-choose-folder");
     clearMockIpcLog();
     const user = userEvent.setup();
-    await user.click(await screen.findByTestId("welcome-choose-folder"));
+    await user.click(screen.getByTestId("welcome-choose-folder"));
     await waitFor(() => {
-      expect(getMockIpcLog()).toEqual([]);
+      expect(openDialog).toHaveBeenCalled();
     });
+    // The click handler does not return its promise. Let the dialog resolution
+    // finish, then assert the folder writes. Shell reads such as check_auth may
+    // still arrive; they are not part of this contract.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(knowledgeFolderWrites(getMockIpcLog())).toEqual([]);
+  });
+
+  it("does not probe auth until settings name a provider", async () => {
+    let releaseSettings: (value: typeof fixtureSettings) => void = () => {};
+    const pendingSettings = new Promise<typeof fixtureSettings>((resolve) => {
+      releaseSettings = resolve;
+    });
+    await renderAppAtRoute("/welcome", {
+      get_settings: () => pendingSettings,
+    });
+    await screen.findByTestId("welcome-choose-folder");
+    expect(getMockIpcLog().filter((cmd) => cmd === "check_auth")).toEqual([]);
+    expect(getMockIpcLog().filter((cmd) => cmd === "list_models")).toEqual([]);
+
+    releaseSettings(fixtureSettings);
+    await waitFor(() => {
+      expect(getMockIpcCalls().some((call) => call.cmd === "check_auth")).toBe(true);
+    });
+    const providers = getMockIpcCalls()
+      .filter((call) => call.cmd === "check_auth")
+      .map((call) => (call.args as { provider?: string } | undefined)?.provider);
+    expect(providers.length).toBeGreaterThan(0);
+    expect(new Set(providers)).toEqual(new Set(["grok"]));
   });
 
   it("shows add-class step when the new root has zero courses", async () => {
