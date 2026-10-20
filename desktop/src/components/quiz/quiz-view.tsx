@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronLeft, ChevronRight, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { EmptyState } from "~/components/app/empty-state";
 import { StudyArtifactToolbar } from "~/components/study/study-artifact-toolbar";
@@ -74,6 +74,7 @@ export function QuizView({
   const [modelHint, setModelHint] = useState<string | null>(null);
 
   const lastSyncedDataRef = useRef({ pack: 0, progress: 0 });
+  const prevSessionIdentityRef = useRef<string | null>(null);
 
   const packQuery = useStudyJson(activeRoot, course, "quiz.json");
   const progressQuery = useQuizProgress(activeRoot, course);
@@ -132,16 +133,18 @@ export function QuizView({
     };
   }, [course, activeRoot, queryClient]);
 
+  const progressReady =
+    (progressQuery.isSuccess || progressQuery.isError) && !progressQuery.isFetching;
+
   const queriesSettled =
     flushDone &&
     postFlushReady &&
     packQuery.isSuccess &&
     !packQuery.isFetching &&
-    progressQuery.isSuccess &&
-    !progressQuery.isFetching &&
+    progressReady &&
     flushAt > 0 &&
     packQuery.dataUpdatedAt >= flushAt &&
-    progressQuery.dataUpdatedAt >= flushAt;
+    (progressQuery.isError || progressQuery.dataUpdatedAt >= flushAt);
 
   let parsedPack: QuizPack | null = null;
   let packLoadError = false;
@@ -160,43 +163,48 @@ export function QuizView({
   const identity =
     parsedPack && activeRoot ? `${activeRoot}|${packIdentity(parsedPack)}` : null;
 
-  useEffect(() => {
-    if (!queriesSettled) {
-      return;
-    }
-    /* eslint-disable react-hooks/set-state-in-effect -- hydrate session when pack identity settles */
+  if (queriesSettled) {
     if (packLoadError) {
-      setSessionIdentity("__error__");
-      setPack(null);
-      setReview(null);
-      setProgress({});
-      return;
+      if (sessionIdentity !== "__error__") {
+        setSessionIdentity("__error__");
+        setPack(null);
+        setReview(null);
+        setProgress({});
+      }
+    } else if (parsedPack && identity && identity !== sessionIdentity) {
+      let parsedProgress: QuizProgress = {};
+      if (progressQuery.isSuccess) {
+        try {
+          parsedProgress = parseQuizProgress(progressQuery.data);
+        } catch {
+          parsedProgress = {};
+        }
+      }
+      setSessionIdentity(identity);
+      setPack(parsedPack);
+      setProgress(parsedProgress);
+      setReview(createReview(parsedPack));
     }
-    if (!parsedPack || !identity || identity === sessionIdentity) {
-      return;
+  }
+
+  useLayoutEffect(() => {
+    if (
+      queriesSettled &&
+      identity &&
+      identity === sessionIdentity &&
+      sessionIdentity !== "__error__" &&
+      prevSessionIdentityRef.current !== sessionIdentity
+    ) {
+      lastSyncedDataRef.current = {
+        pack: packQuery.dataUpdatedAt,
+        progress: progressQuery.dataUpdatedAt,
+      };
     }
-    let parsedProgress: QuizProgress;
-    try {
-      parsedProgress = parseQuizProgress(progressQuery.data);
-    } catch {
-      parsedProgress = {};
-    }
-    setSessionIdentity(identity);
-    setPack(parsedPack);
-    setProgress(parsedProgress);
-    setReview(createReview(parsedPack));
-    lastSyncedDataRef.current = {
-      pack: packQuery.dataUpdatedAt,
-      progress: progressQuery.dataUpdatedAt,
-    };
-    /* eslint-enable react-hooks/set-state-in-effect */
+    prevSessionIdentityRef.current = sessionIdentity;
   }, [
     queriesSettled,
-    packLoadError,
-    parsedPack,
     identity,
     sessionIdentity,
-    progressQuery.data,
     packQuery.dataUpdatedAt,
     progressQuery.dataUpdatedAt,
   ]);
@@ -225,16 +233,8 @@ export function QuizView({
       return;
     }
 
-    let syncedProgress = progress;
-    try {
-      syncedProgress = parseQuizProgress(progressQuery.data);
-    } catch {
-      /* keep optimistic local progress */
-    }
-
     /* eslint-disable react-hooks/set-state-in-effect -- merge refreshed pack in place */
     setPack(syncedPack);
-    setProgress(syncedProgress);
     setReview((prev) => {
       if (!prev) {
         return prev;
@@ -242,10 +242,13 @@ export function QuizView({
       const currentId = prev.questions[prev.index]?.id;
       const questions = syncedPack.questions;
       let index = prev.index;
+      let idFound = true;
       if (currentId) {
         const found = questions.findIndex((q) => q.id === currentId);
         if (found >= 0) {
           index = found;
+        } else {
+          idFound = false;
         }
       }
       if (questions.length === 0) {
@@ -254,11 +257,29 @@ export function QuizView({
       const clampedIndex = Math.min(index, questions.length - 1);
       const question = questions[clampedIndex];
       const choice = prev.answers[question.id];
+      if (choice !== undefined) {
+        return {
+          questions,
+          index: clampedIndex,
+          selected: choice,
+          submitted: true,
+          answers: prev.answers,
+        };
+      }
+      if (idFound && prev.submitted) {
+        return {
+          questions,
+          index: clampedIndex,
+          selected: prev.selected as number,
+          submitted: true,
+          answers: prev.answers,
+        };
+      }
       return {
         questions,
         index: clampedIndex,
-        selected: choice ?? prev.selected,
-        submitted: choice !== undefined ? true : prev.submitted,
+        selected: idFound ? prev.selected : null,
+        submitted: false,
         answers: prev.answers,
       };
     });
@@ -269,11 +290,9 @@ export function QuizView({
     sessionIdentity,
     packQuery.data,
     packQuery.dataUpdatedAt,
-    progressQuery.data,
     progressQuery.dataUpdatedAt,
     course,
     review,
-    progress,
   ]);
 
   const citationsReport = (() => {
@@ -287,7 +306,7 @@ export function QuizView({
     }
   })();
 
-  function handleSubmit() {
+  const handleSubmit = useCallback(function handleSubmit() {
     if (!review || review.selected === null || !activeRoot || !pack) {
       return;
     }
@@ -316,7 +335,15 @@ export function QuizView({
         },
       });
     }
-  }
+  }, [review, progress, pack, activeRoot, course, queryClient, enqueueWrite]);
+
+  const reviewRef = useRef(review);
+  const handleSubmitRef = useRef(handleSubmit);
+
+  useLayoutEffect(() => {
+    reviewRef.current = review;
+    handleSubmitRef.current = handleSubmit;
+  }, [review, handleSubmit]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -326,21 +353,23 @@ export function QuizView({
       if (event.metaKey || event.ctrlKey || event.altKey) {
         return;
       }
-      if (!review || review.questions.length === 0) {
+      const currentReview = reviewRef.current;
+      if (!currentReview || currentReview.questions.length === 0) {
         return;
       }
       const choiceIndex = Number(event.key) - 1;
-      if (choiceIndex >= 0 && choiceIndex <= 3 && !review.submitted) {
+      if (choiceIndex >= 0 && choiceIndex <= 3 && !currentReview.submitted) {
         event.preventDefault();
         setReview((r) => (r ? selectChoice(r, choiceIndex) : r));
         return;
       }
       if (event.key === "Enter") {
         event.preventDefault();
-        if (review.selected !== null && !review.submitted) {
-          handleSubmit();
+        const r = reviewRef.current;
+        if (r?.selected !== null && r?.selected !== undefined && !r.submitted) {
+          handleSubmitRef.current();
         } else {
-          setReview((r) => (r ? nextReview(r) : r));
+          setReview((prev) => (prev ? nextReview(prev) : prev));
         }
         return;
       }
@@ -356,7 +385,7 @@ export function QuizView({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  });
+  }, []);
 
   async function runQuizJob(force: boolean) {
     if (!activeRoot || viewerBlocked) {
@@ -402,10 +431,12 @@ export function QuizView({
     !postFlushReady ||
     !packQuery.isSuccess ||
     packQuery.isFetching ||
-    !progressQuery.isSuccess ||
+    !(progressQuery.isSuccess || progressQuery.isError) ||
     progressQuery.isFetching ||
     (flushAt > 0 && packQuery.dataUpdatedAt < flushAt) ||
-    (flushAt > 0 && progressQuery.dataUpdatedAt < flushAt);
+    (flushAt > 0 &&
+      !progressQuery.isError &&
+      progressQuery.dataUpdatedAt < flushAt);
   const queriesLoading = awaitingSettled && !hasPack && !packUnavailable;
   const displayName = courseDisplayName(course);
   const jobDisabled = viewerBlocked || studyJobRunning || startJob.isPending;
@@ -497,9 +528,11 @@ export function QuizView({
                   size="lg"
                   disabled={session.submitted}
                   className={cn(
-                    "h-auto w-full justify-between whitespace-normal py-3 text-left font-normal",
+                    "h-auto w-full justify-between whitespace-normal py-3 text-left font-normal disabled:opacity-100",
                     selected && !showResult && "border-primary ring-1 ring-primary",
-                    showResult && isCorrect && "border-success text-success",
+                    showResult &&
+                      isCorrect &&
+                      "border-success bg-success-surface text-success",
                     isWrongSelected && "border-destructive bg-destructive-surface text-destructive",
                   )}
                   onClick={() => setReview(selectChoice(session, index))}

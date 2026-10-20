@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, RotateCcw, Shuffle } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { EmptyState } from "~/components/app/empty-state";
 import { StudyArtifactToolbar } from "~/components/study/study-artifact-toolbar";
@@ -131,6 +131,7 @@ export function FlashcardsView({
 
   const focusClearPendingRef = useRef(false);
   const lastSyncedDataRef = useRef({ deck: 0, overview: 0 });
+  const prevSessionIdentityRef = useRef<string | null>(null);
 
   const deckQuery = useStudyJson(activeRoot, course, "flashcards.json");
   const citationsQuery = useStudyJson(activeRoot, course, "citations.json");
@@ -218,36 +219,45 @@ export function FlashcardsView({
   const identity =
     parsedDeck && activeRoot ? `${activeRoot}|${deckIdentity(parsedDeck)}` : null;
 
-  useEffect(() => {
-    if (!queriesSettled) {
-      return;
-    }
-    /* eslint-disable react-hooks/set-state-in-effect -- hydrate session when deck identity settles */
+  if (queriesSettled) {
     if (deckLoadError) {
-      setSessionIdentity("__error__");
-      setDeck(null);
-      setReview(null);
-      return;
+      if (sessionIdentity !== "__error__") {
+        setSessionIdentity("__error__");
+        setDeck(null);
+        setReview(null);
+      }
+    } else if (parsedDeck && identity && identity !== sessionIdentity) {
+      const dueFromOverview = [...overview.data!.due.due_ids];
+      const focused = sessionWithOptionalFocus(parsedDeck, dueFromOverview, focusCardId);
+      setSessionIdentity(identity);
+      setDeck(parsedDeck);
+      setDeckMode(focused.mode);
+      setDueIds(dueFromOverview);
+      setDeckCount(overview.data!.due.deck_count);
+      setReview(focused.review);
     }
-    if (!parsedDeck || !identity || identity === sessionIdentity) {
-      return;
+  }
+
+  useLayoutEffect(() => {
+    if (
+      queriesSettled &&
+      !deckLoadError &&
+      parsedDeck &&
+      identity &&
+      identity === sessionIdentity &&
+      prevSessionIdentityRef.current !== sessionIdentity
+    ) {
+      const dueFromOverview = [...overview.data!.due.due_ids];
+      const focused = sessionWithOptionalFocus(parsedDeck, dueFromOverview, focusCardId);
+      if (focused.clearFocusParam) {
+        focusClearPendingRef.current = true;
+      }
+      lastSyncedDataRef.current = {
+        deck: deckQuery.dataUpdatedAt,
+        overview: overview.dataUpdatedAt,
+      };
     }
-    const dueFromOverview = [...overview.data!.due.due_ids];
-    const focused = sessionWithOptionalFocus(parsedDeck, dueFromOverview, focusCardId);
-    if (focused.clearFocusParam) {
-      focusClearPendingRef.current = true;
-    }
-    setSessionIdentity(identity);
-    setDeck(parsedDeck);
-    setDeckMode(focused.mode);
-    setDueIds(dueFromOverview);
-    setDeckCount(overview.data!.due.deck_count);
-    setReview(focused.review);
-    lastSyncedDataRef.current = {
-      deck: deckQuery.dataUpdatedAt,
-      overview: overview.dataUpdatedAt,
-    };
-    /* eslint-enable react-hooks/set-state-in-effect */
+    prevSessionIdentityRef.current = sessionIdentity;
   }, [
     queriesSettled,
     deckLoadError,
@@ -296,11 +306,17 @@ export function FlashcardsView({
           : cardsForIds(syncedDeck, dueIds);
       const currentId = prev.cards[prev.index]?.id;
       let index = prev.index;
+      let idFound = true;
       if (currentId) {
         const found = modeCards.findIndex((c) => c.id === currentId);
         if (found >= 0) {
           index = found;
+        } else {
+          idFound = false;
         }
+      }
+      if (!idFound) {
+        index = Math.min(prev.index, modeCards.length - 1);
       }
       if (modeCards.length === 0) {
         return { cards: [], index: 0, flipped: false };
