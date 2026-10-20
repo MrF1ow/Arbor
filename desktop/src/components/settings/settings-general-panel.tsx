@@ -90,7 +90,11 @@ export function SettingsGeneralPanel() {
         <SettingRow
           label="Appearance"
           control={
-            <Select value={appearance} onValueChange={(v) => setAppearance(v as Appearance)}>
+            <Select
+              value={appearance}
+              items={APPEARANCE_OPTIONS}
+              onValueChange={(v) => setAppearance(v as Appearance)}
+            >
               <SelectTrigger className="w-36" size="sm" aria-label="Appearance">
                 <SelectValue />
               </SelectTrigger>

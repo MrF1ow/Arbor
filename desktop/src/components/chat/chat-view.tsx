@@ -502,6 +502,7 @@ export function ChatView({
         <div className="mx-auto flex w-full max-w-reading flex-wrap items-center gap-2">
         <Select
           value={course}
+          items={courses.map((slug) => ({ value: slug, label: courseDisplayName(slug) }))}
           disabled={controlsDisabled}
           onValueChange={(value) => {
             if (value) {
@@ -510,7 +511,7 @@ export function ChatView({
           }}
         >
           <SelectTrigger className="w-48" aria-label="Course" title={rootLabel}>
-            <SelectValue>{courseDisplayName(course)}</SelectValue>
+            <SelectValue />
           </SelectTrigger>
           <SelectContent>
             {courses.map((slug) => (
@@ -622,6 +623,9 @@ export function ChatView({
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
             <Select
               value={artifactKind}
+              items={(
+                Object.entries(ARTIFACT_KIND_LABEL) as [ArtifactKind, string][]
+              ).map(([value, label]) => ({ value, label }))}
               disabled={artifactJobDisabled}
               onValueChange={(value) => {
                 if (value === "flashcards" || value === "quiz") {
@@ -630,7 +634,7 @@ export function ChatView({
               }}
             >
               <SelectTrigger className="w-36" aria-label="Study artifact type">
-                <SelectValue>{ARTIFACT_KIND_LABEL[artifactKind]}</SelectValue>
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="flashcards">Flashcards</SelectItem>

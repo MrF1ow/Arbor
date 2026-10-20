@@ -280,6 +280,7 @@ export function SettingsProviderPanel() {
           control={
             <Select
               value={providerId}
+              items={providerOptions.map((p) => ({ value: p.id, label: p.label }))}
               onValueChange={(v) => {
                 if (v) {
                   void onProviderChange(v);
@@ -367,6 +368,7 @@ export function SettingsProviderPanel() {
             <div className="flex items-center gap-2">
               <Select
                 value={selectModelId}
+                items={models.map((m) => ({ value: m.id, label: m.label }))}
                 onValueChange={(v) => {
                   if (v) {
                     void onModelChange(v);

@@ -6,7 +6,10 @@ import { clearTauriMocks } from "~/test/mock-ipc";
 
 import { resetAuthRefreshForTests } from "~/lib/auth-refresh";
 import { modKeyLabel } from "~/lib/shortcuts";
+import { resetEffectiveProviderApplyForTests } from "~/lib/queries/effective-provider";
+import { qk } from "~/lib/queries/keys";
 import { resetSaveSettingsChainForTests } from "~/lib/queries/settings";
+import type { QueryClient } from "@tanstack/react-query";
 import { FIXTURE_ROOT_FALL, fixtureKnowledgeSettings, fixtureSettings } from "~/test/fixtures/data";
 import {
   clearMockIpcLog,
@@ -46,6 +49,20 @@ async function waitForProviderReady() {
   );
 }
 
+async function waitForAuthCached(queryClient: QueryClient, providerId: string) {
+  await waitFor(() => {
+    expect(queryClient.getQueryData(qk.settings())).toBeDefined();
+  });
+  await waitFor(
+    () => {
+      const state = queryClient.getQueryState(qk.auth(providerId));
+      expect(state?.status).toBe("success");
+      expect(state?.fetchStatus).toBe("idle");
+    },
+    { timeout: 5000 },
+  );
+}
+
 describe("settings", () => {
   beforeEach(() => {
     localStorage.clear();
@@ -61,6 +78,7 @@ describe("settings", () => {
       unread: 0,
     });
     resetAuthRefreshForTests();
+    resetEffectiveProviderApplyForTests();
     resetSaveSettingsChainForTests();
     vi.spyOn(window, "innerWidth", "get").mockReturnValue(1280);
   });
@@ -175,7 +193,7 @@ describe("settings", () => {
     await waitForSettingsGeneral();
     await waitForKnowledgeToggles();
 
-    await user.click(within(settingsView()).getByTestId("reindex-knowledge"));
+    await user.click(within(settingsView()).getByRole("button", { name: "Reindex" }));
 
     await waitFor(() => {
       expect(getMockIpcLog()).toContain("reindex_knowledge");
@@ -347,16 +365,16 @@ describe("settings", () => {
   });
 
   it("does not call check_auth when opening settings within the auth cache window", async () => {
-    const { router } = await renderAppAtRoute("/course/cell-biology/notes");
-    await waitFor(() => {
-      expect(getMockIpcLog().filter((c) => c === "check_auth").length).toBeGreaterThan(0);
-    });
-    await new Promise((r) => setTimeout(r, 400));
+    const providerId = fixtureSettings.provider_id;
+    const { router, queryClient } = await renderAppAtRoute("/course/cell-biology/notes");
+    await waitForAuthCached(queryClient, providerId);
     clearMockIpcLog();
 
     await router.navigate({ to: "/settings/provider" });
     await waitForProviderReady();
-    await new Promise((r) => setTimeout(r, 400));
+    await waitFor(() => {
+      expect(queryClient.getQueryState(qk.auth(providerId))?.fetchStatus).toBe("idle");
+    });
     expect(getMockIpcLog().filter((c) => c === "check_auth")).toHaveLength(0);
   });
 
@@ -417,7 +435,7 @@ describe("settings", () => {
     });
     await waitForSettingsGeneral();
     await waitForKnowledgeToggles();
-    await user.click(within(settingsView()).getByTestId("reindex-knowledge"));
+    await user.click(within(settingsView()).getByRole("button", { name: "Reindex" }));
     await waitFor(() => {
       expect(toastError).toHaveBeenCalledWith(expect.stringContaining("index locked"));
     });
@@ -514,16 +532,34 @@ describe("settings", () => {
   });
 
   it("does not call check_auth when opening General within the auth cache window", async () => {
-    const { router } = await renderAppAtRoute("/course/cell-biology/notes");
-    await waitFor(() => {
-      expect(getMockIpcLog().filter((c) => c === "check_auth").length).toBeGreaterThan(0);
-    });
-    await new Promise((r) => setTimeout(r, 400));
+    const providerId = fixtureSettings.provider_id;
+    const { router, queryClient } = await renderAppAtRoute("/course/cell-biology/notes");
+    await waitForAuthCached(queryClient, providerId);
     clearMockIpcLog();
     await router.navigate({ to: "/settings/general" });
     await waitForSettingsGeneral();
-    await new Promise((r) => setTimeout(r, 400));
+    await waitFor(() => {
+      expect(queryClient.getQueryState(qk.auth(providerId))?.fetchStatus).toBe("idle");
+    });
     expect(getMockIpcLog().filter((c) => c === "check_auth")).toHaveLength(0);
+  });
+
+  it("shows human-readable labels on appearance, provider, and model selects", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/settings/general");
+    await waitForSettingsGeneral();
+    expect(within(settingsView()).getByRole("combobox", { name: "Appearance" })).toHaveTextContent(
+      "System",
+    );
+
+    await user.click(within(settingsView()).getByRole("button", { name: "Provider & models" }));
+    await waitForProviderReady();
+    expect(within(settingsView()).getByRole("combobox", { name: "Provider" })).toHaveTextContent(
+      "Grok",
+    );
+    expect(within(settingsView()).getByRole("combobox", { name: "Model" })).toHaveTextContent(
+      "Grok 4.7",
+    );
   });
 
   it("does not repeat list_models after a model change for a cached provider", async () => {
