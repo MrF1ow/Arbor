@@ -27,6 +27,12 @@ const UpdateReviewDialog = lazy(() =>
   })),
 );
 
+const SyncConflictDialogHost = lazy(() =>
+  import("~/components/settings/sync-conflict-dialog").then((m) => ({
+    default: m.SyncConflictDialogHost,
+  })),
+);
+
 export function AppShell() {
   const settings = useSettings();
   const activeRoot = pickActiveRoot(settings.data);
@@ -95,6 +101,9 @@ export function AppShell() {
           </Suspense>
           <Suspense fallback={null}>
             <UpdateReviewDialog />
+          </Suspense>
+          <Suspense fallback={null}>
+            <SyncConflictDialogHost />
           </Suspense>
         </div>
       </SidebarInset>

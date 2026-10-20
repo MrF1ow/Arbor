@@ -1,11 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { SettingsPlaceholder } from "~/components/settings/settings-placeholder";
+import { SettingsSkillsPanel } from "~/components/settings/settings-skills-panel";
 
 export const Route = createFileRoute("/settings/skills")({
   component: SettingsSkillsPage,
 });
 
 function SettingsSkillsPage() {
-  return <SettingsPlaceholder />;
+  return <SettingsSkillsPanel />;
 }
