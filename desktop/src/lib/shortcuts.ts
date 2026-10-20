@@ -35,6 +35,13 @@ export const SHORTCUT_CATALOG: ShortcutEntry[] = [
   { keys: "3", description: "Mastered (Flashcards, when flipped)", group: "Flashcards" },
   { keys: "←", description: "Previous flashcard (Flashcards view)", group: "Flashcards" },
   { keys: "→", description: "Next flashcard (Flashcards view)", group: "Flashcards" },
+  { keys: "1", description: "Select choice 1 (Quiz, before submit)", group: "Quiz" },
+  { keys: "2", description: "Select choice 2 (Quiz, before submit)", group: "Quiz" },
+  { keys: "3", description: "Select choice 3 (Quiz, before submit)", group: "Quiz" },
+  { keys: "4", description: "Select choice 4 (Quiz, before submit)", group: "Quiz" },
+  { keys: "Enter", description: "Submit or next question (Quiz view)", group: "Quiz" },
+  { keys: "←", description: "Previous question (Quiz view)", group: "Quiz" },
+  { keys: "→", description: "Next question (Quiz view)", group: "Quiz" },
 ];
 
 export function isDialogOpen(): boolean {

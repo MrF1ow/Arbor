@@ -21,10 +21,14 @@ test("flashcard grades enqueue study writes instead of awaiting study_progress",
 });
 
 test("quiz grades enqueue study writes instead of awaiting study_progress", async () => {
-  const source = await readFile(new URL("../src/legacy/main.ts", import.meta.url), "utf8");
-  const quizStart = source.indexOf('quizSubmitBtn.addEventListener("click"');
-  const quizEnd = source.indexOf('quizNextBtn.addEventListener("click"', quizStart);
-  const quizBody = source.slice(quizStart, quizEnd);
-  assert.doesNotMatch(quizBody, /await invoke\(\s*["']study_progress["']/);
-  assert.match(quizBody, /enqueueStudyWrite\(/);
+  const source = await readFile(
+    new URL("../src/components/quiz/quiz-view.tsx", import.meta.url),
+    "utf8",
+  );
+  const submitStart = source.indexOf("function handleSubmit");
+  assert.ok(submitStart >= 0, "handleSubmit function missing");
+  const submitEnd = source.indexOf("useEffect(() => {", submitStart);
+  const submitBody = source.slice(submitStart, submitEnd);
+  assert.doesNotMatch(submitBody, /await invoke\(\s*["']study_progress["']/);
+  assert.match(submitBody, /enqueueWrite\(/);
 });
