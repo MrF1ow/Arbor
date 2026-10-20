@@ -33,6 +33,9 @@ import {
   AlertDialogTitle,
 } from "~/components/ui/alert-dialog";
 
+/** Select value for "run locally"; Base UI treats "" as no selection. */
+const LOCAL_WORKER_VALUE = "local";
+
 const emptyForm = {
   label: "",
   host: "",
@@ -274,7 +277,7 @@ export function SettingsWorkersPanel() {
         ) : (
           roots.map((entry) => {
             const workerItems = [
-              { value: "", label: "Local" },
+              { value: LOCAL_WORKER_VALUE, label: "Local" },
               ...workers.map((w) => ({ value: w.id, label: w.label })),
             ];
             return (
@@ -283,16 +286,21 @@ export function SettingsWorkersPanel() {
                 label={knowledgeRootLabel(entry)}
                 control={
                   <Select
-                    value={entry.worker_id ?? ""}
+                    value={entry.worker_id || LOCAL_WORKER_VALUE}
                     items={workerItems}
-                    onValueChange={(value) => void onRootWorkerChange(entry.path, value ?? "")}
+                    onValueChange={(value) =>
+                      void onRootWorkerChange(
+                        entry.path,
+                        !value || value === LOCAL_WORKER_VALUE ? "" : value,
+                      )
+                    }
                   >
                     <SelectTrigger className="w-36" size="sm" aria-label={`Worker for ${entry.name}`}>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       {workerItems.map((opt) => (
-                        <SelectItem key={opt.value || "local"} value={opt.value}>
+                        <SelectItem key={opt.value} value={opt.value}>
                           {opt.label}
                         </SelectItem>
                       ))}

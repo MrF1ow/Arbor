@@ -209,11 +209,11 @@ export function SyncConflictDialogHost() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-w-reading gap-4" data-testid="sync-conflict-dialog">
+      <DialogContent className="max-w-3xl gap-4" data-testid="sync-conflict-dialog">
         <DialogHeader>
           <DialogTitle className="font-serif text-title">Sync conflict</DialogTitle>
         </DialogHeader>
-        <div className="grid min-h-0 gap-4 jobs:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+        <div className="grid min-h-0 gap-4 jobs:min-h-64 jobs:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
           <div className="max-h-80 overflow-auto rounded-xs border border-border">
             {files.map((file) => {
               const resolved = isConflictResolved(file);

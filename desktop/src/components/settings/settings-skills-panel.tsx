@@ -222,7 +222,7 @@ export function SettingsSkillsPanel() {
               value={indexSource}
               onChange={(e) => setIndexSource(e.target.value)}
               placeholder="Default: marketplace/index.json in this repo"
-              className="w-64"
+              className="w-80 max-w-full"
               autoComplete="off"
               spellCheck={false}
             />

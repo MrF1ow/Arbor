@@ -428,7 +428,7 @@ export function SettingsLibraryPanel() {
               control={
                 canEditProvider ? (
                   <Select
-                    value={providerId || undefined}
+                    value={providerId || null}
                     items={PROVIDER_FALLBACK.map((p) => ({ value: p.id, label: p.label }))}
                     onValueChange={(value) => setProviderId(value ?? "")}
                   >
