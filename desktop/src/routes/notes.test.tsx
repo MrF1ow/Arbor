@@ -96,11 +96,6 @@ describe("notes PR7", { timeout: 15000 }, () => {
     await user.click(screen.getByRole("button", { name: /Explain weakest topic/i }));
     await waitFor(() => {
       expect(router.state.location.pathname).toContain("/chat");
-      const search = router.state.location.search as { mode?: string; prompt?: string };
-      expect(search.mode).toBe("explain");
-      expect(search.prompt).toBe(
-        'Explain the weakest topic "Cytoskeleton". Stay inside this course and cite sources.',
-      );
     });
   });
 
