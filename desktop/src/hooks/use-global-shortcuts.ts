@@ -41,7 +41,7 @@ export function useGlobalShortcuts(handlers: GlobalShortcutHandlers) {
 
       if (event.key === ",") {
         event.preventDefault();
-        void navigate({ to: "/settings" });
+        void navigate({ to: "/settings/general" });
         return;
       }
 

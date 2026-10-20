@@ -257,7 +257,7 @@ export function AppSidebar() {
               title="Settings"
               icon={Settings2}
               active={pathname.startsWith("/settings")}
-              onSelect={() => void navigate({ to: "/settings" })}
+              onSelect={() => void navigate({ to: "/settings/general" })}
             />
           </SidebarMenuItem>
         </SidebarMenu>

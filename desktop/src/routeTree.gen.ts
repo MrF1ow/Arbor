@@ -16,6 +16,13 @@ import { Route as WelcomeRouteImport } from './routes/welcome'
 import { Route as CourseCourseRouteImport } from './routes/course.$course'
 import { Route as DevUiRouteImport } from './routes/dev.ui'
 import { Route as SettingsIndexRouteImport } from './routes/settings.index'
+import { Route as SettingsGeneralRouteImport } from './routes/settings.general'
+import { Route as SettingsLibraryRouteImport } from './routes/settings.library'
+import { Route as SettingsProviderRouteImport } from './routes/settings.provider'
+import { Route as SettingsShortcutsRouteImport } from './routes/settings.shortcuts'
+import { Route as SettingsSkillsRouteImport } from './routes/settings.skills'
+import { Route as SettingsSyncRouteImport } from './routes/settings.sync'
+import { Route as SettingsWorkersRouteImport } from './routes/settings.workers'
 import { Route as CourseCourseChatRouteImport } from './routes/course.$course.chat'
 import { Route as CourseCourseFlashcardsRouteImport } from './routes/course.$course.flashcards'
 import { Route as CourseCourseGraphRouteImport } from './routes/course.$course.graph'
@@ -57,6 +64,41 @@ const DevUiRoute = DevUiRouteImport.update({
 const SettingsIndexRoute = SettingsIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsGeneralRoute = SettingsGeneralRouteImport.update({
+  id: '/general',
+  path: '/general',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsLibraryRoute = SettingsLibraryRouteImport.update({
+  id: '/library',
+  path: '/library',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsProviderRoute = SettingsProviderRouteImport.update({
+  id: '/provider',
+  path: '/provider',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsShortcutsRoute = SettingsShortcutsRouteImport.update({
+  id: '/shortcuts',
+  path: '/shortcuts',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsSkillsRoute = SettingsSkillsRouteImport.update({
+  id: '/skills',
+  path: '/skills',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsSyncRoute = SettingsSyncRouteImport.update({
+  id: '/sync',
+  path: '/sync',
+  getParentRoute: () => SettingsRoute,
+} as any)
+const SettingsWorkersRoute = SettingsWorkersRouteImport.update({
+  id: '/workers',
+  path: '/workers',
   getParentRoute: () => SettingsRoute,
 } as any)
 const CourseCourseChatRoute = CourseCourseChatRouteImport.update({
@@ -102,6 +144,13 @@ export interface FileRoutesByFullPath {
   '/welcome': typeof WelcomeRoute
   '/course/$course': typeof CourseCourseRouteWithChildren
   '/dev/ui': typeof DevUiRoute
+  '/settings/general': typeof SettingsGeneralRoute
+  '/settings/library': typeof SettingsLibraryRoute
+  '/settings/provider': typeof SettingsProviderRoute
+  '/settings/shortcuts': typeof SettingsShortcutsRoute
+  '/settings/skills': typeof SettingsSkillsRoute
+  '/settings/sync': typeof SettingsSyncRoute
+  '/settings/workers': typeof SettingsWorkersRoute
   '/settings/': typeof SettingsIndexRoute
   '/course/$course/chat': typeof CourseCourseChatRoute
   '/course/$course/flashcards': typeof CourseCourseFlashcardsRoute
@@ -117,6 +166,13 @@ export interface FileRoutesByTo {
   '/welcome': typeof WelcomeRoute
   '/course/$course': typeof CourseCourseRouteWithChildren
   '/dev/ui': typeof DevUiRoute
+  '/settings/general': typeof SettingsGeneralRoute
+  '/settings/library': typeof SettingsLibraryRoute
+  '/settings/provider': typeof SettingsProviderRoute
+  '/settings/shortcuts': typeof SettingsShortcutsRoute
+  '/settings/skills': typeof SettingsSkillsRoute
+  '/settings/sync': typeof SettingsSyncRoute
+  '/settings/workers': typeof SettingsWorkersRoute
   '/settings': typeof SettingsIndexRoute
   '/course/$course/chat': typeof CourseCourseChatRoute
   '/course/$course/flashcards': typeof CourseCourseFlashcardsRoute
@@ -133,6 +189,13 @@ export interface FileRoutesById {
   '/welcome': typeof WelcomeRoute
   '/course/$course': typeof CourseCourseRouteWithChildren
   '/dev/ui': typeof DevUiRoute
+  '/settings/general': typeof SettingsGeneralRoute
+  '/settings/library': typeof SettingsLibraryRoute
+  '/settings/provider': typeof SettingsProviderRoute
+  '/settings/shortcuts': typeof SettingsShortcutsRoute
+  '/settings/skills': typeof SettingsSkillsRoute
+  '/settings/sync': typeof SettingsSyncRoute
+  '/settings/workers': typeof SettingsWorkersRoute
   '/settings/': typeof SettingsIndexRoute
   '/course/$course/chat': typeof CourseCourseChatRoute
   '/course/$course/flashcards': typeof CourseCourseFlashcardsRoute
@@ -151,6 +214,13 @@ export interface FileRouteTypes {
     | '/welcome'
     | '/course/$course'
     | '/dev/ui'
+    | '/settings/general'
+    | '/settings/library'
+    | '/settings/provider'
+    | '/settings/shortcuts'
+    | '/settings/skills'
+    | '/settings/sync'
+    | '/settings/workers'
     | '/settings/'
     | '/course/$course/chat'
     | '/course/$course/flashcards'
@@ -166,6 +236,13 @@ export interface FileRouteTypes {
     | '/welcome'
     | '/course/$course'
     | '/dev/ui'
+    | '/settings/general'
+    | '/settings/library'
+    | '/settings/provider'
+    | '/settings/shortcuts'
+    | '/settings/skills'
+    | '/settings/sync'
+    | '/settings/workers'
     | '/settings'
     | '/course/$course/chat'
     | '/course/$course/flashcards'
@@ -181,6 +258,13 @@ export interface FileRouteTypes {
     | '/welcome'
     | '/course/$course'
     | '/dev/ui'
+    | '/settings/general'
+    | '/settings/library'
+    | '/settings/provider'
+    | '/settings/shortcuts'
+    | '/settings/skills'
+    | '/settings/sync'
+    | '/settings/workers'
     | '/settings/'
     | '/course/$course/chat'
     | '/course/$course/flashcards'
@@ -251,6 +335,55 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsIndexRouteImport
       parentRoute: typeof SettingsRoute
     }
+    '/settings/general': {
+      id: '/settings/general'
+      path: '/general'
+      fullPath: '/settings/general'
+      preLoaderRoute: typeof SettingsGeneralRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/library': {
+      id: '/settings/library'
+      path: '/library'
+      fullPath: '/settings/library'
+      preLoaderRoute: typeof SettingsLibraryRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/provider': {
+      id: '/settings/provider'
+      path: '/provider'
+      fullPath: '/settings/provider'
+      preLoaderRoute: typeof SettingsProviderRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/shortcuts': {
+      id: '/settings/shortcuts'
+      path: '/shortcuts'
+      fullPath: '/settings/shortcuts'
+      preLoaderRoute: typeof SettingsShortcutsRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/skills': {
+      id: '/settings/skills'
+      path: '/skills'
+      fullPath: '/settings/skills'
+      preLoaderRoute: typeof SettingsSkillsRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/sync': {
+      id: '/settings/sync'
+      path: '/sync'
+      fullPath: '/settings/sync'
+      preLoaderRoute: typeof SettingsSyncRouteImport
+      parentRoute: typeof SettingsRoute
+    }
+    '/settings/workers': {
+      id: '/settings/workers'
+      path: '/workers'
+      fullPath: '/settings/workers'
+      preLoaderRoute: typeof SettingsWorkersRouteImport
+      parentRoute: typeof SettingsRoute
+    }
     '/course/$course/chat': {
       id: '/course/$course/chat'
       path: '/chat'
@@ -304,10 +437,24 @@ declare module '@tanstack/react-router' {
 }
 
 interface SettingsRouteChildren {
+  SettingsGeneralRoute: typeof SettingsGeneralRoute
+  SettingsLibraryRoute: typeof SettingsLibraryRoute
+  SettingsProviderRoute: typeof SettingsProviderRoute
+  SettingsShortcutsRoute: typeof SettingsShortcutsRoute
+  SettingsSkillsRoute: typeof SettingsSkillsRoute
+  SettingsSyncRoute: typeof SettingsSyncRoute
+  SettingsWorkersRoute: typeof SettingsWorkersRoute
   SettingsIndexRoute: typeof SettingsIndexRoute
 }
 
 const SettingsRouteChildren: SettingsRouteChildren = {
+  SettingsGeneralRoute: SettingsGeneralRoute,
+  SettingsLibraryRoute: SettingsLibraryRoute,
+  SettingsProviderRoute: SettingsProviderRoute,
+  SettingsShortcutsRoute: SettingsShortcutsRoute,
+  SettingsSkillsRoute: SettingsSkillsRoute,
+  SettingsSyncRoute: SettingsSyncRoute,
+  SettingsWorkersRoute: SettingsWorkersRoute,
   SettingsIndexRoute: SettingsIndexRoute,
 }
 
