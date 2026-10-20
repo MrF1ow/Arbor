@@ -69,6 +69,21 @@ async function waitForQuizReady() {
   );
 }
 
+function trackEmptyStateText(pattern: RegExp): () => string[] {
+  const seen: string[] = [];
+  const observer = new MutationObserver(() => {
+    const nodes = screen.queryAllByText(pattern);
+    if (nodes.length > 0) {
+      seen.push("empty");
+    }
+  });
+  observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+  return () => {
+    observer.disconnect();
+    return seen;
+  };
+}
+
 describe("quiz PR9", { timeout: 20000 }, () => {
   beforeEach(() => {
     vi.useRealTimers();
@@ -525,6 +540,178 @@ describe("quiz PR9", { timeout: 20000 }, () => {
       },
       { timeout: 8000 },
     );
+  });
+
+  it("never flashes empty state while quiz data is loading", async () => {
+    const finishTracking = trackEmptyStateText(/No quiz yet for/i);
+    await renderAppAtRoute("/course/cell-biology/quiz", {
+      read_study_json: (payload) => {
+        if (readStudyFile(payload) === "quiz.json") {
+          return smallQuiz;
+        }
+        return { schema_version: 1, course: "cell-biology", failures: [] };
+      },
+      read_quiz_progress: () => ({}),
+    });
+    await waitForQuizReady();
+    expect(finishTracking()).toEqual([]);
+  });
+
+  it("renders the pack when quiz progress read fails", async () => {
+    await renderAppAtRoute("/course/cell-biology/quiz", {
+      read_study_json: (payload) => {
+        if (readStudyFile(payload) === "quiz.json") {
+          return smallQuiz;
+        }
+        return { schema_version: 1, course: "cell-biology", failures: [] };
+      },
+      read_quiz_progress: () => {
+        throw new Error("progress unavailable");
+      },
+    });
+    await waitForQuizReady();
+    expect(screen.getByText("0 / 2 correct")).toBeInTheDocument();
+  });
+
+  it("applies success and destructive surfaces with icons after submit", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/quiz", {
+      read_study_json: (payload) => {
+        if (readStudyFile(payload) === "quiz.json") {
+          return smallQuiz;
+        }
+        return { schema_version: 1, course: "cell-biology", failures: [] };
+      },
+      read_quiz_progress: () => ({}),
+    });
+    await waitForQuizReady();
+    await user.click(screen.getByRole("button", { name: /^Alpha/i }));
+    await user.click(screen.getByRole("button", { name: /^Submit$/i }));
+    await waitFor(() => {
+      expect(screen.getByText("Explanation one")).toBeInTheDocument();
+    });
+    const alpha = screen.getByRole("button", { name: /^Alpha/i });
+    const beta = screen.getByRole("button", { name: /^Beta/i });
+    expect(alpha.className).toMatch(/bg-destructive-surface/);
+    expect(alpha.className).toMatch(/disabled:opacity-100/);
+    expect(beta.className).toMatch(/bg-success-surface/);
+    expect(beta.querySelector("svg")).toBeTruthy();
+    expect(alpha.querySelector("svg")).toBeTruthy();
+  });
+
+  it("keeps selection and submitted state when the pack refetches", async () => {
+    const user = userEvent.setup();
+    const { queryClient } = await renderAppAtRoute("/course/cell-biology/quiz", {
+      read_study_json: (payload) => {
+        if (readStudyFile(payload) === "quiz.json") {
+          return smallQuiz;
+        }
+        return { schema_version: 1, course: "cell-biology", failures: [] };
+      },
+      read_quiz_progress: () => ({}),
+      study_progress: (args) => {
+        if (studyProgressAction(args) === "quiz") {
+          return new Promise(() => {});
+        }
+        return {};
+      },
+    });
+    await waitForQuizReady();
+    await user.click(screen.getByRole("button", { name: /^Beta/i }));
+    await user.click(screen.getByRole("button", { name: /^Submit$/i }));
+    await waitFor(() => {
+      expect(screen.getByText("Explanation one")).toBeInTheDocument();
+    });
+    const refreshed = {
+      ...smallQuiz,
+      questions: smallQuiz.questions.map((q) =>
+        q.id === "q-1" ? { ...q, prompt: "Quiz prompt one refreshed" } : q,
+      ),
+    };
+    queryClient.setQueryData(
+      qk.studyJson(FIXTURE_ROOT_FALL, "cell-biology", "quiz.json"),
+      refreshed,
+    );
+    await waitFor(() => {
+      expect(screen.getByText("Quiz prompt one refreshed")).toBeInTheDocument();
+    });
+    expect(screen.getByRole("button", { name: /^Submit$/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^Beta/i }).className).toMatch(
+      /border-primary|bg-success-surface/,
+    );
+  });
+
+  it("selects choices with keys 1, 3, and 4", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/quiz", {
+      read_study_json: (payload) => {
+        if (readStudyFile(payload) === "quiz.json") {
+          return smallQuiz;
+        }
+        return { schema_version: 1, course: "cell-biology", failures: [] };
+      },
+      read_quiz_progress: () => ({}),
+    });
+    await waitForQuizReady();
+    await user.keyboard("1");
+    expect(screen.getByRole("button", { name: /^Alpha/i }).className).toMatch(/ring-primary/);
+    await user.keyboard("3");
+    expect(screen.getByRole("button", { name: /^Gamma/i }).className).toMatch(/ring-primary/);
+    await user.keyboard("4");
+    expect(screen.getByRole("button", { name: /^Delta/i }).className).toMatch(/ring-primary/);
+  });
+
+  it("advances with ArrowRight", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/quiz", {
+      read_study_json: (payload) => {
+        if (readStudyFile(payload) === "quiz.json") {
+          return smallQuiz;
+        }
+        return { schema_version: 1, course: "cell-biology", failures: [] };
+      },
+      read_quiz_progress: () => ({}),
+    });
+    await waitForQuizReady();
+    await user.keyboard("{ArrowRight}");
+    expect(screen.getByText("Quiz prompt two")).toBeInTheDocument();
+  });
+
+  it("advances on Enter when no choice is selected", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/quiz", {
+      read_study_json: (payload) => {
+        if (readStudyFile(payload) === "quiz.json") {
+          return smallQuiz;
+        }
+        return { schema_version: 1, course: "cell-biology", failures: [] };
+      },
+      read_quiz_progress: () => ({}),
+    });
+    await waitForQuizReady();
+    await user.keyboard("{Enter}");
+    expect(screen.getByText("Quiz prompt two")).toBeInTheDocument();
+  });
+
+  it("ignores quiz choice keys while a dialog is open", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/quiz", {
+      read_study_json: (payload) => {
+        if (readStudyFile(payload) === "quiz.json") {
+          return smallQuiz;
+        }
+        return { schema_version: 1, course: "cell-biology", failures: [] };
+      },
+      read_quiz_progress: () => ({}),
+    });
+    await waitForQuizReady();
+    const overlay = document.createElement("div");
+    overlay.setAttribute("data-slot", "dialog-overlay");
+    overlay.setAttribute("data-open", "");
+    document.body.appendChild(overlay);
+    await user.keyboard("2");
+    expect(screen.getByRole("button", { name: /^Beta/i }).className).not.toMatch(/ring-primary/);
+    overlay.remove();
   });
 
   it("shows wrong styling when an incorrect choice is submitted", async () => {
