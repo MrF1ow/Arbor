@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 async function subject() {
-  return await import("../src/markdown.ts");
+  return await import("../src/domain/markdown.ts");
 }
 
 test("renders bold, italic, and inline code", async () => {

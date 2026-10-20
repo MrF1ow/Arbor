@@ -4,7 +4,7 @@ import {
   confirm as tauriConfirm,
   open as tauriOpen,
 } from "@tauri-apps/plugin-dialog";
-import { hasTauriInvoke, TAURI_UNAVAILABLE } from "./tauri";
+import { hasTauriInvoke, TAURI_UNAVAILABLE } from "../domain/tauri";
 import {
   advanceAfterGrade,
   applyGradeToDueIds,
@@ -20,7 +20,7 @@ import {
   requeueCurrentCard,
   shouldAutoGenerateFlashcards,
   shuffleCards,
-} from "./flashcards";
+} from "../domain/flashcards";
 import {
   createReview as createQuizReview,
   currentQuestion,
@@ -33,7 +33,7 @@ import {
   sessionScore,
   shouldAutoGenerateQuiz,
   submitChoice,
-} from "./quiz";
+} from "../domain/quiz";
 import {
   conceptJobArgs,
   diagramJobArgs,
@@ -41,12 +41,12 @@ import {
   nodesForDigest,
   notePathForStudyDigest,
   parseConceptGraph,
-} from "./concepts";
+} from "../domain/concepts";
 import {
   citationJobArgs,
   failedIdsFor,
   parseCitationsReport,
-} from "./citations";
+} from "../domain/citations";
 import {
   buildAssistantLine,
   buildSessionLine,
@@ -60,15 +60,15 @@ import {
   unsupportedBanner,
   visibleTranscript,
   workerHistory,
-} from "./chat";
-import { headingId, renderMarkdown } from "./markdown";
-import { renderSearchHit } from "./search-hit";
+} from "../domain/chat";
+import { headingId, renderMarkdown } from "../domain/markdown";
+import { renderSearchHit } from "../domain/search-hit";
 import {
   authCheckWorkerFailureReason,
   pickerProviders,
   providerBadge,
   signedOutJobMessage,
-} from "./provider";
+} from "../domain/provider";
 import {
   effectiveProvider,
   LIBRARY_RECOMMENDATION_LABEL,
@@ -76,9 +76,9 @@ import {
   VIEWER_WRITE_REASON,
   viewerBlocksWrite,
   type LibraryRole,
-} from "./library-role";
-import { parseAppearance, resolvedTheme } from "./theme";
-import { createStudyWriteQueue, type StudyWrite } from "./study-writes";
+} from "../domain/library-role";
+import { parseAppearance, resolvedTheme } from "../domain/theme";
+import { createStudyWriteQueue, type StudyWrite } from "../domain/study-writes";
 import type {
   Appearance,
   AuthStatus,
@@ -111,7 +111,7 @@ import type {
   UpdatePlan,
   WorkerEvent,
   CitationsReport,
-} from "./types";
+} from "../domain/types";
 
 interface SkillIndexPackage {
   id: string;

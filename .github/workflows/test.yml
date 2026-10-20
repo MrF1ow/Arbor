@@ -33,12 +33,13 @@ jobs:
           cache: npm
           cache-dependency-path: desktop/package-lock.json
 
-      - name: Install, test, and typecheck
+      - name: Install, test, lint, and build
         working-directory: desktop
         run: |
           npm ci
           npm test
-          npx tsc --noEmit
+          npm run lint
+          npm run build
 
   rust:
     runs-on: ubuntu-latest

@@ -3,10 +3,10 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("sidebar groups courses under workspace roots", async () => {
-  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const html = await readFile(new URL("../legacy.html", import.meta.url), "utf8");
   assert.match(html, /id="course-list"/);
 
-  const source = await readFile(new URL("../src/main.ts", import.meta.url), "utf8");
+  const source = await readFile(new URL("../src/legacy/main.ts", import.meta.url), "utf8");
   const renderStart = source.indexOf("async function renderCourseList");
   assert.ok(renderStart >= 0, "renderCourseList must exist");
   const renderEnd = source.indexOf("\nfunction scrollNotesToHeading", renderStart);

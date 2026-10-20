@@ -15,7 +15,7 @@ class El {
 
 test("search hit text is assigned as text, not HTML", async () => {
   globalThis.document = { createElement: () => new El() };
-  const { renderSearchHit } = await import("../src/search-hit.ts");
+  const { renderSearchHit } = await import("../src/domain/search-hit.ts");
   const btn = renderSearchHit({
     title: `<img src=x onerror=alert(1)>`,
     course: `a<b`,
@@ -35,7 +35,7 @@ test("search hit text is assigned as text, not HTML", async () => {
 
 test("search hit omits the page suffix when page_range is null", async () => {
   globalThis.document = { createElement: () => new El() };
-  const { renderSearchHit } = await import("../src/search-hit.ts");
+  const { renderSearchHit } = await import("../src/domain/search-hit.ts");
   const btn = renderSearchHit({
     title: "Title",
     course: "Biology",

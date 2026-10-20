@@ -3,7 +3,7 @@ import test from "node:test";
 
 async function subject() {
   try {
-    return await import("../src/flashcards.ts");
+    return await import("../src/domain/flashcards.ts");
   } catch (error) {
     assert.fail(`flashcard domain module could not load: ${error}`);
   }

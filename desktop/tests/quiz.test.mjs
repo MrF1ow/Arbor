@@ -3,7 +3,7 @@ import test from "node:test";
 
 async function subject() {
   try {
-    return await import("../src/quiz.ts");
+    return await import("../src/domain/quiz.ts");
   } catch (error) {
     assert.fail(`quiz domain module could not load: ${error}`);
   }

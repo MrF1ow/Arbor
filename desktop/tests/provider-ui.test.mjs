@@ -4,14 +4,14 @@ import test from "node:test";
 
 async function subject() {
   try {
-    return await import("../src/provider.ts");
+    return await import("../src/domain/provider.ts");
   } catch (error) {
     assert.fail(`provider module could not load: ${error}`);
   }
 }
 
 test("index.html exposes provider controls", async () => {
-  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const html = await readFile(new URL("../legacy.html", import.meta.url), "utf8");
 
   assert.match(html, /id="provider-status"/);
   assert.match(html, /id="provider"/);
@@ -85,7 +85,7 @@ test("signedOutJobMessage formats auth refusal for the inspector log", async () 
 });
 
 test("provider change persists library override after loadModels selects a model", async () => {
-  const source = await readFile(new URL("../src/main.ts", import.meta.url), "utf8");
+  const source = await readFile(new URL("../src/legacy/main.ts", import.meta.url), "utf8");
   const handlerStart = source.indexOf('providerSel.addEventListener("change"');
   assert.ok(handlerStart >= 0, "provider change handler must exist");
   const handlerEnd = source.indexOf('providerKeySaveBtn.addEventListener("click"', handlerStart);
@@ -117,7 +117,7 @@ test("pickerProviders drops fake and keeps grok", async () => {
 });
 
 test("flashcard study job includes provider", async () => {
-  const { flashcardJobArgs } = await import("../src/flashcards.ts");
+  const { flashcardJobArgs } = await import("../src/domain/flashcards.ts");
 
   assert.equal(
     flashcardJobArgs("/knowledge", "Biology", false, "grok-4.7", "grok").provider,

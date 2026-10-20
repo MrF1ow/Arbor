@@ -3,7 +3,7 @@ import test from "node:test";
 
 async function subject() {
   try {
-    return await import("../src/concepts.ts");
+    return await import("../src/domain/concepts.ts");
   } catch (error) {
     assert.fail(`concept graph module could not load: ${error}`);
   }
