@@ -65,15 +65,16 @@ function JobListRow({
         active && !selected && "bg-accent",
       )}
       aria-current={selected ? "true" : undefined}
+      aria-label={`${label}, ${statusLabel}`}
       onClick={onSelect}
       data-testid={`job-row-${job.id}`}
     >
       <span className="flex min-w-0 items-center gap-2 pr-1">
+        <span className="min-w-0 flex-1 truncate text-sm font-medium">{label}</span>
         <JobStatusDot status={job.status} />
-        <span className={cn("shrink-0 text-2xs font-medium capitalize", jobStatusTextClass(job.status))}>
+        <span className={cn("shrink-0 text-2xs capitalize", jobStatusTextClass(job.status))}>
           {statusLabel}
         </span>
-        <span className="min-w-0 flex-1 truncate text-sm">{label}</span>
         <LazyTooltip>
           <LazyTooltipTrigger
             render={(tooltipProps) => (
@@ -90,7 +91,7 @@ function JobListRow({
         <span className="shrink-0 text-2xs text-faint-foreground tabular-nums">{duration}</span>
       </span>
       {job.model_id ? (
-        <span className="truncate pl-5 text-2xs text-faint-foreground">{job.model_id}</span>
+        <span className="truncate text-2xs text-faint-foreground">{job.model_id}</span>
       ) : null}
       {job.status === "failed" && job.error_summary ? (
         <LazyTooltip>
@@ -98,7 +99,7 @@ function JobListRow({
             render={(tooltipProps) => (
               <span
                 {...tooltipProps}
-                className="truncate pl-5 text-2xs text-destructive"
+                className="truncate text-2xs text-destructive"
               >
                 {job.error_summary}
               </span>
@@ -137,7 +138,10 @@ function JobList({
 
   if (!virtualize) {
     return (
-      <div className="flex min-h-0 flex-col divide-y divide-border overflow-y-auto">
+      <div
+        className="flex flex-col divide-y divide-border jobs:min-h-0 jobs:flex-1 jobs:overflow-y-auto"
+        data-testid="job-list-scroll"
+      >
         {jobs.map((job) => (
           <JobListRow
             key={job.id}
@@ -242,59 +246,65 @@ export function JobsView({
   const selectedJob = jobRows?.find((j) => j.id === selectedId) ?? null;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-auto p-6" data-testid="jobs-view">
-      <ShellPageHeader
-        title="Jobs"
-        description="Job history from your Knowledge folder."
-        actions={
-          <Button variant="ghost" size="sm" onClick={onRefresh} disabled={!activeRoot || jobsQuery.isFetching}>
-            <RefreshCw className={cn("size-icon-sm", jobsQuery.isFetching && "animate-spin")} />
-            Refresh
-          </Button>
-        }
-      />
-
-      {!activeRoot ? (
-        <EmptyState
-          icon={FolderOpen}
-          title="No Knowledge folder selected"
+    <div className="flex min-h-0 flex-1 flex-col overflow-auto p-6" data-testid="jobs-view">
+      <div className="mx-auto flex w-full max-w-4xl min-h-0 flex-1 flex-col gap-6">
+        <ShellPageHeader
+          title="Jobs"
+          description="Job history from your Knowledge folder."
           actions={
-            <Button variant="default" disabled={choosingFolder} onClick={() => void chooseFolder()}>
-              Choose Knowledge folder…
+            <Button variant="ghost" size="sm" onClick={onRefresh} disabled={!activeRoot || jobsQuery.isFetching}>
+              <RefreshCw className={cn("size-icon-sm", jobsQuery.isFetching && "animate-spin")} />
+              Refresh
             </Button>
           }
         />
-      ) : jobsQuery.isLoading ? (
-        <Skeleton className="h-48 w-full max-w-4xl" />
-      ) : jobsQuery.isError ? (
-        <p className="text-sm text-destructive" role="alert">
-          Could not load jobs: {String(jobsQuery.error)}
-        </p>
-      ) : jobCount === 0 ? (
-        <EmptyState title="No runs yet" />
-      ) : (
-        <div className="mx-auto flex w-full max-w-4xl min-h-0 flex-1 flex-col gap-4 jobs:flex-row jobs:items-stretch">
-          <SettingsSection title="Recent runs" className="min-h-0 min-w-0 flex-1 jobs:max-w-md">
-            <div className="flex min-h-48 flex-col jobs:max-h-jobs-pane">
-              <JobList
-                jobs={jobRows ?? []}
-                selectedId={selectedId}
-                activeJobId={activeJobId}
-                nowMs={nowMs}
-                onSelect={onSelectJob}
-              />
-            </div>
-          </SettingsSection>
-          <JobLogPanel
-            job={selectedJob}
-            events={eventsQuery.data}
-            eventsLoading={eventsQuery.isLoading}
-            eventsFetching={eventsQuery.isFetching}
-            eventsDataUpdatedAt={eventsQuery.dataUpdatedAt}
-            nowMs={nowMs}
+
+        {!activeRoot ? (
+          <EmptyState
+            icon={FolderOpen}
+            title="No Knowledge folder selected"
+            actions={
+              <Button variant="default" disabled={choosingFolder} onClick={() => void chooseFolder()}>
+                Choose Knowledge folder…
+              </Button>
+            }
           />
-        </div>
-      )}
+        ) : jobsQuery.isLoading ? (
+          <Skeleton className="h-48 w-full" />
+        ) : jobsQuery.isError ? (
+          <p className="text-sm text-destructive" role="alert">
+            Could not load jobs: {String(jobsQuery.error)}
+          </p>
+        ) : jobCount === 0 ? (
+          <EmptyState title="No runs yet" />
+        ) : (
+          <div className="flex min-h-0 flex-1 flex-col gap-4 jobs:flex-row jobs:items-stretch">
+            <SettingsSection title="Recent runs" className="min-w-0 jobs:min-h-0 jobs:flex-1 jobs:max-w-md">
+              <div
+                className="flex flex-col jobs:min-h-0 jobs:max-h-jobs-pane jobs:flex-1"
+                data-testid="job-list-container"
+              >
+                <JobList
+                  jobs={jobRows ?? []}
+                  selectedId={selectedId}
+                  activeJobId={activeJobId}
+                  nowMs={nowMs}
+                  onSelect={onSelectJob}
+                />
+              </div>
+            </SettingsSection>
+            <JobLogPanel
+              className="min-h-80 jobs:min-h-0"
+              job={selectedJob}
+              events={eventsQuery.data}
+              eventsLoading={eventsQuery.isLoading}
+              eventsFetching={eventsQuery.isFetching}
+              eventsDataUpdatedAt={eventsQuery.dataUpdatedAt}
+              nowMs={nowMs}
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 }

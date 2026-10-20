@@ -87,6 +87,7 @@ export function JobLogPanel({
   eventsFetching,
   eventsDataUpdatedAt,
   nowMs,
+  className,
 }: {
   job: JobSummary | null;
   events: JobEventRow[] | undefined;
@@ -94,6 +95,7 @@ export function JobLogPanel({
   eventsFetching?: boolean;
   eventsDataUpdatedAt?: number;
   nowMs: number;
+  className?: string;
 }) {
   const activeJobId = useJobStore((s) => s.activeJobId);
   const activeUpdateJobId = useJobStore((s) => s.activeUpdateJobId);
@@ -179,7 +181,12 @@ export function JobLogPanel({
 
   if (!job) {
     return (
-      <div className="flex min-h-48 flex-1 items-center justify-center rounded-md border border-border bg-card p-6 text-sm text-muted-foreground">
+      <div
+        className={cn(
+          "flex min-h-48 flex-1 items-center justify-center rounded-md border border-border bg-card p-6 text-sm text-muted-foreground",
+          className,
+        )}
+      >
         Select a job to view its log.
       </div>
     );
@@ -190,7 +197,10 @@ export function JobLogPanel({
 
   return (
     <section
-      className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-card"
+      className={cn(
+        "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-card",
+        className,
+      )}
       data-testid="job-log-panel"
     >
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-4 py-3">

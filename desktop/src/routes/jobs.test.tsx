@@ -52,6 +52,35 @@ describe("jobs page", () => {
     vi.restoreAllMocks();
   });
 
+  it("keeps page header and job panes in the same max-width column", async () => {
+    await renderAppAtRoute("/jobs");
+    await waitForJobsReady();
+
+    const column = jobsView().querySelector(".max-w-4xl");
+    expect(column).not.toBeNull();
+    expect(column).toContainElement(screen.getByRole("heading", { name: "Jobs" }));
+    expect(column).toContainElement(within(jobsView()).getByTestId("job-list-container"));
+    expect(column).toContainElement(within(jobsView()).getByTestId("job-log-panel"));
+  });
+
+  it("does not clip the stacked job list without an internal scroll area (happy-dom has no layout)", async () => {
+    await renderAppAtRoute("/jobs");
+    await waitForJobsReady();
+
+    const container = within(jobsView()).getByTestId("job-list-container");
+    const scroll = within(jobsView()).getByTestId("job-list-scroll");
+    const containerClass = container.getAttribute("class") ?? "";
+    const scrollClass = scroll.getAttribute("class") ?? "";
+
+    expect(containerClass).not.toMatch(/(?:^|\s)max-h-jobs-pane(?:\s|$)/);
+    expect(containerClass).toContain("jobs:max-h-jobs-pane");
+
+    expect(scrollClass).not.toMatch(/(?:^|\s)overflow-y-auto(?:\s|$)/);
+    expect(scrollClass).not.toMatch(/(?:^|\s)max-h-/);
+    expect(scrollClass).not.toMatch(/(?:^|\s)overflow-hidden(?:\s|$)/);
+    expect(scrollClass).toContain("jobs:overflow-y-auto");
+  });
+
   it("renders job labels, status, relative time, duration, model, and error line", async () => {
     await renderAppAtRoute("/jobs");
     await waitForJobsReady();
