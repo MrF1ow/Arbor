@@ -18,6 +18,15 @@ export function skillHasWritePermission(permissions: string[]): boolean {
   );
 }
 
+export function upsertProviderOverride(
+  overrides: { path: string; provider_id: string; model_id: string | null }[],
+  path: string,
+  provider_id: string,
+  model_id: string | null,
+): { path: string; provider_id: string; model_id: string | null }[] {
+  return [...overrides.filter((o) => o.path !== path), { path, provider_id, model_id }];
+}
+
 export function effectiveProvider(input: {
   root: string | null;
   settingsProviderId: string;
