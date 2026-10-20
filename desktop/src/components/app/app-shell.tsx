@@ -7,15 +7,17 @@ import { ShellContextProvider } from "~/components/app/shell-context";
 import { SidebarInset, SidebarProvider } from "~/components/ui/sidebar";
 import { useGlobalShortcuts } from "~/hooks/use-global-shortcuts";
 import { useIsMobile } from "~/hooks/use-mobile";
+import { pickActiveRoot } from "~/lib/knowledge-root";
+import { useSettings } from "~/lib/queries/settings";
 import { useEffectiveSidebarOpen, useUiStore } from "~/stores/ui-store";
 
 const LogDrawer = lazy(() =>
   import("~/components/app/log-drawer").then((m) => ({ default: m.LogDrawer })),
 );
 
-const SearchPlaceholderDialog = lazy(() =>
-  import("~/components/app/search-placeholder-dialog").then((m) => ({
-    default: m.SearchPlaceholderDialog,
+const SearchPalette = lazy(() =>
+  import("~/components/app/search-palette").then((m) => ({
+    default: m.SearchPalette,
   })),
 );
 
@@ -26,6 +28,8 @@ const UpdateReviewDialog = lazy(() =>
 );
 
 export function AppShell() {
+  const settings = useSettings();
+  const activeRoot = pickActiveRoot(settings.data);
   const isMobile = useIsMobile();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const desktopSidebarOpen = useEffectiveSidebarOpen();
@@ -47,7 +51,7 @@ export function AppShell() {
   useGlobalShortcuts({
     onSearch: () => {
       setSearchMounted(true);
-      setSearchOpen(true);
+      setSearchOpen((open) => !open);
     },
   });
 
@@ -96,7 +100,11 @@ export function AppShell() {
       </SidebarInset>
       {searchMounted ? (
         <Suspense fallback={null}>
-          <SearchPlaceholderDialog open={searchOpen} onOpenChange={onSearchOpenChange} />
+          <SearchPalette
+            open={searchOpen}
+            onOpenChange={onSearchOpenChange}
+            rootKey={activeRoot ?? ""}
+          />
         </Suspense>
       ) : null}
       <JobFailureToast />

@@ -23,7 +23,6 @@ export function useSwitchActiveRootMutation() {
         knowledge_root: root,
       };
       await invoke("save_settings", { settings: next });
-      // TODO(PR 12): rerun in-flight search when the active root changes.
       await invoke("start_folder_watch", { root });
       // TODO(PR 11): clear chat transcript state when the active root changes.
       await queryClient.invalidateQueries({ queryKey: qk.settings() });
