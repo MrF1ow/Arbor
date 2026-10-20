@@ -1,7 +1,22 @@
 import { notePathForStudyDigest } from "./concepts.ts";
 import { renderMarkdown } from "./markdown.ts";
+import { signedOutJobMessage } from "./provider.ts";
 
 export type ChatMode = "ask" | "explain" | "quiz";
+
+const CHAT_MODES: ChatMode[] = ["ask", "explain", "quiz"];
+
+export function isChatMode(value: string | undefined): value is ChatMode {
+  return value != null && CHAT_MODES.includes(value as ChatMode);
+}
+
+export function chatAuthErrorMessage(providerLabel: string, error: unknown): string {
+  const text = String(error);
+  if (text.includes("authenticated") || text.includes("auth")) {
+    return signedOutJobMessage(providerLabel, text);
+  }
+  return text;
+}
 
 export interface ChatLine {
   ts?: string;
