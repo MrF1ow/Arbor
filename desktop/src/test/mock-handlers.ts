@@ -21,6 +21,7 @@ import { emitToChannel, parseMockChannelId } from "~/test/emit-to-channel";
 
 let mockSettingsState = structuredClone(fixtureSettings);
 let mockKnowledgeSettingsState = structuredClone(fixtureKnowledgeSettings);
+const mockProviderSecretReady = new Set<string>(["openai_api", "anthropic_api"]);
 
 const ipcLog: string[] = [];
 const chatHistoryByKey = new Map<string, ChatLine[]>();
@@ -138,6 +139,9 @@ export function clearMockIpcLog() {
 export function resetMockSettingsForTests() {
   mockSettingsState = structuredClone(fixtureSettings);
   mockKnowledgeSettingsState = structuredClone(fixtureKnowledgeSettings);
+  mockProviderSecretReady.clear();
+  mockProviderSecretReady.add("openai_api");
+  mockProviderSecretReady.add("anthropic_api");
 }
 
 function mockChatHistoryKey(root: string, course: string): string {
@@ -500,11 +504,20 @@ export function createMockHandler(
         return false;
       case "skill_index":
         return { packages: [] };
-      case "provider_secret_status":
-        return "ready";
-      case "set_provider_secret":
-      case "clear_provider_secret":
+      case "provider_secret_status": {
+        const providerId = String(payload.providerId ?? payload.provider_id ?? "");
+        return mockProviderSecretReady.has(providerId) ? "ready" : "key missing";
+      }
+      case "set_provider_secret": {
+        const providerId = String(payload.providerId ?? payload.provider_id ?? "");
+        mockProviderSecretReady.add(providerId);
         return null;
+      }
+      case "clear_provider_secret": {
+        const providerId = String(payload.providerId ?? payload.provider_id ?? "");
+        mockProviderSecretReady.delete(providerId);
+        return null;
+      }
       case "reindex_knowledge":
         return { documents: 12 };
       case "search_knowledge":

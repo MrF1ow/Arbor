@@ -118,6 +118,10 @@ describe("tailwind-merge render audit", { timeout: 120_000 }, () => {
       "/welcome",
       "/settings/general",
       "/settings/provider",
+      "/settings/library",
+      "/settings/sync",
+      "/settings/skills",
+      "/settings/workers",
       "/settings/shortcuts",
     ] as const;
 

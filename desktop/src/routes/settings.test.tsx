@@ -6,6 +6,7 @@ import { clearTauriMocks } from "~/test/mock-ipc";
 
 import { resetAuthRefreshForTests } from "~/lib/auth-refresh";
 import { modKeyLabel } from "~/lib/shortcuts";
+import { resetSaveSettingsChainForTests } from "~/lib/queries/settings";
 import { FIXTURE_ROOT_FALL, fixtureKnowledgeSettings, fixtureSettings } from "~/test/fixtures/data";
 import {
   clearMockIpcLog,
@@ -60,6 +61,7 @@ describe("settings", () => {
       unread: 0,
     });
     resetAuthRefreshForTests();
+    resetSaveSettingsChainForTests();
     vi.spyOn(window, "innerWidth", "get").mockReturnValue(1280);
   });
 
@@ -366,5 +368,270 @@ describe("settings", () => {
     expect(within(settingsView()).getByText("Toggle sidebar")).toBeInTheDocument();
     expect(within(settingsView()).getByText("Flashcards")).toBeInTheDocument();
     expect(within(settingsView()).getAllByText(modKeyLabel()).length).toBeGreaterThan(0);
+  });
+
+  it("shows Ctrl vs ⌘ labels when the platform is mocked", async () => {
+    vi.resetModules();
+    vi.stubGlobal("navigator", { ...navigator, platform: "MacIntel" });
+    const shortcutsMac = await import("~/lib/shortcuts");
+    expect(shortcutsMac.modKeyLabel()).toBe("⌘");
+
+    vi.resetModules();
+    vi.stubGlobal("navigator", { ...navigator, platform: "Linux x86_64" });
+    const shortcutsLinux = await import("~/lib/shortcuts");
+    expect(shortcutsLinux.modKeyLabel()).toBe("Ctrl");
+  });
+
+  it("preserves sync_after_commit when toggling each knowledge switch", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/settings/general", {
+      get_knowledge_settings: () => ({
+        ...fixtureKnowledgeSettings,
+        sync_after_commit: true,
+      }),
+    });
+    await waitForSettingsGeneral();
+    await waitForKnowledgeToggles();
+
+    const switches = within(settingsView()).getAllByRole("switch");
+    expect(switches.length).toBe(6);
+    for (let i = 0; i < 6; i += 1) {
+      clearMockIpcLog();
+      await user.click(switches[i]!);
+      await waitFor(() => {
+        const save = getMockIpcCalls().find((c) => c.cmd === "save_knowledge_settings");
+        expect(save).toBeDefined();
+        const settings = (save?.args as { settings?: typeof fixtureKnowledgeSettings })?.settings;
+        expect(settings?.sync_after_commit).toBe(true);
+      });
+    }
+  });
+
+  it("logs and toasts reindex failures", async () => {
+    const user = userEvent.setup();
+    const toastError = vi.spyOn(toast, "error").mockImplementation(() => "toast-id");
+    await renderAppAtRoute("/settings/general", {
+      reindex_knowledge: () => {
+        throw new Error("index locked");
+      },
+    });
+    await waitForSettingsGeneral();
+    await waitForKnowledgeToggles();
+    await user.click(within(settingsView()).getByTestId("reindex-knowledge"));
+    await waitFor(() => {
+      expect(toastError).toHaveBeenCalledWith(expect.stringContaining("index locked"));
+    });
+    expect(useJobStore.getState().lines.some((l) => l.includes("Reindex failed:"))).toBe(true);
+    toastError.mockRestore();
+  });
+
+  it("keeps unrelated settings fields on provider save_settings", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/settings/provider");
+    await waitForProviderReady();
+    await user.click(within(settingsView()).getByRole("combobox", { name: "Provider" }));
+    await user.click(await screen.findByRole("option", { name: "Codex" }));
+    await waitFor(() => {
+      const save = getMockIpcCalls().filter((c) => c.cmd === "save_settings").at(-1);
+      const settings = (save?.args as { settings?: typeof fixtureSettings })?.settings;
+      expect(settings?.knowledge_roots).toEqual(fixtureSettings.knowledge_roots);
+      expect(settings?.workers).toEqual(fixtureSettings.workers);
+      expect(settings?.skill_grants).toEqual(fixtureSettings.skill_grants);
+      expect(settings?.lmstudio_base_url).toBe(fixtureSettings.lmstudio_base_url);
+    });
+  });
+
+  it("shows LM Studio base URL placeholder", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/settings/provider");
+    await waitForProviderReady();
+    await user.click(within(settingsView()).getByRole("combobox", { name: "Provider" }));
+    await user.click(await screen.findByRole("option", { name: "LM Studio" }));
+    await waitFor(() => {
+      expect(within(settingsView()).getByTestId("provider-base-url")).toHaveAttribute(
+        "placeholder",
+        "http://127.0.0.1:1234/v1",
+      );
+    });
+  });
+
+  it("shows API key row for Anthropic API", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/settings/provider");
+    await waitForProviderReady();
+    await user.click(within(settingsView()).getByRole("combobox", { name: "Provider" }));
+    await user.click(await screen.findByRole("option", { name: "Anthropic API" }));
+    await waitFor(() => {
+      expect(within(settingsView()).getByTestId("provider-api-key")).toBeInTheDocument();
+    });
+  });
+
+  it("updates auth status after saving an API key", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/settings/provider", {
+      check_auth: (args) => {
+        const force = Boolean((args as { force?: boolean }).force);
+        return {
+          authenticated: force,
+          reason: force ? "" : "cached",
+          docs_url: "",
+        };
+      },
+    });
+    await waitForProviderReady();
+    await user.click(within(settingsView()).getByRole("combobox", { name: "Provider" }));
+    await user.click(await screen.findByRole("option", { name: "OpenAI API" }));
+    await waitFor(() => {
+      expect(within(settingsView()).getByTestId("provider-api-key")).toBeInTheDocument();
+    });
+    clearMockIpcLog();
+    await user.type(within(settingsView()).getByTestId("provider-api-key"), "sk-test");
+    await user.click(within(settingsView()).getByRole("button", { name: "Save key" }));
+    await waitFor(() => {
+      const forced = getMockIpcCalls().filter(
+        (c) => c.cmd === "check_auth" && (c.args as { force?: boolean }).force === true,
+      );
+      expect(forced.length).toBeGreaterThan(0);
+      expect(within(settingsView()).getByTestId("provider-auth-status")).toHaveTextContent(
+        "OpenAI API · grok-4.7",
+      );
+    });
+  });
+
+  it("shows key missing and refreshes auth after clear key", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/settings/provider");
+    await waitForProviderReady();
+    await user.click(within(settingsView()).getByRole("combobox", { name: "Provider" }));
+    await user.click(await screen.findByRole("option", { name: "OpenAI API" }));
+    await user.click(within(settingsView()).getByRole("button", { name: "Clear key" }));
+    await waitFor(() => {
+      expect(within(settingsView()).getByTestId("provider-key-status")).toHaveTextContent(
+        "key missing",
+      );
+      expect(getMockIpcLog()).toContain("clear_provider_secret");
+    });
+  });
+
+  it("does not call check_auth when opening General within the auth cache window", async () => {
+    const { router } = await renderAppAtRoute("/course/cell-biology/notes");
+    await waitFor(() => {
+      expect(getMockIpcLog().filter((c) => c === "check_auth").length).toBeGreaterThan(0);
+    });
+    await new Promise((r) => setTimeout(r, 400));
+    clearMockIpcLog();
+    await router.navigate({ to: "/settings/general" });
+    await waitForSettingsGeneral();
+    await new Promise((r) => setTimeout(r, 400));
+    expect(getMockIpcLog().filter((c) => c === "check_auth")).toHaveLength(0);
+  });
+
+  it("does not repeat list_models after a model change for a cached provider", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/settings/provider", {
+      list_models: () => ({
+        models: [
+          { id: "grok-4.7", label: "Grok 4.7" },
+          { id: "grok-mini", label: "Grok Mini" },
+        ],
+      }),
+    });
+    await waitForProviderReady();
+    await waitFor(() => {
+      expect(getMockIpcLog().filter((c) => c === "list_models").length).toBeGreaterThan(0);
+    });
+    clearMockIpcLog();
+    await user.click(within(settingsView()).getByRole("combobox", { name: "Model" }));
+    await user.click(await screen.findByRole("option", { name: "Grok Mini" }));
+    await waitFor(() => {
+      expect(getMockIpcCalls().some((c) => c.cmd === "save_settings")).toBe(true);
+    });
+    expect(getMockIpcLog().filter((c) => c === "list_models")).toHaveLength(0);
+  });
+
+  it("skips persist and refresh when base URL blur matches stored value", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/settings/provider", {
+      get_settings: () => ({
+        ...fixtureSettings,
+        ollama_base_url: "http://127.0.0.1:11434",
+      }),
+    });
+    await waitForProviderReady();
+    await user.click(within(settingsView()).getByRole("combobox", { name: "Provider" }));
+    await user.click(await screen.findByRole("option", { name: "Ollama" }));
+    await waitFor(() => {
+      expect(within(settingsView()).getByTestId("provider-base-url")).toBeInTheDocument();
+    });
+    clearMockIpcLog();
+    const input = within(settingsView()).getByTestId("provider-base-url");
+    fireEvent.blur(input);
+    await new Promise((r) => setTimeout(r, 200));
+    expect(getMockIpcLog().filter((c) => c === "save_settings")).toHaveLength(0);
+    expect(getMockIpcLog().filter((c) => c === "list_models")).toHaveLength(0);
+  });
+
+  it("renders placeholder routes and highlights the active nav row", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/settings/library");
+    await waitFor(() => {
+      expect(within(settingsView()).getByText("This section is coming soon.")).toBeInTheDocument();
+    });
+    const libraryNav = within(settingsView()).getByRole("button", { name: "Library & sharing" });
+    expect(libraryNav.getAttribute("aria-current")).toBe("page");
+
+    await user.click(within(settingsView()).getByRole("button", { name: "Sync" }));
+    await waitFor(() => {
+      expect(within(settingsView()).getByText("This section is coming soon.")).toBeInTheDocument();
+      expect(within(settingsView()).getByRole("button", { name: "Sync" }).getAttribute("aria-current")).toBe(
+        "page",
+      );
+    });
+  });
+
+  it("persists a fallback model id when the stored model is missing from the list", async () => {
+    await renderAppAtRoute("/settings/provider", {
+      get_settings: () => ({
+        ...fixtureSettings,
+        model_id: "missing-model",
+      }),
+      list_models: () => ({
+        models: [{ id: "grok-4.7", label: "Grok 4.7" }],
+      }),
+    });
+    await waitForProviderReady();
+    await waitFor(() => {
+      const save = getMockIpcCalls().filter((c) => c.cmd === "save_settings").at(-1);
+      expect((save?.args as { settings?: { model_id?: string } })?.settings?.model_id).toBe(
+        "grok-4.7",
+      );
+    });
+  });
+
+  it("persists provider when list_models fails and still forces auth", async () => {
+    const user = userEvent.setup();
+    const toastError = vi.spyOn(toast, "error").mockImplementation(() => "toast-id");
+    await renderAppAtRoute("/settings/provider", {
+      list_models: () => {
+        throw new Error("models down");
+      },
+    });
+    await waitForProviderReady();
+    clearMockIpcLog();
+    await user.click(within(settingsView()).getByRole("combobox", { name: "Provider" }));
+    await user.click(await screen.findByRole("option", { name: "Codex" }));
+    await waitFor(() => {
+      expect(toastError).toHaveBeenCalledWith(expect.stringContaining("models down"));
+      const save = getMockIpcCalls().filter((c) => c.cmd === "save_settings").at(-1);
+      expect((save?.args as { settings?: { provider_id?: string } })?.settings?.provider_id).toBe(
+        "codex",
+      );
+      expect(
+        getMockIpcCalls().some(
+          (c) => c.cmd === "check_auth" && (c.args as { force?: boolean }).force === true,
+        ),
+      ).toBe(true);
+    });
+    toastError.mockRestore();
   });
 });
