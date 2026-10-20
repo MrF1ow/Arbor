@@ -1,6 +1,6 @@
 import { Channel } from "@tauri-apps/api/core";
 import { MessageSquarePlus, Trash2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { ChatTranscript } from "~/components/chat/chat-transcript";
 import { LiveAnswer } from "~/components/chat/live-answer";
@@ -31,6 +31,7 @@ import {
   buildUserLine,
   chatAuthErrorMessage,
   isChatMode,
+  phaseLabel,
   workerHistory,
 } from "~/domain/chat";
 import { courseDisplayName, workspaceRootLabel } from "~/domain/course";
@@ -48,12 +49,28 @@ import {
 import { useStartFlashcardJobMutation, useStartQuizJobMutation } from "~/lib/queries/jobs";
 import {
   appendChatLiveDelta,
+  beginChatLiveStream,
   chatLiveKey,
-  clearChatLive,
+  clearChatLiveIfIdle,
+  clearChatLiveText,
+  finishChatLiveStream,
+  EMPTY_CHAT_LIVE_SNAPSHOT,
+  getChatLiveSnapshot,
+  setChatLiveStatus,
+  subscribeChatLive,
+  type ChatLiveStatusTone,
 } from "~/stores/chat-live-store";
 import { useJobStore } from "~/stores/job-store";
 
 type ArtifactKind = "flashcards" | "quiz";
+
+function linesSignature(rows: ChatLine[]): string {
+  if (rows.length === 0) {
+    return "";
+  }
+  const last = rows[rows.length - 1];
+  return `${rows.length}:${last?.ts ?? ""}:${last?.role ?? ""}:${last?.content ?? ""}`;
+}
 
 export function ChatView({
   activeRoot,
@@ -64,7 +81,9 @@ export function ChatView({
   modeParam,
   promptParam,
   onSearchClear,
+  onModeSearchClear,
   onCourseChange,
+  initialArtifactKind = "flashcards",
 }: {
   activeRoot: string | null;
   course: string;
@@ -74,7 +93,9 @@ export function ChatView({
   modeParam?: string;
   promptParam?: string;
   onSearchClear: () => void;
+  onModeSearchClear: () => void;
   onCourseChange: (course: string) => void;
+  initialArtifactKind?: ArtifactKind;
 }) {
   const historyQuery = useChatHistory(activeRoot, course);
   const appendLines = useAppendChatLinesMutation(activeRoot, course);
@@ -98,20 +119,30 @@ export function ChatView({
     failedMessage: "Quiz generation failed to start",
   });
 
-  const [mode, setMode] = useState<ChatMode>(
+  const [mode, setMode] = useState<ChatMode>(() =>
     isChatMode(modeParam) ? modeParam : "ask",
   );
-  const activeMode = isChatMode(modeParam) ? modeParam : mode;
   const [lines, setLines] = useState<ChatLine[]>([]);
   const [input, setInput] = useState("");
-  const [status, setStatus] = useState("");
-  const [inFlight, setInFlight] = useState(false);
-  const [artifactKind, setArtifactKind] = useState<ArtifactKind>("flashcards");
+  const [gateStatus, setGateStatus] = useState<{ text: string; tone: ChatLiveStatusTone }>({
+    text: "",
+    tone: "muted",
+  });
+  const [artifactKind, setArtifactKind] = useState<ArtifactKind>(initialArtifactKind);
   const [clearOpen, setClearOpen] = useState(false);
 
+  const linesRef = useRef<ChatLine[]>(lines);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const adoptedHistoryKey = useRef("");
+  const stickToBottomRef = useRef(true);
+  const prevViewKeyRef = useRef("");
+  const historyBlockRef = useRef(0);
+  const adoptedSigRef = useRef("");
+  const wasLiveInFlightRef = useRef(false);
   const autoSendPromptRef = useRef<string | null>(null);
+  const sendingRef = useRef(false);
+  const mountedRef = useRef(true);
+  const channelRef = useRef<Channel<unknown> | null>(null);
+  const lastAuthReasonRef = useRef("");
   const sendMessageRef = useRef<(question: string, sendMode?: ChatMode) => Promise<void>>(
     async () => undefined,
   );
@@ -122,177 +153,259 @@ export function ChatView({
     PROVIDER_FALLBACK.find((p) => p.id === effective.providerId)?.label ?? effective.providerId;
   const liveKey = activeRoot ? chatLiveKey(activeRoot, course) : "";
 
+  const liveSnapshot = useSyncExternalStore(subscribeChatLive, () =>
+    liveKey ? getChatLiveSnapshot(liveKey) : EMPTY_CHAT_LIVE_SNAPSHOT,
+  );
+
+  const inFlight = liveSnapshot.inFlight;
+  const statusText = inFlight || liveSnapshot.statusText ? liveSnapshot.statusText : gateStatus.text;
+  const statusTone =
+    inFlight || liveSnapshot.statusText ? liveSnapshot.statusTone : gateStatus.tone;
+
   const controlsDisabled = inFlight;
   const artifactLauncher =
     artifactKind === "quiz" ? quizLauncher : flashcardLauncher;
   const artifactJobDisabled = artifactLauncher.jobDisabled;
   const artifactModelHint = artifactLauncher.modelHint;
 
-  useEffect(() => {
-    const key = `${activeRoot ?? ""}|${course}`;
-    if (adoptedHistoryKey.current === key) {
-      return;
-    }
-    if (!historyQuery.data) {
-      return;
-    }
-    adoptedHistoryKey.current = key;
-    /* eslint-disable react-hooks/set-state-in-effect -- adopt server history once per root/course */
-    setLines(historyQuery.data);
-    /* eslint-enable react-hooks/set-state-in-effect */
-  }, [historyQuery.data, activeRoot, course]);
+  const viewKey = `${activeRoot ?? ""}|${course}`;
 
   useEffect(() => {
+    if (wasLiveInFlightRef.current && !liveSnapshot.inFlight && historyBlockRef.current === 0) {
+      adoptedSigRef.current = "";
+    }
+    wasLiveInFlightRef.current = liveSnapshot.inFlight;
+  }, [liveSnapshot.inFlight]);
+
+  useLayoutEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect -- adopt server history on course/root change and refetch */
+    if (prevViewKeyRef.current !== viewKey) {
+      prevViewKeyRef.current = viewKey;
+      historyBlockRef.current = 0;
+      adoptedSigRef.current = "";
+      if (historyQuery.isFetched && activeRoot) {
+        const serverLines = historyQuery.data ?? [];
+        adoptedSigRef.current = linesSignature(serverLines);
+        linesRef.current = serverLines;
+        setLines(serverLines);
+      } else {
+        linesRef.current = [];
+        setLines([]);
+      }
+      return;
+    }
+    if (!activeRoot || !historyQuery.isFetched) {
+      return;
+    }
+    if (historyBlockRef.current > 0) {
+      return;
+    }
+    if (liveKey && getChatLiveSnapshot(liveKey).inFlight) {
+      return;
+    }
+    const serverLines = historyQuery.data ?? [];
+    const serverSig = linesSignature(serverLines);
+    if (adoptedSigRef.current === serverSig) {
+      return;
+    }
+    adoptedSigRef.current = serverSig;
+    linesRef.current = serverLines;
+    setLines(serverLines);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [activeRoot, course, historyQuery.data, historyQuery.isFetched, liveKey, viewKey]);
+
+  useEffect(() => {
+    mountedRef.current = true;
     return () => {
+      mountedRef.current = false;
       if (liveKey) {
-        clearChatLive(liveKey);
+        clearChatLiveIfIdle(liveKey);
       }
     };
   }, [liveKey]);
 
-  useEffect(() => {
-    if (lines.length === 0) {
+  useLayoutEffect(() => {
+    if (!stickToBottomRef.current) {
       return;
     }
     const el = scrollRef.current;
     if (!el) {
       return;
     }
-    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
-    if (atBottom) {
-      el.scrollTop = el.scrollHeight;
-    }
-  }, [lines.length, status]);
+    el.scrollTop = el.scrollHeight;
+  }, [lines, liveSnapshot.text.length]);
 
-  const sendMessage = async (questionRaw: string, sendMode: ChatMode = activeMode) => {
+  const setStatusOnCourse = (
+    courseAtSend: string,
+    text: string,
+    tone: ChatLiveStatusTone,
+    key: string,
+  ) => {
+    if (course === courseAtSend && mountedRef.current) {
+      setGateStatus({ text: "", tone: "muted" });
+    }
+    setChatLiveStatus(key, text, tone);
+  };
+
+  const sendMessage = async (questionRaw: string, sendMode: ChatMode = mode) => {
     const question = questionRaw.trim();
-    if (!question || !activeRoot || inFlight) {
+    if (!question || !activeRoot || inFlight || sendingRef.current) {
       return;
     }
 
+    sendingRef.current = true;
     const courseAtSend = course;
     const rootAtSend = activeRoot;
+    const streamKey = chatLiveKey(rootAtSend, courseAtSend);
 
     try {
-      const auth = await fetchAuthStatus(effective.providerId, true);
-      if (!auth.authenticated) {
-        setStatus(signedOutJobMessage(providerLabel, auth.reason ?? ""));
+      let auth;
+      try {
+        auth = await fetchAuthStatus(effective.providerId, true);
+        lastAuthReasonRef.current = auth.reason ?? "";
+      } catch (error) {
+        const message = signedOutJobMessage(providerLabel, String(error));
+        setGateStatus({ text: message, tone: "destructive" });
         return;
       }
-    } catch (error) {
-      setStatus(signedOutJobMessage(providerLabel, String(error)));
-      return;
-    }
 
-    const modelId = effective.modelId?.trim();
-    if (!modelId) {
-      setStatus("Select a model in Settings.");
-      return;
-    }
-
-    setStatus("Retrieving");
-    setInFlight(true);
-
-    const historySnapshot = workerHistory(lines);
-    const userLine = buildUserLine(sendMode, question);
-    let pendingAppend: Promise<void> = Promise.resolve();
-
-    try {
-      await appendLines.mutateAsync([userLine]);
-      if (course === courseAtSend) {
-        setLines((prev) => [...prev, userLine]);
-        setInput("");
+      if (!auth.authenticated) {
+        const message = signedOutJobMessage(providerLabel, auth.reason ?? "");
+        setGateStatus({ text: message, tone: "destructive" });
+        return;
       }
 
-      const channel = new Channel<unknown>();
-      channel.onmessage = (raw) => {
-        const event =
-          raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
-        const type = typeof event.type === "string" ? event.type : "";
-        if (type === "chat_retrieved") {
-          if (course === courseAtSend) {
-            setStatus("Answering");
-          }
-          return;
+      const modelId = effective.modelId?.trim();
+      if (!modelId) {
+        setGateStatus({ text: "Select a model in Settings.", tone: "destructive" });
+        return;
+      }
+
+      historyBlockRef.current += 1;
+
+      beginChatLiveStream(streamKey);
+      setChatLiveStatus(streamKey, "Retrieving", "muted");
+      setGateStatus({ text: "", tone: "muted" });
+
+      const historySnapshot = workerHistory(linesRef.current);
+      const userLine = buildUserLine(sendMode, question);
+      let pendingAppend: Promise<void> = Promise.resolve();
+
+      try {
+        await appendLines.mutateAsync([userLine]);
+        linesRef.current = [...linesRef.current, userLine];
+        if (course === courseAtSend && mountedRef.current) {
+          setLines(linesRef.current);
+          setInput("");
         }
-        if (type === "chat_delta") {
-          if (course !== courseAtSend || rootAtSend !== activeRoot) {
+
+        const channel = new Channel<unknown>();
+        channelRef.current = channel;
+        channel.onmessage = (raw) => {
+          const event =
+            raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+          const type = typeof event.type === "string" ? event.type : "";
+          if (type === "chat_retrieved") {
+            const label = phaseLabel("chat_retrieved") ?? "Answering";
+            setStatusOnCourse(courseAtSend, label, "muted", streamKey);
             return;
           }
-          const delta = typeof event.delta === "string" ? event.delta : "";
-          appendChatLiveDelta(chatLiveKey(rootAtSend, courseAtSend), delta);
-          const el = scrollRef.current;
-          if (el) {
-            const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
-            if (atBottom) {
-              el.scrollTop = el.scrollHeight;
+          if (type === "chat_delta") {
+            if (courseAtSend !== course || rootAtSend !== activeRoot) {
+              return;
             }
+            const delta = typeof event.delta === "string" ? event.delta : "";
+            appendChatLiveDelta(streamKey, delta);
+            return;
           }
-          return;
-        }
-        if (type === "chat_done") {
-          clearChatLive(chatLiveKey(rootAtSend, courseAtSend));
-          const markdown = typeof event.markdown === "string" ? event.markdown : "";
-          const supported = event.supported === true;
-          const citations = Array.isArray(event.citations)
-            ? (event.citations as ChatLine["citations"])
-            : [];
-          pendingAppend = (async () => {
+          if (type === "chat_done") {
+            clearChatLiveText(streamKey);
+            const markdown = typeof event.markdown === "string" ? event.markdown : "";
+            const supported = event.supported === true;
+            const citations = Array.isArray(event.citations)
+              ? (event.citations as ChatLine["citations"])
+              : [];
+            const doneLabel = phaseLabel("chat_done") ?? "Done";
+            setStatusOnCourse(courseAtSend, doneLabel, "muted", streamKey);
             const assistantLine = buildAssistantLine(
               sendMode,
               markdown,
               supported,
               citations ?? [],
             );
-            await appendLines.mutateAsync([assistantLine]);
-            if (course === courseAtSend) {
-              setLines((prev) => [...prev, assistantLine]);
-              setStatus("Done");
-            }
-          })();
-          return;
-        }
-        if (type === "auth_failed") {
-          const reason =
-            typeof event.reason === "string" ? event.reason : "";
-          if (course === courseAtSend) {
-            setStatus(signedOutJobMessage(providerLabel, reason));
+            pendingAppend = appendLines
+              .mutateAsync([assistantLine])
+              .then(() => {
+                linesRef.current = [...linesRef.current, assistantLine];
+                if (course === courseAtSend && mountedRef.current) {
+                  setLines(linesRef.current);
+                }
+              })
+              .catch((error) => {
+                throw error;
+              });
+            void pendingAppend.catch(() => undefined);
+            return;
           }
-          return;
-        }
-        if (type === "error") {
-          if (course === courseAtSend) {
-            setStatus(typeof event.message === "string" ? event.message : "Chat failed.");
+          if (type === "auth_failed") {
+            const reason =
+              typeof event.reason === "string"
+                ? event.reason
+                : lastAuthReasonRef.current;
+            setStatusOnCourse(
+              courseAtSend,
+              signedOutJobMessage(providerLabel, reason),
+              "destructive",
+              streamKey,
+            );
+            return;
           }
-          return;
-        }
-        if (type === "worker_exit") {
-          void pendingAppend
-            .catch((error) => {
-              appendLog(`Could not append chat lines: ${error}`);
-              if (course === courseAtSend) {
-                setStatus(chatAuthErrorMessage(providerLabel, error));
-              }
-            })
-            .finally(() => {
-              clearChatLive(chatLiveKey(rootAtSend, courseAtSend));
-              setInFlight(false);
-            });
-        }
-      };
+          if (type === "error") {
+            const message =
+              typeof event.message === "string" ? event.message : "Chat failed.";
+            setStatusOnCourse(courseAtSend, message, "destructive", streamKey);
+            return;
+          }
+          if (type === "worker_exit") {
+            void pendingAppend
+              .catch((error) => {
+                appendLog(`Could not append chat lines: ${error}`);
+                setStatusOnCourse(
+                  courseAtSend,
+                  chatAuthErrorMessage(providerLabel, error),
+                  "destructive",
+                  streamKey,
+                );
+              })
+              .finally(() => {
+                finishChatLiveStream(streamKey);
+                historyBlockRef.current = 0;
+                adoptedSigRef.current = "";
+                channelRef.current = null;
+              });
+          }
+        };
 
-      await startChat.mutateAsync({
-        onEvent: channel,
-        question,
-        mode: sendMode,
-        provider: effective.providerId,
-        model: modelId,
-        history: historySnapshot,
-      });
-    } catch (error) {
-      setInFlight(false);
-      clearChatLive(chatLiveKey(rootAtSend, courseAtSend));
-      setStatus(chatAuthErrorMessage(providerLabel, error));
+        await startChat.mutateAsync({
+          onEvent: channel,
+          question,
+          mode: sendMode,
+          provider: effective.providerId,
+          model: modelId,
+          history: historySnapshot,
+        });
+      } catch (error) {
+        finishChatLiveStream(streamKey);
+        historyBlockRef.current = 0;
+        setStatusOnCourse(
+          courseAtSend,
+          chatAuthErrorMessage(providerLabel, error),
+          "destructive",
+          streamKey,
+        );
+      }
+    } finally {
+      sendingRef.current = false;
     }
   };
 
@@ -302,18 +415,18 @@ export function ChatView({
 
   useEffect(() => {
     const prompt = promptParam?.trim();
-    if (!prompt || !activeRoot) {
+    if (!prompt || !activeRoot || !historyQuery.isFetched) {
       return;
     }
     if (autoSendPromptRef.current === prompt) {
       return;
     }
     autoSendPromptRef.current = prompt;
-    const sendMode = isChatMode(modeParam) ? modeParam : mode;
+    const sendMode = isChatMode(modeParam) ? modeParam : "ask";
     setInput(prompt);
     onSearchClear();
     void sendMessageRef.current(prompt, sendMode);
-  }, [promptParam, modeParam, activeRoot, mode, onSearchClear]);
+  }, [promptParam, modeParam, activeRoot, historyQuery.isFetched, onSearchClear]);
 
   const onNewChat = async () => {
     if (!activeRoot || inFlight) {
@@ -321,8 +434,12 @@ export function ChatView({
     }
     const sessionLine = buildSessionLine();
     await appendLines.mutateAsync([sessionLine]);
-    setLines((prev) => [...prev, sessionLine]);
-    setStatus("");
+    linesRef.current = [...linesRef.current, sessionLine];
+    setLines(linesRef.current);
+    setGateStatus({ text: "", tone: "muted" });
+    if (liveKey) {
+      setChatLiveStatus(liveKey, "", "muted");
+    }
   };
 
   const onClearHistory = async () => {
@@ -330,8 +447,13 @@ export function ChatView({
       return;
     }
     await clearHistory.mutateAsync();
+    linesRef.current = [];
     setLines([]);
-    setStatus("");
+    adoptedSigRef.current = "";
+    setGateStatus({ text: "", tone: "muted" });
+    if (liveKey) {
+      setChatLiveStatus(liveKey, "", "muted");
+    }
     setClearOpen(false);
   };
 
@@ -346,15 +468,25 @@ export function ChatView({
 
   const onComposerKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && !event.shiftKey) {
+      if (event.nativeEvent.isComposing || event.keyCode === 229) {
+        return;
+      }
       event.preventDefault();
       void sendMessage(input);
     }
   };
 
+  const onTranscriptScroll = () => {
+    const el = scrollRef.current;
+    if (!el) {
+      return;
+    }
+    stickToBottomRef.current =
+      el.scrollHeight - el.scrollTop - el.clientHeight < 24;
+  };
+
   const statusClass =
-    status.includes("not authenticated") || status.includes("failed")
-      ? "text-destructive"
-      : "text-muted-foreground";
+    statusTone === "destructive" ? "text-destructive" : "text-muted-foreground";
 
   return (
     <div
@@ -384,12 +516,13 @@ export function ChatView({
         </Select>
         <span className="text-xs text-faint-foreground">{rootLabel}</span>
         <ToggleGroup
-          value={[activeMode]}
+          value={[mode]}
           disabled={controlsDisabled}
           onValueChange={(values) => {
             const next = values.length > 0 ? values[values.length - 1] : undefined;
             if (isChatMode(next)) {
               setMode(next);
+              onModeSearchClear();
             }
           }}
         >
@@ -430,7 +563,7 @@ export function ChatView({
           <AlertDialogContent>
             <AlertDialogTitle>Clear history</AlertDialogTitle>
             <AlertDialogDescription>
-              Delete all chat history for {courseDisplayName(course)}? This cannot be undone.
+              Delete all chat history for {course}? This cannot be undone.
             </AlertDialogDescription>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -446,6 +579,7 @@ export function ChatView({
         ref={scrollRef}
         className="min-h-0 flex-1 overflow-y-auto px-8 py-6"
         data-testid="chat-transcript-scroll"
+        onScroll={onTranscriptScroll}
       >
         <div className="mx-auto w-full max-w-reading">
           <ChatTranscript course={course} lines={lines} digests={digests} />
@@ -456,7 +590,7 @@ export function ChatView({
       <div className="shrink-0 border-t border-border px-8 py-4">
         <div className="mx-auto flex w-full max-w-reading flex-col gap-3">
           <p className={`min-h-4 text-xs ${statusClass}`} data-testid="chat-status">
-            {status}
+            {statusText}
           </p>
           <div className="flex gap-2">
             <Textarea

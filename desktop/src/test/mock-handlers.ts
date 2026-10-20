@@ -15,9 +15,11 @@ import {
   fixtureSettings,
   fixtureStudyPlanMarkdown,
 } from "~/test/fixtures/data";
+import type { ChatLine } from "~/domain/chat";
 import { emitToChannel, parseMockChannelId } from "~/test/emit-to-channel";
 
 const ipcLog: string[] = [];
+const chatHistoryByKey = new Map<string, ChatLine[]>();
 const ipcCalls: { cmd: string; args?: InvokeArgs }[] = [];
 const updateJobTimers: ReturnType<typeof setTimeout>[] = [];
 let mockEventsEnabled = true;
@@ -42,6 +44,28 @@ export function getMockIpcCalls(): readonly { cmd: string; args?: InvokeArgs }[]
 export function clearMockIpcLog() {
   ipcLog.length = 0;
   ipcCalls.length = 0;
+}
+
+function mockChatHistoryKey(root: string, course: string): string {
+  return `${root}\0${course}`;
+}
+
+export function resetMockChatHistoryForTests() {
+  chatHistoryByKey.clear();
+}
+
+export function seedMockChatHistory(root: string, course: string, lines: ChatLine[]) {
+  chatHistoryByKey.set(mockChatHistoryKey(root, course), lines.slice());
+}
+
+export function appendMockChatLines(payload: Record<string, unknown>) {
+  const root = String(payload.root ?? FIXTURE_ROOT_FALL);
+  const course = String(payload.course ?? "");
+  const key = mockChatHistoryKey(root, course);
+  const prev = chatHistoryByKey.get(key) ?? [];
+  const lines = Array.isArray(payload.lines) ? (payload.lines as ChatLine[]) : [];
+  chatHistoryByKey.set(key, [...prev, ...lines]);
+  return null;
 }
 
 function scheduleMockEvent(delayMs: number, run: () => void) {
@@ -180,8 +204,11 @@ export function createMockHandler(
             exit_code: 0,
           },
         ];
-      case "read_chat_history":
-        return [];
+      case "read_chat_history": {
+        const root = String(payload.root ?? FIXTURE_ROOT_FALL);
+        const course = String(payload.course ?? "");
+        return (chatHistoryByKey.get(mockChatHistoryKey(root, course)) ?? []).slice();
+      }
       case "start_chat": {
         const channelId = parseMockChannelId(payload.onEvent);
         if (channelId == null) {
@@ -300,7 +327,13 @@ export function createMockHandler(
       case "study_plan":
         return null;
       case "append_chat_lines":
-      case "clear_chat_history":
+        return appendMockChatLines(payload);
+      case "clear_chat_history": {
+        const root = String(payload.root ?? FIXTURE_ROOT_FALL);
+        const course = String(payload.course ?? "");
+        chatHistoryByKey.delete(mockChatHistoryKey(root, course));
+        return null;
+      }
       case "cancel_update":
       case "plan_update":
         return { pending: [] };

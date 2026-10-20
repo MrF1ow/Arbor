@@ -34,6 +34,13 @@ function ChatRoute() {
     });
   };
 
+  const onModeSearchClear = () => {
+    void navigate({
+      search: (prev) => ({ ...prev, mode: undefined }),
+      replace: true,
+    });
+  };
+
   const onCourseChange = (nextCourse: string) => {
     void navigate({
       to: "/course/$course/chat",
@@ -52,6 +59,7 @@ function ChatRoute() {
       modeParam={mode}
       promptParam={prompt}
       onSearchClear={onSearchClear}
+      onModeSearchClear={onModeSearchClear}
       onCourseChange={onCourseChange}
     />
   );
