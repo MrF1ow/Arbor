@@ -3,6 +3,7 @@
 @source not "../tests";
 
 @custom-variant dark (&:where(.dark, .dark *));
+@custom-variant jobs (@media (width >= 56rem));
 
 :root {
   color-scheme: light;
@@ -163,7 +164,7 @@
   --spacing-control-lg: 38px;
   --container-reading: 40rem;
   --container-flashcards: 42.5rem;
-  --container-jobs: 56rem;
+  --breakpoint-jobs: 56rem;
   --spacing-jobs-pane: 32rem;
   --spacing-progress: 3px;
   --spacing-icon-sm: 14px;

@@ -16,6 +16,7 @@ import type { Settings } from "~/domain/types";
 import { fixtureSettings } from "~/test/fixtures/data";
 import { installMockIpc } from "~/test/mock-ipc";
 import type { createMockHandler } from "~/test/mock-handlers";
+import { trackTestQueryClient } from "~/test/query-clients";
 
 type FixtureOverrides = Parameters<typeof createMockHandler>[0];
 
@@ -31,6 +32,7 @@ export function renderWithProviders(
   clearMocks();
   installMockIpc(opts?.fixtures);
   const queryClient = createAppQueryClient();
+  trackTestQueryClient(queryClient);
   if (opts?.seedSettings ?? opts?.minimal) {
     queryClient.setQueryData(qk.settings(), opts?.seedSettings ?? fixtureSettings);
   }
@@ -69,6 +71,7 @@ export async function renderAppAtRoute(route: string, fixtures?: FixtureOverride
   clearMocks();
   installMockIpc(fixtures);
   const queryClient = createAppQueryClient();
+  trackTestQueryClient(queryClient);
   const history = createMemoryHistory({ initialEntries: [route] });
   const router = getRouter(history);
   await router.load();

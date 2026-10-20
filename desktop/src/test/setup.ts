@@ -1,5 +1,8 @@
 import "@testing-library/jest-dom/vitest";
-import { vi } from "vitest";
+import { cleanup } from "@testing-library/react";
+import { afterEach, vi } from "vitest";
+
+import { cleanupTestQueryClients } from "~/test/query-clients";
 
 export const clipboardWriteText = vi.fn().mockResolvedValue(undefined);
 
@@ -39,3 +42,9 @@ if (typeof window.matchMedia !== "function") {
     dispatchEvent: () => true,
   });
 }
+
+afterEach(async () => {
+  await cleanupTestQueryClients();
+  cleanup();
+  vi.clearAllTimers();
+});

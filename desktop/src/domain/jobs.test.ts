@@ -5,11 +5,21 @@ import { formatDuration, jobKindLabel, relativeTime } from "~/domain/jobs";
 const NOW = new Date("2026-10-20T12:00:00Z").getTime();
 
 describe("jobKindLabel", () => {
-  it("maps known trigger kinds", () => {
+  it("maps trigger kinds without skill", () => {
     expect(jobKindLabel("manual")).toBe("Manual update");
     expect(jobKindLabel("watch")).toBe("Folder watch");
-    expect(jobKindLabel("flashcards")).toBe("Flashcards");
-    expect(jobKindLabel("embed")).toBe("Embeddings");
+  });
+
+  it("maps study skills via skill field", () => {
+    expect(jobKindLabel("study", "flashcards")).toBe("Flashcards");
+    expect(jobKindLabel("study", "quiz")).toBe("Quiz");
+    expect(jobKindLabel("study", "concepts")).toBe("Concepts");
+    expect(jobKindLabel("study", "diagrams")).toBe("Diagrams");
+    expect(jobKindLabel("study", "citations")).toBe("Citations");
+  });
+
+  it("maps embed skill on manual jobs", () => {
+    expect(jobKindLabel("manual", "embed")).toBe("Embeddings");
   });
 
   it("title-cases unknown kinds", () => {

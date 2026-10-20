@@ -114,6 +114,7 @@ describe("tailwind-merge render audit", { timeout: 120_000 }, () => {
       "/course/cell-biology/quiz",
       "/course/cell-biology/graph",
       "/course/cell-biology/chat",
+      "/jobs",
       "/welcome",
     ] as const;
 

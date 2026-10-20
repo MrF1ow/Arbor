@@ -11,6 +11,7 @@ export const qk = {
     ["search", root, semantic ? "semantic" : "knowledge", query] as const,
   models: (provider: string, root: string | null) =>
     ["models", provider, root ?? ""] as const,
+  arborDb: (root: string) => ["arborDb", root] as const,
   jobs: (root: string) => ["jobs", root] as const,
   jobEvents: (root: string, jobId: string) => ["jobEvents", root, jobId] as const,
   library: (root: string) => ["library", root] as const,

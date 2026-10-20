@@ -1,6 +1,6 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Copy, X } from "lucide-react";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Button, IconButton } from "~/components/ui/button";
@@ -11,6 +11,7 @@ import {
   relativeTime,
 } from "~/domain/jobs";
 import type { JobEventRow, JobSummary } from "~/domain/types";
+import { useStickToBottomScroll } from "~/hooks/use-stick-to-bottom-scroll";
 import { useCancelUpdateMutation } from "~/lib/queries/jobs";
 import { cn } from "~/lib/utils";
 import { useJobStore } from "~/stores/job-store";
@@ -26,11 +27,20 @@ export function formatLogForClipboard(lines: LogLine[]): string {
 }
 
 export async function copyLogLines(lines: LogLine[]): Promise<void> {
-  await navigator.clipboard.writeText(formatLogForClipboard(lines));
-  toast.success("Copied");
+  try {
+    await navigator.clipboard.writeText(formatLogForClipboard(lines));
+    toast.success("Copied");
+  } catch {
+    toast.error("Couldn't copy log");
+  }
 }
 
-function buildLogLines(
+/** Lines appended to the store after `cursor` (exclusive prefix). */
+export function liveTailFromStore(storeLines: string[], cursor: number): string[] {
+  return storeLines.slice(Math.max(0, cursor));
+}
+
+export function buildLogLines(
   events: JobEventRow[],
   liveTail: string[],
   jobId: string,
@@ -74,27 +84,70 @@ export function JobLogPanel({
   job,
   events,
   eventsLoading,
+  eventsFetching,
+  eventsDataUpdatedAt,
   nowMs,
 }: {
   job: JobSummary | null;
   events: JobEventRow[] | undefined;
   eventsLoading: boolean;
+  eventsFetching?: boolean;
+  eventsDataUpdatedAt?: number;
   nowMs: number;
 }) {
-  const scrollRef = useRef<HTMLDivElement>(null);
   const activeJobId = useJobStore((s) => s.activeJobId);
   const activeUpdateJobId = useJobStore((s) => s.activeUpdateJobId);
   const storeLines = useJobStore((s) => s.lines);
   const cancelUpdate = useCancelUpdateMutation();
 
-  const lines = useMemo(() => {
-    if (!job) {
-      return [];
+  const [lineCursor, setLineCursor] = useState(0);
+  const [tailJobId, setTailJobId] = useState<string | null>(null);
+  const [showPostFinishTail, setShowPostFinishTail] = useState(false);
+  const prevActiveJobIdRef = useRef<string | null>(null);
+  const activeTailInitializedRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (activeJobId && job?.id === activeJobId) {
+      setTailJobId(activeJobId);
+      if (activeTailInitializedRef.current !== activeJobId) {
+        activeTailInitializedRef.current = activeJobId;
+        setLineCursor(useJobStore.getState().lines.length);
+      }
+      setShowPostFinishTail(false);
     }
-    const liveTail =
-      job.status === "running" && job.id === activeJobId ? storeLines : [];
-    return buildLogLines(events ?? [], liveTail, job.id);
-  }, [activeJobId, events, job, storeLines]);
+    if (!activeJobId) {
+      activeTailInitializedRef.current = null;
+    }
+    const prevActive = prevActiveJobIdRef.current;
+    if (prevActive && !activeJobId && job?.id === prevActive) {
+      setShowPostFinishTail(true);
+      setTailJobId(prevActive);
+    }
+    prevActiveJobIdRef.current = activeJobId;
+  }, [activeJobId, job?.id]);
+
+  useEffect(() => {
+    if (!job?.id || events === undefined) {
+      return;
+    }
+    setLineCursor(useJobStore.getState().lines.length);
+    if (showPostFinishTail && tailJobId === job.id && !eventsFetching) {
+      setShowPostFinishTail(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sync cursor when refetched events land, not on every array reference
+  }, [eventsDataUpdatedAt, eventsFetching, job?.id, showPostFinishTail, tailJobId]);
+
+  let liveTail: string[] = [];
+  if (job && tailJobId === job.id) {
+    const delta = liveTailFromStore(storeLines, lineCursor);
+    if (activeJobId === job.id || showPostFinishTail) {
+      liveTail = delta;
+    }
+  }
+
+  const lines = job == null ? [] : buildLogLines(events ?? [], liveTail, job.id);
+
+  const { scrollRef, onScroll, stickToBottomRef } = useStickToBottomScroll(lines.length);
 
   // eslint-disable-next-line react-hooks/incompatible-library -- virtualizer row offsets are imperative
   const virtualizer = useVirtualizer({
@@ -104,23 +157,20 @@ export function JobLogPanel({
     overscan: 16,
   });
 
-  useEffect(() => {
-    if (lines.length === 0) {
+  useLayoutEffect(() => {
+    if (!stickToBottomRef.current || lines.length === 0) {
+      return;
+    }
+    if (lines.length > 200) {
+      virtualizer.scrollToIndex(lines.length - 1, { align: "end" });
       return;
     }
     const el = scrollRef.current;
-    if (!el) {
-      return;
+    if (el) {
+      el.scrollTop = el.scrollHeight;
     }
-    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
-    if (atBottom) {
-      virtualizer.scrollToIndex(lines.length - 1, { align: "end" });
-    }
-  }, [lines.length, virtualizer]);
-
-  const onCopy = async () => {
-    await copyLogLines(lines);
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- scrollRef is stable; stickiness reads scroll height imperatively
+  }, [lines.length, virtualizer, stickToBottomRef]);
 
   const showCancel =
     job?.status === "running" &&
@@ -145,7 +195,9 @@ export function JobLogPanel({
     >
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-4 py-3">
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium">{jobKindLabel(job.trigger_kind)}</p>
+          <p className="truncate text-sm font-medium">
+            {jobKindLabel(job.trigger_kind, job.skill)}
+          </p>
           <p className="text-2xs text-muted-foreground">
             {jobStatusLabel(job.status)} · {startedRelative} · {duration}
           </p>
@@ -168,11 +220,12 @@ export function JobLogPanel({
           variant="ghost"
           tooltip={false}
           data-testid="copy-job-log"
-          onClick={() => void onCopy()}
+          onClick={() => void copyLogLines(lines)}
         />
       </div>
       <div
         ref={scrollRef}
+        onScroll={onScroll}
         className="min-h-48 flex-1 overflow-auto px-4 py-2 font-mono text-2xs text-muted-foreground"
       >
         {eventsLoading && lines.length === 0 ? (
@@ -203,6 +256,8 @@ export function JobLogPanel({
               return (
                 <div
                   key={row.key}
+                  data-index={item.index}
+                  ref={virtualizer.measureElement}
                   className="absolute inset-x-0 whitespace-pre-wrap break-words"
                   style={{ transform: `translateY(${item.start}px)` }} // style-allow: virtualizer row offset
                 >

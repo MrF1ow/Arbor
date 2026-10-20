@@ -285,6 +285,7 @@ export interface JobSummary {
   id: string;
   status: string;
   trigger_kind: string;
+  skill?: string | null;
   model_id: string | null;
   started_at: string;
   finished_at: string | null;

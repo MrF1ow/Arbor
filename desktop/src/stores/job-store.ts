@@ -10,6 +10,8 @@ export type JobStoreStatus = "idle" | "running" | "failed" | "done";
 interface JobState {
   activeJobId: string | null;
   activeUpdateJobId: string | null;
+  lastFinishedJobId: string | null;
+  lastFinishedStatus: JobFinished["status"] | null;
   status: JobStoreStatus;
   step: string | null;
   label: string | null;
@@ -28,6 +30,8 @@ export function resetJobStoreForRootSwitch() {
   useJobStore.setState({
     activeJobId: null,
     activeUpdateJobId: null,
+    lastFinishedJobId: null,
+    lastFinishedStatus: null,
     status: "idle",
     step: null,
     label: null,
@@ -39,6 +43,8 @@ export function resetJobStoreForRootSwitch() {
 export const useJobStore = create<JobState>((set, get) => ({
   activeJobId: null,
   activeUpdateJobId: null,
+  lastFinishedJobId: null,
+  lastFinishedStatus: null,
   status: "idle",
   step: null,
   label: null,
@@ -80,10 +86,13 @@ export const useJobStore = create<JobState>((set, get) => ({
   },
   finish(result) {
     const cancelled = result.status === "cancelled";
+    const wasActive = get().activeJobId === result.job_id;
     set((state) => ({
       activeJobId: state.activeJobId === result.job_id ? null : state.activeJobId,
       activeUpdateJobId:
         state.activeUpdateJobId === result.job_id ? null : state.activeUpdateJobId,
+      lastFinishedJobId: wasActive ? result.job_id : state.lastFinishedJobId,
+      lastFinishedStatus: wasActive ? result.status : state.lastFinishedStatus,
       status: cancelled ? "idle" : result.status === "succeeded" ? "done" : "failed",
       step: null,
       label: state.activeJobId === result.job_id ? null : state.label,

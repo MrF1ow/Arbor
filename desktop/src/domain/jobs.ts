@@ -1,13 +1,15 @@
-const KIND_LABELS: Record<string, string> = {
-  manual: "Manual update",
-  watch: "Folder watch",
-  embed: "Embeddings",
-  citations: "Citations",
+const SKILL_LABELS: Record<string, string> = {
   flashcards: "Flashcards",
   quiz: "Quiz",
   concepts: "Concepts",
   diagrams: "Diagrams",
-  study: "Study",
+  citations: "Citations",
+  embed: "Embeddings",
+};
+
+const TRIGGER_LABELS: Record<string, string> = {
+  manual: "Manual update",
+  watch: "Folder watch",
 };
 
 function titleCaseKind(kind: string): string {
@@ -18,9 +20,16 @@ function titleCaseKind(kind: string): string {
     .join(" ");
 }
 
-export function jobKindLabel(triggerKind: string): string {
-  const key = triggerKind.trim().toLowerCase();
-  return KIND_LABELS[key] ?? titleCaseKind(triggerKind);
+export function jobKindLabel(triggerKind: string, skill?: string | null): string {
+  const skillKey = skill?.trim().toLowerCase();
+  if (skillKey && SKILL_LABELS[skillKey]) {
+    return SKILL_LABELS[skillKey]!;
+  }
+  const triggerKey = triggerKind.trim().toLowerCase();
+  if (TRIGGER_LABELS[triggerKey]) {
+    return TRIGGER_LABELS[triggerKey]!;
+  }
+  return titleCaseKind(triggerKind);
 }
 
 export function relativeTime(iso: string, nowMs: number): string {

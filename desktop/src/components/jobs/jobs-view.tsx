@@ -1,6 +1,6 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { FolderOpen, RefreshCw } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 
 import { EmptyState } from "~/components/app/empty-state";
 import { SettingsSection } from "~/components/app/settings-section";
@@ -20,28 +20,13 @@ import {
   relativeTime,
 } from "~/domain/jobs";
 import type { JobSummary } from "~/domain/types";
+import { useNow } from "~/hooks/use-now";
 import { useChooseKnowledgeFolder } from "~/lib/hooks/use-choose-knowledge-folder";
 import { pickActiveRoot } from "~/lib/knowledge-root";
 import { useJobEvents, useJobs } from "~/lib/queries/jobs";
 import { useSettings } from "~/lib/queries/settings";
 import { cn } from "~/lib/utils";
 import { useJobStore } from "~/stores/job-store";
-
-function sortJobs(jobs: JobSummary[], activeJobId: string | null): JobSummary[] {
-  if (!activeJobId) {
-    return jobs;
-  }
-  const index = jobs.findIndex((j) => j.id === activeJobId);
-  if (index <= 0) {
-    return jobs;
-  }
-  const copy = jobs.slice();
-  const [active] = copy.splice(index, 1);
-  if (active) {
-    copy.unshift(active);
-  }
-  return copy;
-}
 
 function JobListRow({
   job,
@@ -56,7 +41,7 @@ function JobListRow({
   nowMs: number;
   onSelect: () => void;
 }) {
-  const label = jobKindLabel(job.trigger_kind);
+  const label = jobKindLabel(job.trigger_kind, job.skill);
   const started = relativeTime(job.started_at, nowMs);
   const duration = formatDuration(job.started_at, job.finished_at);
   const statusLabel =
@@ -74,7 +59,8 @@ function JobListRow({
       className={cn(
         "relative flex w-full flex-col gap-0.5 px-2 py-2 text-left outline-none transition-colors duration-fast ease-out-soft",
         "before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-transparent",
-        selected && "before:bg-primary bg-transparent",
+        (selected || active) && "before:bg-primary",
+        selected && "bg-transparent",
         !selected && "hover:bg-muted",
         active && !selected && "bg-accent",
       )}
@@ -106,8 +92,20 @@ function JobListRow({
       {job.model_id ? (
         <span className="truncate pl-5 text-2xs text-faint-foreground">{job.model_id}</span>
       ) : null}
-      {job.error_summary ? (
-        <span className="truncate pl-5 text-2xs text-destructive">{job.error_summary}</span>
+      {job.status === "failed" && job.error_summary ? (
+        <LazyTooltip>
+          <LazyTooltipTrigger
+            render={(tooltipProps) => (
+              <span
+                {...tooltipProps}
+                className="truncate pl-5 text-2xs text-destructive"
+              >
+                {job.error_summary}
+              </span>
+            )}
+          />
+          <LazyTooltipContent className="max-w-sm">{job.error_summary}</LazyTooltipContent>
+        </LazyTooltip>
       ) : null}
     </button>
   );
@@ -164,6 +162,8 @@ function JobList({
           return (
             <div
               key={job.id}
+              data-index={item.index}
+              ref={virtualizer.measureElement}
               className="absolute inset-x-0 border-b border-border"
               style={{ transform: `translateY(${item.start}px)` }} // style-allow: virtualizer row offset
             >
@@ -194,39 +194,37 @@ export function JobsView({
   const jobsQuery = useJobs(activeRoot);
   const activeJobId = useJobStore((s) => s.activeJobId);
   const { chooseFolder, isPending: choosingFolder } = useChooseKnowledgeFolder();
-  const [nowMs] = useState(() => Date.now());
+  const nowMs = useNow();
 
-  const sortedJobs = useMemo(
-    () => sortJobs(jobsQuery.data ?? [], activeJobId),
-    [jobsQuery.data, activeJobId],
-  );
+  const jobRows = jobsQuery.data;
+  const jobCount = jobRows?.length ?? 0;
 
-  const selectedId = useMemo(() => {
-    if (sortedJobs.length === 0) {
+  const selectedId = (() => {
+    if (!jobRows || jobRows.length === 0) {
       return null;
     }
-    if (jobParam && sortedJobs.some((j) => j.id === jobParam)) {
+    if (jobParam && jobRows.some((j) => j.id === jobParam)) {
       return jobParam;
     }
-    return sortedJobs[0]!.id;
-  }, [jobParam, sortedJobs]);
+    return jobRows[0]!.id;
+  })();
 
   useEffect(() => {
-    if (jobsQuery.isSuccess && sortedJobs.length === 0 && jobParam) {
+    if (jobsQuery.isSuccess && jobCount === 0 && jobParam) {
       onJobParamSync(undefined);
     }
-  }, [jobParam, jobsQuery.isSuccess, onJobParamSync, sortedJobs.length]);
+  }, [jobParam, jobCount, jobsQuery.isSuccess, onJobParamSync]);
 
   useEffect(() => {
-    if (!jobsQuery.isSuccess || sortedJobs.length === 0) {
+    if (!jobsQuery.isSuccess || !jobRows || jobRows.length === 0) {
       return;
     }
     const effective =
-      jobParam && sortedJobs.some((j) => j.id === jobParam) ? jobParam : sortedJobs[0]!.id;
+      jobParam && jobRows.some((j) => j.id === jobParam) ? jobParam : jobRows[0]!.id;
     if (jobParam !== effective) {
       onJobParamSync(effective);
     }
-  }, [jobParam, jobsQuery.isSuccess, onJobParamSync, sortedJobs]);
+  }, [jobParam, jobRows, jobsQuery.isSuccess, onJobParamSync]);
 
   const eventsQuery = useJobEvents(activeRoot, selectedId);
 
@@ -241,13 +239,13 @@ export function JobsView({
     }
   };
 
-  const selectedJob = sortedJobs.find((j) => j.id === selectedId) ?? null;
+  const selectedJob = jobRows?.find((j) => j.id === selectedId) ?? null;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-6 overflow-auto p-6" data-testid="jobs-view">
       <ShellPageHeader
         title="Jobs"
-        description="Recent runs from your Knowledge folder."
+        description="Job history from your Knowledge folder."
         actions={
           <Button variant="ghost" size="sm" onClick={onRefresh} disabled={!activeRoot || jobsQuery.isFetching}>
             <RefreshCw className={cn("size-icon-sm", jobsQuery.isFetching && "animate-spin")} />
@@ -267,19 +265,19 @@ export function JobsView({
           }
         />
       ) : jobsQuery.isLoading ? (
-        <Skeleton className="h-48 w-full max-w-jobs" />
+        <Skeleton className="h-48 w-full max-w-4xl" />
       ) : jobsQuery.isError ? (
         <p className="text-sm text-destructive" role="alert">
           Could not load jobs: {String(jobsQuery.error)}
         </p>
-      ) : sortedJobs.length === 0 ? (
+      ) : jobCount === 0 ? (
         <EmptyState title="No runs yet" />
       ) : (
-        <div className="mx-auto flex w-full max-w-jobs min-h-0 flex-1 flex-col gap-4 lg:flex-row lg:items-stretch">
-          <SettingsSection title="Recent runs" className="min-h-0 min-w-0 flex-1 lg:max-w-md">
-            <div className="flex min-h-48 flex-col lg:max-h-jobs-pane">
+        <div className="mx-auto flex w-full max-w-4xl min-h-0 flex-1 flex-col gap-4 jobs:flex-row jobs:items-stretch">
+          <SettingsSection title="Recent runs" className="min-h-0 min-w-0 flex-1 jobs:max-w-md">
+            <div className="flex min-h-48 flex-col jobs:max-h-jobs-pane">
               <JobList
-                jobs={sortedJobs}
+                jobs={jobRows ?? []}
                 selectedId={selectedId}
                 activeJobId={activeJobId}
                 nowMs={nowMs}
@@ -291,6 +289,8 @@ export function JobsView({
             job={selectedJob}
             events={eventsQuery.data}
             eventsLoading={eventsQuery.isLoading}
+            eventsFetching={eventsQuery.isFetching}
+            eventsDataUpdatedAt={eventsQuery.dataUpdatedAt}
             nowMs={nowMs}
           />
         </div>

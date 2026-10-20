@@ -24,6 +24,7 @@ const chatHistoryByKey = new Map<string, ChatLine[]>();
 const ipcCalls: { cmd: string; args?: InvokeArgs }[] = [];
 const updateJobTimers: ReturnType<typeof setTimeout>[] = [];
 let mockEventsEnabled = true;
+let mockUpdateJobRunning = false;
 
 const mockKnowledgeSearchHits: SearchHit[] = [
   {
@@ -113,6 +114,7 @@ export function resetMockHandlerTimers() {
     clearTimeout(timer);
   }
   updateJobTimers.length = 0;
+  mockUpdateJobRunning = false;
   mockEventsEnabled = true;
 }
 
@@ -162,21 +164,23 @@ function scheduleMockEvent(delayMs: number, run: () => void) {
   return timer;
 }
 
-const mockJobSummaries: JobSummary[] = [
+const mockJobSummariesBase: JobSummary[] = [
   {
     id: "mock-update-job",
-    status: "running",
+    status: "succeeded",
     trigger_kind: "manual",
+    skill: null,
     model_id: "grok-4.7",
-    started_at: "2026-10-20T11:58:00Z",
-    finished_at: null,
+    started_at: "2026-10-19T11:58:00Z",
+    finished_at: "2026-10-19T12:05:00Z",
     error_summary: null,
-    exit_code: null,
+    exit_code: 0,
   },
   {
     id: "job-failed-1",
     status: "failed",
     trigger_kind: "manual",
+    skill: null,
     model_id: "grok-4.7",
     started_at: "2026-10-01T10:00:00Z",
     finished_at: "2026-10-01T10:05:00Z",
@@ -187,6 +191,7 @@ const mockJobSummaries: JobSummary[] = [
     id: "job-ok-1",
     status: "succeeded",
     trigger_kind: "watch",
+    skill: null,
     model_id: "grok-4.7",
     started_at: "2026-10-02T10:00:00Z",
     finished_at: "2026-10-02T10:20:00Z",
@@ -196,7 +201,8 @@ const mockJobSummaries: JobSummary[] = [
   {
     id: "job-flashcards",
     status: "succeeded",
-    trigger_kind: "flashcards",
+    trigger_kind: "study",
+    skill: "flashcards",
     model_id: "grok-4.7",
     started_at: "2026-10-03T08:00:00Z",
     finished_at: "2026-10-03T08:12:00Z",
@@ -206,7 +212,8 @@ const mockJobSummaries: JobSummary[] = [
   {
     id: "job-quiz",
     status: "succeeded",
-    trigger_kind: "quiz",
+    trigger_kind: "study",
+    skill: "quiz",
     model_id: "grok-4.7",
     started_at: "2026-10-04T09:00:00Z",
     finished_at: "2026-10-04T09:08:00Z",
@@ -216,7 +223,8 @@ const mockJobSummaries: JobSummary[] = [
   {
     id: "job-embed",
     status: "succeeded",
-    trigger_kind: "embed",
+    trigger_kind: "manual",
+    skill: "embed",
     model_id: "grok-4.7",
     started_at: "2026-10-05T14:00:00Z",
     finished_at: "2026-10-05T14:30:00Z",
@@ -226,7 +234,8 @@ const mockJobSummaries: JobSummary[] = [
   {
     id: "job-citations",
     status: "succeeded",
-    trigger_kind: "citations",
+    trigger_kind: "study",
+    skill: "citations",
     model_id: "grok-4.7",
     started_at: "2026-10-06T16:00:00Z",
     finished_at: "2026-10-06T16:04:00Z",
@@ -237,6 +246,7 @@ const mockJobSummaries: JobSummary[] = [
     id: "job-cancelled",
     status: "cancelled",
     trigger_kind: "manual",
+    skill: null,
     model_id: "grok-4.7",
     started_at: "2026-10-07T12:00:00Z",
     finished_at: "2026-10-07T12:01:00Z",
@@ -244,6 +254,25 @@ const mockJobSummaries: JobSummary[] = [
     exit_code: null,
   },
 ];
+
+function mockJobSummariesList(): JobSummary[] {
+  if (!mockUpdateJobRunning) {
+    return mockJobSummariesBase.slice();
+  }
+  const running: JobSummary = {
+    id: "mock-update-job",
+    status: "running",
+    trigger_kind: "manual",
+    skill: null,
+    model_id: "grok-4.7",
+    started_at: "2026-10-20T11:58:00Z",
+    finished_at: null,
+    error_summary: null,
+    exit_code: null,
+  };
+  const rest = mockJobSummariesBase.filter((job) => job.id !== "mock-update-job");
+  return [running, ...rest];
+}
 
 function mockJobEventCount(jobId: string): number {
   let hash = 0;
@@ -264,6 +293,7 @@ function mockJobEvents(jobId: string): JobEventRow[] {
 
 function simulateUpdateJob(root: string) {
   const jobId = "mock-update-job";
+  mockUpdateJobRunning = true;
   scheduleMockEvent(200, () => {
     if (!mockEventsEnabled) {
       return;
@@ -293,6 +323,7 @@ function simulateUpdateJob(root: string) {
         operation: "update",
         root,
       }).catch(() => undefined);
+      mockUpdateJobRunning = false;
     });
   });
   return jobId;
@@ -365,7 +396,7 @@ export function createMockHandler(
       case "sync_show":
         return { remote: null, shared: false };
       case "list_jobs":
-        return mockJobSummaries.slice();
+        return mockJobSummariesList();
       case "get_job_events":
         return mockJobEvents(String(payload.jobId ?? payload.job_id ?? ""));
       case "read_chat_history": {

@@ -11,6 +11,7 @@ import {
   resetMockHandlerTimers,
 } from "~/test/mock-handlers";
 import { useJobStore } from "~/stores/job-store";
+import { cleanupTestQueryClients } from "~/test/query-clients";
 import { renderAppAtRoute } from "~/test/render";
 
 const FIXED_NOW = new Date("2026-10-20T12:00:00Z");
@@ -33,6 +34,8 @@ describe("jobs page", () => {
     useJobStore.setState({
       activeJobId: null,
       activeUpdateJobId: null,
+      lastFinishedJobId: null,
+      lastFinishedStatus: null,
       status: "idle",
       step: null,
       label: null,
@@ -42,7 +45,6 @@ describe("jobs page", () => {
   });
 
   afterEach(() => {
-    cleanup();
     clearMocks();
     clearMockIpcLog();
     resetMockHandlerTimers();
@@ -56,10 +58,10 @@ describe("jobs page", () => {
 
     const view = within(jobsView());
     expect(view.getAllByText("Manual update").length).toBeGreaterThan(0);
+    expect(view.getByText("Flashcards")).toBeInTheDocument();
     expect(view.getByText("Worker timeout")).toBeInTheDocument();
     expect(view.getAllByText("grok-4.7").length).toBeGreaterThan(0);
-    expect(view.getByText("2 min ago")).toBeInTheDocument();
-    expect(view.getByText("running")).toBeInTheDocument();
+    expect(view.getByText("7m 0s")).toBeInTheDocument();
   });
 
   it("selects the first job by default and syncs ?job=", async () => {
@@ -96,15 +98,17 @@ describe("jobs page", () => {
       activeJobId: "mock-update-job",
       activeUpdateJobId: "mock-update-job",
       status: "running",
-      lines: ["live tail line"],
+      lines: ["prior-job-line"],
     });
     await renderAppAtRoute("/jobs");
     await waitForJobsReady();
+    useJobStore.getState().append("live tail line");
 
     await waitFor(() => {
       const panel = within(jobsView()).getByTestId("job-log-panel");
       expect(panel).toHaveTextContent("[mock-update-job] line 1:");
       expect(panel).toHaveTextContent("live tail line");
+      expect(panel).not.toHaveTextContent("prior-job-line");
     });
   });
 
@@ -128,13 +132,27 @@ describe("jobs page", () => {
     });
   });
 
+  const runningUpdateJob = {
+    id: "mock-update-job",
+    status: "running" as const,
+    trigger_kind: "manual",
+    skill: null,
+    model_id: "grok-4.7",
+    started_at: "2026-10-20T11:58:00Z",
+    finished_at: null,
+    error_summary: null,
+    exit_code: null,
+  };
+
   it("shows cancel only for the running update job", async () => {
     useJobStore.setState({
       activeJobId: "mock-update-job",
       activeUpdateJobId: "mock-update-job",
       status: "running",
     });
-    await renderAppAtRoute("/jobs");
+    await renderAppAtRoute("/jobs", {
+      list_jobs: () => [runningUpdateJob],
+    });
     await waitForJobsReady();
     expect(
       within(jobsView()).getByRole("button", { name: /^Cancel$/i }),
@@ -146,8 +164,11 @@ describe("jobs page", () => {
       status: "running",
     });
     cleanup();
+    await cleanupTestQueryClients();
     clearMocks();
-    await renderAppAtRoute("/jobs");
+    await renderAppAtRoute("/jobs", {
+      list_jobs: () => [runningUpdateJob],
+    });
     await waitForJobsReady();
     expect(within(jobsView()).queryByRole("button", { name: /^Cancel$/i })).not.toBeInTheDocument();
   });
@@ -159,7 +180,9 @@ describe("jobs page", () => {
       activeUpdateJobId: "mock-update-job",
       status: "running",
     });
-    await renderAppAtRoute("/jobs");
+    await renderAppAtRoute("/jobs", {
+      list_jobs: () => [runningUpdateJob],
+    });
     await waitForJobsReady();
 
     await user.click(within(jobsView()).getByRole("button", { name: /^Cancel$/i }));
@@ -232,6 +255,8 @@ describe("action bar status pill", () => {
     useJobStore.setState({
       activeJobId: null,
       activeUpdateJobId: null,
+      lastFinishedJobId: null,
+      lastFinishedStatus: null,
       status: "idle",
       step: null,
       label: null,
@@ -241,7 +266,6 @@ describe("action bar status pill", () => {
   });
 
   afterEach(() => {
-    cleanup();
     clearMocks();
     vi.useRealTimers();
     vi.restoreAllMocks();
@@ -281,7 +305,11 @@ describe("action bar status pill", () => {
       expect(screen.getByText(/Up to date ·/)).toBeInTheDocument();
     });
 
-    useJobStore.setState({ status: "failed" });
+    useJobStore.setState({
+      status: "failed",
+      lastFinishedJobId: "job-failed-1",
+      lastFinishedStatus: "failed",
+    });
     await waitFor(() => {
       expect(screen.getByText("Last job failed")).toBeInTheDocument();
     });
@@ -290,6 +318,45 @@ describe("action bar status pill", () => {
     await waitFor(() => {
       expect(router.state.location.pathname).toBe("/jobs");
       expect(router.state.location.search.job).toBe("job-failed-1");
+    });
+  });
+
+  it("links to the latest failed job after reload when the store is idle", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime.bind(vi) });
+    const { router } = await renderAppAtRoute("/course/cell-biology/notes", {
+      list_jobs: () => [
+        {
+          id: "job-failed-reload",
+          status: "failed",
+          trigger_kind: "manual",
+          skill: null,
+          model_id: "grok-4.7",
+          started_at: "2026-10-01T10:00:00Z",
+          finished_at: "2026-10-01T10:05:00Z",
+          error_summary: "Worker timeout",
+          exit_code: 1,
+        },
+      ],
+    });
+    await waitFor(() => {
+      expect(screen.getByText("Last job failed")).toBeInTheDocument();
+    });
+    await user.click(screen.getByTestId("status-pill-button"));
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe("/jobs");
+      expect(router.state.location.search.job).toBe("job-failed-reload");
+    });
+  });
+
+  it("navigates to jobs from idle pill when up to date", async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime.bind(vi) });
+    const { router } = await renderAppAtRoute("/course/cell-biology/notes");
+    await waitFor(() => {
+      expect(screen.getByText(/Up to date ·/)).toBeInTheDocument();
+    });
+    await user.click(screen.getByTestId("status-pill-button"));
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe("/jobs");
     });
   });
 });

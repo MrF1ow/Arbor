@@ -8,6 +8,7 @@ import { relativeTime } from "~/domain/jobs";
 import { runningJobStatusLabel } from "~/domain/job-labels";
 import { VIEWER_WRITE_REASON, viewerBlocksWrite } from "~/domain/library-role";
 import { PROVIDER_FALLBACK, signedOutJobMessage } from "~/domain/provider";
+import { useNow } from "~/hooks/use-now";
 import { pickActiveRoot } from "~/lib/knowledge-root";
 import { fetchAuthStatus } from "~/lib/auth-refresh";
 import { useEffectiveProvider } from "~/lib/queries/effective-provider";
@@ -36,6 +37,7 @@ export function ActionBar({ course }: { course: string }) {
   const jobStep = useJobStore((s) => s.step);
   const jobLabel = useJobStore((s) => s.label);
   const activeUpdateJobId = useJobStore((s) => s.activeUpdateJobId);
+  const lastFinishedJobId = useJobStore((s) => s.lastFinishedJobId);
   const unread = useJobStore((s) => s.unread);
   const appendLog = useJobStore((s) => s.append);
   const toggleLog = useUiStore((s) => s.toggleLog);
@@ -43,6 +45,7 @@ export function ActionBar({ course }: { course: string }) {
   const cancelUpdate = useCancelUpdateMutation();
   const startCitations = useStartCitationJobMutation(activeRoot);
   const jobs = useJobs(activeRoot);
+  const nowMs = useNow();
 
   const latestJob = jobs.data?.[0];
   const statusLabel = (() => {
@@ -52,25 +55,62 @@ export function ActionBar({ course }: { course: string }) {
     if (jobStatus === "failed") {
       return "Last job failed";
     }
+    if (jobStatus === "idle" && latestJob?.status === "failed") {
+      return "Last job failed";
+    }
+    if (jobStatus === "idle" && latestJob?.status === "running") {
+      return "Job running";
+    }
     const stamp = latestJob?.finished_at ?? latestJob?.started_at;
     if (latestJob?.status === "succeeded" && stamp) {
-      return `Up to date · ${relativeTime(stamp, jobs.dataUpdatedAt)}`;
+      return `Up to date · ${relativeTime(stamp, nowMs)}`;
     }
     return "Up to date";
+  })();
+
+  const statusPillVariant = (() => {
+    if (jobStatus === "running" || (jobStatus === "idle" && latestJob?.status === "running")) {
+      return "running" as const;
+    }
+    if (
+      jobStatus === "failed" ||
+      (jobStatus === "idle" && latestJob?.status === "failed")
+    ) {
+      return "failed" as const;
+    }
+    return "idle" as const;
+  })();
+
+  const jobsLinkId = (() => {
+    if (jobStatus === "failed" && lastFinishedJobId) {
+      return lastFinishedJobId;
+    }
+    if (jobStatus === "idle" && latestJob?.status === "failed") {
+      return latestJob.id;
+    }
+    if (jobStatus === "idle" && latestJob?.status === "running") {
+      return latestJob.id;
+    }
+    return undefined;
+  })();
+
+  const statusPillAriaLabel = (() => {
+    if (statusPillVariant === "running") {
+      return `Job status: ${statusLabel}`;
+    }
+    if (statusPillVariant === "failed") {
+      return "Last job failed. Open Jobs.";
+    }
+    return `Knowledge status: ${statusLabel}. Open Jobs.`;
   })();
 
   const onStatusPillClick = () => {
     if (jobStatus === "running") {
       return;
     }
-    const failedJob =
-      jobStatus === "failed"
-        ? (jobs.data?.find((j) => j.status === "failed") ?? latestJob)
-        : undefined;
-    const failedId = failedJob?.id;
     void navigate({
       to: "/jobs",
-      search: failedId ? { job: failedId } : {},
+      search: jobsLinkId ? { job: jobsLinkId } : {},
     });
   };
 
@@ -134,6 +174,9 @@ export function ActionBar({ course }: { course: string }) {
     </Button>
   );
 
+  const pillRunning =
+    jobStatus === "running" || (jobStatus === "idle" && latestJob?.status === "running");
+
   return (
     <div className="flex h-actionbar min-w-0 shrink-0 items-center gap-2 border-b border-dashed border-border px-4">
       <span
@@ -165,14 +208,12 @@ export function ActionBar({ course }: { course: string }) {
         variant="ghost"
         size="sm"
         className="h-auto min-w-0 px-0 hover:bg-transparent"
-        disabled={jobStatus === "running"}
+        disabled={pillRunning}
         onClick={onStatusPillClick}
         data-testid="status-pill-button"
+        aria-label={statusPillAriaLabel}
       >
-        <StatusPill
-          variant={jobStatus === "running" ? "running" : jobStatus === "failed" ? "failed" : "idle"}
-          label={statusLabel}
-        />
+        <StatusPill variant={statusPillVariant} label={statusLabel} />
       </Button>
       <div className="relative">
         <IconButton
