@@ -53,11 +53,26 @@ pub struct JobSummary {
     pub id: String,
     pub status: String,
     pub trigger_kind: String,
+    pub skill: Option<String>,
     pub model_id: Option<String>,
     pub started_at: String,
     pub finished_at: Option<String>,
     pub error_summary: Option<String>,
     pub exit_code: Option<i32>,
+}
+
+pub fn skill_from_plan(trigger_kind: &str, plan_json: &str) -> Option<String> {
+    let value: serde_json::Value = serde_json::from_str(plan_json).ok()?;
+    if trigger_kind == "study" {
+        return value
+            .get("skill")
+            .and_then(|skill| skill.as_str())
+            .map(str::to_string);
+    }
+    if value.get("op").and_then(|op| op.as_str()) == Some("embed") {
+        return Some("embed".to_string());
+    }
+    None
 }
 
 #[derive(Debug, serde::Serialize, Clone)]
@@ -181,21 +196,24 @@ pub fn list_jobs(knowledge_root: &Path, limit: u32) -> Result<Vec<JobSummary>, S
 fn list_jobs_conn(conn: &Connection, limit: u32) -> Result<Vec<JobSummary>, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT id, status, trigger_kind, model_id, started_at, finished_at, error_summary, exit_code
+            "SELECT id, status, trigger_kind, plan_json, model_id, started_at, finished_at, error_summary, exit_code
              FROM jobs ORDER BY started_at DESC LIMIT ?1",
         )
         .map_err(|e| e.to_string())?;
     let rows = stmt
         .query_map(params![limit], |row| {
+            let trigger_kind: String = row.get(2)?;
+            let plan_json: String = row.get(3)?;
             Ok(JobSummary {
                 id: row.get(0)?,
                 status: row.get(1)?,
-                trigger_kind: row.get(2)?,
-                model_id: row.get(3)?,
-                started_at: row.get(4)?,
-                finished_at: row.get(5)?,
-                error_summary: row.get(6)?,
-                exit_code: row.get(7)?,
+                trigger_kind: trigger_kind.clone(),
+                skill: skill_from_plan(&trigger_kind, &plan_json),
+                model_id: row.get(4)?,
+                started_at: row.get(5)?,
+                finished_at: row.get(6)?,
+                error_summary: row.get(7)?,
+                exit_code: row.get(8)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -346,7 +364,25 @@ mod tests {
         let jobs = list_jobs(&root, 10).unwrap();
         assert_eq!(jobs[0].id, id);
         assert_eq!(jobs[0].trigger_kind, "study");
+        assert_eq!(jobs[0].skill.as_deref(), Some("flashcards"));
         assert_eq!(JobTrigger::from_arg(Some("study")), JobTrigger::Study);
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn embed_skill_from_manual_plan_json() {
+        let root = temp_root("embed-skill");
+        let id = create_job(
+            &root,
+            JobTrigger::Manual,
+            "hashed",
+            r#"{"op":"embed","force":false}"#,
+        )
+        .unwrap();
+        let jobs = list_jobs(&root, 10).unwrap();
+        assert_eq!(jobs[0].id, id);
+        assert_eq!(jobs[0].trigger_kind, "manual");
+        assert_eq!(jobs[0].skill.as_deref(), Some("embed"));
         let _ = fs::remove_dir_all(&root);
     }
 }
