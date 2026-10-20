@@ -35,7 +35,7 @@ async function waitForGraphReady() {
   await waitFor(
     () => {
       expect(screen.getByTestId("graph-view")).toBeInTheDocument();
-      expect(screen.getByText(/2 concepts/i)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Refresh concepts/i })).toBeInTheDocument();
     },
     { timeout: 8000 },
   );
@@ -185,7 +185,9 @@ describe("graph PR10", { timeout: 20000 }, () => {
     await waitFor(() => {
       expect(router.state.location.searchStr).toContain("concept=concept-2");
     });
-    expect(screen.getByRole("heading", { name: /Figure · Figure 3\.2/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { level: 2, name: /Figure · Figure 3\.2/i }),
+    ).toBeInTheDocument();
   });
 
   it("selects neighbor chips", async () => {
@@ -259,7 +261,9 @@ describe("graph PR10", { timeout: 20000 }, () => {
     await waitFor(() => {
       expect(router.state.location.searchStr).toMatch(/concept=concept-1/);
     });
-    expect(screen.getByRole("heading", { name: /Facilitated diffusion/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { level: 2, name: /Facilitated diffusion/i }),
+    ).toBeInTheDocument();
   });
 
   it("moves selection with arrow keys and ignores typing and dialogs", async () => {
@@ -466,7 +470,7 @@ describe("graph PR10", { timeout: 20000 }, () => {
     await waitFor(() => {
       expect(fetchCount).toBeGreaterThan(1);
     });
-    expect(screen.getByText(/2 concepts/i)).toBeInTheDocument();
+    expect(screen.getByText(/Concepts · 2/i)).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: /Concepts/i })).toBeInTheDocument();
     resolvePending(conceptGraph);
     await waitForGraphReady();
@@ -493,7 +497,7 @@ describe("graph PR10", { timeout: 20000 }, () => {
     await waitFor(() => {
       expect(fetchCount).toBeGreaterThan(1);
     });
-    expect(screen.getByText(/2 concepts/i)).toBeInTheDocument();
+    expect(screen.getByText(/Concepts · 2/i)).toBeInTheDocument();
     expect(
       screen.queryByText(/No concept graph yet for Cell Biology/i),
     ).not.toBeInTheDocument();

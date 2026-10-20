@@ -1,5 +1,5 @@
 import { useNavigate } from "@tanstack/react-router";
-import { Image, ListCollapse, RefreshCw } from "lucide-react";
+import { Image, ImagePlus, List, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { Chip } from "~/components/app/chip";
@@ -9,8 +9,9 @@ import { SectionLabel } from "~/components/app/section-label";
 import { UnsavedBadge } from "~/components/app/unsaved-badge";
 import { StudySourceChip } from "~/components/study/study-source-chip";
 import { StudyUnverifiedBadge } from "~/components/study/study-unverified-badge";
-import { Button, IconButton } from "~/components/ui/button";
+import { Button } from "~/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "~/components/ui/sheet";
+import { Separator } from "~/components/ui/separator";
 import { Skeleton } from "~/components/ui/skeleton";
 import { courseDisplayName } from "~/domain/course";
 import { failedIdsFor, parseCitationsReport } from "~/domain/citations";
@@ -55,6 +56,9 @@ function ConceptListPane({
         className,
       )}
     >
+      <SectionLabel className="shrink-0 px-1">
+        Concepts · {graph.nodes.length}
+      </SectionLabel>
       {graph.nodes.map((node) => {
         const unverified = failedIds.has(node.id);
         const reason = unverified
@@ -78,19 +82,6 @@ function ConceptListPane({
         );
       })}
     </nav>
-  );
-}
-
-function ConceptListShowButton({ onClick }: { onClick: () => void }) {
-  return (
-    <IconButton
-      icon={ListCollapse}
-      label="Concepts"
-      size="icon-sm"
-      variant="ghost"
-      className="absolute left-3 top-3 z-floating"
-      onClick={onClick}
-    />
   );
 }
 
@@ -364,14 +355,21 @@ export function GraphView({
           onSelect={selectConceptFromPointer}
         />
       ) : null}
-      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        {showListButton ? (
-          <ConceptListShowButton onClick={() => setListSheetOpen(true)} />
-        ) : null}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <div className="notes-reading-pane min-h-0 flex-1 overflow-y-auto px-8 py-8">
           <div className="mx-auto w-full max-w-reading">
             <div className="mb-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <span>{graph.nodes.length} concepts</span>
+              {showListButton ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setListSheetOpen(true)}
+                >
+                  <List className="size-icon-sm" aria-hidden />
+                  Concepts
+                </Button>
+              ) : null}
               {staleQuery.data ? (
                 <span className="inline-flex items-center gap-1 text-faint-foreground">
                   <RefreshCw className="size-icon-sm" aria-hidden />
@@ -382,7 +380,7 @@ export function GraphView({
               <Button
                 type="button"
                 variant="ghost"
-                size="xs"
+                size="sm"
                 disabled={anyJobDisabled}
                 title={
                   conceptLauncher.viewerBlocked
@@ -391,45 +389,46 @@ export function GraphView({
                 }
                 onClick={() => launchConceptJob(true)}
               >
-                <RefreshCw className="size-icon-sm" />
+                <RefreshCw className="size-icon-sm" aria-hidden />
                 Refresh concepts
               </Button>
-              <span className="inline-flex items-center gap-1">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="xs"
-                  disabled={anyJobDisabled}
-                  title={
-                    diagramLauncher.viewerBlocked
-                      ? diagramLauncher.viewerWriteReason
-                      : undefined
-                  }
-                  onClick={() => launchDiagramJob(false)}
-                >
-                  Generate diagrams
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="xs"
-                  disabled={anyJobDisabled}
-                  title={
-                    diagramLauncher.viewerBlocked
-                      ? diagramLauncher.viewerWriteReason
-                      : undefined
-                  }
-                  onClick={() => launchDiagramJob(true)}
-                >
-                  Refresh diagrams
-                </Button>
-              </span>
+              <Separator orientation="vertical" className="h-4" />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={anyJobDisabled}
+                title={
+                  diagramLauncher.viewerBlocked
+                    ? diagramLauncher.viewerWriteReason
+                    : undefined
+                }
+                onClick={() => launchDiagramJob(false)}
+              >
+                <ImagePlus className="size-icon-sm" aria-hidden />
+                Generate diagrams
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={anyJobDisabled}
+                title={
+                  diagramLauncher.viewerBlocked
+                    ? diagramLauncher.viewerWriteReason
+                    : undefined
+                }
+                onClick={() => launchDiagramJob(true)}
+              >
+                <RefreshCw className="size-icon-sm" aria-hidden />
+                Refresh diagrams
+              </Button>
               {modelHint ? <span>{modelHint}</span> : null}
             </div>
 
-            <h1 className="mb-4 font-serif text-3xl font-medium leading-tight">
+            <h2 className="mb-4 font-serif text-3xl font-medium leading-tight">
               {conceptRowTitle(selected)}
-            </h1>
+            </h2>
             <p className="font-serif text-read text-muted-foreground">{selected.summary}</p>
 
             <SectionLabel className="mb-2 mt-8">Neighbors</SectionLabel>
