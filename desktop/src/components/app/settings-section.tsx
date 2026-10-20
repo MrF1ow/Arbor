@@ -1,6 +1,10 @@
 import { cloneElement, isValidElement, useId, type ReactElement, type ReactNode } from "react";
 
+import { Button } from "~/components/ui/button";
+import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
+import { Select } from "~/components/ui/select";
+import { Switch } from "~/components/ui/switch";
 import { cn } from "~/lib/utils";
 
 export function SettingsSection({
@@ -36,18 +40,39 @@ function associateControl(control: ReactNode, controlId: string): ReactNode {
   return cloneElement(control as ReactElement<{ id?: string }>, { id: controlId });
 }
 
+function labelAssociatesWithControl(control: ReactNode, controlIdProp?: string): boolean {
+  if (controlIdProp) {
+    return true;
+  }
+  if (!isValidElement(control)) {
+    return false;
+  }
+  const type = control.type;
+  if (type === Button) {
+    return false;
+  }
+  return type === Switch || type === Input || type === Select;
+}
+
 export function SettingRow({
   label,
   description,
   control,
   className,
+  controlId: controlIdProp,
 }: {
   label: string;
   description?: string;
   control: ReactNode;
   className?: string;
+  /** When set, labels associate with this id (for nested controls). */
+  controlId?: string;
 }) {
-  const controlId = useId();
+  const generatedId = useId();
+  const controlId = controlIdProp ?? generatedId;
+  const associate = labelAssociatesWithControl(control, controlIdProp);
+  const resolvedControl =
+    associate && !controlIdProp ? associateControl(control, controlId) : control;
 
   return (
     <div
@@ -57,12 +82,16 @@ export function SettingRow({
       )}
     >
       <div className="min-w-0">
-        <Label htmlFor={controlId} className="text-sm font-medium">
-          {label}
-        </Label>
+        {associate ? (
+          <Label htmlFor={controlId} className="text-sm font-medium">
+            {label}
+          </Label>
+        ) : (
+          <span className="text-sm font-medium">{label}</span>
+        )}
         {description ? <p className="text-xs text-muted-foreground">{description}</p> : null}
       </div>
-      <div className="shrink-0">{associateControl(control, controlId)}</div>
+      <div className="shrink-0">{resolvedControl}</div>
     </div>
   );
 }

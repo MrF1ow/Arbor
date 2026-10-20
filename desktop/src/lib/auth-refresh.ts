@@ -28,15 +28,8 @@ async function runCheckAuth(provider: string, force: boolean): Promise<AuthStatu
   }
 }
 
-export function fetchAuthStatus(provider: string, force = false): Promise<AuthStatus> {
+function startAuthRefresh(provider: string, force: boolean): Promise<AuthStatus> {
   const key = authRequestKey(provider, force);
-  if (refreshInFlight && refreshActiveKey === key) {
-    return refreshInFlight;
-  }
-  if (refreshInFlight) {
-    refreshQueued = { provider, force };
-    return refreshInFlight;
-  }
   refreshActiveKey = key;
   refreshInFlight = runCheckAuth(provider, force).finally(() => {
     refreshInFlight = null;
@@ -48,6 +41,21 @@ export function fetchAuthStatus(provider: string, force = false): Promise<AuthSt
     }
   });
   return refreshInFlight;
+}
+
+export function fetchAuthStatus(provider: string, force = false): Promise<AuthStatus> {
+  const key = authRequestKey(provider, force);
+  if (refreshInFlight && refreshActiveKey === key) {
+    return refreshInFlight;
+  }
+  if (refreshInFlight && force) {
+    return refreshInFlight.then(() => fetchAuthStatus(provider, true));
+  }
+  if (refreshInFlight) {
+    refreshQueued = { provider, force };
+    return refreshInFlight;
+  }
+  return startAuthRefresh(provider, force);
 }
 
 export function resetAuthRefreshForTests() {

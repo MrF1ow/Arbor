@@ -19,6 +19,10 @@ import type { ChatLine } from "~/domain/chat";
 import type { JobEventRow, JobSummary, SearchHit } from "~/domain/types";
 import { emitToChannel, parseMockChannelId } from "~/test/emit-to-channel";
 
+let mockSettingsState = structuredClone(fixtureSettings);
+let mockKnowledgeSettingsState = structuredClone(fixtureKnowledgeSettings);
+const mockProviderSecretReady = new Set<string>(["openai_api", "anthropic_api"]);
+
 const ipcLog: string[] = [];
 const chatHistoryByKey = new Map<string, ChatLine[]>();
 const ipcCalls: { cmd: string; args?: InvokeArgs }[] = [];
@@ -116,6 +120,7 @@ export function resetMockHandlerTimers() {
   updateJobTimers.length = 0;
   mockUpdateJobRunning = false;
   mockEventsEnabled = true;
+  resetMockSettingsForTests();
 }
 
 export function getMockIpcLog(): string[] {
@@ -129,6 +134,14 @@ export function getMockIpcCalls(): readonly { cmd: string; args?: InvokeArgs }[]
 export function clearMockIpcLog() {
   ipcLog.length = 0;
   ipcCalls.length = 0;
+}
+
+export function resetMockSettingsForTests() {
+  mockSettingsState = structuredClone(fixtureSettings);
+  mockKnowledgeSettingsState = structuredClone(fixtureKnowledgeSettings);
+  mockProviderSecretReady.clear();
+  mockProviderSecretReady.add("openai_api");
+  mockProviderSecretReady.add("anthropic_api");
 }
 
 function mockChatHistoryKey(root: string, course: string): string {
@@ -341,9 +354,12 @@ export function createMockHandler(
     }
     switch (cmd) {
       case "get_settings":
-        return fixtureSettings;
-      case "save_settings":
+        return structuredClone(mockSettingsState);
+      case "save_settings": {
+        const next = (payload.settings ?? payload) as typeof fixtureSettings;
+        mockSettingsState = structuredClone(next);
         return null;
+      }
       case "list_courses": {
         const root = String(payload.root ?? FIXTURE_ROOT_FALL);
         return fixtureCourses[root] ?? [];
@@ -390,9 +406,12 @@ export function createMockHandler(
       case "library_show":
         return { present: false };
       case "get_knowledge_settings":
-        return fixtureKnowledgeSettings;
-      case "save_knowledge_settings":
+        return structuredClone(mockKnowledgeSettingsState);
+      case "save_knowledge_settings": {
+        const next = (payload.settings ?? payload) as typeof fixtureKnowledgeSettings;
+        mockKnowledgeSettingsState = structuredClone(next);
         return null;
+      }
       case "sync_show":
         return { remote: null, shared: false };
       case "list_jobs":
@@ -485,8 +504,22 @@ export function createMockHandler(
         return false;
       case "skill_index":
         return { packages: [] };
-      case "provider_secret_status":
-        return "ready";
+      case "provider_secret_status": {
+        const providerId = String(payload.providerId ?? payload.provider_id ?? "");
+        return mockProviderSecretReady.has(providerId) ? "ready" : "key missing";
+      }
+      case "set_provider_secret": {
+        const providerId = String(payload.providerId ?? payload.provider_id ?? "");
+        mockProviderSecretReady.add(providerId);
+        return null;
+      }
+      case "clear_provider_secret": {
+        const providerId = String(payload.providerId ?? payload.provider_id ?? "");
+        mockProviderSecretReady.delete(providerId);
+        return null;
+      }
+      case "reindex_knowledge":
+        return { documents: 12 };
       case "search_knowledge":
       case "search_semantic":
         return mockSearchHits(cmd, payload);

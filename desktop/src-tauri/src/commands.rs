@@ -637,7 +637,9 @@ pub async fn test_worker_connection(app: tauri::AppHandle, worker: SshWorker) ->
 pub async fn set_provider_secret(provider_id: String, secret: String) -> Result<(), String> {
     spawn_blocking_cmd_unit(move || {
         let store = OsSecretStore;
-        secrets::set_provider_secret_logic(&store, &provider_id, &secret)
+        secrets::set_provider_secret_logic(&store, &provider_id, &secret)?;
+        auth_cache::invalidate_auth(&provider_id);
+        Ok(())
     })
     .await
 }
@@ -646,7 +648,9 @@ pub async fn set_provider_secret(provider_id: String, secret: String) -> Result<
 pub async fn clear_provider_secret(provider_id: String) -> Result<(), String> {
     spawn_blocking_cmd_unit(move || {
         let store = OsSecretStore;
-        secrets::clear_provider_secret_logic(&store, &provider_id)
+        secrets::clear_provider_secret_logic(&store, &provider_id)?;
+        auth_cache::invalidate_auth(&provider_id);
+        Ok(())
     })
     .await
 }

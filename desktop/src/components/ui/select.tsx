@@ -3,7 +3,18 @@ import { Select as SelectPrimitive } from "@base-ui/react/select"
 import { cn } from "~/lib/utils"
 import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react"
 
-const Select = SelectPrimitive.Root
+export type SelectItems =
+  | Record<string, React.ReactNode>
+  | ReadonlyArray<{ value: string; label: React.ReactNode }>
+
+type SelectProps = SelectPrimitive.Root.Props<string> & {
+  /** Maps values to labels so `SelectValue` shows the label, not the raw value. */
+  items?: SelectItems
+}
+
+function Select({ items, ...props }: SelectProps) {
+  return <SelectPrimitive.Root<string> items={items} {...props} />
+}
 
 function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
   return (

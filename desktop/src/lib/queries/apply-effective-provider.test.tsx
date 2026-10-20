@@ -5,6 +5,7 @@ import { clearTauriMocks } from "~/test/mock-ipc";
 
 import { createAppQueryClient } from "~/lib/query-client";
 import { qk } from "~/lib/queries/keys";
+import { fixtureSettings } from "~/test/fixtures/data";
 import {
   resetEffectiveProviderApplyForTests,
   useApplyEffectiveProvider,
@@ -66,6 +67,33 @@ describe("useApplyEffectiveProvider", () => {
       </QueryClientProvider>,
     );
     await waitFor(() => expect(invalidateSpy.mock.calls.length).toBe(0));
+  });
+
+  it("does not invalidate models when only the effective model id changes", async () => {
+    installMockIpc();
+    const client = createAppQueryClient();
+    const invalidateSpy = vi.spyOn(client, "invalidateQueries");
+    const { rerender } = render(
+      <QueryClientProvider client={client}>
+        <Probe root="/mock/a" />
+      </QueryClientProvider>,
+    );
+    await waitFor(() =>
+      expect(
+        invalidateSpy.mock.calls.some((call) => call[0]?.queryKey?.[1] === "grok"),
+      ).toBe(true),
+    );
+    invalidateSpy.mockClear();
+    await new Promise((r) => setTimeout(r, 50));
+
+    client.setQueryData(qk.settings(), { ...fixtureSettings, model_id: "grok-mini" });
+    rerender(
+      <QueryClientProvider client={client}>
+        <Probe root="/mock/a" />
+      </QueryClientProvider>,
+    );
+    await new Promise((r) => setTimeout(r, 30));
+    expect(invalidateSpy.mock.calls.length).toBe(0);
   });
 
   it("invalidates models for the effective provider", async () => {

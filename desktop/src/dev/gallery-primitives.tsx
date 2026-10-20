@@ -182,7 +182,13 @@ export function GalleryPrimitives() {
               Notify when digest completes
             </Label>
           </div>
-          <Select defaultValue="ml">
+          <Select
+            defaultValue="ml"
+            items={[
+              { value: "ml", label: "Intro to ML" },
+              { value: "stats", label: "Statistics" },
+            ]}
+          >
             <SelectTrigger className="max-w-xs">
               <SelectValue placeholder="Course" />
             </SelectTrigger>
@@ -247,7 +253,14 @@ export function GalleryPrimitives() {
               <DialogTitle>Update knowledge</DialogTitle>
               <p className="text-sm text-muted-foreground">Rebuild embeddings for this course.</p>
               <div className="flex items-center gap-2">
-                <Select defaultValue="full">
+                <Select
+                  defaultValue="full"
+                  items={[
+                    { value: "full", label: "Full rebuild" },
+                    { value: "incremental", label: "Incremental" },
+                    { value: "embeddings", label: "Embeddings only" },
+                  ]}
+                >
                   <SelectTrigger className="w-40">
                     <SelectValue />
                   </SelectTrigger>
