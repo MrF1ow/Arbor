@@ -2,7 +2,7 @@ import { emit } from "@tauri-apps/api/event";
 import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { clearMocks } from "@tauri-apps/api/mocks";
+import { clearTauriMocks } from "~/test/mock-ipc";
 
 import { FIXTURE_ROOT_FALL, fixtureSettings } from "~/test/fixtures/data";
 import {
@@ -45,7 +45,7 @@ describe("jobs page", () => {
   });
 
   afterEach(() => {
-    clearMocks();
+    clearTauriMocks();
     clearMockIpcLog();
     resetMockHandlerTimers();
     vi.useRealTimers();
@@ -165,7 +165,7 @@ describe("jobs page", () => {
     });
     cleanup();
     await cleanupTestQueryClients();
-    clearMocks();
+    clearTauriMocks();
     await renderAppAtRoute("/jobs", {
       list_jobs: () => [runningUpdateJob],
     });
@@ -266,7 +266,7 @@ describe("action bar status pill", () => {
   });
 
   afterEach(() => {
-    clearMocks();
+    clearTauriMocks();
     vi.useRealTimers();
     vi.restoreAllMocks();
   });

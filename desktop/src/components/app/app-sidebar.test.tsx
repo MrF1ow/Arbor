@@ -1,6 +1,6 @@
 import { cleanup, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { clearMocks } from "@tauri-apps/api/mocks";
+import { clearTauriMocks } from "~/test/mock-ipc";
 
 import { renderAppAtRoute } from "~/test/render";
 import { useUiStore } from "~/stores/ui-store";
@@ -23,7 +23,7 @@ describe("app sidebar root groups", () => {
 
   afterEach(() => {
     cleanup();
-    clearMocks();
+    clearTauriMocks();
     vi.restoreAllMocks();
   });
 

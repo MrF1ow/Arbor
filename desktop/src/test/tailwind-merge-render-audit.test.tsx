@@ -3,7 +3,7 @@ import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { twMerge as twMergePlain } from "tailwind-merge";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { clearMocks } from "@tauri-apps/api/mocks";
+import { clearTauriMocks } from "~/test/mock-ipc";
 
 import { UpdateReviewDialog } from "~/components/app/update-review-dialog";
 import { twMerge as twMergeExtended } from "~/lib/tailwind-merge-config";
@@ -101,7 +101,7 @@ describe("tailwind-merge render audit", { timeout: 120_000 }, () => {
 
   afterEach(() => {
     cleanup();
-    clearMocks();
+    clearTauriMocks();
     vi.restoreAllMocks();
   });
 

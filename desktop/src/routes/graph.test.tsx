@@ -1,7 +1,7 @@
 import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { clearMocks } from "@tauri-apps/api/mocks";
+import { clearTauriMocks } from "~/test/mock-ipc";
 
 import { resetAuthRefreshForTests } from "~/lib/auth-refresh";
 import { resetStudyWriteQueueForTests } from "~/lib/study-writes";
@@ -128,7 +128,7 @@ describe("graph PR10", { timeout: 20000 }, () => {
   afterEach(() => {
     cleanup();
     resetMockHandlerTimers();
-    clearMocks();
+    clearTauriMocks();
     vi.restoreAllMocks();
   });
 
@@ -248,7 +248,7 @@ describe("graph PR10", { timeout: 20000 }, () => {
     });
 
     cleanup();
-    clearMocks();
+    clearTauriMocks();
     const { router } = await renderAppAtRoute("/course/cell-biology/graph?concept=missing-id", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "concepts.json") {
@@ -617,7 +617,7 @@ describe("graph PR10", { timeout: 20000 }, () => {
     expect(screen.getByRole("button", { name: /Refresh diagrams/i })).toBeDisabled();
 
     cleanup();
-    clearMocks();
+    clearTauriMocks();
     useJobStore.setState({ status: "idle", activeJobId: null });
     await renderAppAtRoute("/course/cell-biology/graph", {
       get_settings: () => ({ ...fixtureSettings, model_id: null }),
@@ -634,7 +634,7 @@ describe("graph PR10", { timeout: 20000 }, () => {
     expect(screen.getByText("Select a model in Settings.")).toBeInTheDocument();
 
     cleanup();
-    clearMocks();
+    clearTauriMocks();
     await renderAppAtRoute("/course/cell-biology/graph", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "concepts.json") {

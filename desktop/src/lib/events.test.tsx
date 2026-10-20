@@ -3,7 +3,7 @@ import { emit } from "@tauri-apps/api/event";
 import { waitFor } from "@testing-library/react";
 import { StrictMode, useEffect } from "react";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { clearMocks } from "@tauri-apps/api/mocks";
+import { clearTauriMocks } from "~/test/mock-ipc";
 
 import { onJobFinished } from "~/lib/job-finished";
 import {
@@ -54,7 +54,7 @@ describe("events", () => {
   });
 
   afterEach(() => {
-    clearMocks();
+    clearTauriMocks();
   });
 
   it("formats progress payloads for the job store", () => {

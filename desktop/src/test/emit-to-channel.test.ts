@@ -1,12 +1,13 @@
 import { Channel } from "@tauri-apps/api/core";
-import { clearMocks, mockIPC } from "@tauri-apps/api/mocks";
+import { mockIPC } from "@tauri-apps/api/mocks";
+import { clearTauriMocks } from "~/test/mock-ipc";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { emitToChannel, parseMockChannelId } from "~/test/emit-to-channel";
 
 describe("emitToChannel", () => {
   afterEach(() => {
-    clearMocks();
+    clearTauriMocks();
   });
 
   it("dispatches messages to a Channel via mock runCallback", () => {

@@ -1,7 +1,7 @@
 import { cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { clearMocks } from "@tauri-apps/api/mocks";
+import { clearTauriMocks } from "~/test/mock-ipc";
 
 import { resetAuthRefreshForTests } from "~/lib/auth-refresh";
 import { resetStudyWriteQueueForTests } from "~/lib/study-writes";
@@ -115,7 +115,7 @@ describe("quiz PR9", { timeout: 20000 }, () => {
   afterEach(() => {
     cleanup();
     resetMockHandlerTimers();
-    clearMocks();
+    clearTauriMocks();
     vi.restoreAllMocks();
   });
 

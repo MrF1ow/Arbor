@@ -1,6 +1,6 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { clearMocks } from "@tauri-apps/api/mocks";
+import { clearTauriMocks } from "~/test/mock-ipc";
 
 import { PENDING_STUDY_WRITES_KEY } from "~/domain/study-writes";
 import {
@@ -27,7 +27,7 @@ function StudyWriteProbe() {
 
 describe("study writes", () => {
   afterEach(() => {
-    clearMocks();
+    clearTauriMocks();
     resetStudyWriteQueueForTests();
     window.localStorage.removeItem(PENDING_STUDY_WRITES_KEY);
   });

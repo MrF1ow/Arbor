@@ -1,7 +1,7 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { clearMocks } from "@tauri-apps/api/mocks";
+import { clearTauriMocks } from "~/test/mock-ipc";
 
 import { createAppQueryClient } from "~/lib/query-client";
 import { useAuth, useProviderSecretStatus } from "~/lib/queries/auth";
@@ -49,7 +49,7 @@ function AllReadHooks() {
 
 describe("provider queries", () => {
   afterEach(() => {
-    clearMocks();
+    clearTauriMocks();
   });
 
   it("never invokes list_providers", async () => {

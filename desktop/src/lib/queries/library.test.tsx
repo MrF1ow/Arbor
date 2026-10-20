@@ -1,7 +1,7 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { clearMocks } from "@tauri-apps/api/mocks";
+import { clearTauriMocks } from "~/test/mock-ipc";
 
 import { createAppQueryClient } from "~/lib/query-client";
 import { useImportSourcesMutation } from "~/lib/queries/library";
@@ -13,7 +13,7 @@ import { installMockIpc } from "~/test/mock-ipc";
 
 describe("library mutations", () => {
   afterEach(() => {
-    clearMocks();
+    clearTauriMocks();
     useUpdatePlanStore.setState({ pending: null, open: false });
     useJobStore.setState({
       activeJobId: null,

@@ -1,7 +1,6 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
 import { render, type RenderOptions } from "@testing-library/react";
-import { clearMocks } from "@tauri-apps/api/mocks";
 
 import { AppearanceSync } from "~/lib/appearance-sync";
 import { createAppQueryClient } from "~/lib/query-client";
@@ -14,7 +13,7 @@ import { TooltipProvider } from "~/components/ui/tooltip";
 import { qk } from "~/lib/queries/keys";
 import type { Settings } from "~/domain/types";
 import { fixtureSettings } from "~/test/fixtures/data";
-import { installMockIpc } from "~/test/mock-ipc";
+import { clearTauriMocks, installMockIpc } from "~/test/mock-ipc";
 import type { createMockHandler } from "~/test/mock-handlers";
 import { trackTestQueryClient } from "~/test/query-clients";
 
@@ -29,7 +28,7 @@ export function renderWithProviders(
     seedSettings?: Settings;
   } & Omit<RenderOptions, "wrapper">,
 ) {
-  clearMocks();
+  clearTauriMocks();
   installMockIpc(opts?.fixtures);
   const queryClient = createAppQueryClient();
   trackTestQueryClient(queryClient);
@@ -68,7 +67,7 @@ export function renderWithProviders(
 }
 
 export async function renderAppAtRoute(route: string, fixtures?: FixtureOverrides) {
-  clearMocks();
+  clearTauriMocks();
   installMockIpc(fixtures);
   const queryClient = createAppQueryClient();
   trackTestQueryClient(queryClient);

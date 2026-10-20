@@ -1,6 +1,6 @@
 import { waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { clearMocks } from "@tauri-apps/api/mocks";
+import { clearTauriMocks } from "~/test/mock-ipc";
 
 import { FIXTURE_ROOT_FALL } from "~/test/fixtures/data";
 import { renderAppAtRoute } from "~/test/render";
@@ -14,7 +14,7 @@ describe("index route", () => {
   });
 
   afterEach(() => {
-    clearMocks();
+    clearTauriMocks();
   });
 
   it("redirects to the first course overview when lastCourse is unset", async () => {

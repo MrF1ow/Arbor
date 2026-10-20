@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-libra
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { InvokeArgs } from "@tauri-apps/api/core";
-import { clearMocks } from "@tauri-apps/api/mocks";
+import { clearTauriMocks } from "~/test/mock-ipc";
 
 import { resetAuthRefreshForTests } from "~/lib/auth-refresh";
 import { resetStudyWriteQueueForTests } from "~/lib/study-writes";
@@ -123,7 +123,7 @@ describe("chat PR11", { timeout: 25000 }, () => {
   afterEach(() => {
     cleanup();
     resetMockHandlerTimers();
-    clearMocks();
+    clearTauriMocks();
     vi.restoreAllMocks();
   });
 

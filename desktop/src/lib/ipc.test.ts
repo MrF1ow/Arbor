@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { clearMocks, mockIPC } from "@tauri-apps/api/mocks";
+import { mockIPC } from "@tauri-apps/api/mocks";
+import { clearTauriMocks } from "~/test/mock-ipc";
 
 import { TAURI_UNAVAILABLE } from "~/domain/tauri";
 import type { Command } from "~/lib/ipc";
@@ -7,7 +8,7 @@ import { invoke } from "~/lib/ipc";
 
 describe("ipc", () => {
   afterEach(() => {
-    clearMocks();
+    clearTauriMocks();
   });
 
   it("preserves error messages verbatim", async () => {
@@ -18,7 +19,7 @@ describe("ipc", () => {
   });
 
   it("rejects outside Tauri", async () => {
-    clearMocks();
+    clearTauriMocks();
     await expect(invoke("get_settings")).rejects.toThrow(TAURI_UNAVAILABLE);
   });
 

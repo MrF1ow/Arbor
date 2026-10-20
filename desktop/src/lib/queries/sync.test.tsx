@@ -1,7 +1,7 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { clearMocks } from "@tauri-apps/api/mocks";
+import { clearTauriMocks } from "~/test/mock-ipc";
 
 import { createAppQueryClient } from "~/lib/query-client";
 import { qk } from "~/lib/queries/keys";
@@ -12,7 +12,7 @@ import { installMockIpc } from "~/test/mock-ipc";
 
 describe("sync mutations", () => {
   afterEach(() => {
-    clearMocks();
+    clearTauriMocks();
     useSyncUiStore.setState({ syncConflictOpen: false });
   });
 

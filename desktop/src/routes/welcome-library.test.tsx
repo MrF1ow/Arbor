@@ -1,7 +1,7 @@
 import { cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { clearMocks } from "@tauri-apps/api/mocks";
+import { clearTauriMocks } from "~/test/mock-ipc";
 
 import { UpdateReviewDialog } from "~/components/app/update-review-dialog";
 import { DESKTOP_ONLY_WELCOME_COPY } from "~/domain/tauri";
@@ -52,7 +52,7 @@ describe("welcome and library flows (PR 6)", () => {
 
   afterEach(() => {
     cleanup();
-    clearMocks();
+    clearTauriMocks();
     vi.restoreAllMocks();
   });
 
@@ -229,7 +229,7 @@ describe("update review dialog", () => {
 
   afterEach(() => {
     cleanup();
-    clearMocks();
+    clearTauriMocks();
     vi.restoreAllMocks();
     useUpdatePlanStore.setState({ pending: null, open: false, trigger: "manual" });
   });
@@ -402,7 +402,7 @@ describe("import feedback", () => {
 
   afterEach(() => {
     cleanup();
-    clearMocks();
+    clearTauriMocks();
     vi.restoreAllMocks();
   });
 

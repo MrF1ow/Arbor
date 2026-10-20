@@ -2,6 +2,7 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
 import { afterEach, vi } from "vitest";
 
+import { clearTauriMocks } from "~/test/mock-ipc";
 import { cleanupTestQueryClients } from "~/test/query-clients";
 
 export const clipboardWriteText = vi.fn().mockResolvedValue(undefined);
@@ -47,4 +48,5 @@ afterEach(async () => {
   await cleanupTestQueryClients();
   cleanup();
   vi.clearAllTimers();
+  clearTauriMocks();
 });
