@@ -52,6 +52,20 @@ describe("search palette", { timeout: 15000 }, () => {
     vi.restoreAllMocks();
   });
 
+  it("anchors the palette below the header with a scrollable results list", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/notes");
+    await waitForOverview();
+    await openSearchPalette(user);
+    const dialog = searchDialog();
+    expect(dialog.className).toContain("top-palette-top");
+    expect(dialog.className).toContain("translate-y-0");
+    expect(dialog.className).not.toContain("top-1/2");
+    expect(dialog.querySelector("[data-slot=command-list]")?.className).toContain(
+      "max-h-palette-list",
+    );
+  });
+
   it("opens with Mod+K and closes with Escape", async () => {
     const user = userEvent.setup();
     await renderAppAtRoute("/course/cell-biology/notes");

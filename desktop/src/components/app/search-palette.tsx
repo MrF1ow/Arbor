@@ -181,7 +181,7 @@ function SearchPaletteBody({
           />
         </Label>
       </div>
-      <CommandList>
+      <CommandList className="max-h-palette-list">
         {!activeRoot ? (
           <p className="py-6 text-center text-xs text-muted-foreground">
             Choose a Knowledge folder first.

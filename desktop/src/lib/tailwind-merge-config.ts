@@ -12,6 +12,8 @@ const customSpacing = [
   "progress",
   "icon-sm",
   "icon",
+  "palette-top",
+  "palette-list",
 ] as const;
 
 const customContainers = ["reading", "flashcards"] as const;
@@ -33,6 +35,8 @@ export const twMerge = extendTailwindMerge({
       w: [{ w: [...customSpacing, ...customContainers] }],
       h: [{ h: [...customSpacing] }],
       "min-h": [{ "min-h": ["row"] }],
+      "max-h": [{ "max-h": ["palette-list"] }],
+      top: [{ top: [...customSpacing] }],
       size: [{ size: ["icon-sm", "icon", "control", "control-lg"] }],
       z: [{ z: [...customZIndex] }],
       duration: [{ duration: ["fast", "panel"] }],
