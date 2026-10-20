@@ -47,17 +47,17 @@ function CommandDialog({
 }) {
   return (
     <Dialog {...props}>
-      <DialogHeader className="sr-only">
-        <DialogTitle>{title}</DialogTitle>
-        <DialogDescription>{description}</DialogDescription>
-      </DialogHeader>
       <DialogContent
         className={cn(
-          "top-1/3 translate-y-0 overflow-hidden rounded-md! p-0",
+          "top-palette-top translate-y-0 overflow-hidden rounded-md! p-0",
           className
         )}
         showCloseButton={showCloseButton}
       >
+        <DialogHeader className="sr-only">
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
         {children}
       </DialogContent>
     </Dialog>
@@ -66,12 +66,14 @@ function CommandDialog({
 
 function CommandInput({
   className,
+  ref,
   ...props
 }: React.ComponentProps<typeof CommandPrimitive.Input>) {
   return (
     <div data-slot="command-input-wrapper" className="p-1 pb-0">
       <InputGroup className="h-control bg-muted">
         <CommandPrimitive.Input
+          ref={ref}
           data-slot="command-input"
           className={cn(
             "w-full text-xs/relaxed outline-hidden disabled:cursor-not-allowed disabled:opacity-50",

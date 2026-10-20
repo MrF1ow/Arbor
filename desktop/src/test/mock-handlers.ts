@@ -16,6 +16,7 @@ import {
   fixtureStudyPlanMarkdown,
 } from "~/test/fixtures/data";
 import type { ChatLine } from "~/domain/chat";
+import type { SearchHit } from "~/domain/types";
 import { emitToChannel, parseMockChannelId } from "~/test/emit-to-channel";
 
 const ipcLog: string[] = [];
@@ -23,6 +24,88 @@ const chatHistoryByKey = new Map<string, ChatLine[]>();
 const ipcCalls: { cmd: string; args?: InvokeArgs }[] = [];
 const updateJobTimers: ReturnType<typeof setTimeout>[] = [];
 let mockEventsEnabled = true;
+
+const mockKnowledgeSearchHits: SearchHit[] = [
+  {
+    course: "cell-biology",
+    path: "cell-biology/digests/2026-09-12-membranes.md",
+    kind: "digest",
+    title: "Cell membranes",
+    snippet: "Phospholipid bilayer and membrane proteins.",
+    page_range: "3-5",
+    source_path: null,
+  },
+  {
+    course: "cell-biology",
+    path: "cell-biology/course.md",
+    kind: "course_md",
+    title: "Cell Biology",
+    snippet: "Course overview and syllabus topics.",
+    page_range: null,
+    source_path: null,
+  },
+  {
+    course: "organic-chemistry-ii",
+    path: "organic-chemistry-ii/digests/2026-10-01-alkanes.md",
+    kind: "digest",
+    title: "Alkanes",
+    snippet: "Conformations and naming of alkanes.",
+    page_range: null,
+    source_path: null,
+  },
+  {
+    course: "cell-biology",
+    path: "cell-biology/study/plan.md",
+    kind: "plan",
+    title: "Study plan",
+    snippet: "Weekly review schedule before the exam.",
+    page_range: null,
+    source_path: null,
+  },
+  {
+    course: "cell-biology",
+    path: "cell-biology/misc/notes.txt",
+    kind: "other",
+    title: "Misc notes",
+    snippet: "Unlisted path opens overview with toast.",
+    page_range: null,
+    source_path: null,
+  },
+];
+
+const mockSemanticSearchHits: SearchHit[] = [
+  mockKnowledgeSearchHits[2]!,
+  mockKnowledgeSearchHits[0]!,
+  {
+    course: "cell-biology",
+    path: "cell-biology/digests/2026-09-12-membranes.md",
+    kind: "digest",
+    title: "Membrane transport",
+    snippet: "Active transport and pumps in the bilayer.",
+    page_range: "6-7",
+    source_path: null,
+  },
+  mockKnowledgeSearchHits[3]!,
+  mockKnowledgeSearchHits[1]!,
+];
+
+function mockSearchHits(cmd: string, payload: Record<string, unknown>): SearchHit[] {
+  const query = String(payload.query ?? "").trim();
+  if (!query || query.toLowerCase() === "zzz") {
+    return [];
+  }
+  const needle = query.toLowerCase();
+  const pool = cmd === "search_semantic" ? mockSemanticSearchHits : mockKnowledgeSearchHits;
+  const matched = pool.filter(
+    (hit) =>
+      hit.title.toLowerCase().includes(needle) ||
+      hit.snippet.toLowerCase().includes(needle) ||
+      hit.path.toLowerCase().includes(needle) ||
+      hit.course.toLowerCase().includes(needle),
+  );
+  const limit = Number(payload.limit ?? 20);
+  return matched.slice(0, limit);
+}
 
 export function resetMockHandlerTimers() {
   mockEventsEnabled = false;
@@ -294,15 +377,7 @@ export function createMockHandler(
         return "ready";
       case "search_knowledge":
       case "search_semantic":
-        return [
-          {
-            course: "cell-biology",
-            path: "2026-09-12-membranes.md",
-            heading: "Membrane structure",
-            snippet: "Phospholipid bilayer",
-            score: 0.9,
-          },
-        ];
+        return mockSearchHits(cmd, payload);
       case "join_library":
         return { ok: true };
       case "start_study_job":

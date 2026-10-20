@@ -307,12 +307,15 @@ function RootGroup({
         <Button
           variant="ghost"
           size="sm"
-          className="h-auto min-w-0 flex-1 justify-start gap-1.5 px-1 py-1 text-left text-xs font-medium text-muted-foreground"
+          className="h-control min-w-0 flex-1 justify-start gap-1.5 px-1 py-0 text-left text-xs font-medium text-muted-foreground"
           onClick={() => onRootSelect(entry.path)}
         >
           <span className="truncate">{label}</span>
           {entry.kind === "shared" ? (
-            <Badge variant="outline" className="shrink-0 px-1 py-0 text-2xs font-normal text-faint-foreground">
+            <Badge
+              variant="outline"
+              className="h-6 shrink-0 px-1 py-0 text-2xs font-normal text-faint-foreground"
+            >
               shared
             </Badge>
           ) : null}
