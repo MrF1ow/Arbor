@@ -53,16 +53,20 @@ function ProviderAuthStatus({
   providerId,
   modelId,
 }: {
-  providerId: string;
+  providerId: string | null;
   modelId: string | null;
 }) {
   const auth = useAuth(providerId);
-  const providerLabel = PROVIDER_FALLBACK.find((p) => p.id === providerId)?.label ?? providerId;
+  const providerLabel =
+    PROVIDER_FALLBACK.find((p) => p.id === providerId)?.label ?? providerId ?? "";
   const modelLabel = modelId ?? "no model";
 
   let text: string;
   let dotClass = "bg-primary";
-  if (auth.isLoading) {
+  if (!providerId) {
+    text = "Checking provider…";
+    dotClass = "bg-muted-foreground";
+  } else if (auth.isLoading) {
     text = `${providerLabel} · checking…`;
     dotClass = "bg-muted-foreground";
   } else if (auth.data?.authenticated) {
@@ -163,7 +167,7 @@ export function SettingsProviderPanel() {
   };
 
   const onProviderChange = async (nextProviderId: string) => {
-    if (!librarySettled || nextProviderId === providerId) {
+    if (!librarySettled || !providerId || nextProviderId === providerId) {
       return;
     }
     const prevModel = effective.modelId;
@@ -198,7 +202,7 @@ export function SettingsProviderPanel() {
   };
 
   const onModelChange = async (nextModelId: string) => {
-    if (!librarySettled || programmatic.current) {
+    if (!librarySettled || programmatic.current || !providerId) {
       return;
     }
     try {
@@ -210,6 +214,9 @@ export function SettingsProviderPanel() {
   };
 
   const onBaseUrlCommit = async (value: string) => {
+    if (!providerId) {
+      return;
+    }
     const trimmed = value.trim();
     if (trimmed === storedBaseUrl) {
       return;
@@ -231,6 +238,9 @@ export function SettingsProviderPanel() {
   };
 
   const onSaveKey = async () => {
+    if (!providerId) {
+      return;
+    }
     try {
       await setSecret.mutateAsync({ providerId, secret: apiKey });
       setApiKey("");
@@ -243,6 +253,9 @@ export function SettingsProviderPanel() {
   };
 
   const onClearKey = async () => {
+    if (!providerId) {
+      return;
+    }
     try {
       await clearSecret.mutateAsync(providerId);
       setApiKey("");
@@ -259,7 +272,7 @@ export function SettingsProviderPanel() {
 
   useEffect(() => {
     const loaded = modelsQuery.data ?? [];
-    if (programmatic.current || modelsQuery.isLoading || loaded.length === 0) {
+    if (!providerId || programmatic.current || modelsQuery.isLoading || loaded.length === 0) {
       return;
     }
     const resolved = resolveModelId(loaded, effective.modelId);
@@ -279,7 +292,7 @@ export function SettingsProviderPanel() {
           label="Provider"
           control={
             <Select
-              value={providerId}
+              value={providerId ?? null}
               items={providerOptions.map((p) => ({ value: p.id, label: p.label }))}
               onValueChange={(v) => {
                 if (v) {
@@ -397,7 +410,11 @@ export function SettingsProviderPanel() {
                 size="icon-sm"
                 aria-label="Refresh models"
                 disabled={modelsQuery.isFetching}
-                onClick={() => refreshModels(providerId, activeRoot)}
+                onClick={() => {
+                  if (providerId) {
+                    refreshModels(providerId, activeRoot);
+                  }
+                }}
               >
                 <RefreshCw className={cn("size-icon-sm", modelsQuery.isFetching && "animate-spin")} />
               </Button>

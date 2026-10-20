@@ -5,20 +5,25 @@ import { fetchAuthStatus } from "~/lib/auth-refresh";
 import { invoke } from "~/lib/ipc";
 import { qk } from "~/lib/queries/keys";
 
-export function useAuth(provider: string) {
+export function useAuth(provider: string | null) {
   return useQuery({
-    queryKey: qk.auth(provider),
-    queryFn: () => fetchAuthStatus(provider, false),
+    queryKey: qk.auth(provider ?? ""),
+    queryFn: () => fetchAuthStatus(provider ?? "", false),
     staleTime: 60_000,
     refetchOnWindowFocus: true,
     enabled: Boolean(provider) && canUseDesktopIpc(),
   });
 }
 
-export function useProviderSecretStatus(provider: string) {
+export function useProviderSecretStatus(provider: string | null) {
   return useQuery({
-    queryKey: qk.providerSecret(provider),
+    queryKey: qk.providerSecret(provider ?? ""),
     enabled: provider === "openai_api" || provider === "anthropic_api",
-    queryFn: () => invoke<string>("provider_secret_status", { providerId: provider }),
+    queryFn: () => {
+      if (!provider) {
+        return "";
+      }
+      return invoke<string>("provider_secret_status", { providerId: provider });
+    },
   });
 }

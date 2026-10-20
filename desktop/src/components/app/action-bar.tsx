@@ -115,15 +115,15 @@ export function ActionBar({ course }: { course: string }) {
   };
 
   const onUpdate = async () => {
-    if (!activeRoot || viewerBlocked) {
+    if (!activeRoot || viewerBlocked || !effective.providerId) {
       return;
     }
+    const providerId = effective.providerId;
     try {
-      const auth = await fetchAuthStatus(effective.providerId, true);
+      const auth = await fetchAuthStatus(providerId, true);
       if (!auth.authenticated) {
         const label =
-          PROVIDER_FALLBACK.find((p) => p.id === effective.providerId)?.label ??
-          effective.providerId;
+          PROVIDER_FALLBACK.find((p) => p.id === providerId)?.label ?? providerId;
         appendLog(signedOutJobMessage(label, auth.reason ?? ""));
         return;
       }
@@ -139,7 +139,7 @@ export function ActionBar({ course }: { course: string }) {
   };
 
   const onCitations = async () => {
-    if (!activeRoot || !course || !effective.modelId || viewerBlocked) {
+    if (!activeRoot || !course || !effective.modelId || viewerBlocked || !effective.providerId) {
       return;
     }
     try {
