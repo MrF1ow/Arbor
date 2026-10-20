@@ -237,7 +237,30 @@ describe("notes PR7", { timeout: 15000 }, () => {
   it("make card saves append_card and navigates to flashcards", async () => {
     const user = userEvent.setup();
     clearMockIpcLog();
-    const { router } = await renderAppAtRoute("/course/cell-biology/notes/2026-09-12-membranes");
+    const appendedCard = {
+      id: "fc-appended-1",
+      front: "Appended front",
+      back: "Appended back",
+      tags: [] as string[],
+      source: {
+        digest: "digests/2026-09-12-membranes.md",
+        heading: "Membrane structure",
+        page: null as string | null,
+      },
+    };
+    const { router } = await renderAppAtRoute("/course/cell-biology/notes/2026-09-12-membranes", {
+      read_study_json: (payload) => {
+        const file = String((payload as { file?: string }).file ?? "");
+        if (file === "flashcards.json") {
+          return {
+            schema_version: 1,
+            course: "cell-biology",
+            cards: [appendedCard],
+          };
+        }
+        return { schema_version: 1, course: "cell-biology", failures: [] };
+      },
+    });
     await waitForDigestArticle();
     const article = screen.getByRole("article");
     const paragraph = article.querySelector("p");
@@ -263,9 +286,24 @@ describe("notes PR7", { timeout: 15000 }, () => {
     expect(Object.keys(args).filter((k) => k !== "root" && k !== "course").sort()).toEqual(
       ["back", "digest", "front", "heading", "page"].sort(),
     );
+    await waitFor(
+      () => {
+        expect(router.state.location.pathname).toContain("/flashcards");
+        expect(
+          router.history.location.search.includes("card=fc-appended-1") ||
+            screen.queryByText("Appended front") !== null,
+        ).toBe(true);
+      },
+      { timeout: 8000 },
+    );
+    await waitFor(
+      () => {
+        expect(screen.getByText("Appended front")).toBeInTheDocument();
+      },
+      { timeout: 8000 },
+    );
     await waitFor(() => {
-      expect(router.state.location.pathname).toContain("/flashcards");
-      expect(router.state.location.searchStr).toContain("card=fc-appended-1");
+      expect(router.state.location.searchStr).not.toContain("card=");
     });
   });
 

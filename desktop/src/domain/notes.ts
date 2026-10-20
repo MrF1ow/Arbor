@@ -1,5 +1,10 @@
 import { digestKey } from "~/domain/concepts";
-import type { CourseOverviewPayload, DigestInfo, StudyRecommendItem } from "~/domain/types";
+import type {
+  CardSource,
+  CourseOverviewPayload,
+  DigestInfo,
+  StudyRecommendItem,
+} from "~/domain/types";
 
 export function digestSlugFromPath(path: string): string {
   const file = path.split("/").pop() ?? path;
@@ -14,6 +19,23 @@ export function resolveDigestSlug(digestRef: string, digests: DigestInfo[]): str
     return digestSlugFromPath(match.path);
   }
   return digestSlugFromPath(digestRef);
+}
+
+/** Chip label for a flashcard source: digest title when known, else stem. */
+export function formatFlashcardSourceLabel(source: CardSource, digests: DigestInfo[]): string {
+  const key = digestKey(source.digest);
+  const match = digests.find(
+    (d) => digestKey(d.path) === key || digestSlugFromPath(d.path) === source.digest,
+  );
+  const digestLabel = match?.title ?? digestSlugFromPath(source.digest);
+  const parts = [digestLabel];
+  if (source.heading) {
+    parts.push(source.heading);
+  }
+  if (source.page) {
+    parts.push(`p. ${source.page}`);
+  }
+  return parts.join(" · ");
 }
 
 export function digestNotesPath(

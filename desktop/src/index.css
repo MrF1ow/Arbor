@@ -141,6 +141,8 @@
   --text-title--line-height: 1.25;
   --text-read: 17.5px;
   --text-read--line-height: 1.75;
+  --text-flashcard-q: 23px;
+  --text-flashcard-q--line-height: 1.4;
 
   --radius-xs: 4px;
   --radius-sm: 5px;
@@ -157,6 +159,8 @@
   --spacing-control: 28px;
   --spacing-control-lg: 38px;
   --container-reading: 40rem;
+  --container-flashcards: 42.5rem;
+  --spacing-progress: 3px;
   --spacing-icon-sm: 14px;
   --spacing-icon: 16px;
 

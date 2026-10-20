@@ -42,7 +42,11 @@ export const fixtureCourses: Record<string, string[]> = {
 };
 
 export const fixtureCourseOverview = {
-  due: { due_ids: ["fc-1", "fc-2"], count: 14, deck_count: 86 },
+  due: {
+    due_ids: Array.from({ length: 14 }, (_, i) => `fc-${i + 1}`),
+    count: 14,
+    deck_count: 86,
+  },
   weak: {
     topics: [
       {

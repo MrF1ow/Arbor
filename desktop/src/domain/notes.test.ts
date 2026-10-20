@@ -13,6 +13,7 @@ import {
   headingForSelectionNode,
   pageForSelectionNode,
   quizAccuracy,
+  formatFlashcardSourceLabel,
   resolveDigestSlug,
   stripLeadingH1,
   studyPlanMarkdownForOverview,
@@ -59,6 +60,31 @@ describe("digest paths", () => {
       resolveDigestSlug("digests/2026-09-12-membranes.md", digests),
     ).toBe("2026-09-12-membranes");
     expect(resolveDigestSlug("2026-09-15-mitochondria", digests)).toBe("2026-09-15-mitochondria");
+  });
+
+  it("formats flashcard source labels with digest title or stem fallback", () => {
+    expect(
+      formatFlashcardSourceLabel(
+        {
+          digest: "digests/2026-09-12-membranes.md",
+          heading: "Membrane structure",
+          page: "12",
+        },
+        digests,
+      ),
+    ).toBe("Membranes · Membrane structure · p. 12");
+    expect(
+      formatFlashcardSourceLabel(
+        { digest: "2026-09-12-membranes", heading: null, page: null },
+        digests,
+      ),
+    ).toBe("Membranes");
+    expect(
+      formatFlashcardSourceLabel(
+        { digest: "2026-10-01-unknown", heading: null, page: null },
+        digests,
+      ),
+    ).toBe("2026-10-01-unknown");
   });
 });
 

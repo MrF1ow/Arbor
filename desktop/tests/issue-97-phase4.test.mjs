@@ -7,14 +7,21 @@ test("main.ts does not invoke list_providers", async () => {
   assert.doesNotMatch(source, /invoke(\s*<[^>]*>)?\(\s*["']list_providers["']/);
 });
 
-test("flashcard and quiz grades enqueue study writes instead of awaiting study_progress", async () => {
-  const source = await readFile(new URL("../src/legacy/main.ts", import.meta.url), "utf8");
-  const gradeStart = source.indexOf("function gradeCurrentFlashcard");
-  const gradeEnd = source.indexOf("function abortIfSignedOut", gradeStart);
+test("flashcard grades enqueue study writes instead of awaiting study_progress", async () => {
+  const source = await readFile(
+    new URL("../src/components/flashcards/flashcards-view.tsx", import.meta.url),
+    "utf8",
+  );
+  const gradeStart = source.indexOf("function gradeCard");
+  assert.ok(gradeStart >= 0, "gradeCard function missing");
+  const gradeEnd = source.indexOf("\n  useEffect", gradeStart);
   const gradeBody = source.slice(gradeStart, gradeEnd);
   assert.doesNotMatch(gradeBody, /await invoke\(\s*["']study_progress["']/);
-  assert.match(gradeBody, /enqueueStudyWrite\(/);
+  assert.match(gradeBody, /enqueueWrite\(/);
+});
 
+test("quiz grades enqueue study writes instead of awaiting study_progress", async () => {
+  const source = await readFile(new URL("../src/legacy/main.ts", import.meta.url), "utf8");
   const quizStart = source.indexOf('quizSubmitBtn.addEventListener("click"');
   const quizEnd = source.indexOf('quizNextBtn.addEventListener("click"', quizStart);
   const quizBody = source.slice(quizStart, quizEnd);

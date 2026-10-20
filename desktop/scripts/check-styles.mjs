@@ -13,6 +13,8 @@ const LINE_ALLOW = /(?:\/\/|\/\*)\s*style-allow:\s*\S/;
 const STYLE_KEY =
   /\b(color|background[A-Za-z]*|margin[A-Za-z]*|padding[A-Za-z]*|gap|fontSize|width|height|minWidth|maxWidth|minHeight|maxHeight)\s*:/;
 
+const LAYOUT_STYLE_KEY = /\b(flexGrow|flex|transform)\s*:/;
+
 const ARBITRARY_UNIT =
   /-\[(?:[^\]]*(?:[0-9.]+(?:px|rem|em|vh|vw|ms|s|%)|#[0-9a-fA-F]{3,8})[^\]]*)\]/i;
 
@@ -96,7 +98,7 @@ function findMultilineStyleViolations(relativePath, source) {
     if (isAllowLine(contextLine) || isAllowLine(block)) {
       continue;
     }
-    if (STYLE_KEY.test(block)) {
+    if (STYLE_KEY.test(block) || LAYOUT_STYLE_KEY.test(block)) {
       violations.push({
         file: relativePath,
         line,
@@ -127,7 +129,10 @@ export function checkLine(line, { filePath = "file.tsx" } = {}) {
     violations.push({ file: filePath, line: 0, rule: "tailwind-arbitrary", snippet });
   }
 
-  if (/style=\{\{/.test(line) && STYLE_KEY.test(line)) {
+  if (
+    /style=\{\{/.test(line) &&
+    (STYLE_KEY.test(line) || LAYOUT_STYLE_KEY.test(line))
+  ) {
     violations.push({ file: filePath, line: 0, rule: "inline-style", snippet: "style={{ … }}" });
   }
 

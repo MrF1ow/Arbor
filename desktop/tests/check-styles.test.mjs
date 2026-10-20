@@ -68,6 +68,23 @@ test("tailwind arbitrary values with units and colors are flagged", () => {
   );
 });
 
+test("inline style flexGrow and transform are flagged without style-allow", () => {
+  assert.ok(
+    checkLine('return <div style={{ flexGrow: 1 }} />;', { filePath: "x.tsx" }).some(
+      (h) => h.rule === "inline-style",
+    ),
+  );
+  assert.ok(
+    checkLine('return <div style={{ transform: "scaleX(1)" }} />;', { filePath: "x.tsx" }).some(
+      (h) => h.rule === "inline-style",
+    ),
+  );
+  assert.equal(
+    checkLine('return <div style={{ flexGrow: 1 }} />; // style-allow: ratio', { filePath: "x.tsx" }).length,
+    0,
+  );
+});
+
 test("inline style objects with prefixed layout keys are flagged", () => {
   assert.ok(
     checkLine('return <div style={{ backgroundColor: "red" }} />;', { filePath: "x.tsx" }).some(
