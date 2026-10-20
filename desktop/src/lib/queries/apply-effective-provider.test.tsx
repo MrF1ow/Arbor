@@ -1,7 +1,7 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { clearMocks } from "@tauri-apps/api/mocks";
+import { clearTauriMocks } from "~/test/mock-ipc";
 
 import { createAppQueryClient } from "~/lib/query-client";
 import { qk } from "~/lib/queries/keys";
@@ -18,7 +18,7 @@ function Probe({ root }: { root: string | null }) {
 
 describe("useApplyEffectiveProvider", () => {
   afterEach(() => {
-    clearMocks();
+    clearTauriMocks();
     resetEffectiveProviderApplyForTests();
   });
 

@@ -2,7 +2,7 @@ import { emit } from "@tauri-apps/api/event";
 import { cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { clearMocks } from "@tauri-apps/api/mocks";
+import { clearTauriMocks } from "~/test/mock-ipc";
 
 import { FIXTURE_ROOT_FALL, FIXTURE_ROOT_SHARED, fixtureSettings } from "~/test/fixtures/data";
 import { clearMockIpcLog, getMockIpcLog } from "~/test/mock-handlers";
@@ -43,7 +43,7 @@ describe("app shell", () => {
 
   afterEach(() => {
     cleanup();
-    clearMocks();
+    clearTauriMocks();
     vi.restoreAllMocks();
   });
 

@@ -1,4 +1,16 @@
 import "@testing-library/jest-dom/vitest";
+import { cleanup } from "@testing-library/react";
+import { afterEach, vi } from "vitest";
+
+import { clearTauriMocks } from "~/test/mock-ipc";
+import { cleanupTestQueryClients } from "~/test/query-clients";
+
+export const clipboardWriteText = vi.fn().mockResolvedValue(undefined);
+
+Object.defineProperty(navigator, "clipboard", {
+  value: { writeText: clipboardWriteText },
+  configurable: true,
+});
 
 const storage = new Map<string, string>();
 if (typeof globalThis.localStorage?.clear !== "function") {
@@ -31,3 +43,10 @@ if (typeof window.matchMedia !== "function") {
     dispatchEvent: () => true,
   });
 }
+
+afterEach(async () => {
+  await cleanupTestQueryClients();
+  cleanup();
+  vi.clearAllTimers();
+  clearTauriMocks();
+});

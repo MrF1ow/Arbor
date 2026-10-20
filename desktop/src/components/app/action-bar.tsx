@@ -1,11 +1,14 @@
+import { useNavigate } from "@tanstack/react-router";
 import { Check, RefreshCw, Terminal, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { StatusPill } from "~/components/app/status-pill";
 import { Button, IconButton } from "~/components/ui/button";
+import { relativeTime } from "~/domain/jobs";
 import { runningJobStatusLabel } from "~/domain/job-labels";
 import { VIEWER_WRITE_REASON, viewerBlocksWrite } from "~/domain/library-role";
 import { PROVIDER_FALLBACK, signedOutJobMessage } from "~/domain/provider";
+import { useNow } from "~/hooks/use-now";
 import { pickActiveRoot } from "~/lib/knowledge-root";
 import { fetchAuthStatus } from "~/lib/auth-refresh";
 import { useEffectiveProvider } from "~/lib/queries/effective-provider";
@@ -22,25 +25,8 @@ import { useJobStore } from "~/stores/job-store";
 import { useUpdatePlanStore } from "~/stores/update-plan-store";
 import { useUiStore } from "~/stores/ui-store";
 
-function formatRelativeTime(iso: string): string {
-  const then = new Date(iso).getTime();
-  const diffMs = Date.now() - then;
-  const minutes = Math.round(diffMs / 60_000);
-  if (minutes < 1) {
-    return "just now";
-  }
-  if (minutes < 60) {
-    return `${minutes}m ago`;
-  }
-  const hours = Math.round(minutes / 60);
-  if (hours < 48) {
-    return `${hours}h ago`;
-  }
-  const days = Math.round(hours / 24);
-  return `${days}d ago`;
-}
-
 export function ActionBar({ course }: { course: string }) {
+  const navigate = useNavigate();
   const settings = useSettings();
   const activeRoot = pickActiveRoot(settings.data);
   const library = useLibrary(activeRoot);
@@ -51,6 +37,7 @@ export function ActionBar({ course }: { course: string }) {
   const jobStep = useJobStore((s) => s.step);
   const jobLabel = useJobStore((s) => s.label);
   const activeUpdateJobId = useJobStore((s) => s.activeUpdateJobId);
+  const lastFinishedJobId = useJobStore((s) => s.lastFinishedJobId);
   const unread = useJobStore((s) => s.unread);
   const appendLog = useJobStore((s) => s.append);
   const toggleLog = useUiStore((s) => s.toggleLog);
@@ -58,8 +45,9 @@ export function ActionBar({ course }: { course: string }) {
   const cancelUpdate = useCancelUpdateMutation();
   const startCitations = useStartCitationJobMutation(activeRoot);
   const jobs = useJobs(activeRoot);
+  const nowMs = useNow();
 
-  const lastOk = jobs.data?.find((j) => j.status === "succeeded");
+  const latestJob = jobs.data?.[0];
   const statusLabel = (() => {
     if (jobStatus === "running") {
       return runningJobStatusLabel(jobStep, jobLabel);
@@ -67,11 +55,64 @@ export function ActionBar({ course }: { course: string }) {
     if (jobStatus === "failed") {
       return "Last job failed";
     }
-    if (lastOk?.finished_at) {
-      return `Up to date · ${formatRelativeTime(lastOk.finished_at)}`;
+    if (jobStatus === "idle" && latestJob?.status === "failed") {
+      return "Last job failed";
+    }
+    if (jobStatus === "idle" && latestJob?.status === "running") {
+      return "Job running";
+    }
+    const stamp = latestJob?.finished_at ?? latestJob?.started_at;
+    if (latestJob?.status === "succeeded" && stamp) {
+      return `Up to date · ${relativeTime(stamp, nowMs)}`;
     }
     return "Up to date";
   })();
+
+  const statusPillVariant = (() => {
+    if (jobStatus === "running" || (jobStatus === "idle" && latestJob?.status === "running")) {
+      return "running" as const;
+    }
+    if (
+      jobStatus === "failed" ||
+      (jobStatus === "idle" && latestJob?.status === "failed")
+    ) {
+      return "failed" as const;
+    }
+    return "idle" as const;
+  })();
+
+  const jobsLinkId = (() => {
+    if (jobStatus === "failed" && lastFinishedJobId) {
+      return lastFinishedJobId;
+    }
+    if (jobStatus === "idle" && latestJob?.status === "failed") {
+      return latestJob.id;
+    }
+    if (jobStatus === "idle" && latestJob?.status === "running") {
+      return latestJob.id;
+    }
+    return undefined;
+  })();
+
+  const statusPillAriaLabel = (() => {
+    if (statusPillVariant === "running") {
+      return `Job status: ${statusLabel}`;
+    }
+    if (statusPillVariant === "failed") {
+      return "Last job failed. Open Jobs.";
+    }
+    return `Knowledge status: ${statusLabel}. Open Jobs.`;
+  })();
+
+  const onStatusPillClick = () => {
+    if (jobStatus === "running") {
+      return;
+    }
+    void navigate({
+      to: "/jobs",
+      search: jobsLinkId ? { job: jobsLinkId } : {},
+    });
+  };
 
   const onUpdate = async () => {
     if (!activeRoot || viewerBlocked) {
@@ -133,6 +174,9 @@ export function ActionBar({ course }: { course: string }) {
     </Button>
   );
 
+  const pillRunning =
+    jobStatus === "running" || (jobStatus === "idle" && latestJob?.status === "running");
+
   return (
     <div className="flex h-actionbar min-w-0 shrink-0 items-center gap-2 border-b border-dashed border-border px-4">
       <span
@@ -159,10 +203,18 @@ export function ActionBar({ course }: { course: string }) {
         </span>
       ) : null}
       <span className="flex-1" />
-      <StatusPill
-        variant={jobStatus === "running" ? "running" : jobStatus === "failed" ? "failed" : "idle"}
-        label={statusLabel}
-      />
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="h-auto min-w-0 px-0 hover:bg-transparent"
+        disabled={pillRunning}
+        onClick={onStatusPillClick}
+        data-testid="status-pill-button"
+        aria-label={statusPillAriaLabel}
+      >
+        <StatusPill variant={statusPillVariant} label={statusLabel} />
+      </Button>
       <div className="relative">
         <IconButton
           icon={Terminal}

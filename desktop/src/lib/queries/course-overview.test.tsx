@@ -1,7 +1,7 @@
 import { emit } from "@tauri-apps/api/event";
 import { renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { clearMocks } from "@tauri-apps/api/mocks";
+import { clearTauriMocks } from "~/test/mock-ipc";
 
 import { qk } from "~/lib/queries/keys";
 import { useCourseOverview } from "~/lib/queries/notes";
@@ -23,7 +23,7 @@ async function waitForWorkerEventsBridge() {
 
 describe("useCourseOverview", () => {
   afterEach(() => {
-    clearMocks();
+    clearTauriMocks();
   });
 
   it("calls study_progress overview once per root and course", async () => {

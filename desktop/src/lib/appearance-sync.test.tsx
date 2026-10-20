@@ -1,7 +1,7 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { clearMocks } from "@tauri-apps/api/mocks";
+import { clearTauriMocks } from "~/test/mock-ipc";
 
 import { AppearanceSync } from "~/lib/appearance-sync";
 import { createAppQueryClient } from "~/lib/query-client";
@@ -11,7 +11,7 @@ import { installMockIpc } from "~/test/mock-ipc";
 
 describe("AppearanceSync", () => {
   afterEach(() => {
-    clearMocks();
+    clearTauriMocks();
     useUiStore.setState({ appearance: "system" });
   });
 

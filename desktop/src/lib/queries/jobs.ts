@@ -30,10 +30,20 @@ function afterStudyJobStarted(
   }
 }
 
+export function useInitArborDb(root: string | null) {
+  return useQuery({
+    queryKey: qk.arborDb(root ?? ""),
+    enabled: Boolean(root),
+    staleTime: Number.POSITIVE_INFINITY,
+    queryFn: () => invoke("init_arbor_db", { root: root! }),
+  });
+}
+
 export function useJobs(root: string | null) {
+  const dbReady = useInitArborDb(root);
   return useQuery({
     queryKey: qk.jobs(root ?? ""),
-    enabled: Boolean(root),
+    enabled: Boolean(root) && dbReady.isSuccess,
     queryFn: () => invoke<JobSummary[]>("list_jobs", { root: root!, limit: 15 }),
   });
 }

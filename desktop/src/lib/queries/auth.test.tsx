@@ -1,7 +1,7 @@
 import { QueryClientProvider, focusManager } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { clearMocks } from "@tauri-apps/api/mocks";
+import { clearTauriMocks } from "~/test/mock-ipc";
 
 import { resetAuthRefreshForTests } from "~/lib/auth-refresh";
 import { createAppQueryClient } from "~/lib/query-client";
@@ -23,7 +23,7 @@ function DualAuth() {
 
 describe("useAuth", () => {
   beforeEach(() => {
-    clearMocks();
+    clearTauriMocks();
     clearMockIpcLog();
     resetAuthRefreshForTests();
     sharedClient = createAppQueryClient();

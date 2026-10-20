@@ -16,7 +16,7 @@ import {
   fixtureStudyPlanMarkdown,
 } from "~/test/fixtures/data";
 import type { ChatLine } from "~/domain/chat";
-import type { SearchHit } from "~/domain/types";
+import type { JobEventRow, JobSummary, SearchHit } from "~/domain/types";
 import { emitToChannel, parseMockChannelId } from "~/test/emit-to-channel";
 
 const ipcLog: string[] = [];
@@ -24,6 +24,7 @@ const chatHistoryByKey = new Map<string, ChatLine[]>();
 const ipcCalls: { cmd: string; args?: InvokeArgs }[] = [];
 const updateJobTimers: ReturnType<typeof setTimeout>[] = [];
 let mockEventsEnabled = true;
+let mockUpdateJobRunning = false;
 
 const mockKnowledgeSearchHits: SearchHit[] = [
   {
@@ -113,6 +114,7 @@ export function resetMockHandlerTimers() {
     clearTimeout(timer);
   }
   updateJobTimers.length = 0;
+  mockUpdateJobRunning = false;
   mockEventsEnabled = true;
 }
 
@@ -162,8 +164,136 @@ function scheduleMockEvent(delayMs: number, run: () => void) {
   return timer;
 }
 
+const mockJobSummariesBase: JobSummary[] = [
+  {
+    id: "mock-update-job",
+    status: "succeeded",
+    trigger_kind: "manual",
+    skill: null,
+    model_id: "grok-4.7",
+    started_at: "2026-10-19T11:58:00Z",
+    finished_at: "2026-10-19T12:05:00Z",
+    error_summary: null,
+    exit_code: 0,
+  },
+  {
+    id: "job-failed-1",
+    status: "failed",
+    trigger_kind: "manual",
+    skill: null,
+    model_id: "grok-4.7",
+    started_at: "2026-10-01T10:00:00Z",
+    finished_at: "2026-10-01T10:05:00Z",
+    error_summary: "Worker timeout",
+    exit_code: 1,
+  },
+  {
+    id: "job-ok-1",
+    status: "succeeded",
+    trigger_kind: "watch",
+    skill: null,
+    model_id: "grok-4.7",
+    started_at: "2026-10-02T10:00:00Z",
+    finished_at: "2026-10-02T10:20:00Z",
+    error_summary: null,
+    exit_code: 0,
+  },
+  {
+    id: "job-flashcards",
+    status: "succeeded",
+    trigger_kind: "study",
+    skill: "flashcards",
+    model_id: "grok-4.7",
+    started_at: "2026-10-03T08:00:00Z",
+    finished_at: "2026-10-03T08:12:00Z",
+    error_summary: null,
+    exit_code: 0,
+  },
+  {
+    id: "job-quiz",
+    status: "succeeded",
+    trigger_kind: "study",
+    skill: "quiz",
+    model_id: "grok-4.7",
+    started_at: "2026-10-04T09:00:00Z",
+    finished_at: "2026-10-04T09:08:00Z",
+    error_summary: null,
+    exit_code: 0,
+  },
+  {
+    id: "job-embed",
+    status: "succeeded",
+    trigger_kind: "manual",
+    skill: "embed",
+    model_id: "grok-4.7",
+    started_at: "2026-10-05T14:00:00Z",
+    finished_at: "2026-10-05T14:30:00Z",
+    error_summary: null,
+    exit_code: 0,
+  },
+  {
+    id: "job-citations",
+    status: "succeeded",
+    trigger_kind: "study",
+    skill: "citations",
+    model_id: "grok-4.7",
+    started_at: "2026-10-06T16:00:00Z",
+    finished_at: "2026-10-06T16:04:00Z",
+    error_summary: null,
+    exit_code: 0,
+  },
+  {
+    id: "job-cancelled",
+    status: "cancelled",
+    trigger_kind: "manual",
+    skill: null,
+    model_id: "grok-4.7",
+    started_at: "2026-10-07T12:00:00Z",
+    finished_at: "2026-10-07T12:01:00Z",
+    error_summary: null,
+    exit_code: null,
+  },
+];
+
+function mockJobSummariesList(): JobSummary[] {
+  if (!mockUpdateJobRunning) {
+    return mockJobSummariesBase.slice();
+  }
+  const running: JobSummary = {
+    id: "mock-update-job",
+    status: "running",
+    trigger_kind: "manual",
+    skill: null,
+    model_id: "grok-4.7",
+    started_at: "2026-10-20T11:58:00Z",
+    finished_at: null,
+    error_summary: null,
+    exit_code: null,
+  };
+  const rest = mockJobSummariesBase.filter((job) => job.id !== "mock-update-job");
+  return [running, ...rest];
+}
+
+function mockJobEventCount(jobId: string): number {
+  let hash = 0;
+  for (let i = 0; i < jobId.length; i += 1) {
+    hash = (hash * 31 + jobId.charCodeAt(i)) >>> 0;
+  }
+  return 20 + (hash % 181);
+}
+
+function mockJobEvents(jobId: string): JobEventRow[] {
+  const count = mockJobEventCount(jobId);
+  const base = new Date("2026-10-20T10:00:00Z").getTime();
+  return Array.from({ length: count }, (_, index) => ({
+    line: `[${jobId}] line ${index + 1}: processing chunk ${index + 1}`,
+    created_at: new Date(base + index * 1000).toISOString(),
+  }));
+}
+
 function simulateUpdateJob(root: string) {
   const jobId = "mock-update-job";
+  mockUpdateJobRunning = true;
   scheduleMockEvent(200, () => {
     if (!mockEventsEnabled) {
       return;
@@ -193,6 +323,7 @@ function simulateUpdateJob(root: string) {
         operation: "update",
         root,
       }).catch(() => undefined);
+      mockUpdateJobRunning = false;
     });
   });
   return jobId;
@@ -265,28 +396,9 @@ export function createMockHandler(
       case "sync_show":
         return { remote: null, shared: false };
       case "list_jobs":
-        return [
-          {
-            id: "job-failed-1",
-            status: "failed",
-            trigger_kind: "manual",
-            model_id: "grok-4.7",
-            started_at: "2026-10-01T10:00:00Z",
-            finished_at: "2026-10-01T10:05:00Z",
-            error_summary: "Worker timeout",
-            exit_code: 1,
-          },
-          {
-            id: "job-ok-1",
-            status: "succeeded",
-            trigger_kind: "manual",
-            model_id: "grok-4.7",
-            started_at: "2026-10-02T10:00:00Z",
-            finished_at: "2026-10-02T10:20:00Z",
-            error_summary: null,
-            exit_code: 0,
-          },
-        ];
+        return mockJobSummariesList();
+      case "get_job_events":
+        return mockJobEvents(String(payload.jobId ?? payload.job_id ?? ""));
       case "read_chat_history": {
         const root = String(payload.root ?? FIXTURE_ROOT_FALL);
         const course = String(payload.course ?? "");

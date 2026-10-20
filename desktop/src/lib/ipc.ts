@@ -93,6 +93,20 @@ export function listen<T>(
   return tauriListen<T>(event, handler);
 }
 
+function safeUnlisten(unlisten: (() => void) | undefined): void {
+  if (!unlisten) {
+    return;
+  }
+  try {
+    const result = unlisten() as void | Promise<void>;
+    if (result !== undefined && typeof (result as Promise<void>).catch === "function") {
+      void (result as Promise<void>).catch(() => {});
+    }
+  } catch {
+    // Disposal must never throw or reject.
+  }
+}
+
 /** Cancellation-safe Tauri event subscription; returns a synchronous disposer. */
 export function subscribe<T>(
   event: string,
@@ -105,14 +119,14 @@ export function subscribe<T>(
   let unlisten: (() => void) | undefined;
   void listen<T>(event, handler).then((fn) => {
     if (disposed) {
-      fn();
+      safeUnlisten(fn);
     } else {
       unlisten = fn;
     }
   });
   return () => {
     disposed = true;
-    unlisten?.();
+    safeUnlisten(unlisten);
   };
 }
 
