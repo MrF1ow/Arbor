@@ -498,8 +498,8 @@ export function ChatView({
       data-testid="chat-view"
       className="flex h-full min-h-0 flex-1 flex-col overflow-hidden"
     >
-      <div className="shrink-0 border-b border-border">
-        <div className="mx-auto flex w-full max-w-reading flex-wrap items-center gap-2 px-8 py-3">
+      <div className="shrink-0 border-b border-border px-8 py-3">
+        <div className="mx-auto flex w-full max-w-reading flex-wrap items-center gap-2">
         <Select
           value={course}
           disabled={controlsDisabled}
@@ -509,7 +509,7 @@ export function ChatView({
             }
           }}
         >
-          <SelectTrigger className="w-48" aria-label="Course">
+          <SelectTrigger className="w-48" aria-label="Course" title={rootLabel}>
             <SelectValue>{courseDisplayName(course)}</SelectValue>
           </SelectTrigger>
           <SelectContent>
@@ -520,7 +520,6 @@ export function ChatView({
             ))}
           </SelectContent>
         </Select>
-        <span className="text-xs text-faint-foreground">{rootLabel}</span>
         <ToggleGroup
           value={[mode]}
           disabled={controlsDisabled}
@@ -542,43 +541,45 @@ export function ChatView({
             Quiz
           </ToggleGroupItem>
         </ToggleGroup>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          disabled={controlsDisabled}
-          onClick={() => void onNewChat()}
-        >
-          <MessageSquarePlus className="size-icon-sm" aria-hidden />
-          New chat
-        </Button>
-        <AlertDialog open={clearOpen} onOpenChange={setClearOpen}>
-          <AlertDialogTrigger
-            render={
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                disabled={controlsDisabled}
-              />
-            }
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={controlsDisabled}
+            onClick={() => void onNewChat()}
           >
-            <Trash2 className="size-icon-sm" aria-hidden />
-            Clear history
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogTitle>Clear history</AlertDialogTitle>
-            <AlertDialogDescription>
-              Delete all chat history for {course}? This cannot be undone.
-            </AlertDialogDescription>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction variant="destructive" onClick={() => void onClearHistory()}>
-                Clear history
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+            <MessageSquarePlus className="size-icon-sm" aria-hidden />
+            New chat
+          </Button>
+          <AlertDialog open={clearOpen} onOpenChange={setClearOpen}>
+            <AlertDialogTrigger
+              render={
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={controlsDisabled}
+                />
+              }
+            >
+              <Trash2 className="size-icon-sm" aria-hidden />
+              Clear history
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogTitle>Clear history</AlertDialogTitle>
+              <AlertDialogDescription>
+                Delete all chat history for {course}? This cannot be undone.
+              </AlertDialogDescription>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction variant="destructive" onClick={() => void onClearHistory()}>
+                  Clear history
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
         </div>
       </div>
 
