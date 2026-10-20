@@ -305,6 +305,30 @@ export interface JobFinished {
   root: string;
 }
 
+export type StudyRecommendItem = {
+  kind: string;
+  label: string;
+  digest?: string | null;
+  heading?: string | null;
+};
+
+export interface CourseOverviewPayload {
+  due: { due_ids: string[]; count: number; deck_count: number };
+  weak: {
+    topics: Array<{ label: string; digest?: string; heading?: string | null }>;
+  };
+  recommend: { items: StudyRecommendItem[] };
+}
+
+export interface SkillIndexPackage {
+  id: string;
+  kind: string;
+  name: string;
+  description: string;
+  commit: string;
+  permissions: string[];
+}
+
 export interface WorkerEvent {
   type: string;
   ts?: string;

@@ -1,10 +1,11 @@
 {
   "name": "desktop",
   "private": true,
-  "version": "5.5.0",
+  "version": "5.6.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:mock": "vite --mode mock",
     "build": "tsc && vite build",
     "test:node": "node --disable-warning=ExperimentalWarning --experimental-strip-types --test tests/*.test.mjs",
     "test:unit": "vitest run",

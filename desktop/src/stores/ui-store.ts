@@ -4,16 +4,42 @@ import { persist } from "zustand/middleware";
 import { parseAppearance } from "~/domain/theme";
 import type { Appearance } from "~/domain/types";
 
+export type LastCourse = { root: string; course: string };
+
 interface UiState {
   appearance: Appearance;
+  sidebarOpen: boolean;
+  logOpen: boolean;
+  logHeight: number;
+  notesIndexOpen: boolean;
+  lastCourse: LastCourse | null;
   setAppearance: (appearance: Appearance) => void;
+  setSidebarOpen: (open: boolean) => void;
+  toggleSidebar: () => void;
+  setLogOpen: (open: boolean) => void;
+  toggleLog: () => void;
+  setLogHeight: (height: number) => void;
+  setNotesIndexOpen: (open: boolean) => void;
+  setLastCourse: (last: LastCourse | null) => void;
 }
 
 export const useUiStore = create<UiState>()(
   persist(
     (set) => ({
       appearance: "system",
+      sidebarOpen: true,
+      logOpen: false,
+      logHeight: 200,
+      notesIndexOpen: true,
+      lastCourse: null,
       setAppearance: (appearance) => set({ appearance }),
+      setSidebarOpen: (sidebarOpen) => set({ sidebarOpen }),
+      toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
+      setLogOpen: (logOpen) => set({ logOpen }),
+      toggleLog: () => set((s) => ({ logOpen: !s.logOpen })),
+      setLogHeight: (logHeight) => set({ logHeight }),
+      setNotesIndexOpen: (notesIndexOpen) => set({ notesIndexOpen }),
+      setLastCourse: (lastCourse) => set({ lastCourse }),
     }),
     {
       name: "arbor.ui",
@@ -31,4 +57,3 @@ export const useUiStore = create<UiState>()(
   ),
 );
 
-// PR 4: sync with get_settings/save_settings
