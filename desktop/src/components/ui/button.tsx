@@ -4,7 +4,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import type { LucideIcon } from "lucide-react";
 import type * as React from "react";
 
-import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/tooltip";
+import { LazyTooltip, LazyTooltipContent, LazyTooltipTrigger } from "~/components/ui/lazy-tooltip";
 import { cn } from "~/lib/utils";
 
 const buttonVariants = cva(
@@ -108,27 +108,37 @@ function IconButton({
   className,
   ...props
 }: IconButtonProps) {
-  const trigger = (
-    <Button
-      variant={variant}
-      size={size}
-      className={className}
-      aria-label={label}
-      {...props}
-    >
-      <Icon />
-    </Button>
-  );
-
   if (!tooltip) {
-    return trigger;
+    return (
+      <Button
+        variant={variant}
+        size={size}
+        className={className}
+        aria-label={label}
+        {...props}
+      >
+        <Icon />
+      </Button>
+    );
   }
 
   return (
-    <Tooltip>
-      <TooltipTrigger render={trigger} />
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
+    <LazyTooltip>
+      <LazyTooltipTrigger
+        render={(tooltipProps, _tooltipState) => (
+          <Button
+            variant={variant}
+            size={size}
+            className={className}
+            aria-label={label}
+            {...mergeProps<"button">(tooltipProps, props)}
+          >
+            <Icon />
+          </Button>
+        )}
+      />
+      <LazyTooltipContent>{label}</LazyTooltipContent>
+    </LazyTooltip>
   );
 }
 

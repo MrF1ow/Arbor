@@ -8,20 +8,20 @@ import { useIsMobile } from "~/hooks/use-mobile"
 import { Button } from "~/components/ui/button"
 import { Input } from "~/components/ui/input"
 import { Separator } from "~/components/ui/separator"
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "~/components/ui/sheet"
 import { Skeleton } from "~/components/ui/skeleton"
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "~/components/ui/tooltip"
+  LazyTooltip,
+  LazyTooltipContent,
+  LazyTooltipTrigger,
+} from "~/components/ui/lazy-tooltip"
+import { isEditableTarget, modKeyActive } from "~/lib/shortcuts"
 import { PanelLeftIcon } from "lucide-react"
+
+const SidebarMobileSheet = React.lazy(() =>
+  import("~/components/ui/sidebar-mobile-sheet").then((m) => ({
+    default: m.SidebarMobileSheet,
+  })),
+)
 
 // Arbor supports collapsible="offcanvas" only (shown or fully hidden; no icon rail).
 const SIDEBAR_KEYBOARD_SHORTCUT = "b"
@@ -82,16 +82,17 @@ function SidebarProvider({
 
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (
-        event.key === SIDEBAR_KEYBOARD_SHORTCUT &&
-        (event.metaKey || event.ctrlKey)
-      ) {
-        event.preventDefault()
-        if (setOpenProp) {
-          setOpenProp(!open)
-        } else {
-          _setOpen((current) => !current)
-        }
+      if (event.key !== SIDEBAR_KEYBOARD_SHORTCUT || !modKeyActive(event)) {
+        return
+      }
+      if (isEditableTarget(event.target)) {
+        return
+      }
+      event.preventDefault()
+      if (setOpenProp) {
+        setOpenProp(!open)
+      } else {
+        _setOpen((current) => !current)
       }
     }
 
@@ -162,27 +163,16 @@ function Sidebar({
 
   if (isMobile) {
     return (
-      <Sheet open={open} onOpenChange={setOpen} {...props}>
-        <SheetContent
-          dir={dir}
-          data-sidebar="sidebar"
-          data-slot="sidebar"
-          data-mobile="true"
-          className="w-sidebar bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden"
-          side={side}
-        >
-          <SheetHeader className="sr-only">
-            <SheetTitle>Sidebar</SheetTitle>
-            <SheetDescription>Displays the mobile sidebar.</SheetDescription>
-          </SheetHeader>
-          <div className="flex h-full w-full flex-col">{children}</div>
-        </SheetContent>
-      </Sheet>
+      <React.Suspense fallback={null}>
+        <SidebarMobileSheet open={open} onOpenChange={setOpen} side={side} dir={dir}>
+          {children}
+        </SidebarMobileSheet>
+      </React.Suspense>
     )
   }
 
   return (
-    <div
+    <aside
       className="group peer hidden text-sidebar-foreground md:block"
       data-state={state}
       data-collapsible={state === "collapsed" ? collapsible : ""}
@@ -218,7 +208,7 @@ function Sidebar({
           {children}
         </div>
       </div>
-    </div>
+    </aside>
   )
 }
 
@@ -278,7 +268,7 @@ function SidebarInset({ className, ...props }: React.ComponentProps<"main">) {
     <main
       data-slot="sidebar-inset"
       className={cn(
-        "relative flex w-full flex-1 flex-col bg-background md:peer-data-[variant=inset]:m-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-md md:peer-data-[variant=inset]:shadow-card md:peer-data-[variant=inset]:peer-data-[state=collapsed]:ml-2",
+        "relative flex min-w-0 w-full flex-1 flex-col bg-background md:peer-data-[variant=inset]:m-2 md:peer-data-[variant=inset]:ml-0 md:peer-data-[variant=inset]:rounded-md md:peer-data-[variant=inset]:shadow-card md:peer-data-[variant=inset]:peer-data-[state=collapsed]:ml-2",
         className
       )}
       {...props}
@@ -483,7 +473,7 @@ function SidebarMenuButton({
 }: useRender.ComponentProps<"button"> &
   React.ComponentProps<"button"> & {
     isActive?: boolean
-    tooltip?: string | React.ComponentProps<typeof TooltipContent>
+    tooltip?: string | React.ComponentProps<typeof LazyTooltipContent>
   } & VariantProps<typeof sidebarMenuButtonVariants>) {
   const { isMobile, state } = useSidebar()
   const comp = useRender({
@@ -494,7 +484,7 @@ function SidebarMenuButton({
       },
       props
     ),
-    render: !tooltip ? render : <TooltipTrigger render={render} />,
+    render: !tooltip ? render : <LazyTooltipTrigger render={render} />,
     state: {
       slot: "sidebar-menu-button",
       sidebar: "menu-button",
@@ -514,15 +504,15 @@ function SidebarMenuButton({
   }
 
   return (
-    <Tooltip>
+    <LazyTooltip>
       {comp}
-      <TooltipContent
+      <LazyTooltipContent
         side="right"
         align="center"
         hidden={state !== "collapsed" || isMobile}
         {...tooltip}
       />
-    </Tooltip>
+    </LazyTooltip>
   )
 }
 

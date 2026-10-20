@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -7,6 +7,8 @@ vi.mock("~/hooks/use-mobile", () => ({
 }));
 
 import { useIsMobile } from "~/hooks/use-mobile";
+
+import { SidebarHeaderTrigger } from "~/components/app/sidebar-header-trigger";
 
 import {
   Sidebar,
@@ -34,6 +36,26 @@ describe("Sidebar", () => {
     expect(onOpenChange).toHaveBeenCalledWith(true);
   });
 
+  it("shows sidebar trigger on mobile when closed and opens the sheet", async () => {
+    vi.mocked(useIsMobile).mockReturnValue(true);
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+
+    render(
+      <SidebarProvider open={false} onOpenChange={onOpenChange}>
+        <SidebarHeaderTrigger />
+        <Sidebar collapsible="offcanvas">
+          <SidebarContent>Mobile nav</SidebarContent>
+        </Sidebar>
+      </SidebarProvider>,
+    );
+
+    const trigger = screen.getByRole("button", { name: /toggle sidebar/i });
+    expect(trigger).toBeVisible();
+    await user.click(trigger);
+    expect(onOpenChange).toHaveBeenCalledWith(true);
+  });
+
   it("mobile uses controlled open and Mod+B calls onOpenChange", async () => {
     vi.mocked(useIsMobile).mockReturnValue(true);
     const user = userEvent.setup();
@@ -47,7 +69,9 @@ describe("Sidebar", () => {
       </SidebarProvider>,
     );
 
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+    });
     await user.keyboard("{Control>}b{/Control}");
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });

@@ -1,5 +1,6 @@
-import { createRootRoute, Outlet } from "@tanstack/react-router";
+import { createRootRoute, Outlet, useRouterState } from "@tanstack/react-router";
 
+import { AppShell } from "~/components/app/app-shell";
 import { ThemeProvider } from "~/components/app/theme-provider";
 import { Toaster } from "~/components/ui/toast";
 import { TooltipProvider } from "~/components/ui/tooltip";
@@ -13,6 +14,9 @@ export const Route = createRootRoute({
 });
 
 function RootLayout() {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const bareShell = pathname === "/dev/ui";
+
   return (
     <ThemeProvider>
       <TooltipProvider>
@@ -20,7 +24,9 @@ function RootLayout() {
           <EffectiveProviderSync />
           <WorkerEventsBridge />
           <AppearanceSync />
-          <Outlet />
+          <div className="flex h-svh min-h-0 flex-col overflow-hidden">
+            {bareShell ? <Outlet /> : <AppShell />}
+          </div>
           <Toaster />
         </StudyWritesProvider>
       </TooltipProvider>

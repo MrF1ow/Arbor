@@ -1,36 +1,36 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import { createMemoryHistory, RouterProvider } from "@tanstack/react-router";
-import { QueryClientProvider } from "@tanstack/react-query";
-import { afterEach, describe, expect, it } from "vitest";
+import { waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { clearMocks } from "@tauri-apps/api/mocks";
 
-import { createAppQueryClient } from "~/lib/query-client";
-import { getRouter } from "../router";
-import { installMockIpc } from "~/test/mock-ipc";
+import { FIXTURE_ROOT_FALL } from "~/test/fixtures/data";
+import { renderAppAtRoute } from "~/test/render";
+import { useUiStore } from "~/stores/ui-store";
 
 describe("index route", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    useUiStore.persist.clearStorage();
+    useUiStore.setState({ lastCourse: null });
+  });
+
   afterEach(() => {
     clearMocks();
   });
 
-  it("renders the rebuild placeholder heading and fixture courses", async () => {
-    installMockIpc();
-    const history = createMemoryHistory({ initialEntries: ["/"] });
-    const router = getRouter(history);
-    await router.load();
-    const queryClient = createAppQueryClient();
-
-    render(
-      <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
-      </QueryClientProvider>,
-    );
-
-    expect(
-      screen.getByRole("heading", { name: /Arbor 6\.0 rebuild in progress/i }),
-    ).toBeInTheDocument();
+  it("redirects to the first course overview when lastCourse is unset", async () => {
+    const { router } = await renderAppAtRoute("/");
     await waitFor(() => {
-      expect(screen.getByText("cell-biology")).toBeInTheDocument();
+      expect(router.state.location.pathname).toContain("/course/cell-biology/notes");
+    });
+  });
+
+  it("redirects to lastCourse notes when set for the active root", async () => {
+    useUiStore.setState({
+      lastCourse: { root: FIXTURE_ROOT_FALL, course: "linear-algebra" },
+    });
+    const { router } = await renderAppAtRoute("/");
+    await waitFor(() => {
+      expect(router.state.location.pathname).toContain("/course/linear-algebra/notes");
     });
   });
 });

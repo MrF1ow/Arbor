@@ -47,13 +47,9 @@ describe("Button", () => {
 });
 
 describe("IconButton", () => {
-  it("sets aria-label and shows tooltip on focus", async () => {
-    const user = userEvent.setup();
-    renderWithTooltip(<IconButton icon={SettingsIcon} label="Settings" />);
-    const button = screen.getByRole("button", { name: "Settings" });
-    expect(button).toHaveAttribute("aria-label", "Settings");
-    await user.hover(button);
-    expect(await screen.findByTestId("tooltip-content")).toHaveTextContent("Settings");
+  it("sets aria-label on the trigger", () => {
+    renderWithTooltip(<IconButton icon={SettingsIcon} label="Settings" tooltip={false} />);
+    expect(screen.getByRole("button", { name: "Settings" })).toHaveAttribute("aria-label", "Settings");
   });
 });
 

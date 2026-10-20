@@ -287,6 +287,31 @@ export function WorkerEventsBridge() {
   });
 
   useEffect(() => {
+    let pendingLines: string[] = [];
+    let pendingStep: string | null | undefined;
+    let flushRaf: number | null = null;
+
+    const flushProgressBatch = () => {
+      flushRaf = null;
+      const ctx = ctxRef.current;
+      if (pendingLines.length > 0) {
+        useJobStore.getState().appendBatch(pendingLines);
+        pendingLines = [];
+      }
+      if (pendingStep !== undefined) {
+        ctx.setStep(pendingStep);
+        pendingStep = undefined;
+      }
+    };
+
+    const queueProgress = (line: string, step: string | null) => {
+      pendingLines.push(line);
+      pendingStep = step;
+      if (flushRaf == null) {
+        flushRaf = requestAnimationFrame(flushProgressBatch);
+      }
+    };
+
     const disposeProgress = subscribe<{ line: string }>("arbor://progress", (event) => {
       const ctx = ctxRef.current;
       try {
@@ -299,13 +324,21 @@ export function WorkerEventsBridge() {
           course,
           providerLabel: providerDisplayLabel(ctx.providerId),
         });
-        ctx.append(formatted.line);
-        ctx.setStep(formatted.step);
+        queueProgress(formatted.line, formatted.step);
       } catch {
-        ctx.append(event.payload.line);
+        queueProgress(event.payload.line, null);
       }
     });
 
+    return () => {
+      if (flushRaf != null) {
+        cancelAnimationFrame(flushRaf);
+      }
+      disposeProgress();
+    };
+  }, []);
+
+  useEffect(() => {
     const disposeFinished = subscribe<JobFinished>("arbor://job-finished", (event) => {
       const ctx = ctxRef.current;
       const updateJobIdBefore = useJobStore.getState().activeUpdateJobId;
@@ -383,7 +416,6 @@ export function WorkerEventsBridge() {
     });
 
     return () => {
-      disposeProgress();
       disposeFinished();
       disposeFiles();
     };

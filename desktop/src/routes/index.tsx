@@ -1,41 +1,32 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
-import { ListRow } from "~/components/app/list-row";
-import { useCourses } from "~/lib/queries/library";
-import { useSettings } from "~/lib/queries/settings";
+import { hasAnyKnowledgeRoot, pickActiveRoot } from "~/lib/knowledge-root";
+import { invoke } from "~/lib/ipc";
+import type { Settings } from "~/domain/types";
+import { useUiStore } from "~/stores/ui-store";
+
 export const Route = createFileRoute("/")({
-  component: IndexPage,
+  loader: async () => {
+    const settings = await invoke<Settings>("get_settings");
+    if (!hasAnyKnowledgeRoot(settings)) {
+      throw redirect({ to: "/welcome" });
+    }
+    const activeRoot = pickActiveRoot(settings);
+    if (!activeRoot) {
+      throw redirect({ to: "/welcome" });
+    }
+    const courses = await invoke<string[]>("list_courses", { root: activeRoot });
+    const lastCourse = useUiStore.getState().lastCourse;
+    if (lastCourse && lastCourse.root === activeRoot && courses.includes(lastCourse.course)) {
+      throw redirect({
+        to: "/course/$course/notes",
+        params: { course: lastCourse.course },
+      });
+    }
+    if (courses[0]) {
+      throw redirect({ to: "/course/$course/notes", params: { course: courses[0] } });
+    }
+    throw redirect({ to: "/welcome" });
+  },
+  component: () => null,
 });
-
-function IndexPage() {
-  const settings = useSettings();
-  const root =
-    settings.data?.active_root ??
-    settings.data?.knowledge_root ??
-    settings.data?.knowledge_roots?.[0]?.path ??
-    null;
-  const courses = useCourses(root);
-
-  return (
-    <main className="mx-auto max-w-lg space-y-3 p-6">
-      <h1 className="text-lg font-medium">Arbor 6.0 rebuild in progress</h1>
-      <p className="text-sm text-muted-foreground">
-        Courses for <code className="text-xs">{root}</code>
-      </p>
-      <ul className="divide-y divide-border rounded-md border border-border">
-        {(courses.data ?? []).map((course) => (
-          <li key={course}>
-            <ListRow title={course} />
-          </li>
-        ))}
-      </ul>
-      {import.meta.env.DEV ? (
-        <p className="text-sm">
-          <a href="#/dev/ui" className="text-primary underline-offset-2 hover:underline">
-            Open the dev UI token gallery
-          </a>
-        </p>
-      ) : null}
-    </main>
-  );
-}

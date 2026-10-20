@@ -187,6 +187,10 @@ export function createMockHandler(
         return { ok: true };
       case "start_study_job":
         return "mock-study-job";
+      case "create_course": {
+        const name = String(payload.name ?? "new-class");
+        return name.trim().toLowerCase().replace(/\s+/g, "-");
+      }
       case "init_knowledge_repo":
       case "init_arbor_db":
       case "start_folder_watch":
