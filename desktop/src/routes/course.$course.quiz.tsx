@@ -1,17 +1,21 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { PageHeader } from "~/components/app/page-header";
-import { courseDisplayName } from "~/domain/course";
+import { QuizView } from "~/components/quiz/quiz-view";
+import { pickActiveRoot } from "~/lib/knowledge-root";
+import { useDigests } from "~/lib/queries/library";
+import { useSettings } from "~/lib/queries/settings";
 
 export const Route = createFileRoute("/course/$course/quiz")({
-  component: QuizPlaceholder,
+  component: QuizRoute,
 });
 
-function QuizPlaceholder() {
+function QuizRoute() {
   const { course } = Route.useParams();
+  const settings = useSettings();
+  const activeRoot = pickActiveRoot(settings.data);
+  const digests = useDigests(activeRoot, course);
+
   return (
-    <div className="p-8">
-      <PageHeader title={`${courseDisplayName(course)} quiz`} description="Quiz arrives in PR 9." />
-    </div>
+    <QuizView key={`${activeRoot ?? ""}|${course}`} course={course} digests={digests.data ?? []} />
   );
 }
