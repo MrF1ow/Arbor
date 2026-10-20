@@ -556,7 +556,7 @@ export function createMockHandler(
         return { path: dest, name, kind: "shared" };
       }
       case "test_worker_connection":
-        return "arbor-worker 5.1.0 (mock)";
+        return "arbor-worker 5.17.0 (mock)";
       case "list_jobs":
         return mockJobSummariesList();
       case "get_job_events":
