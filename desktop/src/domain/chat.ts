@@ -1,7 +1,28 @@
-import { notePathForStudyDigest } from "./concepts.ts";
+import { digestKey, notePathForStudyDigest } from "./concepts.ts";
 import { renderMarkdown } from "./markdown.ts";
+import { signedOutJobMessage } from "./provider.ts";
+import type { DigestInfo } from "./types.ts";
+
+function digestSlugFromPath(path: string): string {
+  const file = path.split("/").pop() ?? path;
+  return file.replace(/\.md$/i, "");
+}
 
 export type ChatMode = "ask" | "explain" | "quiz";
+
+const CHAT_MODES: ChatMode[] = ["ask", "explain", "quiz"];
+
+export function isChatMode(value: string | undefined): value is ChatMode {
+  return value != null && CHAT_MODES.includes(value as ChatMode);
+}
+
+export function chatAuthErrorMessage(providerLabel: string, error: unknown): string {
+  const text = String(error);
+  if (text.includes("authenticated") || text.includes("auth")) {
+    return signedOutJobMessage(providerLabel, text);
+  }
+  return text;
+}
 
 export interface ChatLine {
   ts?: string;
@@ -50,6 +71,44 @@ export function citationLabel(citation: ChatCitation): string {
   const parts: string[] = [base];
   if (citation.heading_id) parts.push(citation.heading_id);
   if (citation.page_range && citation.page_range.trim()) {
+    parts.push(`p. ${citation.page_range}`);
+  }
+  return parts.join(" · ");
+}
+
+function isCourseOverviewCitation(digestPath: string, course: string): boolean {
+  const norm = digestPath.replace(/\\/g, "/");
+  return norm === `${course}/course.md` || norm.endsWith("/course.md");
+}
+
+export function formatChatCitationLabel(
+  citation: ChatCitation,
+  course: string,
+  digests: DigestInfo[],
+): string {
+  const digestPath = citation.digest_path ?? "";
+  if (isCourseOverviewCitation(digestPath, course)) {
+    const parts = ["Course overview"];
+    if (citation.heading_id) {
+      parts.push(citation.heading_id);
+    }
+    if (citation.page_range?.trim()) {
+      parts.push(`p. ${citation.page_range}`);
+    }
+    return parts.join(" · ");
+  }
+  const key = digestKey(digestPath);
+  const match = digests.find(
+    (d) => digestKey(d.path) === key || digestSlugFromPath(d.path) === digestPath,
+  );
+  if (!match) {
+    return citationLabel(citation);
+  }
+  const parts = [match.title ?? digestSlugFromPath(digestPath)];
+  if (citation.heading_id) {
+    parts.push(citation.heading_id);
+  }
+  if (citation.page_range?.trim()) {
     parts.push(`p. ${citation.page_range}`);
   }
   return parts.join(" · ");

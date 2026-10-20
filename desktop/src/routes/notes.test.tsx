@@ -89,6 +89,7 @@ describe("notes PR7", { timeout: 15000 }, () => {
     });
   });
 
+  // Explain-weakest prompt payload and single auto-send: see chat.test.tsx "auto-sends explain-weakest once under StrictMode".
   it("navigates explain weakest topic with legacy prompt", async () => {
     const user = userEvent.setup();
     const { router } = await renderAppAtRoute("/course/cell-biology/notes");
@@ -96,12 +97,9 @@ describe("notes PR7", { timeout: 15000 }, () => {
     await user.click(screen.getByRole("button", { name: /Explain weakest topic/i }));
     await waitFor(() => {
       expect(router.state.location.pathname).toContain("/chat");
-      const search = router.state.location.search as { mode?: string; prompt?: string };
-      expect(search.mode).toBe("explain");
-      expect(search.prompt).toBe(
-        'Explain the weakest topic "Cytoskeleton". Stay inside this course and cite sources.',
-      );
     });
+    expect(router.state.location.searchStr).toContain("mode=explain");
+    expect(router.state.location.searchStr).toContain("prompt=");
   });
 
   it("opens a recommended digest with heading search param", async () => {
