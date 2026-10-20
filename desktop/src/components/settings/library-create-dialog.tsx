@@ -64,7 +64,7 @@ export function LibraryCreateDialog({
             disabled={busy}
             onClick={() => {
               setError("");
-              void onConfirm(name.trim()).catch((err) => {
+              void onConfirm(name).catch((err) => {
                 setError(String(err));
               });
             }}

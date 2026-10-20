@@ -83,7 +83,6 @@ export async function renderAppAtRoute(route: string, fixtures?: FixtureOverride
             <WorkerEventsBridge />
             <AppearanceSync />
             <RouterProvider router={router} />
-            <Toaster />
           </StudyWritesProvider>
         </TooltipProvider>
       </ThemeProvider>

@@ -10,8 +10,15 @@ import {
   upsertSkillGrant,
   removeSkillGrantsForId,
 } from "~/domain/skill-permissions";
+import {
+  skillHasWritePermission,
+  VIEWER_WRITE_REASON,
+  viewerBlocksWrite,
+} from "~/domain/library-role";
 import type { SkillIndexPackage } from "~/domain/types";
 import { openDialog } from "~/lib/ipc";
+import { pickActiveRoot } from "~/lib/knowledge-root";
+import { useLibrary } from "~/lib/queries/library";
 import { usePersistSettingsMutation, useSettings } from "~/lib/queries/settings";
 import {
   useSkillIndex,
@@ -19,6 +26,7 @@ import {
   useSkillRunMutation,
   useSkillUninstallMutation,
 } from "~/lib/queries/skills";
+import { useUiStore } from "~/stores/ui-store";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,6 +45,9 @@ const SkillPermissionsDialog = lazy(() =>
 
 export function SettingsSkillsPanel() {
   const settings = useSettings();
+  const activeRoot = pickActiveRoot(settings.data);
+  const library = useLibrary(activeRoot);
+  const libraryRole = library.data?.present === true ? library.data.role : null;
   const persistSettings = usePersistSettingsMutation();
   const skillIndex = useSkillIndex();
   const installSkill = useSkillInstallMutation();
@@ -60,6 +71,14 @@ export function SettingsSkillsPanel() {
 
   const grants = settings.data?.skill_grants ?? [];
 
+  const refreshBrowsePackages = async () => {
+    const result = await skillIndex.refetch();
+    if (result.isError) {
+      return;
+    }
+    setBrowsePackages(result.data?.packages ?? []);
+  };
+
   const onSaveIndex = async () => {
     try {
       await persistSettings.mutateAsync((current) => ({
@@ -75,13 +94,15 @@ export function SettingsSkillsPanel() {
 
   const onBrowse = async () => {
     setStatusLine("");
-    try {
-      const result = await skillIndex.refetch();
-      setBrowsePackages(result.data?.packages ?? []);
-    } catch (error) {
+    const result = await skillIndex.refetch();
+    if (result.isError) {
       setBrowsePackages([]);
-      setStatusLine(String(error));
+      const message = String(result.error);
+      setStatusLine(message);
+      toast.error(message);
+      return;
     }
+    setBrowsePackages(result.data?.packages ?? []);
   };
 
   const ensurePermissions = (pkg: SkillIndexPackage, action: "install" | "run") => {
@@ -124,19 +145,34 @@ export function SettingsSkillsPanel() {
     try {
       const result = await installSkill.mutateAsync(pkg.id);
       setStatusLine(`Installed ${result.commit}`);
+      await refreshBrowsePackages();
     } catch (error) {
       setStatusLine(String(error));
       toast.error(String(error));
     }
   };
 
+  const viewerBlocksSkillRun = (pkg: SkillIndexPackage) =>
+    viewerBlocksWrite(libraryRole) && skillHasWritePermission(pkg.permissions);
+
   const onRun = async (pkg: SkillIndexPackage, skipPermCheck = false) => {
-    if (!skipPermCheck && !ensurePermissions(pkg, "run")) {
-      return;
-    }
-    const root = settings.data?.active_root ?? settings.data?.knowledge_root;
+    const root = pickActiveRoot(settings.data);
     if (!root) {
       setStatusLine("Choose a knowledge folder first");
+      return;
+    }
+    const lastCourse = useUiStore.getState().lastCourse;
+    const course =
+      lastCourse && lastCourse.root === root ? lastCourse.course : null;
+    if (!course) {
+      setStatusLine("Choose a course first");
+      return;
+    }
+    if (viewerBlocksSkillRun(pkg)) {
+      setStatusLine(VIEWER_WRITE_REASON);
+      return;
+    }
+    if (!skipPermCheck && !ensurePermissions(pkg, "run")) {
       return;
     }
     const exportDir = await openDialog({ directory: true, multiple: false });
@@ -148,7 +184,7 @@ export function SettingsSkillsPanel() {
         root,
         id: pkg.id,
         commit: pkg.commit,
-        course: "cell-biology",
+        course,
         exportDir,
         confirmed: true,
       });
@@ -168,6 +204,7 @@ export function SettingsSkillsPanel() {
       }));
       setStatusLine("Uninstalled");
       setUninstallTarget(null);
+      await refreshBrowsePackages();
     } catch (error) {
       setStatusLine(String(error));
       toast.error(String(error));
@@ -227,39 +264,52 @@ export function SettingsSkillsPanel() {
 
       {browsePackages.length > 0 ? (
         <SettingsSection title="Packages">
-          {browsePackages.map((pkg) => (
-            <div key={`${pkg.id}-${pkg.commit}`} className="space-y-2 border-t border-border px-4 py-3 first:border-t-0">
-              <div>
-                <h3 className="text-sm font-medium">{pkg.name}</h3>
-                <p className="text-xs text-muted-foreground">
-                  {pkg.description} · id: {pkg.id} · kind: {pkg.kind}
-                  {pkg.installed ? " · installed" : ""}
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-1">
-                {pkg.permissions.map((perm) => (
-                  <Chip key={perm} variant="plain">
-                    {perm}
-                  </Chip>
-                ))}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {pkg.kind === "skill" ? (
-                  <Button type="button" variant="secondary" size="sm" onClick={() => void onInstall(pkg)}>
-                    Install
+          {browsePackages.map((pkg) => {
+            const runBlocked = viewerBlocksSkillRun(pkg);
+            return (
+              <div
+                key={`${pkg.id}-${pkg.commit}`}
+                className="space-y-2 border-t border-border px-4 py-3 first:border-t-0"
+              >
+                <div>
+                  <h3 className="text-sm font-medium">{pkg.name}</h3>
+                  <p className="text-xs text-muted-foreground">
+                    {pkg.description} · id: {pkg.id} · kind: {pkg.kind}
+                    {pkg.installed ? " · installed" : ""}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {pkg.permissions.map((perm) => (
+                    <Chip key={perm} variant="plain">
+                      {perm}
+                    </Chip>
+                  ))}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {pkg.kind === "skill" ? (
+                    <Button type="button" variant="secondary" size="sm" onClick={() => void onInstall(pkg)}>
+                      Install
+                    </Button>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">Provider packages are not installed</span>
+                  )}
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    disabled={runBlocked}
+                    title={runBlocked ? VIEWER_WRITE_REASON : undefined}
+                    onClick={() => void onRun(pkg)}
+                  >
+                    Run
                   </Button>
-                ) : (
-                  <span className="text-xs text-muted-foreground">Provider packages are not installed</span>
-                )}
-                <Button type="button" variant="secondary" size="sm" onClick={() => void onRun(pkg)}>
-                  Run
-                </Button>
-                <Button type="button" variant="secondary" size="sm" onClick={() => setUninstallTarget(pkg)}>
-                  Uninstall
-                </Button>
+                  <Button type="button" variant="secondary" size="sm" onClick={() => setUninstallTarget(pkg)}>
+                    Uninstall
+                  </Button>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </SettingsSection>
       ) : null}
 

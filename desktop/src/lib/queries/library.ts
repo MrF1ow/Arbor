@@ -127,7 +127,7 @@ export function useLibrarySetProviderMutation(root: string | null) {
 export function useCreateSharedLibraryMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { root: string; name: string }) =>
+    mutationFn: (input: { root: string; name: string | null }) =>
       invoke<{ name: string }>("create_shared_library", input),
     onSuccess: (_data, vars) => {
       void queryClient.invalidateQueries({ queryKey: qk.settings() });

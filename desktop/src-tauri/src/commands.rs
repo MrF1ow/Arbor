@@ -154,6 +154,42 @@ fn skill_index_source_path(app: &tauri::AppHandle, settings: &Settings) -> Resul
     }
 }
 
+fn skills_data_base() -> PathBuf {
+    if let Ok(xdg) = std::env::var("XDG_DATA_HOME") {
+        let trimmed = xdg.trim();
+        if !trimmed.is_empty() {
+            return PathBuf::from(trimmed);
+        }
+    }
+    if let Ok(home) = std::env::var("HOME") {
+        return PathBuf::from(home).join(".local").join("share");
+    }
+    PathBuf::from(".")
+}
+
+fn skill_install_dir(skill_id: &str, commit: &str) -> PathBuf {
+    skills_data_base()
+        .join("arbor")
+        .join("skills")
+        .join(skill_id)
+        .join(commit)
+}
+
+fn annotate_skill_index_installed(index: &mut serde_json::Value) {
+    let Some(packages) = index.get_mut("packages").and_then(|v| v.as_array_mut()) else {
+        return;
+    };
+    for pkg in packages.iter_mut() {
+        let Some(obj) = pkg.as_object_mut() else {
+            continue;
+        };
+        let id = obj.get("id").and_then(|v| v.as_str()).unwrap_or("");
+        let commit = obj.get("commit").and_then(|v| v.as_str()).unwrap_or("");
+        let installed = skill_install_dir(id, commit).is_dir();
+        obj.insert("installed".to_string(), serde_json::Value::Bool(installed));
+    }
+}
+
 fn fetch_skill_index(app: &tauri::AppHandle) -> Result<serde_json::Value, String> {
     let settings = settings::load(app);
     let source = skill_index_source_path(app, &settings)?;
@@ -461,7 +497,9 @@ pub async fn sync_continue(app: tauri::AppHandle, root: String) -> Result<serde_
 #[tauri::command]
 pub async fn skill_index(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
     spawn_blocking_cmd(move || {
-        fetch_skill_index(&app)
+        let mut index = fetch_skill_index(&app)?;
+        annotate_skill_index_installed(&mut index);
+        Ok(index)
     })
     .await
 }
@@ -1832,6 +1870,29 @@ mod tests {
             restore_optional_env("GIT_CONFIG_GLOBAL", self.saved_git_config_global.take());
             restore_optional_env("GIT_CONFIG_NOSYSTEM", self.saved_git_config_nosystem.take());
         }
+    }
+
+    #[test]
+    fn skill_index_marks_installed_when_install_dir_exists() {
+        let saved_xdg = std::env::var("XDG_DATA_HOME").ok();
+        let data_home = temp_root("skill-index-installed");
+        unsafe {
+            std::env::set_var("XDG_DATA_HOME", &data_home);
+        }
+        let commit = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        let install_dir = skill_install_dir("demo-skill", commit);
+        fs::create_dir_all(&install_dir).unwrap();
+        let mut index = serde_json::json!({
+            "packages": [
+                {"id": "demo-skill", "commit": commit, "name": "Demo"},
+                {"id": "other-skill", "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "name": "Other"}
+            ]
+        });
+        annotate_skill_index_installed(&mut index);
+        let packages = index["packages"].as_array().unwrap();
+        assert_eq!(packages[0]["installed"], serde_json::Value::Bool(true));
+        assert_eq!(packages[1]["installed"], serde_json::Value::Bool(false));
+        restore_optional_env("XDG_DATA_HOME", saved_xdg);
     }
 
     fn temp_root(label: &str) -> PathBuf {

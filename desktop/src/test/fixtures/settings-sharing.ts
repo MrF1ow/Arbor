@@ -8,6 +8,30 @@ import type {
 
 import { FIXTURE_ROOT_FALL } from "~/test/fixtures/data";
 
+export const fixtureLibraryShowOwnerNoProvider: LibraryShowResult = {
+  present: true,
+  name: "Fall 2026 library",
+  created_by: "owner@example.com",
+  role: "owner",
+  provider: null,
+  members: [
+    { email: "owner@example.com", role: "owner" },
+    { email: "editor@example.com", role: "editor" },
+  ],
+};
+
+export const fixtureLibraryShowEditor: LibraryShowResult = {
+  present: true,
+  name: "Fall 2026 library",
+  created_by: "owner@example.com",
+  role: "editor",
+  provider: { id: "grok", model: "grok-4.7" },
+  members: [
+    { email: "owner@example.com", role: "owner" },
+    { email: "editor@example.com", role: "editor" },
+  ],
+};
+
 export const fixtureLibraryShowOwner: LibraryShowResult = {
   present: true,
   name: "Fall 2026 library",

@@ -503,7 +503,11 @@ export function createMockHandler(
       }
       case "create_shared_library": {
         const root = String(payload.root ?? FIXTURE_ROOT_FALL);
-        const name = String(payload.name ?? "Shared library").trim() || "Shared library";
+        const rawName = payload.name;
+        const name =
+          rawName == null || String(rawName).trim() === ""
+            ? "Shared library"
+            : String(rawName).trim();
         mockLibraryShowState = {
           ...fixtureLibraryShowOwner,
           name,
@@ -548,15 +552,6 @@ export function createMockHandler(
       case "join_library": {
         const dest = String(payload.dest ?? "/mock/knowledge/joined");
         const name = "Joined library";
-        mockSettingsState = {
-          ...mockSettingsState,
-          knowledge_roots: [
-            ...(mockSettingsState.knowledge_roots ?? []),
-            { path: dest, kind: "shared", name },
-          ],
-          active_root: dest,
-          knowledge_root: dest,
-        };
         mockLibraryShowState = { ...fixtureLibraryShowOwner, name } as LibraryShowResult;
         return { path: dest, name, kind: "shared" };
       }

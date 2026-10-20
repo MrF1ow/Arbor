@@ -13,8 +13,8 @@ import {
 } from "~/components/ui/dialog";
 import { Textarea } from "~/components/ui/textarea";
 import type { SyncConflictFile } from "~/domain/types";
+import { reloadLibraryAfterSync } from "~/lib/library-reload";
 import { pickActiveRoot } from "~/lib/knowledge-root";
-import { qk } from "~/lib/queries/keys";
 import { useSettings } from "~/lib/queries/settings";
 import {
   useSyncConflict,
@@ -22,13 +22,32 @@ import {
   useSyncResolveMutation,
 } from "~/lib/queries/sync";
 import { useSyncUiStore } from "~/stores/sync-ui-store";
+import { useUiStore } from "~/stores/ui-store";
 import { cn } from "~/lib/utils";
 
 function isConflictResolved(entry: SyncConflictFile): boolean {
   return entry.choice === "mine" || entry.choice === "theirs" || entry.choice === "edit";
 }
 
-function pickFocusPath(files: SyncConflictFile[], current: string | null): string | null {
+function pickFocusPath(
+  files: SyncConflictFile[],
+  current: string | null,
+  afterResolvedPath: string | null = null,
+): string | null {
+  if (files.length === 0) {
+    return null;
+  }
+  if (afterResolvedPath) {
+    const idx = files.findIndex((f) => f.path === afterResolvedPath);
+    if (idx >= 0) {
+      for (let offset = 1; offset <= files.length; offset += 1) {
+        const entry = files[(idx + offset) % files.length]!;
+        if (!isConflictResolved(entry)) {
+          return entry.path;
+        }
+      }
+    }
+  }
   if (current && files.some((f) => f.path === current && !isConflictResolved(f))) {
     return current;
   }
@@ -121,6 +140,7 @@ export function SyncConflictDialogHost() {
   const files = conflict.data?.files ?? [];
   const filesVersion = files.map((f) => `${f.path}:${f.choice ?? ""}`).join("|");
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [focusAfterResolve, setFocusAfterResolve] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
   const [error, setError] = useState("");
 
@@ -129,10 +149,11 @@ export function SyncConflictDialogHost() {
       return;
     }
     // eslint-disable-next-line react-hooks/set-state-in-effect -- focus next unresolved file after reload
-    setSelectedPath((current) => pickFocusPath(files, current));
+    setSelectedPath((current) => pickFocusPath(files, current, focusAfterResolve));
+    setFocusAfterResolve(null);
     // filesVersion tracks conflict file content; `files` is read from the same render
     // eslint-disable-next-line react-hooks/exhaustive-deps -- filesVersion tracks files content
-  }, [filesVersion, open]);
+  }, [filesVersion, focusAfterResolve, open]);
 
   const activeFile = files.find((f) => f.path === selectedPath) ?? files[0];
 
@@ -157,6 +178,7 @@ export function SyncConflictDialogHost() {
     setError("");
     try {
       await resolve.mutateAsync({ path: selectedPath, ...payload });
+      setFocusAfterResolve(selectedPath);
     } catch (err) {
       setError(String(err));
     }
@@ -175,7 +197,10 @@ export function SyncConflictDialogHost() {
       if (result.ok) {
         setOpen(false);
         toast.success("Synced (integrated).");
-        void queryClient.invalidateQueries({ queryKey: qk.library(activeRoot) });
+        const lastCourse = useUiStore.getState().lastCourse;
+        const course =
+          lastCourse && lastCourse.root === activeRoot ? lastCourse.course : null;
+        reloadLibraryAfterSync(queryClient, activeRoot, course);
       }
     } catch (err) {
       setError(String(err));

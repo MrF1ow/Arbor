@@ -84,6 +84,12 @@ export function SettingsSyncPanel() {
       const result = await syncNow.mutateAsync();
       if (!result.ok && result.action === "conflict") {
         useSyncUiStore.getState().setSyncConflictOpen(true);
+        toast.error("Sync conflict.", {
+          action: {
+            label: "Resolve conflicts",
+            onClick: () => useSyncUiStore.getState().setSyncConflictOpen(true),
+          },
+        });
         return;
       }
       if (result.ok) {

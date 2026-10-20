@@ -9,6 +9,7 @@ import { UpdateReviewDialog } from "~/components/app/update-review-dialog";
 import { twMerge as twMergeExtended } from "~/lib/tailwind-merge-config";
 import { fixturePendingSources, fixtureSettings } from "~/test/fixtures/data";
 import { renderAppAtRoute, renderWithProviders } from "~/test/render";
+import { useSyncUiStore } from "~/stores/sync-ui-store";
 import { useUiStore } from "~/stores/ui-store";
 import { useUpdatePlanStore } from "~/stores/update-plan-store";
 
@@ -177,6 +178,18 @@ describe("tailwind-merge render audit", { timeout: 120_000 }, () => {
           ? sharingFixtures
           : undefined;
       await renderAppAtRoute(route, fixtures);
+      if (route === "/settings/skills") {
+        const skillsPanel = await screen.findByTestId("settings-skills");
+        await user.click(within(skillsPanel).getByRole("button", { name: "Browse index" }));
+        await waitFor(() => {
+          expect(within(skillsPanel).getByText("Demo skill")).toBeInTheDocument();
+        });
+      }
+      if (route === "/settings/sync") {
+        useSyncUiStore.setState({ syncConflictOpen: true });
+        await screen.findByTestId("sync-conflict-dialog");
+        useSyncUiStore.setState({ syncConflictOpen: false });
+      }
       if (route.includes("/notes") && !route.includes("/notes/")) {
         await waitForOverview();
       }

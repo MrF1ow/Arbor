@@ -28,6 +28,7 @@ import { useSettings } from "~/lib/queries/settings";
 import { useJobStore } from "~/stores/job-store";
 import { useSyncUiStore } from "~/stores/sync-ui-store";
 import { useUiStore } from "~/stores/ui-store";
+import { toast } from "sonner";
 import { useUpdatePlanStore, type UpdatePlanTrigger } from "~/stores/update-plan-store";
 
 let suppressWatchUntil = 0;
@@ -253,6 +254,12 @@ export function handleWorkerProgressSideEffects(
       if (ctx.root) {
         useSyncUiStore.getState().setSyncConflictOpen(true);
         void queryClient.invalidateQueries({ queryKey: qk.syncConflict(ctx.root) });
+        toast.error("Sync conflict.", {
+          action: {
+            label: "Resolve conflicts",
+            onClick: () => useSyncUiStore.getState().setSyncConflictOpen(true),
+          },
+        });
       }
       break;
     case "embed_done":

@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Chip } from "~/components/app/chip";
@@ -16,10 +16,9 @@ import {
 } from "~/components/ui/select";
 import { Skeleton } from "~/components/ui/skeleton";
 import { isValidMemberEmail } from "~/domain/library-members";
-import type { LibraryRole } from "~/domain/library-role";
-import { VIEWER_WRITE_REASON } from "~/domain/library-role";
+import { effectiveProvider, VIEWER_WRITE_REASON, type LibraryRole } from "~/domain/library-role";
 import { PROVIDER_FALLBACK } from "~/domain/provider";
-import type { KnowledgeRootEntry } from "~/domain/types";
+import type { KnowledgeRootEntry, LibraryShowResult, Settings } from "~/domain/types";
 import { useChooseKnowledgeFolder } from "~/lib/hooks/use-choose-knowledge-folder";
 import { pickActiveRoot } from "~/lib/knowledge-root";
 import { qk } from "~/lib/queries/keys";
@@ -86,40 +85,112 @@ export function SettingsLibraryPanel() {
   const canEditProvider =
     show?.present === true && (show.role === "owner" || show.role === "editor");
 
+  const lastLibrarySnapshot = useRef<string>("");
+  const providerDraftRef = useRef({ id: "", model: "" });
+
+  useEffect(() => {
+    providerDraftRef.current = { id: providerId, model: providerModel };
+  }, [providerId, providerModel]);
+
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect -- mirror library_show into editable draft fields */
     if (show?.present !== true) {
+      lastLibrarySnapshot.current = "";
       setMembersDraft([]);
       setProviderId("");
       setProviderModel("");
       return;
     }
-    setMembersDraft(show.members.map((m) => ({ ...m })));
-    setProviderId(show.provider?.id ?? "");
-    setProviderModel(show.provider?.model ?? "");
+    const nextMembers = show.members.map((m) => ({ ...m }));
+    const nextProviderId = show.provider?.id ?? "";
+    const nextProviderModel = show.provider?.model ?? "";
+    const snapshot = JSON.stringify({
+      members: nextMembers,
+      providerId: nextProviderId,
+      providerModel: nextProviderModel,
+    });
+    if (lastLibrarySnapshot.current === snapshot) {
+      return;
+    }
+    const previous = lastLibrarySnapshot.current
+      ? (JSON.parse(lastLibrarySnapshot.current) as {
+          members: typeof nextMembers;
+          providerId: string;
+          providerModel: string;
+        })
+      : null;
+    setMembersDraft((prev) => {
+      if (!previous) {
+        return nextMembers;
+      }
+      if (JSON.stringify(prev) === JSON.stringify(previous.members)) {
+        return nextMembers;
+      }
+      return prev;
+    });
+    const providerDraft = providerDraftRef.current;
+    setProviderId((prev) => {
+      if (!previous) {
+        return nextProviderId;
+      }
+      if (
+        prev === previous.providerId &&
+        providerDraft.model === previous.providerModel
+      ) {
+        return nextProviderId;
+      }
+      return prev;
+    });
+    setProviderModel((prev) => {
+      if (!previous) {
+        return nextProviderModel;
+      }
+      if (
+        providerDraft.id === previous.providerId &&
+        prev === previous.providerModel
+      ) {
+        return nextProviderModel;
+      }
+      return prev;
+    });
+    lastLibrarySnapshot.current = snapshot;
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [show]);
 
   const invalidateLibraryStack = async (root: string) => {
+    const settings = queryClient.getQueryData<Settings>(qk.settings());
+    const libraryShow = queryClient.getQueryData<LibraryShowResult>(qk.library(root));
+    const effective = effectiveProvider({
+      root,
+      settingsProviderId: settings?.provider_id?.trim() || "codex",
+      settingsModelId: settings?.model_id ?? null,
+      overrides: settings?.provider_overrides ?? [],
+      libraryProvider:
+        libraryShow?.present === true ? libraryShow.provider : null,
+    });
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: qk.settings() }),
       queryClient.invalidateQueries({ queryKey: qk.library(root) }),
       queryClient.invalidateQueries({ queryKey: qk.courses(root) }),
       queryClient.invalidateQueries({ queryKey: qk.sync(root) }),
     ]);
-    void queryClient.invalidateQueries({ queryKey: qk.models("grok", root) });
+    void queryClient.invalidateQueries({ queryKey: qk.models(effective.providerId, root) });
   };
 
   const onCreateLibrary = async (name: string) => {
     if (!activeRoot) {
       return;
     }
-    await createLibrary.mutateAsync({ root: activeRoot, name: name || activeRoot });
+    const trimmed = name.trim();
+    const doc = await createLibrary.mutateAsync({
+      root: activeRoot,
+      name: trimmed ? trimmed : null,
+    });
     await persistSettings.mutateAsync((current) => ({
       ...current,
       knowledge_roots: (current.knowledge_roots ?? []).map((entry) =>
         entry.path === activeRoot
-          ? { ...entry, kind: "shared", name: name || entry.name }
+          ? { ...entry, kind: "shared", name: doc.name }
           : entry,
       ),
     }));
@@ -131,19 +202,14 @@ export function SettingsLibraryPanel() {
   const onJoinLibrary = async (url: string, dest: string) => {
     const result = await joinLibrary.mutateAsync({ url, dest });
     const path = String((result as { path?: string }).path ?? dest);
+    const name = String((result as { name?: string }).name ?? "Joined library");
     await saveSettingsSerialized(queryClient, (current) => {
       const roots = current.knowledge_roots ?? [];
       const existing = roots.find((e) => e.path === path);
-      const name = String((result as { name?: string }).name ?? "Joined library");
       const knowledge_roots = existing
         ? roots.map((e) => (e.path === path ? { ...e, kind: "shared" as const, name } : e))
         : [...roots, { path, kind: "shared" as const, name }];
-      return {
-        ...current,
-        knowledge_roots,
-        active_root: path,
-        knowledge_root: path,
-      };
+      return { ...current, knowledge_roots };
     });
     await switchRoot.mutateAsync(path);
     await invalidateLibraryStack(path);

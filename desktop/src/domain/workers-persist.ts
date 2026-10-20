@@ -112,3 +112,10 @@ export function fillWorkerFormFields(worker: SshWorker) {
 export function knowledgeRootLabel(entry: KnowledgeRootEntry): string {
   return entry.name || entry.path;
 }
+
+export function workerListLabel(worker: SshWorker): string {
+  const hostPart = worker.user
+    ? `${worker.user}@${worker.host}:${worker.port}`
+    : `${worker.host}:${worker.port}`;
+  return `${worker.label} · ${hostPart}`;
+}

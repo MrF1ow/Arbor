@@ -14,6 +14,7 @@ import {
   fillWorkerFormFields,
   generateWorkerId,
   knowledgeRootLabel,
+  workerListLabel,
   readWorkerFromForm,
   removeWorkerFromSettings,
   setRootWorkerOnSettings,
@@ -58,6 +59,10 @@ export function SettingsWorkersPanel() {
   const saveLabel = editingId ? "Save worker" : "Add worker";
 
   const onSaveWorker = async () => {
+    if (editingId && !workers.some((w) => w.id === editingId)) {
+      setStatusLine("Worker not found.");
+      return;
+    }
     const id = editingId ?? generateWorkerId();
     const parsed = readWorkerFromForm({
       forId: id,
@@ -142,7 +147,7 @@ export function SettingsWorkersPanel() {
         {workers.map((worker) => (
           <SettingRow
             key={worker.id}
-            label={`${worker.label} · ${worker.host}:${worker.port}`}
+            label={workerListLabel(worker)}
             control={
               <div className="flex gap-2">
                 <Button

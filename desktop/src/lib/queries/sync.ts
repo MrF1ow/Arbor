@@ -15,9 +15,10 @@ export function useSyncState(root: string | null) {
 }
 
 export function useSyncConflict(root: string | null) {
+  const syncConflictOpen = useSyncUiStore((s) => s.syncConflictOpen);
   return useQuery({
     queryKey: qk.syncConflict(root ?? ""),
-    enabled: Boolean(root),
+    enabled: Boolean(root) && syncConflictOpen,
     queryFn: () => invoke<SyncConflictSession>("read_sync_conflict", { root: root! }),
   });
 }
