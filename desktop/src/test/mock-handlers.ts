@@ -15,6 +15,7 @@ import {
   fixtureSettings,
   fixtureStudyPlanMarkdown,
 } from "~/test/fixtures/data";
+import { emitToChannel, parseMockChannelId } from "~/test/emit-to-channel";
 
 const ipcLog: string[] = [];
 const ipcCalls: { cmd: string; args?: InvokeArgs }[] = [];
@@ -180,7 +181,50 @@ export function createMockHandler(
           },
         ];
       case "read_chat_history":
-        return [{ role: "assistant", content: "Hello from mock chat." }];
+        return [];
+      case "start_chat": {
+        const channelId = parseMockChannelId(payload.onEvent);
+        if (channelId == null) {
+          return null;
+        }
+        const chatCourse = String(payload.course ?? "cell-biology");
+        const markdown = "**Mock answer** from streaming.";
+        const citations = [
+          {
+            digest_path: `${chatCourse}/digests/2026-09-12-membranes.md`,
+            heading_id: "Membrane structure",
+          },
+        ];
+        let index = 0;
+        scheduleMockEvent(10, () => {
+          emitToChannel(channelId, { type: "chat_retrieved" }, index++);
+        });
+        scheduleMockEvent(30, () => {
+          emitToChannel(channelId, { type: "chat_delta", delta: "Hello " }, index++);
+        });
+        scheduleMockEvent(50, () => {
+          emitToChannel(channelId, { type: "chat_delta", delta: "world" }, index++);
+        });
+        scheduleMockEvent(70, () => {
+          emitToChannel(channelId, { type: "chat_delta", delta: "!" }, index++);
+        });
+        scheduleMockEvent(90, () => {
+          emitToChannel(
+            channelId,
+            {
+              type: "chat_done",
+              markdown,
+              supported: true,
+              citations,
+            },
+            index++,
+          );
+        });
+        scheduleMockEvent(110, () => {
+          emitToChannel(channelId, { type: "worker_exit", code: 0 }, index++);
+        });
+        return null;
+      }
       case "read_study_json":
         if (payload.file === "flashcards.json") {
           return {
