@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Arbor 6.0 — Arbor Paper (chosen direction)</title>
+<style>
+  /* ───────── Mockup chrome (not part of the app) ───────── */
+  .mock { font-family: var(--font-sans, system-ui, sans-serif); color: var(--foreground, #222); }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; margin-bottom: 10px; }
+  .ctl { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted-foreground, #666); }
+  .seg { display: inline-flex; padding: 2px; gap: 2px; border: 1px solid var(--border, #ddd); border-radius: 8px; background: var(--muted, #f4f4f5); }
+  .seg button { font: inherit; font-size: 12px; border: 0; background: transparent; color: var(--muted-foreground, #666); padding: 4px 10px; border-radius: 6px; cursor: pointer; }
+  .seg button[aria-pressed="true"] { background: var(--card, #fff); color: var(--foreground, #111); box-shadow: 0 1px 2px rgb(0 0 0 / .12); }
+  .caption { font-size: 13px; line-height: 1.5; color: var(--muted-foreground, #666); margin: 0 0 12px; max-width: 72ch; }
+  .caption b { color: var(--foreground, #111); font-weight: 600; }
+  .stage { width: 100%; position: relative; overflow: hidden; border-radius: 12px; }
+  .frame { width: 1200px; height: 760px; transform-origin: top left; position: absolute; top: 0; left: 0; }
+
+  /* ───────── Tokens: Arbor Paper ─────────
+     Structure and warmth from Paper, olive green from the logo canopy,
+     ink from the logo trunk, icons from Tool neutral (lucide, 1.75 stroke). */
+  .app {
+    --sidebar-w: 236px; --index-w: 240px; --ease: cubic-bezier(.2,.7,.2,1); --dur: 200ms;
+    --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    --font-read: "Iowan Old Style", Charter, "Palatino Linotype", Palatino, Georgia, serif;
+    --font-title: var(--font-read); --font-meta: var(--font-ui);
+    --text-ui: 13px; --row-h: 30px; --radius: 6px; --radius-ctl: 5px;
+    --read-size: 17.5px; --read-lh: 1.75; --read-max: 640px; --title-size: 21px;
+    --icon-stroke: 1.75;
+  }
+  .app[data-theme="light"] {
+    --bg: #F6F1E7; --surface: #FBF8F1; --sidebar: #F3EDE1; --fg: #2B2420; --muted-fg: #75695E; --faint: #A3978A;
+    --border: #E2D8C8; --primary: #586D37; --primary-hover: #4A5D2D; --primary-fg: #FFFFFF;
+    --hover: #EDE6D8; --row-active: #E8E2CF; --row-active-fg: #2B2420;
+    --soft: #E8EAD8; --soft-fg: #46562B; --success: #586D37; --danger: #B03A2E; --info: #4A6F86;
+    --shadow: 0 1px 2px rgb(43 36 32 / .05), 0 8px 24px rgb(43 36 32 / .05);
+  }
+  .app[data-theme="dark"] {
+    --bg: #1A1714; --surface: #211D19; --sidebar: #171411; --fg: #ECE3D6; --muted-fg: #ADA08F; --faint: #7D7266;
+    --border: #332D27; --primary: #9DB46F; --primary-hover: #AEC383; --primary-fg: #171411;
+    --hover: #25201B; --row-active: #2B2620; --row-active-fg: #F3EADC;
+    --soft: #272B1E; --soft-fg: #B9CC8E; --success: #9DB46F; --danger: #E2806F; --info: #8DB1C7;
+    --shadow: 0 1px 2px rgb(0 0 0 / .3), 0 8px 24px rgb(0 0 0 / .25);
+  }
+
+  /* ───────── App (tokens only) ───────── */
+  .app, .app * { box-sizing: border-box; }
+  .app { display: flex; width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--fg);
+    font-family: var(--font-ui); font-size: var(--text-ui); line-height: 1.4; border: 1px solid var(--border); border-radius: 12px; }
+  .app button { font: inherit; color: inherit; }
+  .i { width: 16px; height: 16px; flex: none; display: block; fill: none; stroke: currentColor; stroke-width: var(--icon-stroke); stroke-linecap: round; stroke-linejoin: round; }
+  .i.sm { width: 14px; height: 14px; }
+
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: var(--radius-ctl);
+    border: 1px solid transparent; background: transparent; cursor: pointer; white-space: nowrap; font-weight: 500; font-size: 12.5px;
+    transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
+  .btn.primary { background: var(--primary); color: var(--primary-fg); }
+  .btn.primary:hover { background: var(--primary-hover); }
+  .btn.outline { border-color: var(--border); background: var(--surface); }
+  .btn.outline:hover, .btn.ghost:hover { background: var(--hover); }
+  .btn.ghost { color: var(--muted-fg); }
+  .btn.ghost:hover { color: var(--fg); }
+  .btn.lg { height: 38px; padding: 0 14px; font-size: 13px; }
+  .ib { width: 28px; height: 28px; padding: 0; display: inline-grid; place-items: center; border: 0; border-radius: var(--radius-ctl); background: transparent; color: var(--muted-fg); cursor: pointer; position: relative; flex: none; }
+  .ib:hover { background: var(--hover); color: var(--fg); }
+  .ib.sm { width: 22px; height: 22px; }
+  .kbd { font-family: var(--font-meta); font-size: 10.5px; color: var(--faint); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; line-height: 16px; }
+
+  /* Sidebar: shown or fully hidden. No rail. */
+  .sb { width: var(--sidebar-w); flex: none; display: flex; flex-direction: column; background: var(--sidebar); border-right: 1px solid var(--border);
+    transition: width var(--dur) var(--ease), border-color var(--dur) var(--ease); overflow: hidden; }
+  .sb > * { width: var(--sidebar-w); }
+  .app[data-sidebar="hidden"] .sb { width: 0; border-right-color: transparent; }
+  .sb-head { height: 52px; display: flex; align-items: center; justify-content: space-between; padding: 0 10px 0 14px; flex: none; }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .logo { width: 28px; height: 28px; object-fit: contain; display: block; }
+  .app[data-theme="light"] .logo.dark, .app[data-theme="dark"] .logo.light { display: none; }
+  .brand-name { font-family: var(--font-title); font-size: 19px; font-weight: 500; }
+  .sb-scroll { flex: 1; min-height: 0; overflow: auto; padding: 4px 8px; }
+  .label-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 4px 4px 8px; }
+  .label { font-family: var(--font-read); font-size: 13px; font-style: italic; color: var(--faint); }
+  .row { display: flex; align-items: center; gap: 10px; height: var(--row-h); padding: 0 8px; border-radius: var(--radius-ctl); cursor: pointer; white-space: nowrap; position: relative; }
+  .row:hover { background: var(--hover); }
+  .row.active { color: var(--row-active-fg); font-weight: 500; }
+  .row.active::before { content: ""; position: absolute; left: 0; top: 7px; bottom: 7px; width: 2px; border-radius: 2px; background: var(--primary); }
+  .row .txt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .row .count { font-size: 11px; color: var(--faint); }
+  .row .lead { width: 18px; height: 18px; flex: none; display: grid; place-items: center; color: var(--muted-fg); }
+  .row.active .lead { color: var(--primary); }
+  .root-row { color: var(--muted-fg); font-size: 12px; font-weight: 500; }
+  .indent { padding-left: 16px; }
+  .sb-bottom { flex: none; border-top: 1px solid var(--border); padding: 8px; }
+  .provider { display: flex; align-items: center; gap: 8px; padding: 8px; font-size: 12px; color: var(--muted-fg); white-space: nowrap; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--success); flex: none; }
+
+  /* Header with underline tabs + lucide icons */
+  .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .hd { height: 52px; flex: none; display: flex; align-items: stretch; gap: 12px; padding: 0 16px; border-bottom: 1px solid var(--border); }
+  .hd > :not(.tabs) { align-self: center; }
+  .hd .open-sb { display: none; }
+  .app[data-sidebar="hidden"] .hd .open-sb { display: inline-grid; }
+  .title { display: flex; align-items: baseline; gap: 10px; margin-right: auto; min-width: 0; }
+  .title h1 { margin: 0; font-family: var(--font-title); font-size: var(--title-size); font-weight: 500; white-space: nowrap; }
+  .title .sub { font-size: 12px; color: var(--faint); white-space: nowrap; }
+  .tabs { display: flex; gap: 20px; }
+  .tab { display: inline-flex; align-items: center; gap: 6px; padding: 0 2px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted-fg); cursor: pointer; }
+  .tab:hover { color: var(--fg); }
+  .tab[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--primary); }
+  .tab[aria-selected="true"] .i { color: var(--primary); }
+
+  .actionbar { height: 44px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px dashed var(--border); }
+  .spacer { flex: 1; }
+  .pill { display: inline-flex; align-items: center; gap: 8px; height: 24px; padding: 0 10px; border-radius: 999px; background: var(--soft); color: var(--soft-fg); font-size: 12px; font-weight: 500; }
+  .badge-dot { position: absolute; top: 4px; right: 4px; width: 7px; height: 7px; border-radius: 50%; background: var(--primary); box-shadow: 0 0 0 2px var(--bg); }
+
+  .body { flex: 1; min-height: 0; display: flex; position: relative; }
+  .view { flex: 1; min-width: 0; display: none; }
+  .app[data-view="notes"] .view.notes, .app[data-view="cards"] .view.cards { display: flex; }
+
+  /* Notes: index + reading pane. Opens on Overview by default. */
+  .index { width: var(--index-w); flex: none; border-right: 1px solid var(--border); padding: 6px 8px; overflow: auto; }
+  .digest { display: block; padding: 8px 10px; border-radius: var(--radius-ctl); cursor: pointer; position: relative; }
+  .digest:hover { background: var(--hover); }
+  .digest.active::before { content: ""; position: absolute; left: 0; top: 9px; bottom: 9px; width: 2px; border-radius: 2px; background: var(--primary); }
+  .digest .n { display: flex; align-items: center; gap: 8px; font-weight: 500; }
+  .digest .n .i { color: var(--muted-fg); }
+  .digest.active .n .i { color: var(--primary); }
+  .digest .d { display: block; font-size: 11px; color: var(--faint); margin-top: 2px; }
+  .digest.overview .d { padding-left: 22px; }
+  .read { flex: 1; min-width: 0; overflow: auto; padding: 36px 48px 64px; }
+  .doc { max-width: var(--read-max); margin: 0 auto; font-family: var(--font-read); font-size: var(--read-size); line-height: var(--read-lh); display: none; }
+  .app[data-doc="overview"] .doc-overview, .app[data-doc="digest"] .doc-digest { display: block; }
+  .eyebrow { font-family: var(--font-ui); font-size: 12px; color: var(--faint); margin-bottom: 6px; display: flex; gap: 8px; align-items: center; }
+  .doc h2 { font-size: 2.2em; line-height: 1.15; margin: 0 0 8px; font-weight: 500; letter-spacing: -.01em; }
+  .doc .lede { color: var(--muted-fg); margin: 0 0 24px; }
+  .doc h3 { font-size: 1.15em; margin: 30px 0 8px; font-weight: 500; font-style: italic; }
+  .doc p { margin: 0 0 14px; }
+  .doc ul { margin: 0 0 14px; padding-left: 1.2em; }
+  .doc li { margin-bottom: 6px; }
+  .doc li::marker { color: var(--faint); }
+  .doc strong { font-weight: 650; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 18px; font-family: var(--font-ui); }
+  .chip { display: inline-flex; align-items: center; height: 24px; padding: 0 9px; border-radius: 4px; border: 1px solid var(--border); color: var(--soft-fg); font-size: 12px; cursor: pointer; background: transparent; }
+  .chip:hover { background: var(--soft); }
+  .chip.plain { color: var(--muted-fg); }
+  .callout { font-family: var(--font-ui); font-size: 13px; line-height: 1.5; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); padding: 12px 14px; display: flex; gap: 10px; margin: 20px 0; color: var(--muted-fg); }
+  .callout .i { color: var(--primary); margin-top: 1px; }
+  /* Overview pieces */
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; margin: 4px 0 24px; font-family: var(--font-ui); }
+  .stat { background: var(--surface); padding: 12px 14px; }
+  .stat .k { font-size: 11.5px; color: var(--faint); }
+  .stat .v { font-family: var(--font-read); font-size: 24px; line-height: 1.2; margin-top: 2px; }
+  .stat .v small { font-family: var(--font-ui); font-size: 12px; color: var(--muted-fg); margin-left: 4px; }
+  .next { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 8px; font-family: var(--font-ui); }
+  .units { list-style: none; padding: 0 !important; margin: 0; font-family: var(--font-ui); font-size: 13.5px; line-height: 1.45; border-top: 1px solid var(--border); }
+  .units li { display: grid; grid-template-columns: 28px 1fr auto; gap: 10px; align-items: baseline; padding: 10px 2px; border-bottom: 1px solid var(--border); margin: 0; cursor: pointer; }
+  .units li:hover { background: var(--hover); }
+  .units .no { font-family: var(--font-read); color: var(--faint); font-size: 15px; }
+  .units .t { font-weight: 500; }
+  .units .s { display: block; color: var(--muted-fg); font-weight: 400; font-size: 12.5px; }
+  .units .m { font-size: 11.5px; color: var(--faint); white-space: nowrap; }
+  .units .m.weak { color: var(--danger); }
+
+  /* Flashcards */
+  .view.cards { flex-direction: column; align-items: center; overflow: auto; padding: 32px 48px; }
+  .cards-bar { width: min(680px, 100%); display: flex; align-items: center; gap: 16px; margin-bottom: 18px; height: 30px; }
+  .cards-bar .tabs { height: 100%; gap: 16px; }
+  .progress { flex: 1; height: 3px; border-radius: 999px; background: var(--hover); overflow: hidden; }
+  .progress > span { display: block; width: 36%; height: 100%; background: var(--primary); }
+  .count-txt { font-size: 12px; color: var(--muted-fg); white-space: nowrap; }
+  .card { width: min(680px, 100%); min-height: 320px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: 28px 32px; display: flex; flex-direction: column; cursor: pointer; }
+  .card .side { font-family: var(--font-read); font-style: italic; font-size: 13px; color: var(--faint); }
+  .card .q { font-family: var(--font-read); font-size: 23px; line-height: 1.4; margin: 12px 0 0; }
+  .card .a { display: none; font-family: var(--font-read); font-size: var(--read-size); line-height: var(--read-lh); color: var(--muted-fg); margin-top: 18px; padding-top: 18px; border-top: 1px dashed var(--border); }
+  .card.flipped .a { display: block; }
+  .card .foot { margin-top: auto; padding-top: 20px; display: flex; align-items: center; justify-content: space-between; color: var(--faint); font-size: 12px; }
+  .grades { width: min(680px, 100%); display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 14px; }
+  .grades .btn { justify-content: space-between; }
+  .grades .again .lbl { color: var(--danger); }
+  .grades .mastered .lbl { color: var(--success); }
+
+  /* Log drawer: closed by default, opened only by the user */
+  .log { position: absolute; left: 0; right: 0; bottom: 0; height: 0; overflow: hidden; background: var(--surface); border-top: 0 solid var(--border); transition: height var(--dur) var(--ease); display: flex; flex-direction: column; }
+  .app[data-log="open"] .log { height: 200px; border-top-width: 1px; box-shadow: 0 -8px 24px rgb(0 0 0 / .08); }
+  .log-hd { height: 36px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 16px; border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 600; }
+  .log pre { margin: 0; padding: 10px 16px; overflow: auto; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11.5px; line-height: 1.6; color: var(--muted-fg); }
+  .log pre .ok { color: var(--success); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-panel" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></symbol>
+  <symbol id="i-activity" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></symbol>
+  <symbol id="i-terminal" viewBox="0 0 24 24"><path d="m4 17 6-6-6-6"/><path d="M12 19h8"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/></symbol>
+  <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></symbol>
+  <symbol id="i-share" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.59 13.51 6.83 3.98"/><path d="m15.41 6.51-6.82 3.98"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></symbol>
+  <symbol id="i-graduation" viewBox="0 0 24 24"><path d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z"/><path d="M22 10v6"/><path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+</svg>
+
+<div class="mock">
+  <div class="controls">
+    <div class="ctl">Theme <div class="seg" data-ctl="theme"><button data-v="light" aria-pressed="true">Light</button><button data-v="dark">Dark</button></div></div>
+    <div class="ctl">View <div class="seg" data-ctl="view"><button data-v="notes" aria-pressed="true">Notes</button><button data-v="cards">Flashcards</button></div></div>
+    <div class="ctl">Sidebar <div class="seg" data-ctl="sidebar"><button data-v="shown" aria-pressed="true">Shown</button><button data-v="hidden">Hidden</button></div></div>
+    <div class="ctl">Log <div class="seg" data-ctl="log"><button data-v="closed" aria-pressed="true">Closed</button><button data-v="open">Open</button></div></div>
+  </div>
+  <p class="caption"><b>Arbor Paper.</b> Paper's warm surfaces, hairlines, and serif reading, with the logo's olive green and bark brown and Tool neutral's icons. A course always opens on its <b>Overview</b>; pick a digest from the index or the course map to read it. The sidebar is either shown or fully hidden (⌘B).</p>
+
+  <div class="stage" id="stage">
+    <div class="frame" id="frame">
+      <div class="app" id="app" data-theme="light" data-view="notes" data-doc="overview" data-sidebar="shown" data-log="closed">
+        <aside class="sb">
+          <div class="sb-head">
+            <div class="brand">
+              <img class="logo light" src="../../desktop/src/assets/arbor-mark.png" alt="" />
+              <img class="logo dark" src="../../desktop/src/assets/arbor-mark-dark.png" alt="" />
+              <span class="brand-name">Arbor</span>
+            </div>
+            <button class="ib" data-act="hide" title="Hide sidebar (⌘B)"><svg class="i"><use href="#i-panel"/></svg></button>
+          </div>
+          <div class="sb-scroll">
+            <div class="label-row"><span class="label">Library</span><button class="ib sm" title="Add class"><svg class="i sm"><use href="#i-plus"/></svg></button></div>
+            <div class="row root-row"><span class="lead"><svg class="i sm"><use href="#i-down"/></svg></span><span class="txt">Fall 2026</span></div>
+            <div class="row indent active"><span class="lead"><svg class="i"><use href="#i-book"/></svg></span><span class="txt">Cell Biology</span><span class="count">12</span></div>
+            <div class="row indent"><span class="lead"><svg class="i"><use href="#i-book"/></svg></span><span class="txt">Organic Chemistry II</span><span class="count">9</span></div>
+            <div class="row indent"><span class="lead"><svg class="i"><use href="#i-book"/></svg></span><span class="txt">Linear Algebra</span><span class="count">14</span></div>
+            <div class="row indent"><span class="lead"><svg class="i"><use href="#i-book"/></svg></span><span class="txt">Medieval Europe</span><span class="count">6</span></div>
+            <div class="row root-row"><span class="lead"><svg class="i sm"><use href="#i-right"/></svg></span><span class="txt">Shared · Study group</span></div>
+          </div>
+          <div class="sb-bottom">
+            <div class="row"><span class="lead"><svg class="i"><use href="#i-activity"/></svg></span><span class="txt">Jobs</span></div>
+            <div class="row"><span class="lead"><svg class="i"><use href="#i-settings"/></svg></span><span class="txt">Settings</span></div>
+            <div class="provider"><span class="dot"></span><span>Grok · grok-4.7</span></div>
+          </div>
+        </aside>
+
+        <div class="main">
+          <header class="hd">
+            <button class="ib open-sb" data-act="show" title="Show sidebar (⌘B)"><svg class="i"><use href="#i-panel"/></svg></button>
+            <div class="title"><h1>Cell Biology</h1><span class="sub">Fall 2026 · 12 digests</span></div>
+            <div class="tabs" role="tablist">
+              <button class="tab" role="tab" data-tab="notes" aria-selected="true"><svg class="i sm"><use href="#i-book"/></svg>Notes</button>
+              <button class="tab" role="tab" data-tab="cards" aria-selected="false"><svg class="i sm"><use href="#i-layers"/></svg>Flashcards</button>
+              <button class="tab" role="tab" aria-selected="false"><svg class="i sm"><use href="#i-help"/></svg>Quiz</button>
+              <button class="tab" role="tab" aria-selected="false"><svg class="i sm"><use href="#i-share"/></svg>Graph</button>
+              <button class="tab" role="tab" aria-selected="false"><svg class="i sm"><use href="#i-chat"/></svg>Chat</button>
+            </div>
+            <button class="btn outline"><svg class="i sm"><use href="#i-plus"/></svg>Add files</button>
+            <button class="btn outline" title="Search (⌘K)"><svg class="i sm"><use href="#i-search"/></svg><span class="kbd">⌘K</span></button>
+          </header>
+
+          <div class="actionbar">
+            <button class="btn primary"><svg class="i sm"><use href="#i-refresh"/></svg>Update knowledge</button>
+            <button class="btn ghost"><svg class="i sm"><use href="#i-check"/></svg>Check citations</button>
+            <div class="spacer"></div>
+            <span class="pill"><span class="dot"></span>Up to date · 2h ago</span>
+            <button class="ib" data-act="log" title="Toggle log (⌘`)"><svg class="i"><use href="#i-terminal"/></svg><span class="badge-dot"></span></button>
+          </div>
+
+          <div class="body">
+            <section class="view notes">
+              <nav class="index">
+                <div class="label-row"><span class="label">Course</span><button class="ib sm" title="Hide index"><svg class="i sm"><use href="#i-list"/></svg></button></div>
+                <a class="digest overview active" data-open="overview"><span class="n"><svg class="i sm"><use href="#i-home"/></svg>Overview</span><span class="d">Study plan · course map</span></a>
+                <div class="label-row"><span class="label">Digests</span></div>
+                <a class="digest" data-open="digest"><span class="n">07 · Membrane transport</span><span class="d">Oct 14 · pp. 151–188</span></a>
+                <a class="digest" data-open="digest"><span class="n">06 · The cytoskeleton</span><span class="d">Oct 9 · pp. 120–150</span></a>
+                <a class="digest" data-open="digest"><span class="n">05 · Protein sorting</span><span class="d">Oct 7 · pp. 96–119</span></a>
+                <a class="digest" data-open="digest"><span class="n">04 · Endomembrane system</span><span class="d">Oct 2 · pp. 71–95</span></a>
+                <a class="digest" data-open="digest"><span class="n">03 · Lipid bilayers</span><span class="d">Sep 30 · pp. 48–70</span></a>
+                <a class="digest" data-open="digest"><span class="n">02 · Cell chemistry</span><span class="d">Sep 25 · pp. 22–47</span></a>
+              </nav>
+              <div class="read">
+                <article class="doc doc-overview">
+                  <div class="eyebrow"><svg class="i sm"><use href="#i-home"/></svg>Course overview</div>
+                  <h2>Cell Biology</h2>
+                  <p class="lede">BIOL 2410 · twelve lectures digested, from cell chemistry through membrane transport. Midterm on November 4.</p>
+                  <div class="stats">
+                    <div class="stat"><div class="k">Cards due today</div><div class="v">14<small>of 86</small></div></div>
+                    <div class="stat"><div class="k">Quiz accuracy</div><div class="v">78%<small>last 3 sessions</small></div></div>
+                    <div class="stat"><div class="k">Midterm</div><div class="v">17<small>days away</small></div></div>
+                  </div>
+                  <div class="next">
+                    <button class="btn primary lg" data-goto="cards"><svg class="i sm"><use href="#i-layers"/></svg>Review 14 due cards</button>
+                    <button class="btn outline lg"><svg class="i sm"><use href="#i-graduation"/></svg>Explain weakest topic</button>
+                  </div>
+                  <h3>Course map</h3>
+                  <ul class="units">
+                    <li data-open="digest"><span class="no">07</span><span><span class="t">Membrane transport</span><span class="s">Channels vs carriers, Na⁺/K⁺ ATPase, gradients</span></span><span class="m">new</span></li>
+                    <li data-open="digest"><span class="no">06</span><span><span class="t">The cytoskeleton</span><span class="s">Actin, microtubules, motor proteins</span></span><span class="m weak">weak · 54%</span></li>
+                    <li data-open="digest"><span class="no">05</span><span><span class="t">Protein sorting</span><span class="s">Signal sequences, ER import, vesicle traffic</span></span><span class="m">82%</span></li>
+                    <li data-open="digest"><span class="no">04</span><span><span class="t">Endomembrane system</span><span class="s">ER, Golgi, lysosomes, endocytosis</span></span><span class="m">88%</span></li>
+                  </ul>
+                  <div class="callout"><svg class="i"><use href="#i-info"/></svg><span>Exam focus: the cytoskeleton is your weakest unit, and lecture 07 hasn't been reviewed yet.</span></div>
+                </article>
+
+                <article class="doc doc-digest">
+                  <div class="eyebrow"><svg class="i sm"><use href="#i-file"/></svg>Digest 07 · Oct 14</div>
+                  <div class="chips"><span class="chip plain">pp. 151–188</span><span class="chip">Facilitated diffusion</span><span class="chip">Na⁺/K⁺ ATPase</span><span class="chip">Electrochemical gradient</span><span class="chip">Aquaporins</span></div>
+                  <h2>Membrane transport</h2>
+                  <p class="lede">How cells move ions and small molecules across a bilayer that is, by design, almost impermeable to them.</p>
+                  <h3>Passive transport</h3>
+                  <p>Solutes move <strong>down their electrochemical gradient</strong> without an energy input. Small nonpolar molecules diffuse straight through the bilayer; ions and polar molecules need a protein path.</p>
+                  <ul>
+                    <li><strong>Channels</strong> form gated pores and are fast, up to 10⁸ ions per second.</li>
+                    <li><strong>Carriers</strong> bind the solute and change shape. They are slower and can saturate.</li>
+                  </ul>
+                  <h3>Active transport</h3>
+                  <p>The <strong>Na⁺/K⁺ ATPase</strong> pumps 3 Na⁺ out and 2 K⁺ in per ATP. That makes it electrogenic: it contributes directly to the resting membrane potential.</p>
+                </article>
+              </div>
+            </section>
+
+            <section class="view cards">
+              <div class="cards-bar">
+                <div class="tabs"><button class="tab" aria-selected="true">Due today · 14</button><button class="tab" aria-selected="false">Full deck · 86</button></div>
+                <div class="progress"><span></span></div>
+                <span class="count-txt">5 / 14</span>
+              </div>
+              <div class="card" id="card">
+                <span class="side">Question</span>
+                <p class="q">Why does the Na⁺/K⁺ ATPase count as electrogenic?</p>
+                <p class="a">Each cycle moves three positive charges out and only two in, so there is a net outward current that adds directly to the membrane potential.</p>
+                <div class="foot"><span>07 · Membrane transport · p. 163</span><span>Click or press <span class="kbd">Space</span> to flip</span></div>
+              </div>
+              <div class="grades">
+                <button class="btn outline lg again"><span class="lbl">Again</span><span class="kbd">1</span></button>
+                <button class="btn outline lg"><span class="lbl">Wrong</span><span class="kbd">2</span></button>
+                <button class="btn outline lg mastered"><span class="lbl">Mastered</span><span class="kbd">3</span></button>
+              </div>
+            </section>
+
+            <div class="log">
+              <div class="log-hd"><svg class="i sm"><use href="#i-terminal"/></svg>Log<span class="spacer"></span><button class="ib sm" data-act="log" title="Close log"><svg class="i sm"><use href="#i-x"/></svg></button></div>
+<pre>14:02:11  plan_update  Cell Biology · 1 new source
+14:02:12  prepare      lecture-07.pdf · 38 pages
+14:02:40  digest       07 · Membrane transport · chunk 3/3
+14:03:05  embed        112 chunks
+14:03:06  <span class="ok">done</span>         Update finished in 55s</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const app = document.getElementById("app");
+  function set(key, v) {
+    app.dataset[key] = v;
+    document.querySelectorAll(`[data-ctl="${key}"] button`).forEach(b => b.setAttribute("aria-pressed", String(b.dataset.v === v)));
+    if (key === "view") document.querySelectorAll(".hd .tab[data-tab]").forEach(t => t.setAttribute("aria-selected", String(t.dataset.tab === v)));
+  }
+  function openDoc(doc, el) {
+    app.dataset.doc = doc;
+    document.querySelectorAll(".digest").forEach(d => d.classList.remove("active"));
+    (el && el.classList.contains("digest") ? el : document.querySelector(doc === "overview" ? ".digest.overview" : ".digest[data-open='digest']")).classList.add("active");
+    document.querySelector(".read").scrollTop = 0;
+  }
+  document.querySelectorAll("[data-ctl] button").forEach(b => b.addEventListener("click", () => set(b.parentElement.dataset.ctl, b.dataset.v)));
+  document.querySelectorAll(".hd .tab[data-tab]").forEach(t => t.addEventListener("click", () => set("view", t.dataset.tab)));
+  app.addEventListener("click", e => {
+    const act = e.target.closest("[data-act]")?.dataset.act;
+    if (act === "hide") set("sidebar", "hidden");
+    if (act === "show") set("sidebar", "shown");
+    if (act === "log") set("log", app.dataset.log === "open" ? "closed" : "open");
+    const open = e.target.closest("[data-open]");
+    if (open) openDoc(open.dataset.open, open);
+    const go = e.target.closest("[data-goto]");
+    if (go) set("view", go.dataset.goto);
+  });
+  document.getElementById("card").addEventListener("click", e => e.currentTarget.classList.toggle("flipped"));
+  if (document.documentElement.classList.contains("dark") || matchMedia("(prefers-color-scheme: dark)").matches) set("theme", "dark");
+  const stage = document.getElementById("stage"), frame = document.getElementById("frame");
+  function fit() { const s = Math.min(1, stage.clientWidth / 1200); frame.style.transform = `scale(${s})`; stage.style.height = `${760 * s}px`; }
+  new ResizeObserver(fit).observe(stage); fit();
+</script>
+</body>
+</html>
