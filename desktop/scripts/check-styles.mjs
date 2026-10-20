@@ -140,6 +140,30 @@ export function checkLine(line, { filePath = "file.tsx" } = {}) {
     });
   }
 
+  if (/\bz-\d+\b/.test(line)) {
+    violations.push({ file: filePath, line: 0, rule: "z-numeric", snippet: "z-<number>" });
+  }
+
+  if (/\b(bg|text|border|ring|from|to|via|fill|stroke|outline)-[a-z-]+\/\d+\b/.test(line)) {
+    violations.push({ file: filePath, line: 0, rule: "color-opacity", snippet: "token/NN" });
+  }
+
+  if (/\bdark:(bg|text|border|ring)-/.test(line)) {
+    violations.push({ file: filePath, line: 0, rule: "dark-color", snippet: "dark: color override" });
+  }
+
+  if (/\bshadow-(sm|md|lg|xl)\b/.test(line)) {
+    violations.push({ file: filePath, line: 0, rule: "shadow-stock", snippet: "shadow-sm|md|lg|xl" });
+  }
+
+  if (/\bduration-\d+\b/.test(line)) {
+    violations.push({ file: filePath, line: 0, rule: "duration-numeric", snippet: "duration-<number>" });
+  }
+
+  if (/\bease-linear\b/.test(line)) {
+    violations.push({ file: filePath, line: 0, rule: "ease-linear", snippet: "ease-linear" });
+  }
+
   return violations;
 }
 

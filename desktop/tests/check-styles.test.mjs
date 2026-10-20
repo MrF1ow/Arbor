@@ -107,3 +107,35 @@ test("lintFile reports line numbers", () => {
   assert.equal(violations.length, 1);
   assert.equal(violations[0].line, 2);
 });
+
+test("numeric z-index utilities are flagged", () => {
+  assert.ok(checkLine('<div className="z-50" />', { filePath: "x.tsx" }).some((h) => h.rule === "z-numeric"));
+});
+
+test("tailwind color opacity modifiers are flagged", () => {
+  assert.ok(
+    checkLine('<div className="bg-primary/50" />', { filePath: "x.tsx" }).some((h) => h.rule === "color-opacity"),
+  );
+});
+
+test("dark color overrides are flagged", () => {
+  assert.ok(
+    checkLine('<div className="dark:bg-muted" />', { filePath: "x.tsx" }).some((h) => h.rule === "dark-color"),
+  );
+});
+
+test("stock shadow utilities are flagged", () => {
+  assert.ok(
+    checkLine('<div className="shadow-md" />', { filePath: "x.tsx" }).some((h) => h.rule === "shadow-stock"),
+  );
+});
+
+test("numeric duration utilities are flagged", () => {
+  assert.ok(
+    checkLine('<div className="duration-200" />', { filePath: "x.tsx" }).some((h) => h.rule === "duration-numeric"),
+  );
+});
+
+test("ease-linear is flagged", () => {
+  assert.ok(checkLine('<div className="ease-linear" />', { filePath: "x.tsx" }).some((h) => h.rule === "ease-linear"));
+});

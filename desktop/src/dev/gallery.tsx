@@ -1,4 +1,6 @@
+import { Button } from "~/components/ui/button";
 import { renderMarkdown } from "~/domain/markdown";
+import { GalleryPrimitives } from "~/dev/gallery-primitives";
 import { useUiStore } from "~/stores/ui-store";
 
 const COLOR_SWATCHES: { token: string; className: string }[] = [
@@ -109,22 +111,20 @@ export default function DevGallery() {
   return (
     <div className="min-h-full bg-background p-6 text-foreground" data-dev-gallery={GALLERY_FINGERPRINT}>
       <header className="mb-8 flex flex-wrap items-center gap-4">
-        <h1 className="font-serif text-title font-medium">Arbor UI tokens</h1>
-        <div className="inline-flex gap-1 rounded-lg border border-border bg-muted p-1 transition-colors duration-panel ease-out-soft">
+        <h1 className="font-serif text-title font-medium">Arbor UI gallery</h1>
+        <div className="inline-flex gap-1 rounded-sm border border-border bg-muted p-1">
           {(["light", "dark", "system"] as const).map((mode) => (
-            <button
+            <Button
               key={mode}
               type="button"
+              size="sm"
+              variant={appearance === mode ? "secondary" : "ghost"}
               aria-pressed={appearance === mode}
-              className={
-                appearance === mode
-                  ? "rounded-md bg-card px-3 py-1 text-xs capitalize text-foreground shadow-card transition-colors duration-fast ease-out-soft"
-                  : "rounded-md px-3 py-1 text-xs capitalize text-muted-foreground transition-colors duration-fast ease-out-soft"
-              }
+              className="capitalize"
               onClick={() => setAppearance(mode)}
             >
               {mode}
-            </button>
+            </Button>
           ))}
         </div>
       </header>
@@ -175,7 +175,7 @@ export default function DevGallery() {
         <div className="flex flex-wrap gap-4">
           {RADIUS_SAMPLES.map(({ name, className }) => (
             <div key={name} className="text-center text-2xs text-muted-foreground">
-              <div className={`mb-1 size-12 border border-border bg-card ${className}`} />
+              <div className={`mb-1 size-12 border border-border bg-accent ${className}`} />
               {name}
             </div>
           ))}
@@ -188,7 +188,7 @@ export default function DevGallery() {
           {SIZE_BARS.map(({ label, className }) => (
             <li key={label} className="flex items-center gap-3 text-2xs text-muted-foreground">
               <span className="w-24 shrink-0 font-mono">{label}</span>
-              <div className={`rounded-sm bg-primary/30 ${className}`} />
+              <div className={`rounded-sm bg-accent ${className}`} />
             </li>
           ))}
         </ul>
@@ -199,13 +199,15 @@ export default function DevGallery() {
         <div className="w-48 rounded-md border border-border bg-card p-4 shadow-card">shadow-card</div>
       </section>
 
-      <section>
+      <section className="mb-10">
         <h2 className="mb-3 text-sm font-semibold">prose-arbor</h2>
         {prose.pageChip ? (
           <span className="page-chip">Pages {prose.pageChip}</span>
         ) : null}
         <div className="prose-arbor" dangerouslySetInnerHTML={{ __html: prose.html }} />
       </section>
+
+      <GalleryPrimitives />
     </div>
   );
 }

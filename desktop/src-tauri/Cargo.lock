@@ -817,7 +817,7 @@ dependencies = [
 
 [[package]]
 name = "desktop"
-version = "5.4.0"
+version = "5.5.0"
 dependencies = [
  "keyring",
  "libc",
