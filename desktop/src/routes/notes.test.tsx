@@ -475,6 +475,7 @@ describe("notes PR7", { timeout: 15000 }, () => {
 
   it("opens narrow index sheet from Show index without changing notesIndexOpen", async () => {
     const OriginalRO = globalThis.ResizeObserver;
+    const width = 500;
     class MockResizeObserver {
       private cb: ResizeObserverCallback;
       constructor(cb: ResizeObserverCallback) {
@@ -483,9 +484,9 @@ describe("notes PR7", { timeout: 15000 }, () => {
       observe(el: Element) {
         Object.defineProperty(el, "clientWidth", {
           configurable: true,
-          value: 500,
+          value: width,
         });
-        this.cb([{ target: el } as ResizeObserverEntry], this);
+        this.cb([{ target: el } as ResizeObserverEntry], this as unknown as ResizeObserver);
       }
       disconnect() {}
       unobserve() {}
@@ -502,6 +503,62 @@ describe("notes PR7", { timeout: 15000 }, () => {
         expect(screen.getByRole("dialog")).toBeInTheDocument();
       });
       expect(useUiStore.getState().notesIndexOpen).toBe(true);
+    } finally {
+      globalThis.ResizeObserver = OriginalRO;
+    }
+  });
+
+  it("closes the notes index sheet after widening past the narrow breakpoint", async () => {
+    const OriginalRO = globalThis.ResizeObserver;
+    let width = 500;
+    const callbacks: Array<{ el: Element; cb: ResizeObserverCallback; ro: ResizeObserver }> = [];
+    class MockResizeObserver {
+      private cb: ResizeObserverCallback;
+      constructor(cb: ResizeObserverCallback) {
+        this.cb = cb;
+      }
+      observe(el: Element) {
+        Object.defineProperty(el, "clientWidth", {
+          configurable: true,
+          get: () => width,
+        });
+        this.cb([{ target: el } as ResizeObserverEntry], this as unknown as ResizeObserver);
+        callbacks.push({ el, cb: this.cb, ro: this as unknown as ResizeObserver });
+      }
+      disconnect() {}
+      unobserve() {}
+    }
+    globalThis.ResizeObserver = MockResizeObserver as typeof ResizeObserver;
+
+    const user = userEvent.setup();
+    useUiStore.setState({ notesIndexOpen: true });
+    try {
+      await renderAppAtRoute("/course/cell-biology/notes");
+      await waitForOverview();
+      await user.click(screen.getByRole("button", { name: /Show index/i }));
+      await waitFor(() => {
+        expect(screen.getByRole("dialog")).toBeInTheDocument();
+      });
+      width = 900;
+      for (const { el, cb, ro } of callbacks) {
+        Object.defineProperty(el, "clientWidth", {
+          configurable: true,
+          get: () => width,
+        });
+        cb([{ target: el } as ResizeObserverEntry], ro);
+      }
+      await waitFor(() => {
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      });
+      width = 500;
+      for (const { el, cb, ro } of callbacks) {
+        Object.defineProperty(el, "clientWidth", {
+          configurable: true,
+          get: () => width,
+        });
+        cb([{ target: el } as ResizeObserverEntry], ro);
+      }
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     } finally {
       globalThis.ResizeObserver = OriginalRO;
     }

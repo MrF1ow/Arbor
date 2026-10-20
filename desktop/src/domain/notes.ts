@@ -21,8 +21,17 @@ export function resolveDigestSlug(digestRef: string, digests: DigestInfo[]): str
   return digestSlugFromPath(digestRef);
 }
 
-/** Chip label for a flashcard source: digest title when known, else stem. */
-export function formatFlashcardSourceLabel(source: CardSource, digests: DigestInfo[]): string {
+export type StudySourceLabelInput = {
+  digest: string;
+  heading?: string | null;
+  page?: string | null;
+};
+
+/** Chip label for a study source: digest title when known, else stem. */
+export function formatStudySourceLabel(
+  source: StudySourceLabelInput,
+  digests: DigestInfo[],
+): string {
   const key = digestKey(source.digest);
   const match = digests.find(
     (d) => digestKey(d.path) === key || digestSlugFromPath(d.path) === source.digest,
@@ -36,6 +45,11 @@ export function formatFlashcardSourceLabel(source: CardSource, digests: DigestIn
     parts.push(`p. ${source.page}`);
   }
   return parts.join(" · ");
+}
+
+/** Chip label for a flashcard source: digest title when known, else stem. */
+export function formatFlashcardSourceLabel(source: CardSource, digests: DigestInfo[]): string {
+  return formatStudySourceLabel(source, digests);
 }
 
 export function digestNotesPath(

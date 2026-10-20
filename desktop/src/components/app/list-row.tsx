@@ -8,6 +8,8 @@ export type ListRowProps = {
   trailing?: React.ReactNode;
   icon?: LucideIcon;
   active?: boolean;
+  /** Dashed leading bar (figure concept rows). */
+  leadingDashed?: boolean;
   twoLine?: boolean;
   onSelect?: () => void;
   href?: string;
@@ -20,6 +22,7 @@ export function ListRow({
   trailing,
   icon: Icon,
   active = false,
+  leadingDashed = false,
   twoLine = false,
   onSelect,
   href,
@@ -43,7 +46,9 @@ export function ListRow({
     "relative flex w-full items-center gap-2 px-2 text-left text-sm outline-none transition-colors duration-fast ease-out-soft",
     twoLine ? "min-h-row py-1.5" : "h-row",
     "before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-transparent",
-    active && "before:bg-primary bg-transparent",
+    leadingDashed && "before:border-l before:border-dashed before:border-border before:bg-transparent",
+    leadingDashed && active && "before:border-primary",
+    !leadingDashed && active && "before:bg-primary bg-transparent",
     !active && "hover:bg-muted",
     className,
   );

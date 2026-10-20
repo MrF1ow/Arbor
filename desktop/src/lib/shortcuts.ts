@@ -42,13 +42,18 @@ export const SHORTCUT_CATALOG: ShortcutEntry[] = [
   { keys: "Enter", description: "Submit or next question (Quiz view)", group: "Quiz" },
   { keys: "←", description: "Previous question (Quiz view)", group: "Quiz" },
   { keys: "→", description: "Next question (Quiz view)", group: "Quiz" },
+  { keys: "↑", description: "Previous concept (Graph list)", group: "Graph" },
+  { keys: "↓", description: "Next concept (Graph list)", group: "Graph" },
 ];
 
 export function isDialogOpen(): boolean {
   if (typeof document === "undefined") {
     return false;
   }
-  return Boolean(document.querySelector('[data-slot="dialog-overlay"][data-open]'));
+  return Boolean(
+    document.querySelector('[data-slot="dialog-overlay"][data-open]') ??
+      document.querySelector('[data-slot="sheet-overlay"][data-open]'),
+  );
 }
 
 export function isEditableTarget(target: EventTarget | null): boolean {
