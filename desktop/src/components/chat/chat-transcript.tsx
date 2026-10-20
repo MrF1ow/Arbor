@@ -43,9 +43,10 @@ export function ChatTranscript({
         if (line.role === "assistant") {
           const banner = unsupportedBanner(line.supported);
           return (
-            <div key={key} className="flex flex-col gap-2">
+            <div key={key} className="flex w-full flex-col gap-2">
               <div
-                className="prose-arbor text-sm"
+                data-testid="chat-assistant-prose"
+                className="prose-arbor mx-0 w-full max-w-none text-sm"
                 dangerouslySetInnerHTML={{ __html: renderAnswerHtml(line.content ?? "") }}
               />
               {banner ? (

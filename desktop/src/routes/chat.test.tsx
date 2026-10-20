@@ -148,7 +148,7 @@ describe("chat PR11", { timeout: 25000 }, () => {
     expect(screen.queryByText("old question")).not.toBeInTheDocument();
     expect(screen.getByText("answer", { selector: "strong" })).toBeInTheDocument();
     const cite = screen.getByRole("button", {
-      name: /2026-09-12-membranes\.md · Membrane structure/i,
+      name: /Cell membranes · Membrane structure/i,
     });
     expect(cite).toBeInTheDocument();
   });
@@ -391,6 +391,30 @@ describe("chat PR11", { timeout: 25000 }, () => {
     await waitFor(() => expect(getMockIpcLog()).toContain("start_study_job"), { timeout: 5000 });
     const job = getMockIpcCalls().find((c) => c.cmd === "start_study_job");
     expect((job?.args as { skill?: string }).skill).toBe("flashcards");
+  });
+
+  it("assistant prose is full width in the reading column", () => {
+    renderWithProviders(
+      <ChatTranscript
+        course="cell-biology"
+        lines={[buildAssistantLine("ask", "Left-aligned answer", true, [])]}
+        digests={fixtureDigests}
+      />,
+      { minimal: true },
+    );
+    const prose = screen.getByTestId("chat-assistant-prose");
+    expect(prose.className).toMatch(/\bw-full\b/);
+    expect(prose.className).toMatch(/\bmax-w-none\b/);
+    expect(prose.className).not.toMatch(/\btext-center\b/);
+    cleanup();
+  });
+
+  it("study artifact select shows human-readable labels", async () => {
+    await renderAppAtRoute("/course/cell-biology/chat");
+    await waitForChatReady();
+    expect(screen.getByRole("combobox", { name: "Study artifact type" })).toHaveTextContent(
+      "Flashcards",
+    );
   });
 
   it("live deltas re-render LiveAnswer without re-rendering ChatTranscript", () => {
@@ -682,11 +706,11 @@ describe("chat PR11", { timeout: 25000 }, () => {
     await waitForChatReady();
     await waitFor(() => {
       expect(
-        screen.getByRole("button", { name: /2026-09-12-membranes\.md · Membrane structure/i }),
+        screen.getByRole("button", { name: /Cell membranes · Membrane structure/i }),
       ).toBeInTheDocument();
     });
     await user.click(
-      screen.getByRole("button", { name: /2026-09-12-membranes\.md · Membrane structure/i }),
+      screen.getByRole("button", { name: /Cell membranes · Membrane structure/i }),
     );
     await waitFor(() => {
       expect(router.state.location.pathname).toContain("/notes/2026-09-12-membranes");
@@ -694,7 +718,7 @@ describe("chat PR11", { timeout: 25000 }, () => {
     });
     await router.navigate({ to: "/course/$course/chat", params: { course: "cell-biology" } });
     await waitForChatReady();
-    await user.click(screen.getByRole("button", { name: /course\.md · Overview/i }));
+    await user.click(screen.getByRole("button", { name: /Course overview · Overview/i }));
     await waitFor(() => {
       expect(router.state.location.pathname).toBe("/course/cell-biology/notes");
     });

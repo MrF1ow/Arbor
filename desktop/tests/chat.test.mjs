@@ -7,6 +7,7 @@ import {
   buildUserLine,
   chatNotePath,
   citationLabel,
+  formatChatCitationLabel,
   phaseLabel,
   renderAnswerHtml,
   unsupportedBanner,
@@ -52,6 +53,42 @@ test("citationLabel formats digest basename heading and page range", () => {
     page_range: "1-4",
   });
   assert.equal(label, "lecture.md · glycolysis · p. 1-4");
+});
+
+test("formatChatCitationLabel uses digest titles and course overview copy", () => {
+  const digests = [
+    {
+      title: "Cell membranes",
+      path: "cell-biology/digests/2026-09-12-membranes.md",
+    },
+  ];
+  assert.equal(
+    formatChatCitationLabel(
+      {
+        digest_path: "cell-biology/digests/2026-09-12-membranes.md",
+        heading_id: "Membrane structure",
+      },
+      "cell-biology",
+      digests,
+    ),
+    "Cell membranes · Membrane structure",
+  );
+  assert.equal(
+    formatChatCitationLabel(
+      { digest_path: "cell-biology/course.md", heading_id: "Overview" },
+      "cell-biology",
+      digests,
+    ),
+    "Course overview · Overview",
+  );
+  assert.equal(
+    formatChatCitationLabel(
+      { digest_path: "cell-biology/digests/missing.md", heading_id: "Section" },
+      "cell-biology",
+      digests,
+    ),
+    "missing.md · Section",
+  );
 });
 
 test("unsupported banner string is exact", () => {

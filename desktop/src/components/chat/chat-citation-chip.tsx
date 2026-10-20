@@ -2,7 +2,7 @@ import { useNavigate } from "@tanstack/react-router";
 
 import { Chip } from "~/components/app/chip";
 import type { ChatCitation } from "~/domain/chat";
-import { chatNotePath, citationLabel } from "~/domain/chat";
+import { chatNotePath, formatChatCitationLabel } from "~/domain/chat";
 import { resolveDigestSlug } from "~/domain/notes";
 import type { DigestInfo } from "~/domain/types";
 
@@ -37,7 +37,7 @@ export function ChatCitationChip({
         });
       }}
     >
-      {citationLabel(citation)}
+      {formatChatCitationLabel(citation, course, digests)}
     </Chip>
   );
 }
