@@ -1,4 +1,12 @@
 import "@testing-library/jest-dom/vitest";
+import { vi } from "vitest";
+
+export const clipboardWriteText = vi.fn().mockResolvedValue(undefined);
+
+Object.defineProperty(navigator, "clipboard", {
+  value: { writeText: clipboardWriteText },
+  configurable: true,
+});
 
 const storage = new Map<string, string>();
 if (typeof globalThis.localStorage?.clear !== "function") {
