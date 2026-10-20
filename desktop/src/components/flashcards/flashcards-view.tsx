@@ -30,23 +30,17 @@ import {
   type FlashcardGrade,
 } from "~/domain/flashcards";
 import type { FlashcardDeck, FlashcardReview } from "~/domain/types";
-import { VIEWER_WRITE_REASON, viewerBlocksWrite } from "~/domain/library-role";
-import { PROVIDER_FALLBACK, signedOutJobMessage } from "~/domain/provider";
 import type { CourseOverviewPayload, DigestInfo } from "~/domain/types";
-import { fetchAuthStatus } from "~/lib/auth-refresh";
+import { useStudyJobLauncher } from "~/hooks/use-study-job-launcher";
 import { invoke } from "~/lib/ipc";
 import { pickActiveRoot } from "~/lib/knowledge-root";
-import { useEffectiveProvider } from "~/lib/queries/effective-provider";
 import { useStartFlashcardJobMutation } from "~/lib/queries/jobs";
-import { useLibrary } from "~/lib/queries/library";
 import { useCourseOverview } from "~/lib/queries/notes";
 import { qk } from "~/lib/queries/keys";
 import { useSettings } from "~/lib/queries/settings";
 import { useStudyArtifactStale, useStudyJson } from "~/lib/queries/study";
 import { isDialogOpen, isEditableTarget } from "~/lib/shortcuts";
 import { flushStudyWrites, useEnqueueStudyWrite } from "~/lib/study-writes";
-import { useJobStore } from "~/stores/job-store";
-
 type DeckMode = "due" | "full";
 
 function deckIdentity(deck: FlashcardDeck): string {
@@ -109,14 +103,20 @@ export function FlashcardsView({
   const queryClient = useQueryClient();
   const settings = useSettings();
   const activeRoot = pickActiveRoot(settings.data);
-  const library = useLibrary(activeRoot);
-  const role = library.data?.present === true ? library.data.role : null;
-  const viewerBlocked = viewerBlocksWrite(role);
-  const effective = useEffectiveProvider(activeRoot);
-  const appendLog = useJobStore((s) => s.append);
-  const studyJobRunning = useJobStore((s) => s.status) === "running";
   const enqueueWrite = useEnqueueStudyWrite();
   const startJob = useStartFlashcardJobMutation(activeRoot);
+  const {
+    viewerBlocked,
+    viewerWriteReason,
+    modelHint,
+    jobDisabled,
+    launchStudyJob,
+  } = useStudyJobLauncher(activeRoot, {
+    mutateAsync: startJob.mutateAsync,
+    isPending: startJob.isPending,
+    startedMessage: (jobId) => `Flashcard job ${jobId} started.`,
+    failedMessage: "Flashcard generation failed to start",
+  });
 
   const [flushDone, setFlushDone] = useState(false);
   const [postFlushReady, setPostFlushReady] = useState(false);
@@ -125,7 +125,6 @@ export function FlashcardsView({
   const [deckCount, setDeckCount] = useState(0);
   const [review, setReview] = useState<FlashcardReview | null>(null);
   const [deck, setDeck] = useState<FlashcardDeck | null>(null);
-  const [modelHint, setModelHint] = useState<string | null>(null);
   const [sessionIdentity, setSessionIdentity] = useState<string | null>(null);
   const [flushAt, setFlushAt] = useState(0);
 
@@ -470,42 +469,6 @@ export function FlashcardsView({
     return () => window.removeEventListener("keydown", onKeyDown);
   });
 
-  async function runFlashcardJob(force: boolean) {
-    if (!activeRoot || viewerBlocked) {
-      return;
-    }
-    const modelId = effective.modelId?.trim();
-    if (!modelId) {
-      setModelHint("Select a model in Settings.");
-      return;
-    }
-    setModelHint(null);
-    const providerLabel =
-      PROVIDER_FALLBACK.find((p) => p.id === effective.providerId)?.label ??
-      effective.providerId;
-    try {
-      const auth = await fetchAuthStatus(effective.providerId, true);
-      if (!auth.authenticated) {
-        appendLog(signedOutJobMessage(providerLabel, auth.reason));
-        return;
-      }
-    } catch (error) {
-      appendLog(signedOutJobMessage(providerLabel, String(error)));
-      return;
-    }
-    try {
-      const jobId = await startJob.mutateAsync({
-        course,
-        force,
-        model: modelId,
-        provider: effective.providerId,
-      });
-      appendLog(`Flashcard job ${jobId} started.`);
-    } catch (error) {
-      appendLog(`Flashcard generation failed to start: ${error}`);
-    }
-  }
-
   const hasDeck = deck !== null && review !== null;
   const deckUnavailable =
     deckQuery.isError ||
@@ -521,7 +484,6 @@ export function FlashcardsView({
     (flushAt > 0 && overview.dataUpdatedAt < flushAt);
   const queriesLoading = awaitingSettled && !hasDeck && !deckUnavailable;
   const displayName = courseDisplayName(course);
-  const jobDisabled = viewerBlocked || studyJobRunning || startJob.isPending;
 
   if (queriesLoading) {
     return (
@@ -548,8 +510,8 @@ export function FlashcardsView({
                 ) : null}
                 <Button
                   disabled={jobDisabled}
-                  title={viewerBlocked ? VIEWER_WRITE_REASON : undefined}
-                  onClick={() => void runFlashcardJob(false)}
+                  title={viewerBlocked ? viewerWriteReason : undefined}
+                  onClick={() => void launchStudyJob(course, false)}
                 >
                   Generate
                 </Button>
@@ -600,7 +562,7 @@ export function FlashcardsView({
           stale={Boolean(staleQuery.data)}
           viewerBlocked={viewerBlocked}
           jobDisabled={jobDisabled}
-          onRefresh={() => void runFlashcardJob(true)}
+          onRefresh={() => void launchStudyJob(course, true)}
           modelHint={modelHint}
         />
 

@@ -26,21 +26,15 @@ import {
   submitChoice,
 } from "~/domain/quiz";
 import type { DigestInfo, QuizPack, QuizProgress, QuizReview } from "~/domain/types";
-import { VIEWER_WRITE_REASON, viewerBlocksWrite } from "~/domain/library-role";
-import { PROVIDER_FALLBACK, signedOutJobMessage } from "~/domain/provider";
-import { fetchAuthStatus } from "~/lib/auth-refresh";
+import { useStudyJobLauncher } from "~/hooks/use-study-job-launcher";
 import { invoke } from "~/lib/ipc";
 import { pickActiveRoot } from "~/lib/knowledge-root";
-import { useEffectiveProvider } from "~/lib/queries/effective-provider";
 import { useStartQuizJobMutation } from "~/lib/queries/jobs";
-import { useLibrary } from "~/lib/queries/library";
 import { qk } from "~/lib/queries/keys";
 import { useSettings } from "~/lib/queries/settings";
 import { useQuizProgress, useStudyArtifactStale, useStudyJson } from "~/lib/queries/study";
 import { isDialogOpen, isEditableTarget } from "~/lib/shortcuts";
 import { flushStudyWrites, useEnqueueStudyWrite } from "~/lib/study-writes";
-import { useJobStore } from "~/stores/job-store";
-
 function packIdentity(pack: QuizPack): string {
   return `${pack.course}:${pack.questions.map((q) => q.id).join("\0")}`;
 }
@@ -55,14 +49,20 @@ export function QuizView({
   const queryClient = useQueryClient();
   const settings = useSettings();
   const activeRoot = pickActiveRoot(settings.data);
-  const library = useLibrary(activeRoot);
-  const role = library.data?.present === true ? library.data.role : null;
-  const viewerBlocked = viewerBlocksWrite(role);
-  const effective = useEffectiveProvider(activeRoot);
-  const appendLog = useJobStore((s) => s.append);
-  const studyJobRunning = useJobStore((s) => s.status) === "running";
   const enqueueWrite = useEnqueueStudyWrite();
   const startJob = useStartQuizJobMutation(activeRoot);
+  const {
+    viewerBlocked,
+    viewerWriteReason,
+    modelHint,
+    jobDisabled,
+    launchStudyJob,
+  } = useStudyJobLauncher(activeRoot, {
+    mutateAsync: startJob.mutateAsync,
+    isPending: startJob.isPending,
+    startedMessage: (jobId) => `Quiz job ${jobId} started.`,
+    failedMessage: "Quiz generation failed to start",
+  });
 
   const [flushDone, setFlushDone] = useState(false);
   const [postFlushReady, setPostFlushReady] = useState(false);
@@ -71,8 +71,6 @@ export function QuizView({
   const [progress, setProgress] = useState<QuizProgress>({});
   const [review, setReview] = useState<QuizReview | null>(null);
   const [sessionIdentity, setSessionIdentity] = useState<string | null>(null);
-  const [modelHint, setModelHint] = useState<string | null>(null);
-
   const lastSyncedDataRef = useRef({ pack: 0, progress: 0 });
   const prevSessionIdentityRef = useRef<string | null>(null);
 
@@ -387,42 +385,6 @@ export function QuizView({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  async function runQuizJob(force: boolean) {
-    if (!activeRoot || viewerBlocked) {
-      return;
-    }
-    const modelId = effective.modelId?.trim();
-    if (!modelId) {
-      setModelHint("Select a model in Settings.");
-      return;
-    }
-    setModelHint(null);
-    const providerLabel =
-      PROVIDER_FALLBACK.find((p) => p.id === effective.providerId)?.label ??
-      effective.providerId;
-    try {
-      const auth = await fetchAuthStatus(effective.providerId, true);
-      if (!auth.authenticated) {
-        appendLog(signedOutJobMessage(providerLabel, auth.reason));
-        return;
-      }
-    } catch (error) {
-      appendLog(signedOutJobMessage(providerLabel, String(error)));
-      return;
-    }
-    try {
-      const jobId = await startJob.mutateAsync({
-        course,
-        force,
-        model: modelId,
-        provider: effective.providerId,
-      });
-      appendLog(`Quiz job ${jobId} started.`);
-    } catch (error) {
-      appendLog(`Quiz generation failed to start: ${error}`);
-    }
-  }
-
   const hasPack = pack !== null && review !== null;
   const packUnavailable =
     packQuery.isError || (queriesSettled && packLoadError);
@@ -439,7 +401,6 @@ export function QuizView({
       progressQuery.dataUpdatedAt < flushAt);
   const queriesLoading = awaitingSettled && !hasPack && !packUnavailable;
   const displayName = courseDisplayName(course);
-  const jobDisabled = viewerBlocked || studyJobRunning || startJob.isPending;
 
   if (queriesLoading) {
     return (
@@ -466,8 +427,8 @@ export function QuizView({
                 ) : null}
                 <Button
                   disabled={jobDisabled}
-                  title={viewerBlocked ? VIEWER_WRITE_REASON : undefined}
-                  onClick={() => void runQuizJob(false)}
+                  title={viewerBlocked ? viewerWriteReason : undefined}
+                  onClick={() => void launchStudyJob(course, false)}
                 >
                   Generate
                 </Button>
@@ -505,7 +466,7 @@ export function QuizView({
           stale={Boolean(staleQuery.data)}
           viewerBlocked={viewerBlocked}
           jobDisabled={jobDisabled}
-          onRefresh={() => void runQuizJob(true)}
+          onRefresh={() => void launchStudyJob(course, true)}
           modelHint={modelHint}
         />
 
