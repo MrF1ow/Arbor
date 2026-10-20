@@ -12,7 +12,7 @@ Living tracker for **implemented / locally tested / live-run tested**. Capabilit
 
 **Current era:** Version 5 closed at `v5.0.0`. Version 4’s Linux live run is recorded (2026-10-18). Version 5’s Linux live run is recorded the same day. A Mac run does not close a version.
 
-**Current package:** `5.5.0`. `v6.0.0` waits for UI plan row 16 (cutover). **`v5.1.0` is cut when this release lands** (not tagged in this commit). **`v5.0.1` is cut when that release lands** (not tagged in this commit). **`v5.0.0` is cut when that release lands** (not tagged in this commit). **`v4.5.0` is cut when that release lands** (not tagged in this commit). **`v4.4.0` is tagged.** **`v4.3.0` is not tagged yet.** **`v4.2.0`, `v4.1.0`, and `v4.0.0` are already tagged.** Version 3’s two Notes rows stay open: markdown tables, and bold/italic, because no live digest contained them. The 2026-09-20 Mac blockers were retested on the 2026-10-17 run.
+**Current package:** `5.6.0`. `v6.0.0` waits for UI plan row 16 (cutover). **`v5.1.0` is cut when this release lands** (not tagged in this commit). **`v5.0.1` is cut when that release lands** (not tagged in this commit). **`v5.0.0` is cut when that release lands** (not tagged in this commit). **`v4.5.0` is cut when that release lands** (not tagged in this commit). **`v4.4.0` is tagged.** **`v4.3.0` is not tagged yet.** **`v4.2.0`, `v4.1.0`, and `v4.0.0` are already tagged.** Version 3’s two Notes rows stay open: markdown tables, and bold/italic, because no live digest contained them. The 2026-09-20 Mac blockers were retested on the 2026-10-17 run.
 
 | Marker | Meaning |
 |--------|---------|
@@ -141,7 +141,7 @@ Also Version 4 (not extra GitHub issues): review scheduling, weak-topic detectio
 
 ## Version 5 — collaboration (closed at `v5.0.0`)
 
-No current GitHub issue for the milestone. Cloud sync, shared libraries, marketplaces, permissions, remote workers. Version 4 is closed at `v4.0.0`. This package is `5.5.0`.
+No current GitHub issue for the milestone. Cloud sync, shared libraries, marketplaces, permissions, remote workers. Version 4 is closed at `v4.0.0`. This package is `5.6.0`.
 
 | Item | Implemented | Local/VM | Live run | Mac (optional) |
 |------|-------------|----------|----------|----------------|
