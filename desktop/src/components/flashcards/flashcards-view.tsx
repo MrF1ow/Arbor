@@ -1,27 +1,17 @@
-import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  ChevronLeft,
-  ChevronRight,
-  RefreshCw,
-  RotateCcw,
-  Shuffle,
-} from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight, RotateCcw, Shuffle } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
-import { Chip } from "~/components/app/chip";
 import { EmptyState } from "~/components/app/empty-state";
-import { UnsavedBadge } from "~/components/app/unsaved-badge";
-import { Badge } from "~/components/ui/badge";
+import { StudyArtifactToolbar } from "~/components/study/study-artifact-toolbar";
+import { StudyColumn, StudyViewShell } from "~/components/study/study-layout";
+import { StudyProgressBar } from "~/components/study/study-progress-bar";
+import { StudySourceChip } from "~/components/study/study-source-chip";
+import { StudyUnverifiedBadge } from "~/components/study/study-unverified-badge";
 import { Button } from "~/components/ui/button";
 import { Kbd } from "~/components/ui/kbd";
 import { Skeleton } from "~/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "~/components/ui/tabs";
-import {
-  LazyTooltip,
-  LazyTooltipContent,
-  LazyTooltipTrigger,
-} from "~/components/ui/lazy-tooltip";
 import { courseDisplayName } from "~/domain/course";
 import { failedIdsFor, parseCitationsReport } from "~/domain/citations";
 import {
@@ -41,7 +31,6 @@ import {
 } from "~/domain/flashcards";
 import type { FlashcardDeck, FlashcardReview } from "~/domain/types";
 import { VIEWER_WRITE_REASON, viewerBlocksWrite } from "~/domain/library-role";
-import { formatFlashcardSourceLabel, resolveDigestSlug } from "~/domain/notes";
 import { PROVIDER_FALLBACK, signedOutJobMessage } from "~/domain/provider";
 import type { CourseOverviewPayload, DigestInfo } from "~/domain/types";
 import { fetchAuthStatus } from "~/lib/auth-refresh";
@@ -117,7 +106,6 @@ export function FlashcardsView({
   focusCardId?: string;
   onFocusCardHandled: () => void;
 }) {
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const settings = useSettings();
   const activeRoot = pickActiveRoot(settings.data);
@@ -143,6 +131,7 @@ export function FlashcardsView({
 
   const focusClearPendingRef = useRef(false);
   const lastSyncedDataRef = useRef({ deck: 0, overview: 0 });
+  const prevSessionIdentityRef = useRef<string | null>(null);
 
   const deckQuery = useStudyJson(activeRoot, course, "flashcards.json");
   const citationsQuery = useStudyJson(activeRoot, course, "citations.json");
@@ -230,36 +219,45 @@ export function FlashcardsView({
   const identity =
     parsedDeck && activeRoot ? `${activeRoot}|${deckIdentity(parsedDeck)}` : null;
 
-  useEffect(() => {
-    if (!queriesSettled) {
-      return;
-    }
-    /* eslint-disable react-hooks/set-state-in-effect -- hydrate session when deck identity settles */
+  if (queriesSettled) {
     if (deckLoadError) {
-      setSessionIdentity("__error__");
-      setDeck(null);
-      setReview(null);
-      return;
+      if (sessionIdentity !== "__error__") {
+        setSessionIdentity("__error__");
+        setDeck(null);
+        setReview(null);
+      }
+    } else if (parsedDeck && identity && identity !== sessionIdentity) {
+      const dueFromOverview = [...overview.data!.due.due_ids];
+      const focused = sessionWithOptionalFocus(parsedDeck, dueFromOverview, focusCardId);
+      setSessionIdentity(identity);
+      setDeck(parsedDeck);
+      setDeckMode(focused.mode);
+      setDueIds(dueFromOverview);
+      setDeckCount(overview.data!.due.deck_count);
+      setReview(focused.review);
     }
-    if (!parsedDeck || !identity || identity === sessionIdentity) {
-      return;
+  }
+
+  useLayoutEffect(() => {
+    if (
+      queriesSettled &&
+      !deckLoadError &&
+      parsedDeck &&
+      identity &&
+      identity === sessionIdentity &&
+      prevSessionIdentityRef.current !== sessionIdentity
+    ) {
+      const dueFromOverview = [...overview.data!.due.due_ids];
+      const focused = sessionWithOptionalFocus(parsedDeck, dueFromOverview, focusCardId);
+      if (focused.clearFocusParam) {
+        focusClearPendingRef.current = true;
+      }
+      lastSyncedDataRef.current = {
+        deck: deckQuery.dataUpdatedAt,
+        overview: overview.dataUpdatedAt,
+      };
     }
-    const dueFromOverview = [...overview.data!.due.due_ids];
-    const focused = sessionWithOptionalFocus(parsedDeck, dueFromOverview, focusCardId);
-    if (focused.clearFocusParam) {
-      focusClearPendingRef.current = true;
-    }
-    setSessionIdentity(identity);
-    setDeck(parsedDeck);
-    setDeckMode(focused.mode);
-    setDueIds(dueFromOverview);
-    setDeckCount(overview.data!.due.deck_count);
-    setReview(focused.review);
-    lastSyncedDataRef.current = {
-      deck: deckQuery.dataUpdatedAt,
-      overview: overview.dataUpdatedAt,
-    };
-    /* eslint-enable react-hooks/set-state-in-effect */
+    prevSessionIdentityRef.current = sessionIdentity;
   }, [
     queriesSettled,
     deckLoadError,
@@ -308,11 +306,17 @@ export function FlashcardsView({
           : cardsForIds(syncedDeck, dueIds);
       const currentId = prev.cards[prev.index]?.id;
       let index = prev.index;
+      let idFound = true;
       if (currentId) {
         const found = modeCards.findIndex((c) => c.id === currentId);
         if (found >= 0) {
           index = found;
+        } else {
+          idFound = false;
         }
+      }
+      if (!idFound) {
+        index = Math.min(prev.index, modeCards.length - 1);
       }
       if (modeCards.length === 0) {
         return { cards: [], index: 0, flipped: false };
@@ -521,23 +525,19 @@ export function FlashcardsView({
 
   if (queriesLoading) {
     return (
-      <div
-        data-testid="flashcards-view"
-        className="notes-reading-pane flex min-h-0 flex-1 flex-col overflow-y-auto px-8 py-8"
-      >
-        <Skeleton className="mx-auto h-8 w-full max-w-flashcards" />
-        <Skeleton className="mx-auto mt-6 h-80 w-full max-w-flashcards" />
-      </div>
+      <StudyViewShell testId="flashcards-view">
+        <StudyColumn className="mx-auto flex w-full max-w-flashcards flex-col items-center gap-3.5">
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="mt-6 h-80 w-full" />
+        </StudyColumn>
+      </StudyViewShell>
     );
   }
 
   if (!hasDeck) {
     return (
-      <div
-        data-testid="flashcards-view"
-        className="notes-reading-pane flex min-h-0 flex-1 flex-col overflow-y-auto px-8 py-8"
-      >
-        <div className="mx-auto flex w-full max-w-flashcards flex-col items-center gap-4">
+      <StudyViewShell testId="flashcards-view">
+        <StudyColumn className="mx-auto flex w-full max-w-flashcards flex-col items-center gap-4">
           <EmptyState
             title="No flashcards yet"
             description={`No flashcards yet for ${displayName}. Generate a deck from your digests.`}
@@ -556,8 +556,8 @@ export function FlashcardsView({
               </div>
             }
           />
-        </div>
-      </div>
+        </StudyColumn>
+      </StudyViewShell>
     );
   }
 
@@ -577,11 +577,8 @@ export function FlashcardsView({
       : undefined;
 
   return (
-    <div
-      data-testid="flashcards-view"
-      className="notes-reading-pane flex min-h-0 flex-1 flex-col overflow-y-auto px-8 py-8"
-    >
-      <div className="mx-auto flex w-full max-w-flashcards flex-col items-center gap-3.5">
+    <StudyViewShell testId="flashcards-view">
+      <StudyColumn>
         <div className="flex h-row w-full items-center gap-4">
           <Tabs
             value={deckMode}
@@ -593,38 +590,19 @@ export function FlashcardsView({
               <TabsTrigger value="full">Full deck · {deckCount}</TabsTrigger>
             </TabsList>
           </Tabs>
-          <div className="flex h-progress min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
-            <div
-              className="h-full w-full origin-left bg-primary transition-transform duration-fast ease-out-soft"
-              style={{ transform: `scaleX(${progressRatio})` }} // style-allow: live progress ratio
-            />
-          </div>
+          <StudyProgressBar ratio={progressRatio} />
           <span className="text-xs whitespace-nowrap text-muted-foreground">
             {emptySession ? "0 / 0" : `${session.index + 1} / ${session.cards.length}`}
           </span>
         </div>
 
-        <div className="flex w-full flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          {staleQuery.data ? (
-            <span className="inline-flex items-center gap-1 text-faint-foreground">
-              <RefreshCw className="size-icon-sm" aria-hidden />
-              Digests updated since last generation.
-            </span>
-          ) : null}
-          <UnsavedBadge />
-          <Button
-            type="button"
-            variant="ghost"
-            size="xs"
-            disabled={jobDisabled}
-            title={viewerBlocked ? VIEWER_WRITE_REASON : undefined}
-            onClick={() => void runFlashcardJob(true)}
-          >
-            <RefreshCw className="size-icon-sm" />
-            Refresh from digests
-          </Button>
-          {modelHint ? <span>{modelHint}</span> : null}
-        </div>
+        <StudyArtifactToolbar
+          stale={Boolean(staleQuery.data)}
+          viewerBlocked={viewerBlocked}
+          jobDisabled={jobDisabled}
+          onRefresh={() => void runFlashcardJob(true)}
+          modelHint={modelHint}
+        />
 
         {emptySession ? (
           <div className="flex min-h-80 w-full flex-col items-center justify-center gap-3 rounded-md border border-border bg-card p-8 shadow-card">
@@ -654,33 +632,14 @@ export function FlashcardsView({
               ) : null}
               <div className="mt-auto flex items-center justify-between gap-2 pt-5 text-xs text-faint-foreground">
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
-                  <Chip
-                    variant="plain"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      const slug = resolveDigestSlug(card!.source.digest, digests);
-                      void navigate({
-                        to: "/course/$course/notes/$digest",
-                        params: { course, digest: slug },
-                        search: card!.source.heading
-                          ? { heading: card!.source.heading }
-                          : {},
-                      });
-                    }}
-                  >
-                    {formatFlashcardSourceLabel(card!.source, digests)}
-                  </Chip>
+                  <StudySourceChip
+                    course={course}
+                    source={card!.source}
+                    digests={digests}
+                    onClick={(event) => event.stopPropagation()}
+                  />
                   {failedCitationIds.has(card!.id) ? (
-                    <LazyTooltip>
-                      <LazyTooltipTrigger
-                        render={(tooltipProps) => (
-                          <Badge variant="destructive" className="cursor-default" {...tooltipProps}>
-                            Unverified
-                          </Badge>
-                        )}
-                      />
-                      <LazyTooltipContent>{citationReason ?? "Citation check failed"}</LazyTooltipContent>
-                    </LazyTooltip>
+                    <StudyUnverifiedBadge reason={citationReason} />
                   ) : null}
                   {card!.tags.length > 0 ? (
                     <span className="truncate">{card!.tags.join(" · ")}</span>
@@ -777,7 +736,7 @@ export function FlashcardsView({
             </div>
           </>
         )}
-      </div>
-    </div>
+      </StudyColumn>
+    </StudyViewShell>
   );
 }

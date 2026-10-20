@@ -75,6 +75,21 @@ async function waitForFlashcardsReady(dueTabCount = 14) {
   );
 }
 
+function trackEmptyStateText(pattern: RegExp): () => string[] {
+  const seen: string[] = [];
+  const observer = new MutationObserver(() => {
+    const nodes = screen.queryAllByText(pattern);
+    if (nodes.length > 0) {
+      seen.push("empty");
+    }
+  });
+  observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+  return () => {
+    observer.disconnect();
+    return seen;
+  };
+}
+
 describe("flashcards PR8", { timeout: 20000 }, () => {
   beforeEach(() => {
     vi.useRealTimers();
@@ -108,6 +123,20 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
     resetMockHandlerTimers();
     clearMocks();
     vi.restoreAllMocks();
+  });
+
+  it("never flashes empty state while deck data is loading", async () => {
+    const finishTracking = trackEmptyStateText(/No flashcards yet for/i);
+    await renderAppAtRoute("/course/cell-biology/flashcards", {
+      read_study_json: (payload) => {
+        if (readStudyFile(payload) === "flashcards.json") {
+          return smallDeck;
+        }
+        return { schema_version: 1, course: "cell-biology", failures: [] };
+      },
+    });
+    await waitForFlashcardsReady();
+    expect(finishTracking()).toEqual([]);
   });
 
   it("optimistically advances after mastered grade while study_progress is pending", async () => {

@@ -28,6 +28,7 @@
   --destructive: #b03a2e;
   --destructive-hover: #962f25;
   --destructive-surface: color-mix(in srgb, var(--destructive) 10%, transparent);
+  --success-surface: color-mix(in srgb, var(--success) 10%, transparent);
   --info: #4a6f86;
   --backdrop: rgb(43 36 32 / 0.35);
   --card-shadow: 0 1px 2px rgb(43 36 32 / 0.05), 0 8px 24px rgb(43 36 32 / 0.05);
@@ -70,6 +71,7 @@
   --destructive: #e2806f;
   --destructive-hover: #e99686;
   --destructive-surface: color-mix(in srgb, var(--destructive) 10%, transparent);
+  --success-surface: color-mix(in srgb, var(--success) 10%, transparent);
   --info: #8db1c7;
   --backdrop: rgb(0 0 0 / 0.5);
   --card-shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px rgb(0 0 0 / 0.25);
@@ -97,6 +99,7 @@
   --color-destructive: var(--destructive);
   --color-destructive-hover: var(--destructive-hover);
   --color-destructive-surface: var(--destructive-surface);
+  --color-success-surface: var(--success-surface);
   --color-info: var(--info);
   --color-backdrop: var(--backdrop);
 
