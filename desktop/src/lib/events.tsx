@@ -71,6 +71,7 @@ export function invalidateAfterJobFinished(
   course: string | null,
 ) {
   void queryClient.invalidateQueries({ queryKey: qk.jobs(root) });
+  void queryClient.invalidateQueries({ queryKey: ["jobEvents", root] });
   if (course) {
     invalidateCourseStudyKeys(queryClient, root, course);
   }

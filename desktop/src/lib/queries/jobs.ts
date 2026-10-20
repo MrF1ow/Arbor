@@ -34,7 +34,10 @@ export function useJobs(root: string | null) {
   return useQuery({
     queryKey: qk.jobs(root ?? ""),
     enabled: Boolean(root),
-    queryFn: () => invoke<JobSummary[]>("list_jobs", { root: root!, limit: 15 }),
+    queryFn: async () => {
+      await invoke("init_arbor_db", { root: root! });
+      return invoke<JobSummary[]>("list_jobs", { root: root!, limit: 15 });
+    },
   });
 }
 
