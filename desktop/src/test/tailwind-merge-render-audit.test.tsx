@@ -116,6 +116,9 @@ describe("tailwind-merge render audit", { timeout: 120_000 }, () => {
       "/course/cell-biology/chat",
       "/jobs",
       "/welcome",
+      "/settings/general",
+      "/settings/provider",
+      "/settings/shortcuts",
     ] as const;
 
     for (const route of routes) {
