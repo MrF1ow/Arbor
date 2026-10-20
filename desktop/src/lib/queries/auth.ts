@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 
+import { canUseDesktopIpc } from "~/domain/tauri";
 import { fetchAuthStatus } from "~/lib/auth-refresh";
 import { invoke } from "~/lib/ipc";
 import { qk } from "~/lib/queries/keys";
@@ -10,7 +11,7 @@ export function useAuth(provider: string) {
     queryFn: () => fetchAuthStatus(provider, false),
     staleTime: 60_000,
     refetchOnWindowFocus: true,
-    enabled: Boolean(provider),
+    enabled: Boolean(provider) && canUseDesktopIpc(),
   });
 }
 

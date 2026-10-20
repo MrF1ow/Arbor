@@ -16,13 +16,19 @@ import {
 } from "~/test/fixtures/data";
 
 const ipcLog: string[] = [];
+const ipcCalls: { cmd: string; args?: InvokeArgs }[] = [];
 
 export function getMockIpcLog(): string[] {
   return ipcLog;
 }
 
+export function getMockIpcCalls(): readonly { cmd: string; args?: InvokeArgs }[] {
+  return ipcCalls;
+}
+
 export function clearMockIpcLog() {
   ipcLog.length = 0;
+  ipcCalls.length = 0;
 }
 
 function simulateUpdateJob(root: string) {
@@ -61,6 +67,7 @@ export function createMockHandler(
   return (cmd: string, args?: InvokeArgs): unknown => {
     const payload = (args ?? {}) as Record<string, unknown>;
     ipcLog.push(cmd);
+    ipcCalls.push({ cmd, args });
     if (cmd in overrides && overrides[cmd]) {
       return overrides[cmd]!(args);
     }
@@ -187,11 +194,19 @@ export function createMockHandler(
         return { ok: true };
       case "start_study_job":
         return "mock-study-job";
+      case "import_sources": {
+        const paths = payload.paths;
+        if (Array.isArray(paths)) {
+          return paths.map(String);
+        }
+        return [];
+      }
       case "create_course": {
         const name = String(payload.name ?? "new-class");
         return name.trim().toLowerCase().replace(/\s+/g, "-");
       }
       case "init_knowledge_repo":
+        return true;
       case "init_arbor_db":
       case "start_folder_watch":
       case "append_card":

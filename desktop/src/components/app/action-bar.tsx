@@ -3,6 +3,7 @@ import { toast } from "sonner";
 
 import { StatusPill } from "~/components/app/status-pill";
 import { Button, IconButton } from "~/components/ui/button";
+import { runningJobStatusLabel } from "~/domain/job-labels";
 import { VIEWER_WRITE_REASON, viewerBlocksWrite } from "~/domain/library-role";
 import { PROVIDER_FALLBACK, signedOutJobMessage } from "~/domain/provider";
 import { pickActiveRoot } from "~/lib/knowledge-root";
@@ -48,6 +49,7 @@ export function ActionBar({ course }: { course: string }) {
   const effective = useEffectiveProvider(activeRoot);
   const jobStatus = useJobStore((s) => s.status);
   const jobStep = useJobStore((s) => s.step);
+  const jobLabel = useJobStore((s) => s.label);
   const activeUpdateJobId = useJobStore((s) => s.activeUpdateJobId);
   const unread = useJobStore((s) => s.unread);
   const appendLog = useJobStore((s) => s.append);
@@ -60,7 +62,7 @@ export function ActionBar({ course }: { course: string }) {
   const lastOk = jobs.data?.find((j) => j.status === "succeeded");
   const statusLabel = (() => {
     if (jobStatus === "running") {
-      return jobStep ?? "Running…";
+      return runningJobStatusLabel(jobStep, jobLabel);
     }
     if (jobStatus === "failed") {
       return "Last job failed";
@@ -89,7 +91,7 @@ export function ActionBar({ course }: { course: string }) {
         appendLog("Nothing to process — everything is up to date.");
         return;
       }
-      useUpdatePlanStore.getState().setPendingPlan(plan.pending, true);
+      useUpdatePlanStore.getState().setPendingPlan(plan.pending, true, "manual");
     } catch (error) {
       toast.error(String(error));
     }

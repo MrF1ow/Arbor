@@ -11,6 +11,9 @@ import { WorkerEventsBridge } from "~/lib/events";
 import { ThemeProvider } from "~/components/app/theme-provider";
 import { Toaster } from "~/components/ui/toast";
 import { TooltipProvider } from "~/components/ui/tooltip";
+import { qk } from "~/lib/queries/keys";
+import type { Settings } from "~/domain/types";
+import { fixtureSettings } from "~/test/fixtures/data";
 import { installMockIpc } from "~/test/mock-ipc";
 import type { createMockHandler } from "~/test/mock-handlers";
 
@@ -22,11 +25,15 @@ export function renderWithProviders(
     route?: string;
     fixtures?: FixtureOverrides;
     minimal?: boolean;
+    seedSettings?: Settings;
   } & Omit<RenderOptions, "wrapper">,
 ) {
   clearMocks();
   installMockIpc(opts?.fixtures);
   const queryClient = createAppQueryClient();
+  if (opts?.seedSettings ?? opts?.minimal) {
+    queryClient.setQueryData(qk.settings(), opts?.seedSettings ?? fixtureSettings);
+  }
   const history = createMemoryHistory({ initialEntries: [opts?.route ?? "/"] });
   const router = getRouter(history);
 

@@ -34,9 +34,10 @@ import {
 import { courseDisplayName, workspaceRootLabel } from "~/domain/course";
 import type { KnowledgeRootEntry } from "~/domain/types";
 import { PROVIDER_FALLBACK, isWorkerUnavailableAuthReason, providerBadge } from "~/domain/provider";
+import { canUseDesktopIpc } from "~/domain/tauri";
 import { pickActiveRoot } from "~/lib/knowledge-root";
-import { openDialog } from "~/lib/ipc";
-import { useActivateKnowledgeRootMutation, useSwitchActiveRootMutation } from "~/lib/queries/active-root";
+import { useChooseKnowledgeFolder } from "~/lib/hooks/use-choose-knowledge-folder";
+import { useSwitchActiveRootMutation } from "~/lib/queries/active-root";
 import { useAuth } from "~/lib/queries/auth";
 import { useCreateCourseMutation, useCourses, useDigests } from "~/lib/queries/library";
 import { useEffectiveProvider } from "~/lib/queries/effective-provider";
@@ -78,6 +79,14 @@ function CourseNavRow({
 function ProviderStatusLine({ root }: { root: string | null }) {
   const effective = useEffectiveProvider(root);
   const auth = useAuth(effective.providerId);
+  if (!canUseDesktopIpc()) {
+    return (
+      <div className="flex items-center gap-2 px-2 py-2 text-xs text-muted-foreground">
+        <span className="size-1.5 shrink-0 rounded-full bg-muted-foreground" aria-hidden />
+        <span className="truncate">Desktop app required</span>
+      </div>
+    );
+  }
   const providerLabel =
     PROVIDER_FALLBACK.find((p) => p.id === effective.providerId)?.label ?? effective.providerId;
   const modelLabel = effective.modelId ?? "no model";
@@ -118,7 +127,7 @@ export function AppSidebar() {
   const activeRoot = pickActiveRoot(settings.data);
   const roots = settings.data?.knowledge_roots ?? [];
   const switchRoot = useSwitchActiveRootMutation();
-  const activateRoot = useActivateKnowledgeRootMutation();
+  const { chooseFolder, desktopIpc: sidebarDesktopIpc } = useChooseKnowledgeFolder();
   const createCourse = useCreateCourseMutation(activeRoot);
   const activeDigests = useDigests(activeRoot, activeCourse ?? "");
   const [addingClass, setAddingClass] = useState(false);
@@ -134,18 +143,6 @@ export function AppSidebar() {
       if (isMobile) {
         setOpen(false);
       }
-    } catch (error) {
-      toast.error(String(error));
-    }
-  };
-
-  const onPickFolder = async () => {
-    try {
-      const picked = await openDialog({ directory: true, multiple: false });
-      if (typeof picked !== "string") {
-        return;
-      }
-      await activateRoot.mutateAsync(picked);
     } catch (error) {
       toast.error(String(error));
     }
@@ -261,7 +258,13 @@ export function AppSidebar() {
           </SidebarMenuItem>
         </SidebarMenu>
         <ProviderStatusLine root={activeRoot} />
-        <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => void onPickFolder()}>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full justify-start"
+          disabled={!sidebarDesktopIpc}
+          onClick={() => void chooseFolder()}
+        >
           <FolderOpen className="size-icon-sm" />
           Choose Knowledge folder…
         </Button>

@@ -18,6 +18,12 @@ const SearchPlaceholderDialog = lazy(() =>
   })),
 );
 
+const UpdateReviewDialog = lazy(() =>
+  import("~/components/app/update-review-dialog").then((m) => ({
+    default: m.UpdateReviewDialog,
+  })),
+);
+
 export function AppShell() {
   const sidebarOpen = useEffectiveSidebarOpen();
   const setSidebarOpen = useUiStore((s) => s.setSidebarOpen);
@@ -65,6 +71,9 @@ export function AppShell() {
           </ShellContextProvider>
           <Suspense fallback={null}>
             <LogDrawer />
+          </Suspense>
+          <Suspense fallback={null}>
+            <UpdateReviewDialog />
           </Suspense>
         </div>
       </SidebarInset>

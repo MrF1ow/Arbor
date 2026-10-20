@@ -125,7 +125,7 @@ function IconButton({
   return (
     <LazyTooltip>
       <LazyTooltipTrigger
-        render={(tooltipProps, _tooltipState) => (
+        render={(tooltipProps) => (
           <Button
             variant={variant}
             size={size}

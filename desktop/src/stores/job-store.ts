@@ -12,13 +12,14 @@ interface JobState {
   activeUpdateJobId: string | null;
   status: JobStoreStatus;
   step: string | null;
+  label: string | null;
   lines: string[];
   unread: number;
   append: (line: string) => void;
   appendBatch: (lines: string[]) => void;
   markRead: () => void;
   clear: () => void;
-  start: (jobId: string, opts?: { isUpdate?: boolean }) => void;
+  start: (jobId: string, opts?: { isUpdate?: boolean; label?: string }) => void;
   finish: (result: JobFinished) => void;
   setStep: (step: string | null) => void;
 }
@@ -29,6 +30,7 @@ export function resetJobStoreForRootSwitch() {
     activeUpdateJobId: null,
     status: "idle",
     step: null,
+    label: null,
     lines: [],
     unread: 0,
   });
@@ -39,6 +41,7 @@ export const useJobStore = create<JobState>((set, get) => ({
   activeUpdateJobId: null,
   status: "idle",
   step: null,
+  label: null,
   lines: [],
   unread: 0,
   append(line) {
@@ -72,6 +75,7 @@ export const useJobStore = create<JobState>((set, get) => ({
       activeUpdateJobId: opts?.isUpdate ? jobId : get().activeUpdateJobId,
       status: "running",
       step: null,
+      label: opts?.label ?? null,
     });
   },
   finish(result) {
@@ -82,6 +86,7 @@ export const useJobStore = create<JobState>((set, get) => ({
         state.activeUpdateJobId === result.job_id ? null : state.activeUpdateJobId,
       status: cancelled ? "idle" : result.status === "succeeded" ? "done" : "failed",
       step: null,
+      label: state.activeJobId === result.job_id ? null : state.label,
     }));
   },
   setStep(step) {

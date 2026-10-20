@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import type { Settings } from "~/domain/types";
+import { pickActiveRoot } from "~/lib/knowledge-root";
 import { invoke } from "~/lib/ipc";
 import { flushStudyWritesForRootSwitch } from "~/lib/study-writes";
 import { qk } from "~/lib/queries/keys";
@@ -10,9 +11,12 @@ export function useSwitchActiveRootMutation() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (root: string) => {
+      const settings = await invoke<Settings>("get_settings");
+      if (pickActiveRoot(settings) === root) {
+        return;
+      }
       await flushStudyWritesForRootSwitch(3000);
       resetJobStoreForRootSwitch();
-      const settings = await invoke<Settings>("get_settings");
       const next: Settings = {
         ...settings,
         active_root: root,
@@ -52,11 +56,18 @@ export function useActivateKnowledgeRootMutation() {
         knowledge_root: picked,
         active_root: picked,
       };
-      await invoke("init_knowledge_repo", { path: picked });
+      let repoCreated = false;
+      let initRepoError: string | null = null;
+      try {
+        repoCreated = await invoke<boolean>("init_knowledge_repo", { path: picked });
+      } catch (error) {
+        initRepoError = error instanceof Error ? error.message : String(error);
+      }
       await invoke("save_settings", { settings: next });
+      await invoke("init_arbor_db", { root: picked });
       await invoke("start_folder_watch", { root: picked });
       await queryClient.invalidateQueries({ queryKey: qk.settings() });
-      return picked;
+      return { root: picked, repoCreated, initRepoError };
     },
   });
 }

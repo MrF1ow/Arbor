@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { KnowledgeSettings, Settings } from "~/domain/types";
+import { canUseDesktopIpc } from "~/domain/tauri";
 import { invoke } from "~/lib/ipc";
 import { qk } from "~/lib/queries/keys";
 
@@ -8,6 +9,7 @@ export function useSettings() {
   return useQuery({
     queryKey: qk.settings(),
     queryFn: () => invoke<Settings>("get_settings"),
+    enabled: canUseDesktopIpc(),
   });
 }
 

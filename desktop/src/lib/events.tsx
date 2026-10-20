@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 
 import { flashcardJobArgs } from "~/domain/flashcards";
+import { JOB_START_LABEL } from "~/domain/job-labels";
 import { quizJobArgs } from "~/domain/quiz";
 import { selectionsFromPending } from "~/domain/update";
 import { formatWorkerEvent } from "~/domain/worker-events";
@@ -27,7 +28,7 @@ import { useSettings } from "~/lib/queries/settings";
 import { useJobStore } from "~/stores/job-store";
 import { useSyncUiStore } from "~/stores/sync-ui-store";
 import { useUiStore } from "~/stores/ui-store";
-import { useUpdatePlanStore } from "~/stores/update-plan-store";
+import { useUpdatePlanStore, type UpdatePlanTrigger } from "~/stores/update-plan-store";
 
 let suppressWatchUntil = 0;
 
@@ -102,7 +103,11 @@ export type PresentUpdatePlanDeps = {
   planUpdate: (root: string) => Promise<UpdatePlan>;
   startUpdate: (root: string, input: Record<string, unknown>) => Promise<string>;
   checkAuth: (provider: string) => Promise<AuthStatus>;
-  setPendingPlan: (pending: PendingSource[] | null, open: boolean) => void;
+  setPendingPlan: (
+    pending: PendingSource[] | null,
+    open: boolean,
+    trigger: UpdatePlanTrigger,
+  ) => void;
   appendJobLine: (line: string) => void;
   providerId: string;
   modelId: string | null;
@@ -115,6 +120,9 @@ export async function presentUpdatePlan(root: string, deps: PresentUpdatePlanDep
     const ks = deps.knowledgeSettings ?? (await deps.getKnowledgeSettings(root));
     const plan = await deps.planUpdate(root);
     if (plan.pending.length === 0) {
+      if (deps.reason === "import") {
+        deps.appendJobLine("Nothing to process");
+      }
       return;
     }
     deps.appendJobLine(
@@ -125,7 +133,11 @@ export async function presentUpdatePlan(root: string, deps: PresentUpdatePlanDep
     if (ks.auto_update) {
       const auth = await deps.checkAuth(deps.providerId);
       if (!auth.authenticated) {
-        deps.setPendingPlan(plan.pending, true);
+        deps.setPendingPlan(
+          plan.pending,
+          true,
+          deps.reason === "watch" ? "watch" : "manual",
+        );
         const label = providerDisplayLabel(deps.providerId);
         deps.appendJobLine(
           `Auto-update waiting for ${label} auth. Review and Confirm when ready. ${signedOutJobMessage(label, auth.reason ?? "")}`,
@@ -133,18 +145,30 @@ export async function presentUpdatePlan(root: string, deps: PresentUpdatePlanDep
         return;
       }
       if (!deps.modelId) {
-        deps.setPendingPlan(plan.pending, true);
+        deps.setPendingPlan(
+          plan.pending,
+          true,
+          deps.reason === "watch" ? "watch" : "manual",
+        );
         return;
       }
-      await deps.startUpdate(root, {
+      const jobId = await deps.startUpdate(root, {
         model: deps.modelId,
         provider: deps.providerId,
         selections: selectionsFromPending(plan.pending),
         trigger: deps.reason === "watch" ? "watch" : "manual",
       });
+      useJobStore.getState().start(jobId, {
+        isUpdate: true,
+        label: JOB_START_LABEL.update,
+      });
       return;
     }
-    deps.setPendingPlan(plan.pending, true);
+    deps.setPendingPlan(
+      plan.pending,
+      true,
+      deps.reason === "watch" ? "watch" : "manual",
+    );
     deps.appendJobLine("Review the detected files and Confirm when ready.");
   } catch (error) {
     deps.appendJobLine(
@@ -197,8 +221,8 @@ export async function presentUpdatePlanAfterImport(root: string) {
     planUpdate: (r) => invoke("plan_update", { root: r }),
     startUpdate: (r, input) => invoke<string>("start_update", { root: r, ...input }),
     checkAuth: (provider) => fetchAuthStatus(provider, true),
-    setPendingPlan: (pending, open) =>
-      useUpdatePlanStore.getState().setPendingPlan(pending, open),
+    setPendingPlan: (pending, open, trigger) =>
+      useUpdatePlanStore.getState().setPendingPlan(pending, open, trigger),
     appendJobLine: (line) => useJobStore.getState().append(line),
   });
 }
@@ -249,7 +273,7 @@ type WorkerEventsBridgeContext = {
   append: (line: string) => void;
   finish: (payload: JobFinished) => void;
   setStep: (step: string | null) => void;
-  startJob: (jobId: string) => void;
+  startJob: (jobId: string, opts?: { isUpdate?: boolean; label?: string }) => void;
 };
 
 export function WorkerEventsBridge() {
@@ -371,7 +395,7 @@ export function WorkerEventsBridge() {
                   ctx.providerId,
                 ),
               );
-              ctx.startJob(jobId);
+              ctx.startJob(jobId, { label: JOB_START_LABEL.flashcards });
             },
             startQuizJob: async (force) => {
               if (!ctx.activeRoot || !currentCourse || !ctx.modelId) {
@@ -387,11 +411,11 @@ export function WorkerEventsBridge() {
                   ctx.providerId,
                 ),
               );
-              ctx.startJob(jobId);
+              ctx.startJob(jobId, { label: JOB_START_LABEL.quiz });
             },
             startEmbedJob: async (root) => {
               const jobId = await invoke<string>("start_embed_job", { root, force: false });
-              ctx.startJob(jobId);
+              ctx.startJob(jobId, { label: JOB_START_LABEL.embed });
             },
           },
           jobStateRef.current,
@@ -407,8 +431,8 @@ export function WorkerEventsBridge() {
         planUpdate: (root) => invoke("plan_update", { root }),
         startUpdate: (root, input) => invoke<string>("start_update", { root, ...input }),
         checkAuth: (provider) => fetchAuthStatus(provider, true),
-        setPendingPlan: (pending, open) =>
-          useUpdatePlanStore.getState().setPendingPlan(pending, open),
+        setPendingPlan: (pending, open, trigger) =>
+          useUpdatePlanStore.getState().setPendingPlan(pending, open, trigger),
         appendJobLine: (line) => useJobStore.getState().append(line),
         providerId: ctx.providerId,
         modelId: ctx.modelId,

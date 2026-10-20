@@ -1,5 +1,6 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 
+import { canUseDesktopIpc } from "~/domain/tauri";
 import { hasAnyKnowledgeRoot, pickActiveRoot } from "~/lib/knowledge-root";
 import { invoke } from "~/lib/ipc";
 import type { Settings } from "~/domain/types";
@@ -7,6 +8,9 @@ import { useUiStore } from "~/stores/ui-store";
 
 export const Route = createFileRoute("/")({
   loader: async () => {
+    if (!canUseDesktopIpc()) {
+      throw redirect({ to: "/welcome" });
+    }
     const settings = await invoke<Settings>("get_settings");
     if (!hasAnyKnowledgeRoot(settings)) {
       throw redirect({ to: "/welcome" });
