@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { SettingRow, SettingsSection } from "~/components/app/settings-section";
@@ -120,6 +120,7 @@ export function SettingsProviderPanel() {
   const [apiKey, setApiKey] = useState("");
   const programmatic = useRef(false);
 
+  const librarySettled = !library.isLoading && library.isFetched;
   const showKeyRow = providerId === "openai_api" || providerId === "anthropic_api";
   const showBaseUrlRow = providerId === "ollama" || providerId === "lmstudio";
   const baseUrlPlaceholder =
@@ -132,48 +133,63 @@ export function SettingsProviderPanel() {
         ? (settings.data?.lmstudio_base_url?.trim() ?? "")
         : "";
 
-  const persistProviderModel = async (nextProviderId: string, nextModelId: string | null) => {
-    await persistSettings.mutateAsync((current) => {
-      if (activeRoot && libraryProvider) {
+  const persistProviderModel = useCallback(
+    async (nextProviderId: string, nextModelId: string | null) => {
+      await persistSettings.mutateAsync((current) => {
+        if (activeRoot && libraryProvider) {
+          return {
+            ...current,
+            provider_overrides: upsertProviderOverride(
+              current.provider_overrides ?? [],
+              activeRoot,
+              nextProviderId,
+              nextModelId,
+            ),
+          };
+        }
         return {
           ...current,
-          provider_overrides: upsertProviderOverride(
-            current.provider_overrides ?? [],
-            activeRoot,
-            nextProviderId,
-            nextModelId,
-          ),
+          provider_id: nextProviderId,
+          model_id: nextModelId,
         };
-      }
-      return {
-        ...current,
-        provider_id: nextProviderId,
-        model_id: nextModelId,
-      };
-    });
+      });
+    },
+    [activeRoot, libraryProvider, persistSettings],
+  );
+
+  const storeForcedAuth = async (targetProviderId: string) => {
+    const auth = await fetchAuthStatus(targetProviderId, true);
+    queryClient.setQueryData(qk.auth(targetProviderId), auth);
   };
 
   const onProviderChange = async (nextProviderId: string) => {
-    if (nextProviderId === providerId) {
+    if (!librarySettled || nextProviderId === providerId) {
       return;
     }
     const prevModel = effective.modelId;
     programmatic.current = true;
     try {
-      const models = await queryClient.fetchQuery({
-        queryKey: qk.models(nextProviderId, activeRoot),
-        queryFn: async () => {
-          const res = await invoke<{ models: Model[] }>("list_models", {
-            root: activeRoot ?? undefined,
-            provider: nextProviderId,
-          });
-          return res.models;
-        },
-      });
+      let models: Model[];
+      try {
+        models = await queryClient.fetchQuery({
+          queryKey: qk.models(nextProviderId, activeRoot),
+          queryFn: async () => {
+            const res = await invoke<{ models: Model[] }>("list_models", {
+              root: activeRoot ?? undefined,
+              provider: nextProviderId,
+            });
+            return res.models;
+          },
+        });
+      } catch (modelsError) {
+        toast.error(String(modelsError));
+        await persistProviderModel(nextProviderId, prevModel);
+        await storeForcedAuth(nextProviderId);
+        return;
+      }
       const nextModelId = resolveModelId(models, prevModel);
       await persistProviderModel(nextProviderId, nextModelId);
-      const auth = await fetchAuthStatus(nextProviderId, true);
-      queryClient.setQueryData(qk.auth(nextProviderId), auth);
+      await storeForcedAuth(nextProviderId);
     } catch (error) {
       toast.error(String(error));
     } finally {
@@ -182,7 +198,7 @@ export function SettingsProviderPanel() {
   };
 
   const onModelChange = async (nextModelId: string) => {
-    if (programmatic.current) {
+    if (!librarySettled || programmatic.current) {
       return;
     }
     try {
@@ -195,6 +211,9 @@ export function SettingsProviderPanel() {
 
   const onBaseUrlCommit = async (value: string) => {
     const trimmed = value.trim();
+    if (trimmed === storedBaseUrl) {
+      return;
+    }
     try {
       await persistSettings.mutateAsync((current) => {
         if (providerId === "ollama") {
@@ -215,7 +234,7 @@ export function SettingsProviderPanel() {
     try {
       await setSecret.mutateAsync({ providerId, secret: apiKey });
       setApiKey("");
-      await fetchAuthStatus(providerId, true);
+      await storeForcedAuth(providerId);
     } catch (error) {
       const message = `Could not save API key: ${error}`;
       appendLog(message);
@@ -227,7 +246,7 @@ export function SettingsProviderPanel() {
     try {
       await clearSecret.mutateAsync(providerId);
       setApiKey("");
-      await fetchAuthStatus(providerId, true);
+      await storeForcedAuth(providerId);
     } catch (error) {
       const message = `Could not clear API key: ${error}`;
       appendLog(message);
@@ -235,8 +254,23 @@ export function SettingsProviderPanel() {
     }
   };
 
-  const modelId = effective.modelId ?? "";
   const models = modelsQuery.data ?? [];
+  const selectModelId = resolveModelId(models, effective.modelId) ?? "";
+
+  useEffect(() => {
+    const loaded = modelsQuery.data ?? [];
+    if (programmatic.current || modelsQuery.isLoading || loaded.length === 0) {
+      return;
+    }
+    const resolved = resolveModelId(loaded, effective.modelId);
+    if (!resolved || resolved === effective.modelId) {
+      return;
+    }
+    programmatic.current = true;
+    void persistProviderModel(providerId, resolved).finally(() => {
+      programmatic.current = false;
+    });
+  }, [effective.modelId, modelsQuery.data, modelsQuery.isLoading, persistProviderModel, providerId]);
 
   return (
     <div className="space-y-6" data-testid="settings-provider">
@@ -251,6 +285,7 @@ export function SettingsProviderPanel() {
                   void onProviderChange(v);
                 }
               }}
+              disabled={!librarySettled}
             >
               <SelectTrigger className="w-44" size="sm" aria-label="Provider">
                 <SelectValue />
@@ -271,9 +306,11 @@ export function SettingsProviderPanel() {
         {showKeyRow ? (
           <SettingRow
             label="API key"
+            controlId="settings-provider-api-key"
             control={
               <div className="flex flex-wrap items-center justify-end gap-2">
                 <Input
+                  id="settings-provider-api-key"
                   type="password"
                   autoComplete="off"
                   className="w-40"
@@ -296,7 +333,7 @@ export function SettingsProviderPanel() {
             }
           />
         ) : null}
-        {showKeyRow ? (
+        {showKeyRow && secretStatus.isSuccess ? (
           <div className="px-4 pb-3 text-xs text-muted-foreground" data-testid="provider-key-status">
             {secretStatus.data === "ready" ? "ready" : "key missing"}
           </div>
@@ -325,18 +362,24 @@ export function SettingsProviderPanel() {
         ) : null}
         <SettingRow
           label="Model"
+          controlId="settings-provider-model"
           control={
             <div className="flex items-center gap-2">
               <Select
-                value={modelId}
+                value={selectModelId}
                 onValueChange={(v) => {
                   if (v) {
                     void onModelChange(v);
                   }
                 }}
-                disabled={modelsQuery.isLoading || models.length === 0}
+                disabled={!librarySettled || modelsQuery.isLoading || models.length === 0}
               >
-                <SelectTrigger className="w-44" size="sm" aria-label="Model">
+                <SelectTrigger
+                  id="settings-provider-model"
+                  className="w-44"
+                  size="sm"
+                  aria-label="Model"
+                >
                   <SelectValue placeholder="Select model" />
                 </SelectTrigger>
                 <SelectContent>
@@ -359,7 +402,7 @@ export function SettingsProviderPanel() {
             </div>
           }
         />
-        <ProviderAuthStatus providerId={providerId} modelId={effective.modelId} />
+        <ProviderAuthStatus providerId={providerId} modelId={selectModelId || effective.modelId} />
       </SettingsSection>
     </div>
   );

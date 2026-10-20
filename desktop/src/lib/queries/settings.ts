@@ -1,4 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from "@tanstack/react-query";
 
 import type { KnowledgeSettings, Settings } from "~/domain/types";
 import { canUseDesktopIpc } from "~/domain/tauri";
@@ -8,6 +13,36 @@ import { qk } from "~/lib/queries/keys";
 export type KnowledgeSettingsPartial = Omit<Partial<KnowledgeSettings>, "auto_generate"> & {
   auto_generate?: Partial<KnowledgeSettings["auto_generate"]>;
 };
+
+let saveSettingsChain: Promise<unknown> = Promise.resolve();
+
+export function resetSaveSettingsChainForTests() {
+  saveSettingsChain = Promise.resolve();
+}
+
+export async function saveSettingsSerialized(
+  queryClient: QueryClient,
+  build: (current: Settings) => Settings,
+): Promise<Settings> {
+  const run = saveSettingsChain.then(async () => {
+    let current = queryClient.getQueryData<Settings>(qk.settings());
+    if (!current) {
+      current = await queryClient.fetchQuery({
+        queryKey: qk.settings(),
+        queryFn: () => invoke<Settings>("get_settings"),
+      });
+    }
+    if (!current) {
+      throw new Error("Settings not loaded");
+    }
+    const next = build(current);
+    queryClient.setQueryData(qk.settings(), next);
+    await invoke("save_settings", { settings: next });
+    return next;
+  });
+  saveSettingsChain = run.catch(() => undefined);
+  return run;
+}
 
 export function mergeKnowledgeSettings(
   current: KnowledgeSettings,
@@ -34,10 +69,8 @@ export function useSettings() {
 export function useSaveSettingsMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (settings: Settings) => invoke("save_settings", { settings }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: qk.settings() });
-    },
+    mutationFn: (settings: Settings) =>
+      saveSettingsSerialized(queryClient, () => settings),
   });
 }
 
@@ -69,22 +102,8 @@ export function useSaveKnowledgeSettingsMutation(root: string | null) {
 
 export function usePersistSettingsMutation() {
   const queryClient = useQueryClient();
-  const save = useSaveSettingsMutation();
   return useMutation({
-    mutationFn: async (build: (current: Settings) => Settings) => {
-      let current = queryClient.getQueryData<Settings>(qk.settings());
-      if (!current) {
-        current = await queryClient.fetchQuery({
-          queryKey: qk.settings(),
-          queryFn: () => invoke<Settings>("get_settings"),
-        });
-      }
-      if (!current) {
-        throw new Error("Settings not loaded");
-      }
-      const next = build(current);
-      await save.mutateAsync(next);
-      return next;
-    },
+    mutationFn: (build: (current: Settings) => Settings) =>
+      saveSettingsSerialized(queryClient, build),
   });
 }

@@ -6,7 +6,7 @@ export function SettingsPlaceholder() {
     <EmptyState
       icon={Settings2}
       title="Coming in the next PR"
-      description="Library, sync, skills, and workers settings ship in PR 14b."
+      description="This section is coming soon."
     />
   );
 }

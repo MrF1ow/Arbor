@@ -41,13 +41,17 @@ export function SettingRow({
   description,
   control,
   className,
+  controlId: controlIdProp,
 }: {
   label: string;
   description?: string;
   control: ReactNode;
   className?: string;
+  /** When set, labels associate with this id (for nested controls). */
+  controlId?: string;
 }) {
-  const controlId = useId();
+  const generatedId = useId();
+  const controlId = controlIdProp ?? generatedId;
 
   return (
     <div
@@ -62,7 +66,9 @@ export function SettingRow({
         </Label>
         {description ? <p className="text-xs text-muted-foreground">{description}</p> : null}
       </div>
-      <div className="shrink-0">{associateControl(control, controlId)}</div>
+      <div className="shrink-0">
+        {controlIdProp ? control : associateControl(control, controlId)}
+      </div>
     </div>
   );
 }

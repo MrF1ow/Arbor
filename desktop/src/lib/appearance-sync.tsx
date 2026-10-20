@@ -1,16 +1,13 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 
 import { parseAppearance } from "~/domain/theme";
-import { useSaveSettingsMutation, useSettings } from "~/lib/queries/settings";
+import { saveSettingsSerialized, useSettings } from "~/lib/queries/settings";
 import { useUiStore } from "~/stores/ui-store";
 
 export function useAppearanceSync() {
   const settings = useSettings();
-  const saveSettings = useSaveSettingsMutation();
-  const saveRef = useRef(saveSettings.mutate);
-  useEffect(() => {
-    saveRef.current = saveSettings.mutate;
-  }, [saveSettings.mutate]);
+  const queryClient = useQueryClient();
   const appearance = useUiStore((s) => s.appearance);
   const setAppearance = useUiStore((s) => s.setAppearance);
   const loadedFromSettings = useRef(false);
@@ -40,11 +37,11 @@ export function useAppearanceSync() {
     if (settings.data.appearance === appearance) {
       return;
     }
-    saveRef.current({
-      ...settings.data,
+    void saveSettingsSerialized(queryClient, (current) => ({
+      ...current,
       appearance,
-    });
-  }, [appearance, settings.data]);
+    })).catch(() => undefined);
+  }, [appearance, queryClient, settings.data]);
 }
 
 export function AppearanceSync() {

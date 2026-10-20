@@ -39,7 +39,7 @@ export function useApplyEffectiveProvider(root: string | null) {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    const key = `${root ?? ""}|${effective.providerId}|${effective.modelId ?? ""}|${effective.source}`;
+    const key = `${root ?? ""}|${effective.providerId}`;
     if (lastAppliedEffectiveKey === key) {
       return;
     }
@@ -47,7 +47,7 @@ export function useApplyEffectiveProvider(root: string | null) {
     void queryClient.invalidateQueries({
       queryKey: qk.models(effective.providerId, root),
     });
-  }, [effective.modelId, effective.providerId, effective.source, queryClient, root]);
+  }, [effective.providerId, queryClient, root]);
 }
 
 export function EffectiveProviderSync() {

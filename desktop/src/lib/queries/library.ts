@@ -172,7 +172,6 @@ export function useSetProviderSecretMutation() {
       invoke("set_provider_secret", input),
     onSuccess: (_data, vars) => {
       void queryClient.invalidateQueries({ queryKey: qk.providerSecret(vars.providerId) });
-      void queryClient.invalidateQueries({ queryKey: qk.auth(vars.providerId) });
     },
   });
 }
@@ -183,7 +182,6 @@ export function useClearProviderSecretMutation() {
     mutationFn: (providerId: string) => invoke("clear_provider_secret", { providerId }),
     onSuccess: (_data, providerId) => {
       void queryClient.invalidateQueries({ queryKey: qk.providerSecret(providerId) });
-      void queryClient.invalidateQueries({ queryKey: qk.auth(providerId) });
     },
   });
 }

@@ -106,7 +106,7 @@ export function SettingsGeneralPanel() {
         />
       </SettingsSection>
 
-      <SettingsSection title="Knowledge folder" description="Automation for the active library.">
+      <SettingsSection title="Knowledge folder">
         {!settings.data ? (
           <div className="p-4">
             <Skeleton className="h-48 w-full" />
