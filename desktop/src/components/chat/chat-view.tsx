@@ -136,6 +136,7 @@ export function ChatView({
   const [artifactKind, setArtifactKind] = useState<ArtifactKind>(initialArtifactKind);
   const [streamingThreadId, setStreamingThreadId] = useState<string | null>(null);
   const [slashActiveIndex, setSlashActiveIndex] = useState(0);
+  const [slashDismissed, setSlashDismissed] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
@@ -340,8 +341,9 @@ export function ChatView({
     applyChatMode(mode === "ask" ? "explain" : "ask");
   };
 
-  const slashSuggestionsOpen = isSlashSuggestionOpen(draftText);
-  const slashOptions = slashSuggestionsOpen ? filterSlashCommands(draftText) : [];
+  const slashPrefixActive = isSlashSuggestionOpen(draftText) && !slashDismissed;
+  const slashOptions = slashPrefixActive ? filterSlashCommands(draftText) : [];
+  const slashListOpen = slashOptions.length > 0;
 
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect -- reset slash highlight when filter changes */
@@ -384,7 +386,7 @@ export function ChatView({
       return;
     }
 
-    if (slashSuggestionsOpen && slashOptions.length > 0) {
+    if (slashListOpen) {
       if (event.key === "ArrowDown") {
         event.preventDefault();
         setSlashActiveIndex((prev) => (prev + 1) % slashOptions.length);
@@ -397,12 +399,10 @@ export function ChatView({
       }
       if (event.key === "Escape") {
         event.preventDefault();
-        if (activeRoot) {
-          setDraft(activeRoot, course, threadId, "");
-        }
+        setSlashDismissed(true);
         return;
       }
-      if (event.key === "Enter" || event.key === "Tab") {
+      if (event.key === "Tab" || (event.key === "Enter" && !event.shiftKey)) {
         if (event.nativeEvent.isComposing || event.keyCode === 229) {
           return;
         }
@@ -431,10 +431,9 @@ export function ChatView({
       ? "Ask for a step-by-step explanation…"
       : "Ask about this course…";
 
-  const slashActiveDescendant =
-    slashSuggestionsOpen && slashOptions.length > 0
-      ? `${COMPOSER_SLASH_LISTBOX_ID}-option-${slashOptions[slashActiveIndex]?.id ?? slashOptions[0]!.id}`
-      : undefined;
+  const slashActiveDescendant = slashListOpen
+    ? `${COMPOSER_SLASH_LISTBOX_ID}-option-${slashOptions[slashActiveIndex]?.id ?? slashOptions[0]!.id}`
+    : undefined;
 
   const onTranscriptScroll = () => {
     const el = scrollRef.current;
@@ -528,11 +527,12 @@ export function ChatView({
               {statusText}
             </p>
             <div className="relative flex flex-col gap-2">
-              {slashSuggestionsOpen ? (
+              {slashListOpen ? (
                 <ComposerSlashSuggestions
                   draftPrefix={draftText}
                   activeIndex={slashActiveIndex}
                   listboxId={COMPOSER_SLASH_LISTBOX_ID}
+                  onPick={pickSlashSuggestion}
                 />
               ) : null}
               <Textarea
@@ -543,6 +543,7 @@ export function ChatView({
                 rows={1}
                 className="max-h-36 min-h-10 w-full"
                 onChange={(event) => {
+                  setSlashDismissed(false);
                   if (activeRoot) {
                     setDraft(activeRoot, course, threadId, event.target.value);
                   }
@@ -550,10 +551,10 @@ export function ChatView({
                 onKeyDown={onComposerKeyDown}
                 aria-label="Chat message"
                 aria-activedescendant={slashActiveDescendant}
-                aria-controls={slashSuggestionsOpen ? COMPOSER_SLASH_LISTBOX_ID : undefined}
-                aria-expanded={slashSuggestionsOpen && slashOptions.length > 0}
-                aria-autocomplete={slashSuggestionsOpen ? "list" : undefined}
-                role={slashSuggestionsOpen ? "combobox" : undefined}
+                aria-controls={slashListOpen ? COMPOSER_SLASH_LISTBOX_ID : undefined}
+                aria-expanded={slashListOpen ? true : undefined}
+                aria-autocomplete={slashListOpen ? "list" : undefined}
+                role={slashListOpen ? "combobox" : undefined}
               />
               <div className="flex items-center justify-between gap-2">
                 <ModeChip mode={mode} disabled={controlsDisabled} onToggle={toggleChatMode} />

@@ -1138,6 +1138,62 @@ describe("chat threads", { timeout: 30000 }, () => {
     expect(getMockIpcCalls().some((c) => c.cmd === "start_chat")).toBe(false);
   });
 
+  it("Escape dismisses slash suggestions without clearing the draft", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/chat");
+    await waitForChatReady();
+    await openNewChat(user);
+    const view = screen.getByTestId("chat-view");
+    const textarea = within(view).getByLabelText("Chat message");
+    await user.click(textarea);
+    await fillComposer("/explain");
+    await waitFor(() => {
+      expect(within(view).getByRole("listbox", { name: "Slash commands" })).toBeInTheDocument();
+    });
+    fireEvent.keyDown(textarea, { key: "Escape", code: "Escape" });
+    await waitFor(() => {
+      expect(within(view).queryByRole("listbox", { name: "Slash commands" })).not.toBeInTheDocument();
+    });
+    expect(textarea).toHaveValue("/explain");
+  });
+
+  it("Shift+Enter with slash list open inserts a newline instead of picking", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/chat");
+    await waitForChatReady();
+    await openNewChat(user);
+    const view = screen.getByTestId("chat-view");
+    const textarea = within(view).getByLabelText("Chat message");
+    await user.click(textarea);
+    await user.keyboard("/e");
+    await waitFor(() => {
+      expect(within(view).getByRole("listbox", { name: "Slash commands" })).toBeInTheDocument();
+    });
+    fireEvent.keyDown(textarea, { key: "Enter", shiftKey: true, code: "Enter" });
+    fireEvent.change(textarea, { target: { value: "/e\n" } });
+    expect(textarea).toHaveValue("/e\n");
+    expect(textarea).not.toHaveValue("/explain ");
+  });
+
+  it("mousedown on a slash suggestion inserts the command", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/chat");
+    await waitForChatReady();
+    await openNewChat(user);
+    const view = screen.getByTestId("chat-view");
+    const textarea = within(view).getByLabelText("Chat message");
+    await user.click(textarea);
+    await fillComposer("/e");
+    const listbox = await within(view).findByRole("listbox", { name: "Slash commands" });
+    const explainOption = within(listbox).getByText("/explain").closest("li");
+    expect(explainOption).not.toBeNull();
+    fireEvent.mouseDown(explainOption!, { button: 0 });
+    await waitFor(() => {
+      expect(textarea).toHaveValue("/explain ");
+    });
+    expect(getMockIpcCalls().some((c) => c.cmd === "start_chat")).toBe(false);
+  });
+
   it("hides dictation on Linux and invokes start_dictation on Mac", async () => {
     const platformSpy = vi.spyOn(window.navigator, "platform", "get");
     platformSpy.mockReturnValue("Linux x86_64");

@@ -20,15 +20,12 @@ export function parseSlashCommand(text: string): { mode?: ChatMode; text: string
   if (text.startsWith(" ") || text.startsWith("\t")) {
     return { text };
   }
-  const match = text.match(/^\/(ask|explain)(?:\s|$)/i);
+  const match = text.match(/^\/(ask|explain)(?: |$)/i);
   if (!match) {
     return { text };
   }
   const mode = match[1]!.toLowerCase() as ChatMode;
-  let rest = text.slice(match[0].length);
-  if (rest.startsWith(" ")) {
-    rest = rest.slice(1);
-  }
+  const rest = text.slice(match[0].length);
   return { mode, text: rest };
 }
 

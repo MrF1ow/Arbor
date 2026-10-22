@@ -14,10 +14,12 @@ export function ComposerSlashSuggestions({
   draftPrefix,
   activeIndex,
   listboxId,
+  onPick,
 }: {
   draftPrefix: string;
   activeIndex: number;
   listboxId: string;
+  onPick: (index: number) => void;
 }) {
   const options = filterSlashCommands(draftPrefix);
   if (options.length === 0) {
@@ -41,6 +43,10 @@ export function ComposerSlashSuggestions({
             "cursor-default rounded-sm px-2 py-1.5 text-xs",
             index === activeIndex && "bg-selected text-foreground",
           )}
+          onMouseDown={(event) => {
+            event.preventDefault();
+            onPick(index);
+          }}
         >
           <span className="font-medium">{entry.command}</span>
           <span className="text-muted-foreground"> — {entry.description}</span>

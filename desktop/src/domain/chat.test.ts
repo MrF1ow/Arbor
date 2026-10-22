@@ -51,6 +51,12 @@ describe("parseSlashCommand", () => {
     expect(parseSlashCommand("  /explain x")).toEqual({ text: "  /explain x" });
     expect(parseSlashCommand("/unknown x")).toEqual({ text: "/unknown x" });
   });
+
+  it("treats only a single space as the command separator", () => {
+    expect(parseSlashCommand("/explain\nfoo")).toEqual({ text: "/explain\nfoo" });
+    expect(parseSlashCommand("/explain\twhy")).toEqual({ text: "/explain\twhy" });
+    expect(parseSlashCommand("/explain  why")).toEqual({ mode: "explain", text: " why" });
+  });
 });
 
 describe("workerHistory", () => {
