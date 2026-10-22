@@ -4,10 +4,12 @@ import base64
 import json
 from pathlib import Path
 
-from arbor_worker.provider.base import ProviderError, ProviderRequest, image_media_type
+from collections.abc import Iterator
+
+from arbor_worker.provider.base import DeltaFn, ProviderError, ProviderRequest, image_media_type
 
 
-def build_chat_completions_body(request: ProviderRequest) -> dict:
+def build_chat_completions_body(request: ProviderRequest, *, stream: bool = False) -> dict:
     messages: list[dict] = []
     if request.system is not None:
         messages.append({"role": "system", "content": request.system})
@@ -30,8 +32,41 @@ def build_chat_completions_body(request: ProviderRequest) -> dict:
     return {
         "model": request.model_id,
         "messages": messages,
-        "stream": False,
+        "stream": stream,
     }
+
+
+def iter_chat_completions_sse(lines: Iterator[bytes], on_delta: DeltaFn) -> str:
+    parts: list[str] = []
+    for raw in lines:
+        line = raw.decode("utf-8", errors="replace").strip()
+        if not line or line.startswith(":"):
+            continue
+        if line == "data: [DONE]":
+            break
+        if not line.startswith("data: "):
+            continue
+        try:
+            payload = json.loads(line[6:])
+        except json.JSONDecodeError as exc:
+            raise ProviderError("chat completion stream returned invalid JSON") from exc
+        choices = payload.get("choices")
+        if not isinstance(choices, list) or not choices:
+            continue
+        choice0 = choices[0]
+        if not isinstance(choice0, dict):
+            continue
+        delta = choice0.get("delta")
+        if not isinstance(delta, dict):
+            continue
+        text = delta.get("content")
+        if isinstance(text, str) and text:
+            on_delta(text)
+            parts.append(text)
+    joined = "".join(parts)
+    if not joined.strip():
+        raise ProviderError("chat completion stream returned empty text")
+    return joined
 
 
 def parse_chat_completions_content(payload: dict, provider_label: str) -> str:
@@ -57,5 +92,5 @@ def parse_chat_completions_content(payload: dict, provider_label: str) -> str:
     raise ProviderError(f"{provider_label} response did not include assistant text")
 
 
-def chat_completions_json_body(request: ProviderRequest) -> bytes:
-    return json.dumps(build_chat_completions_body(request)).encode("utf-8")
+def chat_completions_json_body(request: ProviderRequest, *, stream: bool = False) -> bytes:
+    return json.dumps(build_chat_completions_body(request, stream=stream)).encode("utf-8")

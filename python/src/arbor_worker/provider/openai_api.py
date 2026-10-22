@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 
 from arbor_worker.provider.base import (
+    DeltaFn,
     Model,
     ProviderError,
     ProviderRequest,
@@ -15,9 +16,11 @@ from arbor_worker.provider.http_transport import (
     parse_json_body,
     strip_trailing_slash,
     urllib_http_request,
+    urllib_http_stream,
 )
 from arbor_worker.provider.openai_compat import (
     chat_completions_json_body,
+    iter_chat_completions_sse,
     parse_chat_completions_content,
 )
 
@@ -42,11 +45,15 @@ class OpenAiApiProvider:
         models: list[Model],
         *,
         transport=None,
+        stream_transport=None,
         base_url: str | None = None,
         api_key: str | None = None,
     ):
         self._models = models if models else list(DEFAULT_OPENAI_API_MODELS)
         self._transport = transport if transport is not None else urllib_http_request
+        self._stream_transport = (
+            stream_transport if stream_transport is not None else urllib_http_stream
+        )
         self._base = strip_trailing_slash(
             base_url or os.environ.get(ENV_OPENAI_BASE_URL) or DEFAULT_OPENAI_BASE
         )
@@ -73,6 +80,38 @@ class OpenAiApiProvider:
 
     def list_models(self) -> list[Model]:
         return list(self._models)
+
+    def stream(self, request: ProviderRequest, on_delta: DeltaFn) -> ProviderResult:
+        key = self._resolved_key()
+        if not key:
+            raise ProviderError("key missing")
+        url = f"{self._base}/chat/completions"
+        body_bytes = chat_completions_json_body(request, stream=True)
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {key}",
+        }
+        try:
+            status, line_iter = self._stream_transport(
+                "POST", url, headers, body_bytes, _RUN_TIMEOUT
+            )
+        except ProviderError:
+            raise
+        except ConnectionRefusedError:
+            raise ProviderError(f"Could not reach OpenAI API at {self._base}")
+        except TimeoutError:
+            raise ProviderError("OpenAI API request timed out")
+        except OSError as exc:
+            if is_connection_refused(exc):
+                raise ProviderError(f"Could not reach OpenAI API at {self._base}")
+            raise
+        if status in (401, 403):
+            raise ProviderError(f"OpenAI API key was rejected (HTTP {status})")
+        if status >= 400:
+            err_body = b"".join(line_iter)
+            raise ProviderError(error_excerpt(status, err_body, key))
+        text = iter_chat_completions_sse(line_iter, on_delta)
+        return ProviderResult(markdown=text)
 
     def run(self, request: ProviderRequest) -> ProviderResult:
         key = self._resolved_key()

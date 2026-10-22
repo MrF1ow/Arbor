@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 
 from arbor_worker.provider.base import (
+    DeltaFn,
     Model,
     ProviderError,
     ProviderRequest,
@@ -16,9 +17,11 @@ from arbor_worker.provider.http_transport import (
     redact_secret,
     strip_trailing_slash,
     urllib_http_request,
+    urllib_http_stream,
 )
 from arbor_worker.provider.openai_compat import (
     chat_completions_json_body,
+    iter_chat_completions_sse,
     parse_chat_completions_content,
 )
 
@@ -39,11 +42,15 @@ class LmStudioProvider:
         models: list[Model],
         *,
         transport=None,
+        stream_transport=None,
         base_url: str | None = None,
         api_key: str | None = None,
     ):
         self._models = models
         self._transport = transport if transport is not None else urllib_http_request
+        self._stream_transport = (
+            stream_transport if stream_transport is not None else urllib_http_stream
+        )
         self._base = strip_trailing_slash(
             base_url or os.environ.get(ENV_LMSTUDIO_BASE_URL) or DEFAULT_LMSTUDIO_BASE
         )
@@ -105,6 +112,40 @@ class LmStudioProvider:
                 if isinstance(model_id, str) and model_id:
                     out.append(Model(id=model_id, label=model_id))
         return out if out else list(self._models)
+
+    def stream(self, request: ProviderRequest, on_delta: DeltaFn) -> ProviderResult:
+        url = f"{self._base}/chat/completions"
+        body_bytes = chat_completions_json_body(request, stream=True)
+        headers = self._auth_headers()
+        try:
+            status, line_iter = self._stream_transport(
+                "POST", url, headers, body_bytes, _RUN_TIMEOUT
+            )
+        except ConnectionRefusedError:
+            raise ProviderError(f"LM Studio is not running at {self._base}")
+        except TimeoutError:
+            raise ProviderError("LM Studio request timed out")
+        except OSError as exc:
+            if is_connection_refused(exc):
+                raise ProviderError(f"LM Studio is not running at {self._base}")
+            raise ProviderError(str(exc) or "LM Studio request failed")
+        except Exception as exc:
+            if is_connection_refused(exc):
+                raise ProviderError(f"LM Studio is not running at {self._base}")
+            raise
+        if status in (401, 403):
+            err_body = b"".join(line_iter)
+            excerpt = redact_secret(
+                err_body.decode("utf-8", errors="replace")[:200], self._api_key
+            )
+            raise ProviderError(
+                f"LM Studio rejected the request (HTTP {status}): {excerpt}"
+            )
+        if status >= 400:
+            err_body = b"".join(line_iter)
+            raise ProviderError(error_excerpt(status, err_body, self._api_key))
+        text = iter_chat_completions_sse(line_iter, on_delta)
+        return ProviderResult(markdown=text)
 
     def run(self, request: ProviderRequest) -> ProviderResult:
         url = f"{self._base}/chat/completions"
