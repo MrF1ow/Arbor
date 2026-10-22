@@ -1035,7 +1035,7 @@ pub async fn get_knowledge_settings(root: String) -> Result<KnowledgeSettings, S
     .await
 }
 
-fn validate_path_component(value: &str, label: &str) -> Result<(), String> {
+pub(crate) fn validate_path_component(value: &str, label: &str) -> Result<(), String> {
     if value.is_empty() || value.contains('/') || value.contains('\\') || value.contains("..") {
         return Err(format!("Invalid {label}"));
     }
