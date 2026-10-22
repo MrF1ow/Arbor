@@ -15,6 +15,8 @@ export type Command =
   | "delete_chat_thread"
   | "clear_provider_secret"
   | "create_course"
+  | "read_course_meta"
+  | "set_course_meta"
   | "create_shared_library"
   | "get_job_events"
   | "get_knowledge_settings"
