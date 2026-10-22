@@ -139,6 +139,7 @@ export function ChatView({
   const linesRef = useRef<ChatLine[]>(lines);
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef(true);
+  const forceScrollRef = useRef(false);
   const prevViewKeyRef = useRef("");
   const historyBlockRef = useRef(0);
   const adoptedSigRef = useRef("");
@@ -239,14 +240,19 @@ export function ChatView({
     if (!el) {
       return;
     }
-    const selection = window.getSelection();
-    if (
-      selection &&
-      !selection.isCollapsed &&
-      selection.anchorNode &&
-      el.contains(selection.anchorNode)
-    ) {
-      return;
+    const forceScroll = forceScrollRef.current;
+    if (forceScroll) {
+      forceScrollRef.current = false;
+    } else {
+      const selection = window.getSelection();
+      if (
+        selection &&
+        !selection.isCollapsed &&
+        selection.anchorNode &&
+        el.contains(selection.anchorNode)
+      ) {
+        return;
+      }
     }
     el.scrollTop = el.scrollHeight;
   }, [lines, liveSnapshot.text.length]);
@@ -312,6 +318,7 @@ export function ChatView({
         await appendLines.mutateAsync([userLine]);
         linesRef.current = [...linesRef.current, userLine];
         stickToBottomRef.current = true;
+        forceScrollRef.current = true;
         if (course === courseAtSend && mountedRef.current) {
           setLines(linesRef.current);
           setInput("");

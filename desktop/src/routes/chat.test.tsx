@@ -476,6 +476,39 @@ describe("chat PR11", { timeout: 25000 }, () => {
     cleanup();
   });
 
+  it("scrolls to the bottom after send even when the transcript has a selection", async () => {
+    const user = userEvent.setup();
+    resetChatLiveStoreForTests();
+    const lines = [
+      buildUserLine("ask", "hello"),
+      buildAssistantLine("ask", "Long answer for scroll test.", true, []),
+    ];
+    seedMockChatHistory(FIXTURE_ROOT_FALL, "cell-biology", lines);
+    renderChatViewMinimal();
+    await waitFor(() => {
+      expect(screen.getByTestId("chat-assistant-prose")).toBeInTheDocument();
+    });
+    const scrollEl = screen.getByTestId("chat-transcript-scroll");
+    Object.defineProperty(scrollEl, "scrollHeight", { value: 800, configurable: true });
+    Object.defineProperty(scrollEl, "clientHeight", { value: 400, configurable: true });
+    scrollEl.scrollTop = 0;
+    const prose = screen.getByTestId("chat-assistant-prose");
+    const anchor = prose.firstChild ?? prose;
+    vi.spyOn(window, "getSelection").mockReturnValue({
+      isCollapsed: false,
+      anchorNode: anchor,
+      removeAllRanges: () => undefined,
+      addRange: () => undefined,
+    } as unknown as Selection);
+    await fillComposer("My new question");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => {
+      expect(scrollEl.scrollTop).toBe(800);
+    });
+    vi.restoreAllMocks();
+    cleanup();
+  });
+
   it("live deltas re-render LiveAnswer without re-rendering ChatTranscript", () => {
     resetChatLiveStoreForTests();
     let transcriptUpdates = 0;
