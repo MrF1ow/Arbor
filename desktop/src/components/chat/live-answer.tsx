@@ -10,13 +10,15 @@ import {
 export function LiveAnswer({
   root,
   course,
+  threadId,
   onContentChange,
 }: {
   root: string;
   course: string;
+  threadId: string;
   onContentChange?: () => void;
 }) {
-  const key = chatLiveKey(root, course);
+  const key = chatLiveKey(root, course, threadId);
   const textFromStore = useSyncExternalStore(subscribeChatLive, () => getChatLiveText(key));
   const [displayText, setDisplayText] = useState(textFromStore);
   const rafRef = useRef<number | null>(null);
