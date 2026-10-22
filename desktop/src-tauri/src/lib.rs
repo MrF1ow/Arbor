@@ -1,4 +1,5 @@
 mod auth_cache;
+mod chat_threads;
 mod commands;
 mod db;
 mod jobs;
@@ -74,9 +75,14 @@ pub fn run() {
             commands::study_plan,
             commands::append_card,
             commands::study_artifact_stale,
-            commands::read_chat_history,
-            commands::append_chat_lines,
-            commands::clear_chat_history,
+            chat_threads::list_chat_threads,
+            chat_threads::create_chat_thread,
+            chat_threads::read_chat_thread,
+            chat_threads::append_chat_thread_lines,
+            chat_threads::rename_chat_thread,
+            chat_threads::set_chat_thread_mode,
+            chat_threads::delete_chat_thread,
+            chat_threads::delete_all_chat_threads,
             commands::start_chat,
             commands::sync_show,
             commands::sync_set_remote,

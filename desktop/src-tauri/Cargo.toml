@@ -31,6 +31,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rusqlite = { version = "0.30", features = ["bundled"] }
 sha2 = "0.11.0"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
 
 [target.'cfg(unix)'.dependencies]
