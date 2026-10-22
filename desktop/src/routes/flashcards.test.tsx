@@ -15,7 +15,9 @@ import {
   getMockIpcLog,
   resetMockHandlerTimers,
 } from "~/test/mock-handlers";
+import { studySessionKey } from "~/domain/study-session";
 import { useJobStore } from "~/stores/job-store";
+import { useStudySessionStore } from "~/stores/study-session-store";
 import { useUiStore } from "~/stores/ui-store";
 import { renderAppAtRoute } from "~/test/render";
 
@@ -97,6 +99,8 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
     resetStudyWriteQueueForTests();
     localStorage.clear();
     useUiStore.persist.clearStorage();
+    useStudySessionStore.persist.clearStorage();
+    useStudySessionStore.setState({ sessions: {} });
     useUiStore.setState({
       appearance: "system",
       sidebarOpen: true,
@@ -860,5 +864,203 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
     await user.click(screen.getByRole("button", { name: /Study full deck/i }));
     expect(screen.getByText("Question one")).toBeInTheDocument();
     expect(screen.getByText("1 / 3")).toBeInTheDocument();
+  });
+
+  it("resumes full-deck position and flip state after a Notes round trip", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/flashcards", {
+      read_study_json: (payload) => {
+        if (readStudyFile(payload) === "flashcards.json") {
+          return smallDeck;
+        }
+        return { schema_version: 1, course: "cell-biology", failures: [] };
+      },
+    });
+    await waitForFlashcardsReady();
+    await user.click(screen.getByText(/Full deck · 86/i));
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
+    expect(screen.getByText("Question ninety-nine")).toBeInTheDocument();
+    await user.keyboard(" ");
+    expect(screen.getByText("Answer ninety-nine")).toBeInTheDocument();
+    await user.click(screen.getByRole("link", { name: /Notes/i }));
+    await waitFor(() => {
+      expect(screen.getByText("Course overview")).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole("link", { name: /Flashcards/i }));
+    await waitForFlashcardsReady();
+    expect(screen.getByText("Question ninety-nine")).toBeInTheDocument();
+    expect(screen.getByText("3 / 3")).toBeInTheDocument();
+    expect(screen.getByText("Answer ninety-nine")).toBeInTheDocument();
+  });
+
+  it("card focus deep link overrides a saved session position", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/flashcards", {
+      read_study_json: (payload) => {
+        if (readStudyFile(payload) === "flashcards.json") {
+          return smallDeck;
+        }
+        return { schema_version: 1, course: "cell-biology", failures: [] };
+      },
+    });
+    await waitForFlashcardsReady();
+    await user.click(screen.getByText(/Full deck · 86/i));
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
+    await user.click(screen.getByRole("link", { name: /Notes/i }));
+    await waitFor(() => {
+      expect(screen.getByText("Course overview")).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole("link", { name: /Flashcards/i }));
+    await waitFor(() => {
+      expect(screen.getByText("Question ninety-nine")).toBeInTheDocument();
+    });
+    cleanup();
+    await renderAppAtRoute("/course/cell-biology/flashcards?card=fc-1", {
+      read_study_json: (payload) => {
+        if (readStudyFile(payload) === "flashcards.json") {
+          return smallDeck;
+        }
+        return { schema_version: 1, course: "cell-biology", failures: [] };
+      },
+    });
+    await waitFor(() => {
+      expect(screen.getByText("Question one")).toBeInTheDocument();
+    });
+    expect(screen.getByText(/Due today · 14/i)).toBeInTheDocument();
+  });
+
+  it("starts fresh when deck identity changes and overwrites the saved entry", async () => {
+    const user = userEvent.setup();
+    const deckV2 = {
+      ...smallDeck,
+      cards: [
+        ...smallDeck.cards,
+        {
+          id: "fc-new",
+          front: "Question new",
+          back: "Answer new",
+          tags: [],
+          source: { digest: "2026-09-12-membranes", heading: null, page: null },
+        },
+      ],
+    };
+    let deckPayload: typeof smallDeck = smallDeck;
+    await renderAppAtRoute("/course/cell-biology/flashcards", {
+      read_study_json: (payload) => {
+        if (readStudyFile(payload) === "flashcards.json") {
+          return deckPayload;
+        }
+        return { schema_version: 1, course: "cell-biology", failures: [] };
+      },
+    });
+    await waitForFlashcardsReady();
+    await user.click(screen.getByText(/Full deck · 86/i));
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
+    expect(screen.getByText("Question ninety-nine")).toBeInTheDocument();
+    cleanup();
+    deckPayload = deckV2;
+    await renderAppAtRoute("/course/cell-biology/flashcards", {
+      read_study_json: (payload) => {
+        if (readStudyFile(payload) === "flashcards.json") {
+          return deckPayload;
+        }
+        return { schema_version: 1, course: "cell-biology", failures: [] };
+      },
+    });
+    await waitForFlashcardsReady();
+    expect(screen.getByText("Question one")).toBeInTheDocument();
+    expect(screen.getByText("1 / 2")).toBeInTheDocument();
+    const key = studySessionKey(FIXTURE_ROOT_FALL, "cell-biology", "flashcards");
+    await waitFor(() => {
+      const saved = useStudySessionStore.getState().sessions[key];
+      expect(saved && "identity" in saved ? saved.identity : "").toContain("fc-new");
+    });
+  });
+
+  it("ignores corrupt persisted flashcard sessions", async () => {
+    const key = studySessionKey(FIXTURE_ROOT_FALL, "cell-biology", "flashcards");
+    useStudySessionStore.setState({
+      sessions: {
+        [key]: { identity: "bad", savedAt: 1 } as never,
+      },
+    });
+    await renderAppAtRoute("/course/cell-biology/flashcards", {
+      read_study_json: (payload) => {
+        if (readStudyFile(payload) === "flashcards.json") {
+          return smallDeck;
+        }
+        return { schema_version: 1, course: "cell-biology", failures: [] };
+      },
+    });
+    await waitForFlashcardsReady();
+    expect(screen.getByText("Question one")).toBeInTheDocument();
+  });
+
+  it("restart clears saved position and returns to the first card", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/flashcards", {
+      read_study_json: (payload) => {
+        if (readStudyFile(payload) === "flashcards.json") {
+          return smallDeck;
+        }
+        return { schema_version: 1, course: "cell-biology", failures: [] };
+      },
+    });
+    await waitForFlashcardsReady();
+    await user.click(screen.getByText(/Full deck · 86/i));
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
+    expect(screen.getByText("Question two")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^Restart$/i }));
+    const restartButtons = screen.getAllByRole("button", { name: /^Restart$/i });
+    await user.click(restartButtons.at(-1)!);
+    await waitFor(() => {
+      expect(screen.getByText("Question one")).toBeInTheDocument();
+    });
+    expect(screen.getByText("1 / 3")).toBeInTheDocument();
+    const key = studySessionKey(FIXTURE_ROOT_FALL, "cell-biology", "flashcards");
+    const saved = useStudySessionStore.getState().sessions[key];
+    expect(saved && "index" in saved ? saved.index : -1).toBe(0);
+  });
+
+  it("keeps flashcard sessions independent per course key", async () => {
+    const bioIdentity = `${FIXTURE_ROOT_FALL}|cell-biology:fc-1\u0000fc-2\u0000fc-99`;
+    const keyBio = studySessionKey(FIXTURE_ROOT_FALL, "cell-biology", "flashcards");
+    const keyChem = studySessionKey(FIXTURE_ROOT_FALL, "organic-chemistry", "flashcards");
+    useStudySessionStore.setState({
+      sessions: {
+        [keyBio]: {
+          identity: bioIdentity,
+          savedAt: 1,
+          deckMode: "full",
+          cardIds: ["fc-1", "fc-2", "fc-99"],
+          index: 2,
+          flipped: false,
+        },
+        [keyChem]: {
+          identity: `${FIXTURE_ROOT_FALL}|organic-chemistry:fc-1`,
+          savedAt: 2,
+          deckMode: "full",
+          cardIds: ["fc-1"],
+          index: 0,
+          flipped: false,
+        },
+      },
+    });
+    await renderAppAtRoute("/course/cell-biology/flashcards", {
+      read_study_json: (payload) => {
+        if (readStudyFile(payload) === "flashcards.json") {
+          return smallDeck;
+        }
+        return { schema_version: 1, course: "cell-biology", failures: [] };
+      },
+    });
+    await waitForFlashcardsReady();
+    await userEvent.setup().click(screen.getByText(/Full deck · 86/i));
+    await waitFor(() => {
+      expect(screen.getByText("Question ninety-nine")).toBeInTheDocument();
+    });
   });
 });

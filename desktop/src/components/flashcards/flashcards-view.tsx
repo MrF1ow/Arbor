@@ -8,6 +8,15 @@ import { StudyColumn, StudyViewShell } from "~/components/study/study-layout";
 import { StudyProgressBar } from "~/components/study/study-progress-bar";
 import { StudySourceChip } from "~/components/study/study-source-chip";
 import { StudyUnverifiedBadge } from "~/components/study/study-unverified-badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogTitle,
+} from "~/components/ui/alert-dialog";
 import { Button } from "~/components/ui/button";
 import { Kbd } from "~/components/ui/kbd";
 import { Skeleton } from "~/components/ui/skeleton";
@@ -29,6 +38,11 @@ import {
   shuffleCards,
   type FlashcardGrade,
 } from "~/domain/flashcards";
+import {
+  restoreFlashcards,
+  snapshotFlashcards,
+  studySessionKey,
+} from "~/domain/study-session";
 import type { FlashcardDeck, FlashcardReview } from "~/domain/types";
 import type { CourseOverviewPayload, DigestInfo } from "~/domain/types";
 import { useStudyJobLauncher } from "~/hooks/use-study-job-launcher";
@@ -41,6 +55,7 @@ import { useSettings } from "~/lib/queries/settings";
 import { useStudyArtifactStale, useStudyJson } from "~/lib/queries/study";
 import { isDialogOpen, isEditableTarget } from "~/lib/shortcuts";
 import { flushStudyWrites, useEnqueueStudyWrite } from "~/lib/study-writes";
+import { useStudySessionStore } from "~/stores/study-session-store";
 type DeckMode = "due" | "full";
 
 function deckIdentity(deck: FlashcardDeck): string {
@@ -127,6 +142,7 @@ export function FlashcardsView({
   const [deck, setDeck] = useState<FlashcardDeck | null>(null);
   const [sessionIdentity, setSessionIdentity] = useState<string | null>(null);
   const [flushAt, setFlushAt] = useState(0);
+  const [restartOpen, setRestartOpen] = useState(false);
 
   const focusClearPendingRef = useRef(false);
   const lastSyncedDataRef = useRef({ deck: 0, overview: 0 });
@@ -227,13 +243,44 @@ export function FlashcardsView({
       }
     } else if (parsedDeck && identity && identity !== sessionIdentity) {
       const dueFromOverview = [...overview.data!.due.due_ids];
-      const focused = sessionWithOptionalFocus(parsedDeck, dueFromOverview, focusCardId);
+      let nextMode: DeckMode;
+      let nextReview: FlashcardReview;
+      if (focusCardId) {
+        const focused = sessionWithOptionalFocus(parsedDeck, dueFromOverview, focusCardId);
+        nextMode = focused.mode;
+        nextReview = focused.review;
+      } else if (activeRoot) {
+        const key = studySessionKey(activeRoot, course, "flashcards");
+        const saved = useStudySessionStore.getState().sessions[key];
+        let restored = restoreFlashcards(saved, parsedDeck, identity);
+        if (saved && "deckMode" in saved && saved.deckMode === "due") {
+          const dueSet = new Set(dueFromOverview);
+          const cardIds = saved.cardIds.filter((id) => dueSet.has(id));
+          if (cardIds.length === 0) {
+            restored = null;
+          } else if (cardIds.length !== saved.cardIds.length) {
+            restored = restoreFlashcards({ ...saved, cardIds }, parsedDeck, identity);
+          }
+        }
+        if (restored) {
+          nextMode = restored.deckMode;
+          nextReview = restored.review;
+        } else {
+          const focused = sessionWithOptionalFocus(parsedDeck, dueFromOverview, undefined);
+          nextMode = focused.mode;
+          nextReview = focused.review;
+        }
+      } else {
+        const focused = sessionWithOptionalFocus(parsedDeck, dueFromOverview, undefined);
+        nextMode = focused.mode;
+        nextReview = focused.review;
+      }
       setSessionIdentity(identity);
       setDeck(parsedDeck);
-      setDeckMode(focused.mode);
+      setDeckMode(nextMode);
       setDueIds(dueFromOverview);
       setDeckCount(overview.data!.due.deck_count);
-      setReview(focused.review);
+      setReview(nextReview);
     }
   }
 
@@ -347,6 +394,32 @@ export function FlashcardsView({
     focusClearPendingRef.current = false;
     onFocusCardHandled();
   }, [review, onFocusCardHandled]);
+
+  useEffect(() => {
+    if (
+      !activeRoot ||
+      !identity ||
+      identity !== sessionIdentity ||
+      !review ||
+      review.cards.length === 0
+    ) {
+      return;
+    }
+    const key = studySessionKey(activeRoot, course, "flashcards");
+    useStudySessionStore
+      .getState()
+      .save(key, snapshotFlashcards(review, deckMode, identity));
+  }, [activeRoot, course, identity, sessionIdentity, review, deckMode]);
+
+  function confirmRestart() {
+    if (!deck || !activeRoot) {
+      return;
+    }
+    const key = studySessionKey(activeRoot, course, "flashcards");
+    useStudySessionStore.getState().clear(key);
+    setReview(sessionForMode(deck, deckMode, dueIds));
+    setRestartOpen(false);
+  }
 
   const citationsReport = (() => {
     if (!citationsQuery.isSuccess || citationsQuery.data == null) {
@@ -556,7 +629,30 @@ export function FlashcardsView({
           <span className="text-xs whitespace-nowrap text-muted-foreground">
             {emptySession ? "0 / 0" : `${session.index + 1} / ${session.cards.length}`}
           </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            className="ml-auto"
+            onClick={() => setRestartOpen(true)}
+          >
+            <RotateCcw className="size-icon-sm" />
+            Restart
+          </Button>
         </div>
+
+        <AlertDialog open={restartOpen} onOpenChange={setRestartOpen}>
+          <AlertDialogContent>
+            <AlertDialogTitle>Restart this deck?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Your grades are kept; only your place in the deck resets.
+            </AlertDialogDescription>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmRestart}>Restart</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         <StudyArtifactToolbar
           stale={Boolean(staleQuery.data)}
