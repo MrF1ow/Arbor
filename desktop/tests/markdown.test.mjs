@@ -72,7 +72,6 @@ test("does not swallow a shallow paragraph after a blank line as list continuati
   for (const source of [
     "1. only\n\n The next paragraph starts with one space.\n",
     "1. only\n\n  The next paragraph starts with two spaces.\n",
-    "1. only\n\n   The next paragraph starts with three spaces.\n",
     "- only\n\n The next paragraph starts with one space.\n",
   ]) {
     const { html } = renderMarkdown(source);
@@ -94,10 +93,16 @@ test("indented continuation at content column becomes a paragraph inside the lis
   assert.match(html, /<li>a<p>more text<\/p><\/li>/);
 });
 
-test("continuation at content column runs inline format once across joined lines", async () => {
+test("continuation at the content column belongs to the item regardless of case", async () => {
   const { renderMarkdown } = await subject();
-  const { html } = renderMarkdown("1. see **ATP\n\n   synthase**\n");
-  assert.match(html, /<li>see <p><strong>ATP synthase<\/strong><\/p><\/li>/);
+  const { html } = renderMarkdown("1. only\n\n   The next paragraph starts with three spaces.\n");
+  assert.match(html, /<li>only<p>The next paragraph starts with three spaces\.<\/p><\/li><\/ol>/);
+});
+
+test("continuation paragraph runs inline format once across its joined lines", async () => {
+  const { renderMarkdown } = await subject();
+  const { html } = renderMarkdown("1. see\n\n   **ATP\n   synthase**\n");
+  assert.match(html, /<li>see<p><strong>ATP synthase<\/strong><\/p><\/li>/);
 });
 
 test("renders asterisk bullets", async () => {

@@ -89,7 +89,6 @@ interface OpenList {
   indent: number;
   contentIndent: number;
   items: string[];
-  rawItems: string[];
   start?: number;
 }
 
@@ -99,20 +98,6 @@ function listItemContentIndent(item: ListItemMatch): number {
   }
   const digits = item.orderStart != null ? String(item.orderStart).length : 1;
   return item.indent + digits + 2;
-}
-
-function splitRawForListContinuation(rawLast: string, continuation: string): {
-  itemRaw: string;
-  paragraphRaw: string;
-} {
-  const boldMarkers = (rawLast.match(/\*\*/g) ?? []).length;
-  if (boldMarkers % 2 === 1) {
-    const lastMarker = rawLast.lastIndexOf("**");
-    const itemRaw = rawLast.slice(0, lastMarker);
-    const paragraphRaw = `${rawLast.slice(lastMarker)} ${continuation}`.trim();
-    return { itemRaw, paragraphRaw };
-  }
-  return { itemRaw: rawLast, paragraphRaw: continuation };
 }
 
 function listOpenTag(list: OpenList, pageAttr: () => string): string {
@@ -177,7 +162,6 @@ function appendListItem(
       indent: item.indent,
       contentIndent: listItemContentIndent(item),
       items: [inlineFormat(item.content)],
-      rawItems: [item.content],
     };
     if (item.kind === "ol" && item.orderStart != null && item.orderStart !== 1) {
       opened.start = item.orderStart;
@@ -192,7 +176,6 @@ function appendListItem(
       indent: item.indent,
       contentIndent: listItemContentIndent(item),
       items: [inlineFormat(item.content)],
-      rawItems: [item.content],
     };
     if (item.kind === "ol" && item.orderStart != null && item.orderStart !== 1) {
       opened.start = item.orderStart;
@@ -201,7 +184,6 @@ function appendListItem(
     return;
   }
   top.items.push(inlineFormat(item.content));
-  top.rawItems.push(item.content);
 }
 
 interface MarkdownTable {
@@ -291,20 +273,7 @@ function keepListsOpenAcrossBlankLine(
     return false;
   }
   const indent = indentMatch[1].replace(/\t/g, "  ").length;
-  const text = indentMatch[2];
-  for (const open of stack) {
-    if (indent > open.contentIndent) {
-      return true;
-    }
-    if (
-      indent === open.contentIndent &&
-      text.length > 0 &&
-      /^[a-z]/.test(text)
-    ) {
-      return true;
-    }
-  }
-  return false;
+  return indent >= stack[0].contentIndent;
 }
 
 export function renderMarkdown(source: string): {
@@ -391,16 +360,7 @@ export function renderMarkdown(source: string): {
       if (lists.length > 0 && paraParts.length > 0) {
         const top = lists[lists.length - 1];
         const last = top.items.length - 1;
-        const continuation = paraParts.join(" ");
-        const rawLast = top.rawItems[last];
-        const formattedPrefix = inlineFormat(rawLast);
-        const nestedSuffix =
-          top.items[last].length > formattedPrefix.length
-            ? top.items[last].slice(formattedPrefix.length)
-            : "";
-        const { itemRaw, paragraphRaw } = splitRawForListContinuation(rawLast, continuation);
-        top.rawItems[last] = itemRaw;
-        top.items[last] = `${inlineFormat(itemRaw)}${nestedSuffix}<p${pageAttr()}>${inlineFormat(paragraphRaw)}</p>`;
+        top.items[last] = `${top.items[last]}<p${pageAttr()}>${inlineFormat(paraParts.join(" "))}</p>`;
       }
       i = j - 1;
       continue;
