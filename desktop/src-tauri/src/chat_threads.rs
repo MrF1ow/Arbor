@@ -5,11 +5,16 @@ use std::fs::{self, OpenOptions};
 use std::hash::{Hash, Hasher};
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
+use std::collections::HashSet;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use crate::commands::{
-    chat_history_path, git_user_dirname, validate_chat_course, validate_chat_mode,
+    chat_history_path, git_user_dirname, validate_chat_course, validate_chat_line_role,
+    validate_chat_mode,
 };
+
+static THREAD_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 static CHAT_INDEX_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
@@ -115,11 +120,79 @@ fn random_hex6() -> String {
     let mut hasher = DefaultHasher::new();
     std::time::SystemTime::now().hash(&mut hasher);
     std::process::id().hash(&mut hasher);
+    THREAD_ID_COUNTER
+        .fetch_add(1, Ordering::Relaxed)
+        .hash(&mut hasher);
     format!("{:06x}", (hasher.finish() as u32) & 0xffffff)
 }
 
 fn utc_now_rfc3339() -> String {
-    Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string()
+    Utc::now().format("%Y-%m-%dT%H:%M:%SZ%.3f").to_string()
+}
+
+fn sort_threads(threads: &mut [ThreadMeta]) {
+    threads.sort_by(|a, b| {
+        b.updated_at
+            .cmp(&a.updated_at)
+            .then_with(|| b.created_at.cmp(&a.created_at))
+            .then_with(|| b.id.cmp(&a.id))
+    });
+}
+
+fn thread_jsonl_exists(course_dir: &Path, id: &str) -> bool {
+    course_dir.join(format!("{id}.jsonl")).is_file()
+}
+
+fn allocate_thread_id(
+    index: &ChatIndex,
+    course_dir: &Path,
+    ts: Option<&str>,
+    reserved: &HashSet<String>,
+) -> Result<String, String> {
+    for _ in 0..128 {
+        let id = if let Some(ts) = ts {
+            new_thread_id_from_ts(ts)
+        } else {
+            new_thread_id_now()
+        };
+        if reserved.contains(&id) || index.threads.iter().any(|entry| entry.id == id) {
+            continue;
+        }
+        if thread_jsonl_exists(course_dir, &id) {
+            continue;
+        }
+        return Ok(id);
+    }
+    Err("Could not allocate a unique thread id".into())
+}
+
+fn rename_legacy_chat_file(root: &str, course: &str) -> Result<(), String> {
+    let legacy_path = chat_history_path(root, course)?;
+    if !legacy_path.is_file() {
+        return Ok(());
+    }
+    let migrated_name = format!("{course}.jsonl.migrated");
+    let migrated_path = legacy_path
+        .parent()
+        .ok_or_else(|| "Invalid chat history path".to_string())?
+        .join(migrated_name);
+    fs::rename(&legacy_path, &migrated_path).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+fn remove_orphan_thread_files(course_dir: &Path) -> Result<(), String> {
+    if !course_dir.is_dir() {
+        return Ok(());
+    }
+    for entry in fs::read_dir(course_dir).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name.starts_with("t-") && name.ends_with(".jsonl") {
+            fs::remove_file(entry.path()).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
 }
 
 fn compact_timestamp_for_id(ts: &str) -> Option<String> {
@@ -205,18 +278,6 @@ fn write_index_atomic(dir: &Path, index: &ChatIndex) -> Result<(), String> {
     Ok(())
 }
 
-fn validate_chat_thread_line_role(line: &serde_json::Value) -> Result<(), String> {
-    let role = line
-        .get("role")
-        .and_then(|value| value.as_str())
-        .ok_or_else(|| "Chat line must have a role".to_string())?;
-    if role == "user" || role == "assistant" {
-        Ok(())
-    } else {
-        Err(format!("Invalid chat line role: {role}"))
-    }
-}
-
 fn segment_has_dialogue(segment: &[serde_json::Value]) -> bool {
     segment
         .iter()
@@ -258,13 +319,17 @@ fn ensure_migrated(root: &str, course: &str) -> Result<(), String> {
     let _guard = index_lock().lock().map_err(|e| e.to_string())?;
     let course_dir = chat_course_dir(root, course)?;
     let index_file = course_dir.join("index.json");
+    let legacy_path = chat_history_path(root, course)?;
     if index_file.is_file() {
+        if legacy_path.is_file() {
+            rename_legacy_chat_file(root, course)?;
+        }
         return Ok(());
     }
-    let legacy_path = chat_history_path(root, course)?;
     if !legacy_path.is_file() {
         return Ok(());
     }
+    remove_orphan_thread_files(&course_dir)?;
     let text = fs::read_to_string(&legacy_path).map_err(|e| e.to_string())?;
     let mut all_lines: Vec<serde_json::Value> = Vec::new();
     for line in text.lines() {
@@ -293,6 +358,7 @@ fn ensure_migrated(root: &str, course: &str) -> Result<(), String> {
     }
 
     let mut threads = Vec::new();
+    let mut reserved_ids = HashSet::new();
     for segment in segments {
         if !segment_has_dialogue(&segment) {
             continue;
@@ -305,7 +371,16 @@ fn ensure_migrated(root: &str, course: &str) -> Result<(), String> {
             .last()
             .and_then(ts_from_line)
             .unwrap_or_else(|| created_at.clone());
-        let id = new_thread_id_from_ts(&created_at);
+        let id = allocate_thread_id(
+            &ChatIndex {
+                version: 1,
+                threads: threads.clone(),
+            },
+            &course_dir,
+            Some(&created_at),
+            &reserved_ids,
+        )?;
+        reserved_ids.insert(id.clone());
         let mode = mode_from_segment(&segment);
         let title = title_from_segment(&segment);
         let meta = ThreadMeta {
@@ -343,12 +418,7 @@ fn ensure_migrated(root: &str, course: &str) -> Result<(), String> {
         },
     )?;
 
-    let migrated_name = format!("{course}.jsonl.migrated");
-    let migrated_path = legacy_path
-        .parent()
-        .ok_or_else(|| "Invalid chat history path".to_string())?
-        .join(migrated_name);
-    fs::rename(&legacy_path, &migrated_path).map_err(|e| e.to_string())?;
+    rename_legacy_chat_file(root, course)?;
     Ok(())
 }
 
@@ -384,7 +454,7 @@ pub async fn list_chat_threads(root: String, course: String) -> Result<Vec<Threa
         let _guard = index_lock().lock().map_err(|e| e.to_string())?;
         let index = read_index_file(&index_path(&root, &course)?)?;
         let mut threads = index.threads;
-        threads.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+        sort_threads(&mut threads);
         Ok(threads)
     })
     .await
@@ -403,8 +473,9 @@ pub async fn create_chat_thread(
         let course_dir = chat_course_dir(&root, &course)?;
         let mut index = read_index_file(&course_dir.join("index.json"))?;
         let now = utc_now_rfc3339();
+        let id = allocate_thread_id(&index, &course_dir, None, &HashSet::new())?;
         let meta = ThreadMeta {
-            id: new_thread_id_now(),
+            id,
             title: "New chat".to_string(),
             mode,
             created_at: now.clone(),
@@ -442,7 +513,7 @@ pub async fn append_chat_thread_lines(
     spawn_blocking_cmd(move || {
         validate_thread_id(&thread)?;
         for line in &lines {
-            validate_chat_thread_line_role(line)?;
+            validate_chat_line_role(line)?;
         }
         ensure_migrated(&root, &course)?;
         let _guard = index_lock().lock().map_err(|e| e.to_string())?;
@@ -580,9 +651,7 @@ pub async fn delete_all_chat_threads(root: String, course: String) -> Result<(),
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::{Mutex, MutexGuard};
-
-    static GIT_IDENTITY_TEST_LOCK: Mutex<()> = Mutex::new(());
+    use std::sync::MutexGuard;
 
     struct IsolatedGitIdentityGuard {
         _mutex: MutexGuard<'static, ()>,
@@ -602,7 +671,7 @@ mod tests {
 
     impl IsolatedGitIdentityGuard {
         fn with_empty_identity() -> Self {
-            let mutex = GIT_IDENTITY_TEST_LOCK.lock().unwrap();
+            let mutex = crate::GIT_IDENTITY_TEST_LOCK.lock().unwrap();
             let saved_home = std::env::var("HOME").ok();
             let saved_git_config_global = std::env::var("GIT_CONFIG_GLOBAL").ok();
             let saved_git_config_nosystem = std::env::var("GIT_CONFIG_NOSYSTEM").ok();
@@ -675,7 +744,6 @@ mod tests {
         ))
         .unwrap();
         assert_eq!(created.title, "New chat");
-        std::thread::sleep(std::time::Duration::from_millis(1100));
         let user = serde_json::json!({
             "ts": "2026-10-17T12:00:00Z",
             "role": "user",
@@ -704,11 +772,23 @@ mod tests {
             "ask".into(),
         ))
         .unwrap();
-        std::thread::sleep(std::time::Duration::from_millis(1100));
         let b = block_on_cmd(create_chat_thread(
             root_string.clone(),
             "Biology".into(),
             "explain".into(),
+        ))
+        .unwrap();
+        let user = serde_json::json!({
+            "ts": "2026-10-17T12:00:00Z",
+            "role": "user",
+            "mode": "explain",
+            "content": "Bump b"
+        });
+        block_on_cmd(append_chat_thread_lines(
+            root_string.clone(),
+            "Biology".into(),
+            b.id.clone(),
+            vec![user],
         ))
         .unwrap();
         let listed = block_on_cmd(list_chat_threads(root_string, "Biology".into())).unwrap();
@@ -847,5 +927,62 @@ mod tests {
         assert!(!legacy.is_file());
         let again = block_on_cmd(list_chat_threads(root_string, "Biology".into())).unwrap();
         assert_eq!(again.len(), 2);
+    }
+
+    #[test]
+    fn migration_renames_legacy_when_index_already_exists() {
+        let _guard = IsolatedGitIdentityGuard::with_empty_identity();
+        let root = temp_root("migrate-index-legacy");
+        let root_string = root.to_string_lossy().into_owned();
+        let course_dir = chat_course_dir(&root_string, "Biology").unwrap();
+        fs::create_dir_all(&course_dir).unwrap();
+        let legacy = chat_history_path(&root_string, "Biology").unwrap();
+        fs::create_dir_all(legacy.parent().unwrap()).unwrap();
+        fs::write(&legacy, "{\"role\":\"session\"}\n").unwrap();
+        fs::write(
+            course_dir.join("index.json"),
+            r#"{"version":1,"threads":[]}"#,
+        )
+        .unwrap();
+
+        block_on_cmd(list_chat_threads(root_string.clone(), "Biology".into())).unwrap();
+        assert!(!legacy.is_file());
+        assert!(legacy.with_file_name("Biology.jsonl.migrated").is_file());
+    }
+
+    #[test]
+    fn migration_retry_does_not_duplicate_orphan_thread_files() {
+        let _guard = IsolatedGitIdentityGuard::with_empty_identity();
+        let root = temp_root("migrate-orphan-retry");
+        let root_string = root.to_string_lossy().into_owned();
+        let course_dir = chat_course_dir(&root_string, "Biology").unwrap();
+        fs::create_dir_all(&course_dir).unwrap();
+        let legacy = chat_history_path(&root_string, "Biology").unwrap();
+        fs::create_dir_all(legacy.parent().unwrap()).unwrap();
+        fs::write(
+            &legacy,
+            concat!(
+                "{\"ts\":\"2026-10-17T10:00:00Z\",\"role\":\"session\"}\n",
+                "{\"ts\":\"2026-10-17T10:00:01Z\",\"role\":\"user\",\"mode\":\"ask\",\"content\":\"One\"}\n",
+                "{\"ts\":\"2026-10-17T10:00:02Z\",\"role\":\"assistant\",\"mode\":\"ask\",\"content\":\"A\"}\n",
+            ),
+        )
+        .unwrap();
+        fs::write(
+            course_dir.join("t-20261017T100001Z-dead01.jsonl"),
+            "{\"role\":\"user\",\"content\":\"orphan\"}\n",
+        )
+        .unwrap();
+
+        let listed = block_on_cmd(list_chat_threads(root_string.clone(), "Biology".into())).unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].title, "One");
+        let jsonls: Vec<_> = fs::read_dir(&course_dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|name| name.ends_with(".jsonl"))
+            .collect();
+        assert_eq!(jsonls.len(), 1);
     }
 }

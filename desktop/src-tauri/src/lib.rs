@@ -15,6 +15,9 @@ mod worker_pool;
 
 use jobs::JobCoordinator;
 use std::sync::{Arc, Mutex};
+
+#[cfg(test)]
+pub(crate) static GIT_IDENTITY_TEST_LOCK: Mutex<()> = Mutex::new(());
 use tauri::Manager;
 use worker_pool::WorkerPool;
 

@@ -1543,12 +1543,12 @@ fn kill_and_reap_child(child: &mut Child) {
     let _ = child.wait();
 }
 
-fn validate_chat_line_role(line: &serde_json::Value) -> Result<(), String> {
+pub(crate) fn validate_chat_line_role(line: &serde_json::Value) -> Result<(), String> {
     let role = line
         .get("role")
         .and_then(|value| value.as_str())
         .ok_or_else(|| "Chat line must have a role".to_string())?;
-    if role == "user" || role == "assistant" || role == "session" {
+    if role == "user" || role == "assistant" {
         Ok(())
     } else {
         Err(format!("Invalid chat line role: {role}"))
@@ -1722,9 +1722,7 @@ mod tests {
 
     use super::*;
     use std::fs;
-    use std::sync::{Mutex, MutexGuard};
-
-    static GIT_IDENTITY_TEST_LOCK: Mutex<()> = Mutex::new(());
+    use std::sync::MutexGuard;
 
     struct IsolatedGitIdentityGuard {
         _mutex: MutexGuard<'static, ()>,
@@ -1744,7 +1742,7 @@ mod tests {
 
     impl IsolatedGitIdentityGuard {
         fn with_empty_identity() -> Self {
-            let mutex = GIT_IDENTITY_TEST_LOCK.lock().unwrap();
+            let mutex = crate::GIT_IDENTITY_TEST_LOCK.lock().unwrap();
             let saved_home = std::env::var("HOME").ok();
             let saved_git_config_global = std::env::var("GIT_CONFIG_GLOBAL").ok();
             let saved_git_config_nosystem = std::env::var("GIT_CONFIG_NOSYSTEM").ok();
@@ -1770,7 +1768,7 @@ mod tests {
         }
 
         fn with_global_email() -> Self {
-            let mutex = GIT_IDENTITY_TEST_LOCK.lock().unwrap();
+            let mutex = crate::GIT_IDENTITY_TEST_LOCK.lock().unwrap();
             let saved_home = std::env::var("HOME").ok();
             let saved_git_config_global = std::env::var("GIT_CONFIG_GLOBAL").ok();
             let saved_git_config_nosystem = std::env::var("GIT_CONFIG_NOSYSTEM").ok();
