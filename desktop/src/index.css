@@ -344,7 +344,8 @@
     font-weight: 500;
   }
 
-  .prose-arbor.live-caret > :last-child::after {
+  .prose-arbor.live-caret > :last-child:not(ol, ul)::after,
+  .prose-arbor.live-caret > :is(ol, ul):last-child > li:last-child::after {
     content: "";
     display: inline-block;
     width: calc(var(--spacing) * 0.5);
