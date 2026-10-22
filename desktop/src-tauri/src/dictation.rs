@@ -28,7 +28,7 @@ pub fn start_dictation_impl(app: AppHandle) -> Result<(), String> {
 
         let result = (|| {
             let Some(mtm) = MainThreadMarker::new() else {
-                return Err("Dictation requires the main thread.".into());
+                return Err(String::from("Dictation requires the main thread."));
             };
             let ns_app = NSApplication::sharedApplication(mtm);
             // SAFETY: `startDictation:` is a standard AppKit action sent with nil target/sender.
@@ -36,7 +36,7 @@ pub fn start_dictation_impl(app: AppHandle) -> Result<(), String> {
             if sent {
                 Ok(())
             } else {
-                Err(DICTATION_START_FAILED.into())
+                Err(String::from(DICTATION_START_FAILED))
             }
         })();
         let _ = tx.send(result);
@@ -44,7 +44,7 @@ pub fn start_dictation_impl(app: AppHandle) -> Result<(), String> {
     .map_err(|e| e.to_string())?;
 
     rx.recv_timeout(Duration::from_secs(2))
-        .map_err(|_| "Dictation timed out or failed to start.".into())?
+        .map_err(|_| String::from("Dictation timed out or failed to start."))?
 }
 
 #[tauri::command]
