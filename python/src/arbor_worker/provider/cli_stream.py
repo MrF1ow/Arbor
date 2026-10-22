@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import subprocess
 import threading
 from collections.abc import Callable, Iterable
@@ -34,18 +35,43 @@ def run_popen_stream(
         assert proc.stderr is not None
         stderr_lines.append(proc.stderr.read())
 
-    reader = threading.Thread(target=drain_stderr, daemon=True)
-    reader.start()
+    stderr_reader = threading.Thread(target=drain_stderr, daemon=True)
+    stderr_reader.start()
+
+    def write_stdin() -> None:
+        try:
+            assert proc.stdin is not None
+            proc.stdin.write(stdin_text)
+            proc.stdin.close()
+        except BrokenPipeError:
+            pass
+        except OSError as exc:
+            if exc.errno != errno.EPIPE:
+                raise
+
+    stdin_writer = threading.Thread(target=write_stdin, daemon=True)
+    stdin_writer.start()
+    parse_error: ProviderError | None = None
+    result = ""
     try:
-        assert proc.stdin is not None
-        proc.stdin.write(stdin_text)
-        proc.stdin.close()
         assert proc.stdout is not None
-        result = parse_stdout(proc.stdout, on_delta)
-        proc.stdout.close()
-        reader.join()
+        try:
+            result = parse_stdout(proc.stdout, on_delta)
+        except ProviderError as exc:
+            parse_error = exc
+        close_stdout = getattr(proc.stdout, "close", None)
+        if callable(close_stdout):
+            close_stdout()
+        stdin_writer.join()
+        stderr_reader.join()
         code = proc.wait()
         stderr = "".join(stderr_lines).strip()
+        if parse_error is not None:
+            empty_msg = f"{label} returned empty result"
+            if parse_error.args and str(parse_error.args[0]) == empty_msg and code != 0:
+                detail = stderr or "no stderr"
+                raise ProviderError(f"{label} failed ({code}): {detail}") from parse_error
+            raise parse_error
         if code != 0:
             detail = stderr or "no stderr"
             raise ProviderError(f"{label} failed ({code}): {detail}")

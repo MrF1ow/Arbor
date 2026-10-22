@@ -52,3 +52,9 @@ def test_iter_stream_json_empty_result():
     lines = ['{"type":"result","is_error":false,"result":""}']
     with pytest.raises(ProviderError, match="empty result"):
         iter_stream_json(lines, lambda _t: None, label="grok")
+
+
+def test_iter_stream_json_error_line():
+    lines = ['{"type":"error","message":"not logged in"}']
+    with pytest.raises(ProviderError, match="not logged in"):
+        iter_stream_json(lines, lambda _t: None, label="claude")

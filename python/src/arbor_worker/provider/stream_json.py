@@ -52,6 +52,12 @@ def iter_stream_json(lines: Iterable[str], on_delta: DeltaFn, *, label: str) -> 
             raise ProviderError(f"{label} returned invalid stream JSON")
 
         line_type = payload.get("type")
+        if line_type == "error":
+            msg = payload.get("message")
+            if isinstance(msg, str) and msg.strip():
+                raise ProviderError(msg.strip())
+            raise ProviderError(f"{label} stream error")
+
         if line_type == "stream_event":
             event = payload.get("event")
             if not isinstance(event, dict):
