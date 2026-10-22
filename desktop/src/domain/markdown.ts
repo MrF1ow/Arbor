@@ -87,8 +87,32 @@ function matchListItem(line: string): ListItemMatch | null {
 interface OpenList {
   kind: ListKind;
   indent: number;
+  contentIndent: number;
   items: string[];
+  rawItems: string[];
   start?: number;
+}
+
+function listItemContentIndent(item: ListItemMatch): number {
+  if (item.kind === "ul") {
+    return item.indent + 2;
+  }
+  const digits = item.orderStart != null ? String(item.orderStart).length : 1;
+  return item.indent + digits + 2;
+}
+
+function splitRawForListContinuation(rawLast: string, continuation: string): {
+  itemRaw: string;
+  paragraphRaw: string;
+} {
+  const boldMarkers = (rawLast.match(/\*\*/g) ?? []).length;
+  if (boldMarkers % 2 === 1) {
+    const lastMarker = rawLast.lastIndexOf("**");
+    const itemRaw = rawLast.slice(0, lastMarker);
+    const paragraphRaw = `${rawLast.slice(lastMarker)} ${continuation}`.trim();
+    return { itemRaw, paragraphRaw };
+  }
+  return { itemRaw: rawLast, paragraphRaw: continuation };
 }
 
 function listOpenTag(list: OpenList, pageAttr: () => string): string {
@@ -127,6 +151,18 @@ function closeAllLists(stack: OpenList[], parts: string[], pageAttr: () => strin
   closeListsThrough(stack, -1, parts, pageAttr);
 }
 
+function closeListsWithContentIndentGreaterThan(
+  stack: OpenList[],
+  lineIndent: number,
+  parts: string[],
+  pageAttr: () => string,
+): void {
+  while (stack.length > 0 && stack[stack.length - 1].contentIndent > lineIndent) {
+    const top = stack[stack.length - 1];
+    closeListsThrough(stack, top.indent - 1, parts, pageAttr);
+  }
+}
+
 function appendListItem(
   stack: OpenList[],
   item: ListItemMatch,
@@ -139,7 +175,9 @@ function appendListItem(
     const opened: OpenList = {
       kind: item.kind,
       indent: item.indent,
+      contentIndent: listItemContentIndent(item),
       items: [inlineFormat(item.content)],
+      rawItems: [item.content],
     };
     if (item.kind === "ol" && item.orderStart != null && item.orderStart !== 1) {
       opened.start = item.orderStart;
@@ -152,7 +190,9 @@ function appendListItem(
     const opened: OpenList = {
       kind: item.kind,
       indent: item.indent,
+      contentIndent: listItemContentIndent(item),
       items: [inlineFormat(item.content)],
+      rawItems: [item.content],
     };
     if (item.kind === "ol" && item.orderStart != null && item.orderStart !== 1) {
       opened.start = item.orderStart;
@@ -161,6 +201,7 @@ function appendListItem(
     return;
   }
   top.items.push(inlineFormat(item.content));
+  top.rawItems.push(item.content);
 }
 
 interface MarkdownTable {
@@ -250,8 +291,20 @@ function keepListsOpenAcrossBlankLine(
     return false;
   }
   const indent = indentMatch[1].replace(/\t/g, "  ").length;
-  const top = stack[stack.length - 1];
-  return indent > top.indent;
+  const text = indentMatch[2];
+  for (const open of stack) {
+    if (indent > open.contentIndent) {
+      return true;
+    }
+    if (
+      indent === open.contentIndent &&
+      text.length > 0 &&
+      /^[a-z]/.test(text)
+    ) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export function renderMarkdown(source: string): {
@@ -275,6 +328,18 @@ export function renderMarkdown(source: string): {
   const parts: string[] = [];
   let paragraph: string[] = [];
   const lists: OpenList[] = [];
+  let listContinuationAfterBlank = false;
+
+  const noteBlankLineKeepsLists = (blankIndex: number) => {
+    if (!keepListsOpenAcrossBlankLine(lines, blankIndex, lists)) {
+      return false;
+    }
+    const nextIndex = nextNonBlankLineIndex(lines, blankIndex);
+    if (nextIndex >= 0 && !matchListItem(lines[nextIndex].replace(/\s+$/, ""))) {
+      listContinuationAfterBlank = true;
+    }
+    return true;
+  };
 
   const flushParagraph = () => {
     if (paragraph.length === 0) return;
@@ -299,9 +364,51 @@ export function renderMarkdown(source: string): {
     const segments = splitLineByArborMarkers(line);
     const nextLine = i + 1 < lines.length ? lines[i + 1].replace(/\s+$/, "") : "";
 
+    if (listContinuationAfterBlank && line.trim() !== "") {
+      listContinuationAfterBlank = false;
+      flushParagraph();
+      const indentMatch = line.match(/^(\s*)(.*)$/);
+      const lineIndent = indentMatch ? indentMatch[1].replace(/\t/g, "  ").length : 0;
+      closeListsWithContentIndentGreaterThan(lists, lineIndent, parts, pageAttr);
+      const paraParts: string[] = [];
+      let j = i;
+      while (j < lines.length) {
+        const raw = lines[j].replace(/\s+$/, "");
+        if (raw.trim() === "") {
+          break;
+        }
+        if (matchListItem(raw)) {
+          break;
+        }
+        const im = raw.match(/^(\s*)(.*)$/);
+        const ind = im ? im[1].replace(/\t/g, "  ").length : 0;
+        if (ind < lineIndent) {
+          break;
+        }
+        paraParts.push(raw.trim());
+        j += 1;
+      }
+      if (lists.length > 0 && paraParts.length > 0) {
+        const top = lists[lists.length - 1];
+        const last = top.items.length - 1;
+        const continuation = paraParts.join(" ");
+        const rawLast = top.rawItems[last];
+        const formattedPrefix = inlineFormat(rawLast);
+        const nestedSuffix =
+          top.items[last].length > formattedPrefix.length
+            ? top.items[last].slice(formattedPrefix.length)
+            : "";
+        const { itemRaw, paragraphRaw } = splitRawForListContinuation(rawLast, continuation);
+        top.rawItems[last] = itemRaw;
+        top.items[last] = `${inlineFormat(itemRaw)}${nestedSuffix}<p${pageAttr()}>${inlineFormat(paragraphRaw)}</p>`;
+      }
+      i = j - 1;
+      continue;
+    }
+
     if (segments.length === 0) {
       flushParagraph();
-      if (line.trim() === "" && keepListsOpenAcrossBlankLine(lines, i, lists)) {
+      if (line.trim() === "" && noteBlankLineKeepsLists(i)) {
         continue;
       }
       closeAllLists(lists, parts, pageAttr);
@@ -313,7 +420,7 @@ export function renderMarkdown(source: string): {
       !segments.some((seg) => seg.kind === "open" || seg.kind === "close");
     if (lineHasOnlyWhitespace && line.trim() === "") {
       flushParagraph();
-      if (!keepListsOpenAcrossBlankLine(lines, i, lists)) {
+      if (!noteBlankLineKeepsLists(i)) {
         closeAllLists(lists, parts, pageAttr);
       }
       continue;

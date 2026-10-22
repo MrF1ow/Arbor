@@ -67,6 +67,39 @@ test("closes a list before a paragraph after a blank line", async () => {
   assert.match(html, /<p>Not a list item\.<\/p>/);
 });
 
+test("does not swallow a shallow paragraph after a blank line as list continuation", async () => {
+  const { renderMarkdown } = await subject();
+  for (const source of [
+    "1. only\n\n The next paragraph starts with one space.\n",
+    "1. only\n\n  The next paragraph starts with two spaces.\n",
+    "1. only\n\n   The next paragraph starts with three spaces.\n",
+    "- only\n\n The next paragraph starts with one space.\n",
+  ]) {
+    const { html } = renderMarkdown(source);
+    assert.match(html, /(<\/ol>|<\/ul>)\s*<p>.*next paragraph/s);
+    assert.doesNotMatch(html, /<li>only The next paragraph/s);
+  }
+});
+
+test("nested list continuation after blank becomes a paragraph inside the parent item", async () => {
+  const { renderMarkdown } = await subject();
+  const { html } = renderMarkdown("1. outer\n\n   - nested\n\n    four spaces after nested\n");
+  assert.match(html, /<li>nested<\/li>.*<p>four spaces after nested<\/p>/s);
+  assert.doesNotMatch(html, /nested four spaces after nested/s);
+});
+
+test("indented continuation at content column becomes a paragraph inside the list item", async () => {
+  const { renderMarkdown } = await subject();
+  const { html } = renderMarkdown("1. a\n\n   more text\n");
+  assert.match(html, /<li>a<p>more text<\/p><\/li>/);
+});
+
+test("continuation at content column runs inline format once across joined lines", async () => {
+  const { renderMarkdown } = await subject();
+  const { html } = renderMarkdown("1. see **ATP\n\n   synthase**\n");
+  assert.match(html, /<li>see <p><strong>ATP synthase<\/strong><\/p><\/li>/);
+});
+
 test("renders asterisk bullets", async () => {
   const { renderMarkdown } = await subject();
   const { html } = renderMarkdown("* mitochondria\n* nucleus\n");
