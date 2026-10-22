@@ -9,6 +9,7 @@ from pathlib import Path
 
 from arbor_worker.auth import check_cli_auth, gui_path, resolve_cli_command
 from arbor_worker.provider.base import (
+    DeltaFn,
     Model,
     ProviderError,
     ProviderRequest,
@@ -16,6 +17,8 @@ from arbor_worker.provider.base import (
     ProviderStatus,
     image_media_type,
 )
+from arbor_worker.provider.cli_stream import run_popen_stream
+from arbor_worker.provider.stream_json import iter_stream_json
 
 CLAUDE_DOCS_URL = "https://code.claude.com/docs"
 CLAUDECODE_GUARD = "Claude provider disabled inside a Claude Code session"
@@ -30,10 +33,17 @@ DEFAULT_CLAUDE_MODELS = [
 class ClaudeCliProvider:
     name = "claude"
 
-    def __init__(self, models: list[Model], runner=subprocess.run, which=shutil.which):
+    def __init__(
+        self,
+        models: list[Model],
+        runner=subprocess.run,
+        which=shutil.which,
+        popen=subprocess.Popen,
+    ):
         self._models = models
         self._runner = runner
         self._which = which
+        self._popen = popen
 
     def _guard_active(self) -> bool:
         return os.environ.get("CLAUDECODE") == "1"
@@ -79,6 +89,16 @@ class ClaudeCliProvider:
             argv.append("stream-json")
         if request.system is not None:
             argv.extend(["--system-prompt", request.system])
+        return argv
+
+    def build_stream_argv(self, request: ProviderRequest) -> list[str]:
+        argv = self.build_argv(request)
+        idx = argv.index("--output-format")
+        argv[idx + 1] = "stream-json"
+        insert_at = idx + 2
+        for flag in ("--verbose", "--include-partial-messages"):
+            argv.insert(insert_at, flag)
+            insert_at += 1
         return argv
 
     def _stdin_payload(self, request: ProviderRequest) -> str:
@@ -134,3 +154,28 @@ class ClaudeCliProvider:
         if not isinstance(result, str) or not result.strip():
             raise ProviderError("claude returned empty result")
         return ProviderResult(markdown=result)
+
+    def stream(self, request: ProviderRequest, on_delta: DeltaFn) -> ProviderResult:
+        if self._guard_active():
+            raise ProviderError(CLAUDECODE_GUARD)
+        if resolve_cli_command("claude", self._which) is None:
+            raise ProviderError("Claude CLI not found on PATH")
+        argv = self.build_stream_argv(request)
+        env = os.environ.copy()
+        env["PATH"] = gui_path()
+        stdin_text = self._stdin_payload(request)
+
+        def parse_stdout(lines, delta_fn: DeltaFn) -> str:
+            return iter_stream_json(lines, delta_fn, label="claude")
+
+        markdown = run_popen_stream(
+            popen=self._popen,
+            argv=argv,
+            cwd=request.cwd,
+            env=env,
+            stdin_text=stdin_text,
+            on_delta=on_delta,
+            parse_stdout=parse_stdout,
+            label="claude",
+        )
+        return ProviderResult(markdown=markdown)

@@ -10,6 +10,7 @@ from pathlib import Path
 
 from arbor_worker.auth import check_cli_auth, gui_path, resolve_cli_command
 from arbor_worker.provider.base import (
+    DeltaFn,
     Model,
     ProviderError,
     ProviderRequest,
@@ -17,6 +18,8 @@ from arbor_worker.provider.base import (
     ProviderStatus,
     image_media_type,
 )
+from arbor_worker.provider.cli_stream import run_popen_stream
+from arbor_worker.provider.stream_json import iter_stream_json
 
 GROK_DOCS_URL = "https://x.ai/grok"
 
@@ -70,10 +73,17 @@ def _raise_if_tool_call(payload: dict) -> None:
 class GrokCliProvider:
     name = "grok"
 
-    def __init__(self, models: list[Model], runner=subprocess.run, which=shutil.which):
+    def __init__(
+        self,
+        models: list[Model],
+        runner=subprocess.run,
+        which=shutil.which,
+        popen=subprocess.Popen,
+    ):
         self._models = models
         self._runner = runner
         self._which = which
+        self._popen = popen
 
     def status(self) -> ProviderStatus:
         cmd = resolve_cli_command("grok", self._which)
@@ -121,6 +131,13 @@ class GrokCliProvider:
         )
         if request.system is not None:
             argv.extend(["--system-prompt-override", request.system])
+        return argv
+
+    def build_stream_argv(self, request: ProviderRequest, prompt_file: Path | None) -> list[str]:
+        argv = self.build_argv(request, prompt_file=prompt_file)
+        idx = argv.index("--output-format")
+        argv[idx + 1] = "streaming-messages-json"
+        argv.insert(idx + 2, "--include-partial-messages")
         return argv
 
     def _parse_stdout(self, stdout: str) -> ProviderResult:
@@ -194,3 +211,56 @@ class GrokCliProvider:
             detail = (proc.stderr or proc.stdout or "").strip() or "grok failed"
             raise ProviderError(f"grok failed ({proc.returncode}): {detail}")
         return self._parse_stdout(proc.stdout or "")
+
+    def stream(self, request: ProviderRequest, on_delta: DeltaFn) -> ProviderResult:
+        if resolve_cli_command("grok", self._which) is None:
+            raise ProviderError("Grok CLI not found on PATH")
+        env = os.environ.copy()
+        env["PATH"] = gui_path()
+        if request.image_paths:
+            blocks: list[dict] = [{"type": "text", "text": request.prompt}]
+            for path in request.image_paths:
+                data = base64.standard_b64encode(path.read_bytes()).decode("ascii")
+                blocks.append(
+                    {
+                        "type": "image",
+                        "mimeType": image_media_type(path),
+                        "data": data,
+                    }
+                )
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                delete=False,
+                suffix=".json",
+            ) as tmp:
+                tmp.write(json.dumps(blocks))
+                prompt_path = Path(tmp.name)
+        else:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                delete=False,
+                suffix=".txt",
+            ) as tmp:
+                tmp.write(request.prompt)
+                prompt_path = Path(tmp.name)
+        try:
+            argv = self.build_stream_argv(request, prompt_file=prompt_path)
+
+            def parse_stdout(lines, delta_fn: DeltaFn) -> str:
+                return iter_stream_json(lines, delta_fn, label="grok")
+
+            markdown = run_popen_stream(
+                popen=self._popen,
+                argv=argv,
+                cwd=request.cwd,
+                env=env,
+                stdin_text="",
+                on_delta=on_delta,
+                parse_stdout=parse_stdout,
+                label="grok",
+            )
+        finally:
+            prompt_path.unlink(missing_ok=True)
+        return ProviderResult(markdown=markdown)

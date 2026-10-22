@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from collections.abc import Callable
 from typing import Protocol, runtime_checkable
+
+DeltaFn = Callable[[str], None]
 
 
 class ProviderError(Exception):
@@ -59,6 +62,10 @@ class Provider(Protocol):
     def list_models(self) -> list[Model]: ...
 
     def run(self, request: ProviderRequest) -> ProviderResult: ...
+
+
+def supports_stream(provider: object) -> bool:
+    return callable(getattr(provider, "stream", None))
 
 
 CliProvider = Provider
