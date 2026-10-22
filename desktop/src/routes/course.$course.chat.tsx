@@ -31,14 +31,17 @@ function ChatRoute() {
   const courses = useCourses(activeRoot);
   const digests = useDigests(activeRoot, course);
   const threadsQuery = useChatThreads(activeRoot, course);
-  const allowAutoSelectRef = useRef(!prompt?.trim());
+  const hasSearchParams = Boolean(mode || prompt || thread);
+  const allowAutoSelectRef = useRef(!hasSearchParams);
 
   useEffect(() => {
-    allowAutoSelectRef.current = !prompt?.trim();
-  }, [course, activeRoot, prompt]);
+    if (mode || prompt || thread) {
+      allowAutoSelectRef.current = false;
+    }
+  }, [course, activeRoot, mode, prompt, thread]);
 
   useEffect(() => {
-    if (thread || prompt?.trim()) {
+    if (mode || prompt || thread) {
       return;
     }
     if (!allowAutoSelectRef.current) {
@@ -52,11 +55,12 @@ function ChatRoute() {
       search: (prev) => ({ ...prev, thread: threadsQuery.data![0]!.id }),
       replace: true,
     });
-  }, [thread, prompt, threadsQuery.isFetched, threadsQuery.data, navigate]);
+  }, [thread, mode, prompt, threadsQuery.isFetched, threadsQuery.data, navigate]);
 
   const onSearchClear = () => {
+    allowAutoSelectRef.current = false;
     void navigate({
-      search: { mode: undefined, prompt: undefined, thread },
+      search: (prev) => ({ ...prev, mode: undefined, prompt: undefined }),
       replace: true,
     });
   };

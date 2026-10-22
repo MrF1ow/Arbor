@@ -38,6 +38,32 @@ export type SendChatMessageOpts = {
   appendLog?: (line: string) => void;
 };
 
+function patchThreadCaches(
+  queryClient: QueryClient,
+  root: string,
+  course: string,
+  threadId: string,
+  appendedLines: ChatLine[],
+  meta: ChatThreadMeta,
+) {
+  queryClient.setQueryData<ChatLine[]>(qk.chatThread(root, course, threadId), (prev) => [
+    ...(prev ?? []),
+    ...appendedLines,
+  ]);
+  queryClient.setQueryData<ChatThreadMeta[]>(qk.chatThreads(root, course), (prev) => {
+    const rows = prev ?? [];
+    const index = rows.findIndex((entry) => entry.id === threadId);
+    if (index < 0) {
+      return [...rows, meta];
+    }
+    const next = rows.slice();
+    next[index] = meta;
+    return next;
+  });
+  void queryClient.invalidateQueries({ queryKey: qk.chatThreads(root, course) });
+  void queryClient.invalidateQueries({ queryKey: qk.chatThread(root, course, threadId) });
+}
+
 export async function sendChatMessage(opts: SendChatMessageOpts): Promise<{ threadId: string }> {
   const {
     queryClient,
@@ -76,6 +102,7 @@ export async function sendChatMessage(opts: SendChatMessageOpts): Promise<{ thre
     throw new Error(message);
   }
 
+  let createdThisSend = false;
   if (!threadId) {
     const created = await invoke<ChatThreadMeta>("create_chat_thread", {
       root,
@@ -83,6 +110,7 @@ export async function sendChatMessage(opts: SendChatMessageOpts): Promise<{ thre
       mode,
     });
     threadId = created.id;
+    createdThisSend = true;
   }
   if (!threadId) {
     throw new Error("Could not create chat thread");
@@ -93,14 +121,26 @@ export async function sendChatMessage(opts: SendChatMessageOpts): Promise<{ thre
   setChatLiveStatus(streamKey, "Retrieving", "muted");
 
   const userLine = buildUserLine(mode, question);
-  await invoke<ChatThreadMeta>("append_chat_thread_lines", {
-    root,
-    course,
-    thread: threadId,
-    lines: [userLine],
-  });
-  void queryClient.invalidateQueries({ queryKey: qk.chatThreads(root, course) });
-  void queryClient.invalidateQueries({ queryKey: qk.chatThread(root, course, threadId) });
+  let userLineStored = false;
+  try {
+    const userMeta = await invoke<ChatThreadMeta>("append_chat_thread_lines", {
+      root,
+      course,
+      thread: threadId,
+      lines: [userLine],
+    });
+    userLineStored = true;
+    patchThreadCaches(queryClient, root, course, threadId, [userLine], userMeta);
+  } catch (error) {
+    finishChatLiveStream(streamKey);
+    const message = chatAuthErrorMessage(providerLabel, error);
+    setChatLiveStatus(streamKey, message, "destructive");
+    onAuthGate?.(message, "destructive");
+    if (createdThisSend && !userLineStored) {
+      await invoke("delete_chat_thread", { root, course, thread: threadId }).catch(() => undefined);
+    }
+    throw error;
+  }
 
   const lastAuthReason = auth.reason ?? "";
   let pendingAppend: Promise<void> = Promise.resolve();
@@ -132,16 +172,9 @@ export async function sendChatMessage(opts: SendChatMessageOpts): Promise<{ thre
         course,
         thread: threadId!,
         lines: [assistantLine],
-      })
-        .then(() => {
-          void queryClient.invalidateQueries({ queryKey: qk.chatThreads(root, course) });
-          void queryClient.invalidateQueries({
-            queryKey: qk.chatThread(root, course, threadId!),
-          });
-        })
-        .catch((error) => {
-          throw error;
-        });
+      }).then((meta) => {
+        patchThreadCaches(queryClient, root, course, threadId!, [assistantLine], meta);
+      });
       void pendingAppend.catch(() => undefined);
       return;
     }
@@ -187,7 +220,9 @@ export async function sendChatMessage(opts: SendChatMessageOpts): Promise<{ thre
     history,
   }).catch((error) => {
     finishChatLiveStream(streamKey);
-    setChatLiveStatus(streamKey, chatAuthErrorMessage(providerLabel, error), "destructive");
+    const message = chatAuthErrorMessage(providerLabel, error);
+    setChatLiveStatus(streamKey, message, "destructive");
+    onAuthGate?.(message, "destructive");
   });
 
   return { threadId };
