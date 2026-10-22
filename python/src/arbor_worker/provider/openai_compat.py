@@ -7,6 +7,7 @@ from pathlib import Path
 from collections.abc import Iterator
 
 from arbor_worker.provider.base import DeltaFn, ProviderError, ProviderRequest, image_media_type
+from arbor_worker.provider.http_transport import redact_secret
 
 
 def build_chat_completions_body(request: ProviderRequest, *, stream: bool = False) -> dict:
@@ -36,7 +37,19 @@ def build_chat_completions_body(request: ProviderRequest, *, stream: bool = Fals
     }
 
 
-def iter_chat_completions_sse(lines: Iterator[bytes], on_delta: DeltaFn) -> str:
+def _sse_error_message(payload: dict, secret: str | None) -> str | None:
+    error_obj = payload.get("error")
+    if not isinstance(error_obj, dict):
+        return None
+    message = error_obj.get("message")
+    if isinstance(message, str) and message.strip():
+        return redact_secret(message.strip(), secret)
+    return redact_secret(json.dumps(error_obj, ensure_ascii=False), secret)
+
+
+def iter_chat_completions_sse(
+    lines: Iterator[bytes], on_delta: DeltaFn, *, secret: str | None = None
+) -> str:
     parts: list[str] = []
     for raw in lines:
         line = raw.decode("utf-8", errors="replace").strip()
@@ -50,6 +63,11 @@ def iter_chat_completions_sse(lines: Iterator[bytes], on_delta: DeltaFn) -> str:
             payload = json.loads(line[6:])
         except json.JSONDecodeError as exc:
             raise ProviderError("chat completion stream returned invalid JSON") from exc
+        if not isinstance(payload, dict):
+            continue
+        err_msg = _sse_error_message(payload, secret)
+        if err_msg is not None:
+            raise ProviderError(err_msg)
         choices = payload.get("choices")
         if not isinstance(choices, list) or not choices:
             continue

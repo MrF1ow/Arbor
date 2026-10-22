@@ -144,7 +144,7 @@ class LmStudioProvider:
         if status >= 400:
             err_body = b"".join(line_iter)
             raise ProviderError(error_excerpt(status, err_body, self._api_key))
-        text = iter_chat_completions_sse(line_iter, on_delta)
+        text = iter_chat_completions_sse(line_iter, on_delta, secret=self._api_key)
         return ProviderResult(markdown=text)
 
     def run(self, request: ProviderRequest) -> ProviderResult:

@@ -110,7 +110,7 @@ class OpenAiApiProvider:
         if status >= 400:
             err_body = b"".join(line_iter)
             raise ProviderError(error_excerpt(status, err_body, key))
-        text = iter_chat_completions_sse(line_iter, on_delta)
+        text = iter_chat_completions_sse(line_iter, on_delta, secret=key)
         return ProviderResult(markdown=text)
 
     def run(self, request: ProviderRequest) -> ProviderResult:

@@ -81,7 +81,10 @@ def urllib_http_stream(
     try:
         resp = opener.open(req, timeout=timeout)
     except urllib.error.HTTPError as exc:
-        err_body = exc.read()
+        try:
+            err_body = exc.read()
+        finally:
+            exc.close()
 
         def err_iter() -> Iterator[bytes]:
             yield err_body
@@ -121,7 +124,11 @@ def urllib_http_request(
         with opener.open(req, timeout=timeout) as resp:
             return resp.status, resp.read()
     except urllib.error.HTTPError as exc:
-        return exc.code, exc.read()
+        try:
+            body = exc.read()
+        finally:
+            exc.close()
+        return exc.code, body
     except urllib.error.URLError as exc:
         if is_connection_refused(exc):
             raise ConnectionRefusedError(errno.ECONNREFUSED, "Connection refused") from exc
