@@ -55,10 +55,11 @@ export function workerHistory(lines: ChatLine[]): Array<{ role: string; content:
 
 export function titleFromUserMessage(content: string): string {
   const collapsed = content.trim().replace(/\s+/g, " ");
-  if (collapsed.length <= 60) {
+  const chars = Array.from(collapsed);
+  if (chars.length <= 60) {
     return collapsed;
   }
-  const cut = collapsed.slice(0, 60);
+  const cut = chars.slice(0, 60).join("");
   const lastSpace = cut.lastIndexOf(" ");
   if (lastSpace > 0) {
     return `${cut.slice(0, lastSpace)}…`;

@@ -204,6 +204,42 @@ function mockThreadsKey(root: string, course: string): string {
   return `${root}\0${course}`;
 }
 
+const CHAT_THREAD_ID_RE = /^t-\d{8}T\d{6}Z-[0-9a-f]{6}$/;
+
+function assertMockThreadId(thread: string) {
+  if (!CHAT_THREAD_ID_RE.test(thread)) {
+    throw new Error("Invalid thread id");
+  }
+}
+
+function assertMockChatMode(mode: string) {
+  if (mode !== "ask" && mode !== "explain") {
+    throw new Error(`Invalid chat mode: ${mode}`);
+  }
+}
+
+function assertMockChatLineRoles(lines: ChatLine[]) {
+  for (const line of lines) {
+    if (line.role !== "user" && line.role !== "assistant") {
+      throw new Error(`Invalid chat line role: ${line.role}`);
+    }
+  }
+}
+
+function sortMockThreads(rows: ChatThreadMeta[]): ChatThreadMeta[] {
+  return rows.slice().sort((a, b) => {
+    const byUpdated = b.updated_at.localeCompare(a.updated_at);
+    if (byUpdated !== 0) {
+      return byUpdated;
+    }
+    const byCreated = b.created_at.localeCompare(a.created_at);
+    if (byCreated !== 0) {
+      return byCreated;
+    }
+    return b.id.localeCompare(a.id);
+  });
+}
+
 function newMockThreadId(iso: string): string {
   mockThreadCounter += 1;
   const compact = iso.replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z").slice(0, 16);
@@ -360,15 +396,15 @@ function handleMockListChatThreads(payload: Record<string, unknown>) {
   const course = String(payload.course ?? "");
   seedDefaultCellBiologyThreads(root, course);
   const bucket = getMockThreadBucket(root, course);
-  return bucket.threads
-    .slice()
-    .sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+  return sortMockThreads(bucket.threads);
 }
 
 function handleMockCreateChatThread(payload: Record<string, unknown>) {
   const root = String(payload.root ?? FIXTURE_ROOT_FALL);
   const course = String(payload.course ?? "");
-  const mode: ChatMode = String(payload.mode ?? "ask") === "explain" ? "explain" : "ask";
+  const modeRaw = String(payload.mode ?? "ask");
+  assertMockChatMode(modeRaw);
+  const mode: ChatMode = modeRaw === "explain" ? "explain" : "ask";
   const now = new Date().toISOString();
   const meta: ChatThreadMeta = {
     id: newMockThreadId(now),
@@ -387,6 +423,7 @@ function handleMockReadChatThread(payload: Record<string, unknown>) {
   const root = String(payload.root ?? FIXTURE_ROOT_FALL);
   const course = String(payload.course ?? "");
   const thread = String(payload.thread ?? "");
+  assertMockThreadId(thread);
   seedDefaultCellBiologyThreads(root, course);
   const bucket = getMockThreadBucket(root, course);
   return (bucket.linesByThread.get(thread) ?? []).slice();
@@ -396,7 +433,9 @@ function handleMockAppendChatThreadLines(payload: Record<string, unknown>) {
   const root = String(payload.root ?? FIXTURE_ROOT_FALL);
   const course = String(payload.course ?? "");
   const thread = String(payload.thread ?? "");
+  assertMockThreadId(thread);
   const lines = Array.isArray(payload.lines) ? (payload.lines as ChatLine[]) : [];
+  assertMockChatLineRoles(lines);
   const bucket = getMockThreadBucket(root, course);
   const index = bucket.threads.findIndex((entry) => entry.id === thread);
   if (index < 0) {
@@ -406,8 +445,8 @@ function handleMockAppendChatThreadLines(payload: Record<string, unknown>) {
   bucket.linesByThread.set(thread, [...prev, ...lines]);
   const entry = { ...bucket.threads[index]! };
   for (const line of lines) {
-    if (entry.title === "New chat" && line.role === "user" && line.content) {
-      entry.title = titleFromUserMessage(line.content);
+    if (entry.title === "New chat" && line.role === "user") {
+      entry.title = titleFromUserMessage(line.content ?? "");
     }
   }
   entry.updated_at = new Date().toISOString();
@@ -776,6 +815,7 @@ export function createMockHandler(
         const root = String(payload.root ?? FIXTURE_ROOT_FALL);
         const course = String(payload.course ?? "");
         const thread = String(payload.thread ?? "");
+        assertMockThreadId(thread);
         const title = String(payload.title ?? "").trim();
         if (title.length < 1 || title.length > 120) {
           throw new Error("Title must be 1–120 characters");
@@ -797,7 +837,10 @@ export function createMockHandler(
         const root = String(payload.root ?? FIXTURE_ROOT_FALL);
         const course = String(payload.course ?? "");
         const thread = String(payload.thread ?? "");
-        const mode: ChatMode = String(payload.mode ?? "ask") === "explain" ? "explain" : "ask";
+        assertMockThreadId(thread);
+        const modeRaw = String(payload.mode ?? "ask");
+        assertMockChatMode(modeRaw);
+        const mode: ChatMode = modeRaw === "explain" ? "explain" : "ask";
         const bucket = getMockThreadBucket(root, course);
         const index = bucket.threads.findIndex((entry) => entry.id === thread);
         if (index < 0) {
@@ -815,6 +858,7 @@ export function createMockHandler(
         const root = String(payload.root ?? FIXTURE_ROOT_FALL);
         const course = String(payload.course ?? "");
         const thread = String(payload.thread ?? "");
+        assertMockThreadId(thread);
         const bucket = getMockThreadBucket(root, course);
         bucket.threads = bucket.threads.filter((entry) => entry.id !== thread);
         bucket.linesByThread.delete(thread);

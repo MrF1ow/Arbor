@@ -1,5 +1,5 @@
 import { ListCollapse, Loader2, MessageSquarePlus, MoreHorizontal, PanelLeftClose } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import { ListRow } from "~/components/app/list-row";
 import { SectionLabel } from "~/components/app/section-label";
@@ -88,14 +88,11 @@ export function ChatThreadsPanel({
   const [deleteAllOpen, setDeleteAllOpen] = useState(false);
   const [nowMs] = useState(() => Date.now());
 
-  const threads = useMemo(() => {
-    const rows = threadsQuery.data ?? [];
-    const needle = filter.trim().toLowerCase();
-    if (!needle) {
-      return rows;
-    }
-    return rows.filter((row) => row.title.toLowerCase().includes(needle));
-  }, [filter, threadsQuery.data]);
+  const allThreads = threadsQuery.data ?? [];
+  const needle = filter.trim().toLowerCase();
+  const threads = needle
+    ? allThreads.filter((row) => row.title.toLowerCase().includes(needle))
+    : allThreads;
 
   const saveRename = async () => {
     if (!renameTarget) {
@@ -162,7 +159,9 @@ export function ChatThreadsPanel({
         {threadsQuery.isLoading ? (
           <p className="px-2 py-2 text-xs text-muted-foreground">Loading…</p>
         ) : threads.length === 0 ? (
-          <p className="px-2 py-2 text-xs text-muted-foreground">No chats yet</p>
+          <p className="px-2 py-2 text-xs text-muted-foreground">
+            {allThreads.length === 0 ? "No chats yet" : "No matching chats"}
+          </p>
         ) : (
           threads.map((thread) => (
             <div key={thread.id} className="group relative flex w-full items-center">

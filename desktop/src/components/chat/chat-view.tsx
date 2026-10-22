@@ -1,4 +1,3 @@
-import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useEffect,
@@ -84,7 +83,6 @@ export function ChatView({
   onNewChatNavigate: () => void;
   initialArtifactKind?: ArtifactKind;
 }) {
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const threadsQuery = useChatThreads(activeRoot, course);
   const threadQuery = useChatThread(activeRoot, course, threadId);
@@ -159,8 +157,10 @@ export function ChatView({
     liveKey ? getChatLiveSnapshot(liveKey).statusTone : "muted",
   );
 
-  const statusText = inFlight || liveStatusText ? liveStatusText : gateStatus.text;
-  const statusTone = inFlight || liveStatusText ? liveStatusTone : gateStatus.tone;
+  const statusText =
+    !inFlight && gateStatus.text ? gateStatus.text : liveStatusText;
+  const statusTone =
+    !inFlight && gateStatus.text ? gateStatus.tone : liveStatusTone;
 
   const controlsDisabled = inFlight;
   const composerDisabled = inFlight;
@@ -259,12 +259,6 @@ export function ChatView({
       setStreamingThreadId(result.threadId);
       if (!threadAtSend) {
         moveDraft(rootAtSend, courseAtSend, null, result.threadId);
-        void navigate({
-          to: "/course/$course/chat",
-          params: { course: courseAtSend },
-          search: { thread: result.threadId },
-          replace: true,
-        });
         onThreadChange(result.threadId, true);
       }
       clearDraft(rootAtSend, courseAtSend, threadAtSend);
