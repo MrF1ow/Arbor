@@ -1,6 +1,13 @@
 import { Channel } from "@tauri-apps/api/core";
 import { MessageSquarePlus, Trash2 } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
 import { ChatTranscript } from "~/components/chat/chat-transcript";
 import { LiveAnswer } from "~/components/chat/live-answer";
@@ -54,8 +61,8 @@ import {
   clearChatLiveIfIdle,
   clearChatLiveText,
   finishChatLiveStream,
-  EMPTY_CHAT_LIVE_SNAPSHOT,
   getChatLiveSnapshot,
+  isChatLiveInFlight,
   setChatLiveStatus,
   subscribeChatLive,
   type ChatLiveStatusTone,
@@ -161,14 +168,18 @@ export function ChatView({
     "Provider";
   const liveKey = activeRoot ? chatLiveKey(activeRoot, course) : "";
 
-  const liveSnapshot = useSyncExternalStore(subscribeChatLive, () =>
-    liveKey ? getChatLiveSnapshot(liveKey) : EMPTY_CHAT_LIVE_SNAPSHOT,
+  const inFlight = useSyncExternalStore(subscribeChatLive, () =>
+    liveKey ? isChatLiveInFlight(liveKey) : false,
+  );
+  const liveStatusText = useSyncExternalStore(subscribeChatLive, () =>
+    liveKey ? getChatLiveSnapshot(liveKey).statusText : "",
+  );
+  const liveStatusTone = useSyncExternalStore(subscribeChatLive, () =>
+    liveKey ? getChatLiveSnapshot(liveKey).statusTone : "muted",
   );
 
-  const inFlight = liveSnapshot.inFlight;
-  const statusText = inFlight || liveSnapshot.statusText ? liveSnapshot.statusText : gateStatus.text;
-  const statusTone =
-    inFlight || liveSnapshot.statusText ? liveSnapshot.statusTone : gateStatus.tone;
+  const statusText = inFlight || liveStatusText ? liveStatusText : gateStatus.text;
+  const statusTone = inFlight || liveStatusText ? liveStatusTone : gateStatus.tone;
 
   const controlsDisabled = inFlight;
   const artifactLauncher =
@@ -179,11 +190,11 @@ export function ChatView({
   const viewKey = `${activeRoot ?? ""}|${course}`;
 
   useEffect(() => {
-    if (wasLiveInFlightRef.current && !liveSnapshot.inFlight && historyBlockRef.current === 0) {
+    if (wasLiveInFlightRef.current && !inFlight && historyBlockRef.current === 0) {
       adoptedSigRef.current = "";
     }
-    wasLiveInFlightRef.current = liveSnapshot.inFlight;
-  }, [liveSnapshot.inFlight]);
+    wasLiveInFlightRef.current = inFlight;
+  }, [inFlight]);
 
   useLayoutEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect -- adopt server history on course/root change and refetch */
@@ -232,7 +243,7 @@ export function ChatView({
     };
   }, [liveKey]);
 
-  useLayoutEffect(() => {
+  const scrollTranscriptIfSticky = useCallback(() => {
     if (!stickToBottomRef.current) {
       return;
     }
@@ -255,7 +266,11 @@ export function ChatView({
       }
     }
     el.scrollTop = el.scrollHeight;
-  }, [lines, liveSnapshot.text.length]);
+  }, []);
+
+  useLayoutEffect(() => {
+    scrollTranscriptIfSticky();
+  }, [lines, scrollTranscriptIfSticky]);
 
   const setStatusOnCourse = (
     courseAtSend: string,
@@ -609,7 +624,13 @@ export function ChatView({
       >
         <div className="mx-auto w-full max-w-reading">
           <ChatTranscript course={course} lines={lines} digests={digests} />
-          {activeRoot ? <LiveAnswer root={activeRoot} course={course} /> : null}
+          {activeRoot ? (
+            <LiveAnswer
+              root={activeRoot}
+              course={course}
+              onContentChange={scrollTranscriptIfSticky}
+            />
+          ) : null}
         </div>
       </div>
 

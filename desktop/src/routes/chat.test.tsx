@@ -509,7 +509,46 @@ describe("chat PR11", { timeout: 25000 }, () => {
     cleanup();
   });
 
-  it("live deltas re-render LiveAnswer without re-rendering ChatTranscript", () => {
+  it("ChatView does not re-render on each live text delta", async () => {
+    resetChatLiveStoreForTests();
+    let chatViewRenders = 0;
+    renderWithProviders(
+      <Profiler
+        id="chat-view-stream"
+        onRender={() => {
+          chatViewRenders += 1;
+        }}
+      >
+        <ChatView
+          activeRoot={FIXTURE_ROOT_FALL}
+          course="cell-biology"
+          courses={["cell-biology"]}
+          digests={fixtureDigests}
+          roots={fixtureSettings.knowledge_roots}
+          onSearchClear={() => undefined}
+          onModeSearchClear={() => undefined}
+          onCourseChange={() => undefined}
+        />
+      </Profiler>,
+      { minimal: true },
+    );
+    const afterMount = chatViewRenders;
+    const liveKey = chatLiveKey(FIXTURE_ROOT_FALL, "cell-biology");
+    beginChatLiveStream(liveKey);
+    await waitFor(() => {
+      expect(chatViewRenders).toBeGreaterThan(afterMount);
+    });
+    const afterFlight = chatViewRenders;
+    act(() => {
+      appendChatLiveDelta(liveKey, "tok");
+      appendChatLiveDelta(liveKey, "ens");
+      appendChatLiveDelta(liveKey, "!");
+    });
+    expect(chatViewRenders - afterFlight).toBeLessThan(3);
+    cleanup();
+  });
+
+  it("live deltas re-render LiveAnswer without re-rendering ChatTranscript", async () => {
     resetChatLiveStoreForTests();
     let transcriptUpdates = 0;
     const lines = [buildUserLine("ask", "hello")];
@@ -531,11 +570,18 @@ describe("chat PR11", { timeout: 25000 }, () => {
     expect(transcriptUpdates).toBe(initial);
 
     cleanup();
+    const key = chatLiveKey(FIXTURE_ROOT_FALL, "cell-biology");
+    beginChatLiveStream(key);
+    act(() => {
+      appendChatLiveDelta(key, " streamed");
+    });
     renderWithProviders(
       <LiveAnswer root={FIXTURE_ROOT_FALL} course="cell-biology" />,
       { minimal: true },
     );
-    expect(screen.getByTestId("chat-live-answer")).toHaveTextContent("streamed");
+    await waitFor(() => {
+      expect(screen.getByTestId("chat-live-answer")).toHaveTextContent("streamed");
+    });
     cleanup();
   });
 
