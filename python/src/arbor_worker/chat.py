@@ -12,7 +12,7 @@ from arbor_worker.embedder.hashed import HashedNgramEmbedder
 from arbor_worker.events import EventEmitter
 from arbor_worker.indexer import db_path
 from arbor_worker.page_markers import parse_page_markers
-from arbor_worker.provider.base import CliProvider, ProviderRequest
+from arbor_worker.provider.base import CliProvider, DeltaFn, ProviderRequest, supports_stream
 
 _HEADING_LINE = re.compile(r"^(#{1,6})[ \t]+(.+?)[ \t]*$", re.MULTILINE)
 
@@ -33,6 +33,65 @@ _MODE_SENTENCES = {
 }
 
 _CITATION_RE = re.compile(r"\[(\d+)\]")
+
+_TRAILER_LINES = ("supported: true", "supported: false")
+
+
+def _is_trailer_prefix(text: str) -> bool:
+    stripped = text.strip()
+    if not stripped:
+        return False
+    return any(trailer.startswith(stripped) for trailer in _TRAILER_LINES)
+
+
+class TrailerFilter:
+    """Emit streaming text while holding back a partial supported: trailer line."""
+
+    def __init__(self, on_delta: DeltaFn):
+        self._on_delta = on_delta
+        self._text = ""
+        self._emitted = 0
+
+    def feed(self, chunk: str) -> None:
+        if not chunk:
+            return
+        self._text += chunk
+        self._emit_safe()
+
+    def finish(self) -> None:
+        tail_start = self._text.rfind("\n") + 1
+        tail = self._text[tail_start:]
+        stripped = tail.strip()
+        if stripped in _TRAILER_LINES:
+            safe_end = tail_start
+            if safe_end > 0 and self._text[safe_end - 1] == "\n":
+                safe_end -= 1
+            if safe_end > self._emitted:
+                self._on_delta(self._text[self._emitted : safe_end])
+                self._emitted = safe_end
+            return
+        if self._emitted < len(self._text):
+            self._on_delta(self._text[self._emitted :])
+            self._emitted = len(self._text)
+
+    def _emit_safe(self) -> None:
+        last_nl = self._text.rfind("\n")
+        if last_nl < 0:
+            tail = self._text
+            if _is_trailer_prefix(tail):
+                return
+            if self._emitted < len(self._text):
+                self._on_delta(self._text[self._emitted :])
+                self._emitted = len(self._text)
+            return
+        tail = self._text[last_nl + 1 :]
+        if _is_trailer_prefix(tail):
+            safe_end = last_nl + 1
+        else:
+            safe_end = len(self._text)
+        if safe_end > self._emitted:
+            self._on_delta(self._text[self._emitted : safe_end])
+            self._emitted = safe_end
 
 
 def heading_id(text: str) -> str:
@@ -447,14 +506,24 @@ def answer(
         )
 
     user_prompt = _build_user_prompt(mode, history, question, placed)
-    result = provider.run(
-        ProviderRequest(
-            prompt=user_prompt,
-            model_id=model,
-            cwd=root,
-            system=_system_prompt(mode),
-        )
+    request = ProviderRequest(
+        prompt=user_prompt,
+        model_id=model,
+        cwd=root,
+        system=_system_prompt(mode),
     )
+    if supports_stream(provider):
+        trailer = TrailerFilter(
+            lambda text: emitter.emit("chat_delta", delta=text) if emitter else None
+        )
+
+        def on_delta(text: str) -> None:
+            trailer.feed(text)
+
+        result = provider.stream(request, on_delta)
+        trailer.finish()
+    else:
+        result = provider.run(request)
     markdown, supported, citations, dropped = _parse_response(
         result.markdown, placed, emitter
     )

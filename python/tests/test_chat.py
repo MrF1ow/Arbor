@@ -9,12 +9,19 @@ from pathlib import Path
 import pytest
 
 from arbor_worker import cli
-from arbor_worker.chat import _MODE_SENTENCES, _fts_search, _system_prompt, answer, heading_id
+from arbor_worker.chat import (
+    TrailerFilter,
+    _MODE_SENTENCES,
+    _fts_search,
+    _system_prompt,
+    answer,
+    heading_id,
+)
 from arbor_worker.embed import embed_root
 from arbor_worker.embedder.hashed import HashedNgramEmbedder
 from arbor_worker.events import EventEmitter, parse_lines
 from arbor_worker.indexer import index_course
-from arbor_worker.provider.base import ProviderRequest, ProviderResult
+from arbor_worker.provider.base import ProviderError, ProviderRequest, ProviderResult
 from arbor_worker.provider.fake import FakeProvider
 
 
@@ -335,3 +342,103 @@ def test_chat_cli_ndjson(monkeypatch, biology_root: Path):
     assert "chat_retrieved" in types
     assert "chat_done" in types
     assert _course_tree_hash(biology_root / "Biology") == before
+
+
+def test_trailer_filter_holds_and_drops_trailer():
+    emitted: list[str] = []
+    filt = TrailerFilter(emitted.append)
+    for chunk in ["Mito", "chondria [1].\nsupp", "orted: true"]:
+        filt.feed(chunk)
+    filt.finish()
+    assert "".join(emitted) == "Mitochondria [1].\n"
+
+
+def test_trailer_filter_releases_false_prefix():
+    emitted: list[str] = []
+    filt = TrailerFilter(emitted.append)
+    filt.feed("sup")
+    filt.feed("er cool\n")
+    filt.finish()
+    assert "".join(emitted) == "super cool\n"
+
+
+def test_streaming_answer_emits_chat_deltas(biology_root: Path):
+    script = ["Mito", "chondria [1].\nsupp", "orted: true"]
+    fake = FakeProvider(
+        markdown="Mitochondria [1].\nsupported: true",
+        stream_script=script,
+    )
+    events: list[dict] = []
+
+    class Capture(EventEmitter):
+        def emit(self, type: str, **fields):
+            obj = super().emit(type, **fields)
+            events.append(obj)
+            return obj
+
+    emitter = Capture(io.StringIO())
+    result = answer(
+        biology_root,
+        "Biology",
+        [],
+        "What absorbs blue light ZXYFACT123?",
+        "ask",
+        fake,
+        "fake-model",
+        emitter=emitter,
+    )
+    deltas = [event["delta"] for event in events if event["type"] == "chat_delta"]
+    assert "".join(deltas) == "Mitochondria [1].\n"
+    done = next(event for event in events if event["type"] == "chat_done")
+    assert done["supported"] is True
+
+
+def test_non_streaming_fake_has_no_chat_delta(biology_root: Path):
+    fake = RecordingFake("Short.\n\nsupported: true")
+    events: list[dict] = []
+
+    class Capture(EventEmitter):
+        def emit(self, type: str, **fields):
+            obj = super().emit(type, **fields)
+            events.append(obj)
+            return obj
+
+    answer(
+        biology_root,
+        "Biology",
+        [],
+        "overview?",
+        "ask",
+        fake,
+        "fake-model",
+        emitter=Capture(io.StringIO()),
+    )
+    assert "chat_delta" not in [event["type"] for event in events]
+
+
+def test_streaming_exception_emits_error(biology_root: Path, monkeypatch):
+    class BrokenStream(FakeProvider):
+        def stream(self, request, on_delta):
+            on_delta("partial")
+            raise ProviderError("stream broke")
+
+    payload = {
+        "root": str(biology_root),
+        "course": "Biology",
+        "question": "Hi",
+        "mode": "ask",
+        "provider": "fake",
+        "model": "fake-model",
+        "history": [],
+    }
+    monkeypatch.setattr(
+        "arbor_worker.provider.registry.make_provider",
+        lambda *_a, **_k: BrokenStream(markdown="x"),
+    )
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+    out = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", out)
+    code = cli.main(["chat"])
+    assert code == 1
+    events = parse_lines(out.getvalue())
+    assert any(event["type"] == "error" for event in events)
