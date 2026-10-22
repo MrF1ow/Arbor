@@ -35,6 +35,30 @@ describe("LiveAnswer", () => {
     );
   });
 
+  it("shows only the new stream text on the first render after a prior answer", async () => {
+    const key = chatLiveKey(FIXTURE_ROOT_FALL, "cell-biology");
+    beginChatLiveStream(key);
+    renderWithProviders(
+      <LiveAnswer root={FIXTURE_ROOT_FALL} course="cell-biology" />,
+      { minimal: true },
+    );
+    act(() => {
+      appendChatLiveDelta(key, "First answer");
+    });
+    await act(async () => {
+      await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
+    });
+    act(() => {
+      finishChatLiveStream(key);
+    });
+    await act(async () => {
+      beginChatLiveStream(key);
+      appendChatLiveDelta(key, "Second");
+    });
+    expect(screen.getByTestId("chat-live-answer").textContent).toContain("Second");
+    expect(screen.getByTestId("chat-live-answer").textContent).not.toContain("First answer");
+  });
+
   it("clears the live bubble when the stream finishes", async () => {
     const key = chatLiveKey(FIXTURE_ROOT_FALL, "cell-biology");
     beginChatLiveStream(key);

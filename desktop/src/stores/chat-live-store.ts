@@ -45,27 +45,6 @@ export function getChatLiveSnapshot(key: string): ChatLiveSnapshot {
   return snapshotFor(key);
 }
 
-export type ChatLiveChrome = Pick<ChatLiveSnapshot, "statusText" | "statusTone" | "inFlight">;
-
-const EMPTY_CHAT_LIVE_CHROME: ChatLiveChrome = {
-  statusText: "",
-  statusTone: "muted",
-  inFlight: false,
-};
-
-export function getChatLiveChrome(key: string): ChatLiveChrome {
-  const snap = snapshotFor(key);
-  return {
-    statusText: snap.statusText,
-    statusTone: snap.statusTone,
-    inFlight: snap.inFlight,
-  };
-}
-
-export function getEmptyChatLiveChrome(): ChatLiveChrome {
-  return EMPTY_CHAT_LIVE_CHROME;
-}
-
 export function getChatLiveText(key: string): string {
   return snapshotFor(key).text;
 }

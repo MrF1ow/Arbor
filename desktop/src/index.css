@@ -344,6 +344,28 @@
     font-weight: 500;
   }
 
+  .prose-arbor.live-caret > :last-child::after {
+    content: "";
+    display: inline-block;
+    width: calc(var(--spacing) * 0.5);
+    height: calc(var(--spacing) * 3.5);
+    margin-left: calc(var(--spacing) * 0.5);
+    vertical-align: middle;
+    background: var(--muted-foreground);
+    animation: live-caret-pulse 1s ease-in-out infinite;
+  }
+
+  @keyframes live-caret-pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+
+    50% {
+      opacity: 0.35;
+    }
+  }
+
   .page-chip {
     display: inline-flex;
     align-items: center;
