@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { titleFromUserMessage, workerHistory } from "~/domain/chat";
-import { buildAssistantLine, buildUserLine } from "~/domain/chat";
+import {
+  buildAssistantLine,
+  buildUserLine,
+  parseSlashCommand,
+  titleFromUserMessage,
+  workerHistory,
+} from "~/domain/chat";
 
 describe("titleFromUserMessage", () => {
   it("collapses whitespace and truncates on word boundary", () => {
@@ -31,6 +36,20 @@ describe("titleFromUserMessage", () => {
   it("matches Rust retitle on empty user content", () => {
     expect(titleFromUserMessage("")).toBe("");
     expect(titleFromUserMessage("   ")).toBe("");
+  });
+});
+
+describe("parseSlashCommand", () => {
+  it("parses /explain and /ask commands", () => {
+    expect(parseSlashCommand("/explain why")).toEqual({ mode: "explain", text: "why" });
+    expect(parseSlashCommand("/EXPLAIN why")).toEqual({ mode: "explain", text: "why" });
+    expect(parseSlashCommand("/ask")).toEqual({ mode: "ask", text: "" });
+  });
+
+  it("ignores invalid or spaced prefixes", () => {
+    expect(parseSlashCommand("/askwhy")).toEqual({ text: "/askwhy" });
+    expect(parseSlashCommand("  /explain x")).toEqual({ text: "  /explain x" });
+    expect(parseSlashCommand("/unknown x")).toEqual({ text: "/unknown x" });
   });
 });
 

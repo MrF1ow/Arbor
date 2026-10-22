@@ -16,6 +16,22 @@ export function isChatMode(value: string | undefined): value is ChatMode {
   return value != null && CHAT_MODES.includes(value as ChatMode);
 }
 
+export function parseSlashCommand(text: string): { mode?: ChatMode; text: string } {
+  if (text.startsWith(" ") || text.startsWith("\t")) {
+    return { text };
+  }
+  const match = text.match(/^\/(ask|explain)(?:\s|$)/i);
+  if (!match) {
+    return { text };
+  }
+  const mode = match[1]!.toLowerCase() as ChatMode;
+  let rest = text.slice(match[0].length);
+  if (rest.startsWith(" ")) {
+    rest = rest.slice(1);
+  }
+  return { mode, text: rest };
+}
+
 export function chatAuthErrorMessage(providerLabel: string, error: unknown): string {
   const text = String(error);
   if (text.includes("authenticated") || text.includes("auth")) {

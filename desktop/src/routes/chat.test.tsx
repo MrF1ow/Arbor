@@ -1089,6 +1089,55 @@ describe("chat threads", { timeout: 30000 }, () => {
     });
   });
 
+  it("slash /explain sends with explain mode and stripped text", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/chat");
+    await waitForChatReady();
+    await openNewChat(user);
+    await fillComposer("/explain foo");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => {
+      const start = getMockIpcCalls().find((c) => c.cmd === "start_chat");
+      expect((start?.args as { mode?: string }).mode).toBe("explain");
+      expect((start?.args as { question?: string }).question).toBe("foo");
+    });
+  });
+
+  it("/ask alone switches mode without sending", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/chat?mode=explain");
+    await waitForChatReady();
+    await openNewChat(user);
+    await fillComposer("/ask");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => {
+      expect(
+        within(screen.getByTestId("chat-view")).getByRole("button", { name: modeChipLabel("Ask") }),
+      ).toBeInTheDocument();
+    });
+    expect(getMockIpcCalls().some((c) => c.cmd === "start_chat")).toBe(false);
+    expect(within(screen.getByTestId("chat-view")).getByLabelText("Chat message")).toHaveValue("");
+  });
+
+  it("slash suggestion Enter picks without sending", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/chat");
+    await waitForChatReady();
+    await openNewChat(user);
+    const view = screen.getByTestId("chat-view");
+    const textarea = within(view).getByLabelText("Chat message");
+    await user.click(textarea);
+    await user.keyboard("/e");
+    await waitFor(() => {
+      expect(within(view).getByRole("listbox", { name: "Slash commands" })).toBeInTheDocument();
+    });
+    await user.keyboard("{Enter}");
+    await waitFor(() => {
+      expect(textarea).toHaveValue("/explain ");
+    });
+    expect(getMockIpcCalls().some((c) => c.cmd === "start_chat")).toBe(false);
+  });
+
   it("auto-sends prompt once under StrictMode into a new thread", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
