@@ -10,6 +10,7 @@ import {
 import { ChatThreadsPanel, ChatThreadsPanelShowButton } from "~/components/chat/chat-threads-panel";
 import { ChatTranscript } from "~/components/chat/chat-transcript";
 import { LiveAnswer } from "~/components/chat/live-answer";
+import { ModeChip } from "~/components/chat/mode-chip";
 import { Button } from "~/components/ui/button";
 import {
   Select,
@@ -19,7 +20,6 @@ import {
   SelectValue,
 } from "~/components/ui/select";
 import { Textarea } from "~/components/ui/textarea";
-import { ToggleGroup, ToggleGroupItem } from "~/components/ui/toggle-group";
 import type { ChatMode } from "~/domain/chat";
 import { isChatMode, workerHistory } from "~/domain/chat";
 import { courseDisplayName, workspaceRootLabel } from "~/domain/course";
@@ -313,7 +313,29 @@ export function ChatView({
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [inFlight, threadId]);
 
+  const applyChatMode = (next: ChatMode) => {
+    if (threadId && activeRoot) {
+      void setThreadMode.mutateAsync({ thread: threadId, mode: next });
+    } else {
+      setLocalNewMode(next);
+    }
+    onModeSearchClear();
+  };
+
+  const toggleChatMode = () => {
+    applyChatMode(mode === "ask" ? "explain" : "ask");
+  };
+
   const onComposerKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Tab" && event.shiftKey) {
+      if (event.nativeEvent.isComposing || event.keyCode === 229) {
+        return;
+      }
+      event.preventDefault();
+      toggleChatMode();
+      return;
+    }
+
     if (event.key === "Enter" && !event.shiftKey) {
       if (event.nativeEvent.isComposing || event.keyCode === 229) {
         return;
@@ -322,6 +344,11 @@ export function ChatView({
       void sendMessage(draftText);
     }
   };
+
+  const composerPlaceholder =
+    mode === "explain"
+      ? "Ask for a step-by-step explanation…"
+      : "Ask about this course…";
 
   const onTranscriptScroll = () => {
     const el = scrollRef.current;
@@ -387,29 +414,6 @@ export function ChatView({
                 ))}
               </SelectContent>
             </Select>
-            <ToggleGroup
-              value={[mode]}
-              disabled={controlsDisabled}
-              onValueChange={(values) => {
-                const next = values.length > 0 ? values[values.length - 1] : undefined;
-                if (!isChatMode(next)) {
-                  return;
-                }
-                if (threadId && activeRoot) {
-                  void setThreadMode.mutateAsync({ thread: threadId, mode: next });
-                } else {
-                  setLocalNewMode(next);
-                }
-                onModeSearchClear();
-              }}
-            >
-              <ToggleGroupItem value="ask" aria-label="Ask mode">
-                Ask
-              </ToggleGroupItem>
-              <ToggleGroupItem value="explain" aria-label="Explain mode">
-                Explain
-              </ToggleGroupItem>
-            </ToggleGroup>
           </div>
         </div>
 
@@ -437,13 +441,13 @@ export function ChatView({
             <p className={`min-h-4 text-xs ${statusClass}`} data-testid="chat-status">
               {statusText}
             </p>
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2">
               <Textarea
                 value={draftText}
                 disabled={composerDisabled}
-                placeholder="Ask about this course…"
+                placeholder={composerPlaceholder}
                 rows={1}
-                className="max-h-36 min-h-10 flex-1"
+                className="max-h-36 min-h-10 w-full"
                 onChange={(event) => {
                   if (activeRoot) {
                     setDraft(activeRoot, course, threadId, event.target.value);
@@ -452,13 +456,16 @@ export function ChatView({
                 onKeyDown={onComposerKeyDown}
                 aria-label="Chat message"
               />
-              <Button
-                type="button"
-                disabled={composerDisabled || draftText.trim().length === 0}
-                onClick={() => void sendMessage(draftText)}
-              >
-                Send
-              </Button>
+              <div className="flex items-center justify-between gap-2">
+                <ModeChip mode={mode} disabled={controlsDisabled} onToggle={toggleChatMode} />
+                <Button
+                  type="button"
+                  disabled={composerDisabled || draftText.trim().length === 0}
+                  onClick={() => void sendMessage(draftText)}
+                >
+                  Send
+                </Button>
+              </div>
             </div>
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <Select
