@@ -16,6 +16,9 @@ import {
   fixtureStudyPlanMarkdown,
 } from "~/test/fixtures/data";
 import type { ChatLine } from "~/domain/chat";
+import { titleFromUserMessage } from "~/domain/chat";
+import type { ChatMode } from "~/domain/chat";
+import type { ChatThreadMeta } from "~/lib/queries/chat";
 import type {
   JobEventRow,
   JobSummary,
@@ -47,7 +50,14 @@ let mockSyncNowResult: {
 } = { ok: true, action: "integrated", head_changed: false };
 
 const ipcLog: string[] = [];
-const chatHistoryByKey = new Map<string, ChatLine[]>();
+type MockThreadBucket = {
+  threads: ChatThreadMeta[];
+  linesByThread: Map<string, ChatLine[]>;
+};
+
+const mockThreadsByKey = new Map<string, MockThreadBucket>();
+const mockThreadsSeedDisabled = new Set<string>();
+let mockThreadCounter = 0;
 const ipcCalls: { cmd: string; args?: InvokeArgs }[] = [];
 const updateJobTimers: ReturnType<typeof setTimeout>[] = [];
 let mockEventsEnabled = true;
@@ -190,26 +200,219 @@ export function seedMockSyncNowResult(result: typeof mockSyncNowResult) {
   mockSyncNowResult = structuredClone(result);
 }
 
-function mockChatHistoryKey(root: string, course: string): string {
+function mockThreadsKey(root: string, course: string): string {
   return `${root}\0${course}`;
 }
 
+function newMockThreadId(iso: string): string {
+  mockThreadCounter += 1;
+  const compact = iso.replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z").slice(0, 16);
+  return `t-${compact}-${mockThreadCounter.toString(16).padStart(6, "0")}`;
+}
+
+function getMockThreadBucket(root: string, course: string): MockThreadBucket {
+  const key = mockThreadsKey(root, course);
+  let bucket = mockThreadsByKey.get(key);
+  if (!bucket) {
+    bucket = { threads: [], linesByThread: new Map() };
+    mockThreadsByKey.set(key, bucket);
+  }
+  return bucket;
+}
+
+function seedDefaultCellBiologyThreads(root: string, course: string) {
+  const key = mockThreadsKey(root, course);
+  if (mockThreadsSeedDisabled.has(key)) {
+    return;
+  }
+  if (course !== "cell-biology" || root !== FIXTURE_ROOT_FALL) {
+    return;
+  }
+  const bucket = getMockThreadBucket(root, course);
+  if (bucket.threads.length > 0) {
+    return;
+  }
+  const specs: Array<{ meta: Omit<ChatThreadMeta, "id">; lines: ChatLine[] }> = [
+    {
+      meta: {
+        title: "Membrane structure review",
+        mode: "ask",
+        created_at: "2026-10-18T10:00:00Z",
+        updated_at: "2026-10-18T10:05:00Z",
+      },
+      lines: [
+        {
+          ts: "2026-10-18T10:00:00Z",
+          role: "user",
+          mode: "ask",
+          content: "Membrane structure review",
+        },
+        {
+          ts: "2026-10-18T10:05:00Z",
+          role: "assistant",
+          mode: "ask",
+          content: "Phospholipid bilayer overview.",
+          supported: true,
+          citations: [],
+        },
+      ],
+    },
+    {
+      meta: {
+        title: "ATP and energy currency",
+        mode: "ask",
+        created_at: "2026-10-19T14:00:00Z",
+        updated_at: "2026-10-19T14:02:00Z",
+      },
+      lines: [
+        {
+          ts: "2026-10-19T14:00:00Z",
+          role: "user",
+          mode: "ask",
+          content: "What is ATP?",
+        },
+        {
+          ts: "2026-10-19T14:02:00Z",
+          role: "assistant",
+          mode: "ask",
+          content: "ATP stores energy for cellular work.",
+          supported: true,
+          citations: [],
+        },
+      ],
+    },
+    {
+      meta: {
+        title: "Explain the cytoskeleton",
+        mode: "explain",
+        created_at: "2026-10-20T16:00:00Z",
+        updated_at: "2026-10-20T16:03:00Z",
+      },
+      lines: [
+        {
+          ts: "2026-10-20T16:00:00Z",
+          role: "user",
+          mode: "explain",
+          content: "Explain the cytoskeleton",
+        },
+        {
+          ts: "2026-10-20T16:03:00Z",
+          role: "assistant",
+          mode: "explain",
+          content:
+            "1. Microfilaments provide shape\n2. Microtubules move organelles\n3. Intermediate filaments add strength",
+          supported: true,
+          citations: [],
+        },
+      ],
+    },
+  ];
+  for (const spec of specs) {
+    const id = newMockThreadId(spec.meta.created_at);
+    bucket.threads.push({ id, ...spec.meta });
+    bucket.linesByThread.set(id, spec.lines.slice());
+  }
+}
+
 export function resetMockChatHistoryForTests() {
-  chatHistoryByKey.clear();
+  mockThreadsByKey.clear();
+  mockThreadsSeedDisabled.clear();
+  mockThreadCounter = 0;
+  seedDefaultCellBiologyThreads(FIXTURE_ROOT_FALL, "cell-biology");
 }
 
 export function seedMockChatHistory(root: string, course: string, lines: ChatLine[]) {
-  chatHistoryByKey.set(mockChatHistoryKey(root, course), lines.slice());
+  const bucket = getMockThreadBucket(root, course);
+  bucket.threads.length = 0;
+  bucket.linesByThread.clear();
+  const now = new Date().toISOString();
+  const firstUser = lines.find((line) => line.role === "user");
+  const title = firstUser?.content ? titleFromUserMessage(firstUser.content) : "Seeded chat";
+  const id = newMockThreadId(now);
+  bucket.threads.push({
+    id,
+    title,
+    mode: firstUser?.mode === "explain" ? "explain" : "ask",
+    created_at: now,
+    updated_at: now,
+  });
+  bucket.linesByThread.set(id, lines.slice());
 }
 
-export function appendMockChatLines(payload: Record<string, unknown>) {
+export function seedMockChatThread(
+  root: string,
+  course: string,
+  meta: ChatThreadMeta,
+  lines: ChatLine[],
+) {
+  const bucket = getMockThreadBucket(root, course);
+  const existing = bucket.threads.findIndex((t) => t.id === meta.id);
+  if (existing >= 0) {
+    bucket.threads[existing] = meta;
+  } else {
+    bucket.threads.push(meta);
+  }
+  bucket.linesByThread.set(meta.id, lines.slice());
+}
+
+function handleMockListChatThreads(payload: Record<string, unknown>) {
   const root = String(payload.root ?? FIXTURE_ROOT_FALL);
   const course = String(payload.course ?? "");
-  const key = mockChatHistoryKey(root, course);
-  const prev = chatHistoryByKey.get(key) ?? [];
+  seedDefaultCellBiologyThreads(root, course);
+  const bucket = getMockThreadBucket(root, course);
+  return bucket.threads
+    .slice()
+    .sort((a, b) => b.updated_at.localeCompare(a.updated_at));
+}
+
+function handleMockCreateChatThread(payload: Record<string, unknown>) {
+  const root = String(payload.root ?? FIXTURE_ROOT_FALL);
+  const course = String(payload.course ?? "");
+  const mode: ChatMode = String(payload.mode ?? "ask") === "explain" ? "explain" : "ask";
+  const now = new Date().toISOString();
+  const meta: ChatThreadMeta = {
+    id: newMockThreadId(now),
+    title: "New chat",
+    mode,
+    created_at: now,
+    updated_at: now,
+  };
+  const bucket = getMockThreadBucket(root, course);
+  bucket.threads.push(meta);
+  bucket.linesByThread.set(meta.id, []);
+  return meta;
+}
+
+function handleMockReadChatThread(payload: Record<string, unknown>) {
+  const root = String(payload.root ?? FIXTURE_ROOT_FALL);
+  const course = String(payload.course ?? "");
+  const thread = String(payload.thread ?? "");
+  seedDefaultCellBiologyThreads(root, course);
+  const bucket = getMockThreadBucket(root, course);
+  return (bucket.linesByThread.get(thread) ?? []).slice();
+}
+
+function handleMockAppendChatThreadLines(payload: Record<string, unknown>) {
+  const root = String(payload.root ?? FIXTURE_ROOT_FALL);
+  const course = String(payload.course ?? "");
+  const thread = String(payload.thread ?? "");
   const lines = Array.isArray(payload.lines) ? (payload.lines as ChatLine[]) : [];
-  chatHistoryByKey.set(key, [...prev, ...lines]);
-  return null;
+  const bucket = getMockThreadBucket(root, course);
+  const index = bucket.threads.findIndex((entry) => entry.id === thread);
+  if (index < 0) {
+    throw new Error("Thread not found");
+  }
+  const prev = bucket.linesByThread.get(thread) ?? [];
+  bucket.linesByThread.set(thread, [...prev, ...lines]);
+  const entry = { ...bucket.threads[index]! };
+  for (const line of lines) {
+    if (entry.title === "New chat" && line.role === "user" && line.content) {
+      entry.title = titleFromUserMessage(line.content);
+    }
+  }
+  entry.updated_at = new Date().toISOString();
+  bucket.threads[index] = entry;
+  return entry;
 }
 
 function scheduleMockEvent(delayMs: number, run: () => void) {
@@ -561,10 +764,69 @@ export function createMockHandler(
         return mockJobSummariesList();
       case "get_job_events":
         return mockJobEvents(String(payload.jobId ?? payload.job_id ?? ""));
-      case "read_chat_history": {
+      case "list_chat_threads":
+        return handleMockListChatThreads(payload);
+      case "create_chat_thread":
+        return handleMockCreateChatThread(payload);
+      case "read_chat_thread":
+        return handleMockReadChatThread(payload);
+      case "append_chat_thread_lines":
+        return handleMockAppendChatThreadLines(payload);
+      case "rename_chat_thread": {
         const root = String(payload.root ?? FIXTURE_ROOT_FALL);
         const course = String(payload.course ?? "");
-        return (chatHistoryByKey.get(mockChatHistoryKey(root, course)) ?? []).slice();
+        const thread = String(payload.thread ?? "");
+        const title = String(payload.title ?? "").trim();
+        if (title.length < 1 || title.length > 120) {
+          throw new Error("Title must be 1–120 characters");
+        }
+        const bucket = getMockThreadBucket(root, course);
+        const index = bucket.threads.findIndex((entry) => entry.id === thread);
+        if (index < 0) {
+          throw new Error("Thread not found");
+        }
+        const updated = {
+          ...bucket.threads[index]!,
+          title,
+          updated_at: new Date().toISOString(),
+        };
+        bucket.threads[index] = updated;
+        return updated;
+      }
+      case "set_chat_thread_mode": {
+        const root = String(payload.root ?? FIXTURE_ROOT_FALL);
+        const course = String(payload.course ?? "");
+        const thread = String(payload.thread ?? "");
+        const mode: ChatMode = String(payload.mode ?? "ask") === "explain" ? "explain" : "ask";
+        const bucket = getMockThreadBucket(root, course);
+        const index = bucket.threads.findIndex((entry) => entry.id === thread);
+        if (index < 0) {
+          throw new Error("Thread not found");
+        }
+        const updated: ChatThreadMeta = {
+          ...bucket.threads[index]!,
+          mode,
+          updated_at: new Date().toISOString(),
+        };
+        bucket.threads[index] = updated;
+        return updated;
+      }
+      case "delete_chat_thread": {
+        const root = String(payload.root ?? FIXTURE_ROOT_FALL);
+        const course = String(payload.course ?? "");
+        const thread = String(payload.thread ?? "");
+        const bucket = getMockThreadBucket(root, course);
+        bucket.threads = bucket.threads.filter((entry) => entry.id !== thread);
+        bucket.linesByThread.delete(thread);
+        return null;
+      }
+      case "delete_all_chat_threads": {
+        const root = String(payload.root ?? FIXTURE_ROOT_FALL);
+        const course = String(payload.course ?? "");
+        const key = mockThreadsKey(root, course);
+        mockThreadsByKey.delete(key);
+        mockThreadsSeedDisabled.add(key);
+        return null;
       }
       case "start_chat": {
         const channelId = parseMockChannelId(payload.onEvent);
@@ -704,14 +966,6 @@ export function createMockHandler(
         return { id: "fc-appended-1" };
       case "study_plan":
         return null;
-      case "append_chat_lines":
-        return appendMockChatLines(payload);
-      case "clear_chat_history": {
-        const root = String(payload.root ?? FIXTURE_ROOT_FALL);
-        const course = String(payload.course ?? "");
-        chatHistoryByKey.delete(mockChatHistoryKey(root, course));
-        return null;
-      }
       case "cancel_update":
       case "plan_update":
         return { pending: [] };
