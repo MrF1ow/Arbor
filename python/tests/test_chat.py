@@ -362,6 +362,38 @@ def test_trailer_filter_releases_false_prefix():
     assert "".join(emitted) == "super cool\n"
 
 
+def _trailer_filter_join(chunks: list[str] | str) -> str:
+    emitted: list[str] = []
+    filt = TrailerFilter(emitted.append)
+    if isinstance(chunks, str):
+        filt.feed(chunks)
+    else:
+        for chunk in chunks:
+            filt.feed(chunk)
+    filt.finish()
+    return "".join(emitted)
+
+
+@pytest.mark.parametrize(
+    ("chunks", "expected"),
+    [
+        ("Answer [1].\nsupported: true\n", "Answer [1].\n"),
+        (["Answer [1].\n", "supported: true", "\n"], "Answer [1].\n"),
+        ("Answer.\n\nsupported: false\n\n", "Answer.\n\n"),
+        ("supported: true\n", ""),
+        ("Answer\n  supported: true  \n", "Answer\n"),
+        (["Mito", "chondria [1].\nsupp", "orted: true"], "Mitochondria [1].\n"),
+        (["sup", "er cool\n"], "super cool\n"),
+        ("supported: true", ""),
+        ("Answer\nsupported: true\nmore", "Answer\nsupported: true\nmore"),
+        ("supported: t", "supported: t"),
+        ("\n\n", "\n\n"),
+    ],
+)
+def test_trailer_filter_cases(chunks, expected):
+    assert _trailer_filter_join(chunks) == expected
+
+
 def test_streaming_answer_emits_chat_deltas(biology_root: Path):
     script = ["Mito", "chondria [1].\nsupp", "orted: true"]
     fake = FakeProvider(

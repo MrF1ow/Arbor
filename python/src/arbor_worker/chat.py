@@ -44,6 +44,30 @@ def _is_trailer_prefix(text: str) -> bool:
     return any(trailer.startswith(stripped) for trailer in _TRAILER_LINES)
 
 
+def _last_non_blank_line_stripped(text: str) -> tuple[int, str]:
+    """Return (line_start_index, stripped_line) for the last non-blank line."""
+    end = len(text)
+    while end > 0 and text[end - 1] in " \t\n\r":
+        end -= 1
+    if end == 0:
+        return 0, ""
+    line_start = text.rfind("\n", 0, end) + 1
+    return line_start, text[line_start:end].strip()
+
+
+def _safe_emit_end(text: str, *, finishing: bool) -> int:
+    line_start, stripped = _last_non_blank_line_stripped(text)
+    if not stripped:
+        return len(text)
+    if finishing:
+        if stripped in _TRAILER_LINES:
+            return line_start
+        return len(text)
+    if _is_trailer_prefix(stripped):
+        return line_start
+    return len(text)
+
+
 class TrailerFilter:
     """Emit streaming text while holding back a partial supported: trailer line."""
 
@@ -59,36 +83,13 @@ class TrailerFilter:
         self._emit_safe()
 
     def finish(self) -> None:
-        tail_start = self._text.rfind("\n") + 1
-        tail = self._text[tail_start:]
-        stripped = tail.strip()
-        if stripped in _TRAILER_LINES:
-            safe_end = tail_start
-            if safe_end > 0 and self._text[safe_end - 1] == "\n":
-                safe_end -= 1
-            if safe_end > self._emitted:
-                self._on_delta(self._text[self._emitted : safe_end])
-                self._emitted = safe_end
-            return
-        if self._emitted < len(self._text):
-            self._on_delta(self._text[self._emitted :])
-            self._emitted = len(self._text)
+        safe_end = _safe_emit_end(self._text, finishing=True)
+        if safe_end > self._emitted:
+            self._on_delta(self._text[self._emitted : safe_end])
+            self._emitted = safe_end
 
     def _emit_safe(self) -> None:
-        last_nl = self._text.rfind("\n")
-        if last_nl < 0:
-            tail = self._text
-            if _is_trailer_prefix(tail):
-                return
-            if self._emitted < len(self._text):
-                self._on_delta(self._text[self._emitted :])
-                self._emitted = len(self._text)
-            return
-        tail = self._text[last_nl + 1 :]
-        if _is_trailer_prefix(tail):
-            safe_end = last_nl + 1
-        else:
-            safe_end = len(self._text)
+        safe_end = _safe_emit_end(self._text, finishing=False)
         if safe_end > self._emitted:
             self._on_delta(self._text[self._emitted : safe_end])
             self._emitted = safe_end
