@@ -17,7 +17,7 @@ import { ChatThreadsPanel, ChatThreadsPanelShowButton } from "~/components/chat/
 import { ChatTranscript } from "~/components/chat/chat-transcript";
 import { LiveAnswer } from "~/components/chat/live-answer";
 import { ModeChip } from "~/components/chat/mode-chip";
-import { Button } from "~/components/ui/button";
+import { Button, IconButton } from "~/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -28,6 +28,8 @@ import {
 import { Textarea } from "~/components/ui/textarea";
 import type { ChatMode } from "~/domain/chat";
 import { isChatMode, parseSlashCommand, workerHistory } from "~/domain/chat";
+import { startDictation } from "~/lib/dictation";
+import { isMacPlatform } from "~/lib/shortcuts";
 import { courseDisplayName, workspaceRootLabel } from "~/domain/course";
 import { PROVIDER_FALLBACK } from "~/domain/provider";
 import type { DigestInfo, KnowledgeRootEntry } from "~/domain/types";
@@ -51,6 +53,7 @@ import {
 import { useChatDraftsStore } from "~/stores/chat-drafts-store";
 import { useUiStore } from "~/stores/ui-store";
 import { useJobStore } from "~/stores/job-store";
+import { Mic } from "lucide-react";
 
 type ArtifactKind = "flashcards" | "quiz";
 
@@ -418,6 +421,11 @@ export function ChatView({
     }
   };
 
+  const onDictationClick = () => {
+    composerRef.current?.focus();
+    void startDictation();
+  };
+
   const composerPlaceholder =
     mode === "explain"
       ? "Ask for a step-by-step explanation…"
@@ -550,6 +558,16 @@ export function ChatView({
               <div className="flex items-center justify-between gap-2">
                 <ModeChip mode={mode} disabled={controlsDisabled} onToggle={toggleChatMode} />
                 <div className="flex items-center gap-2">
+                  {isMacPlatform() ? (
+                    <IconButton
+                      icon={Mic}
+                      label="Dictate (or press Fn twice)"
+                      size="icon-sm"
+                      variant="ghost"
+                      disabled={composerDisabled}
+                      onClick={onDictationClick}
+                    />
+                  ) : null}
                   <Button
                     type="button"
                     disabled={composerDisabled || draftText.trim().length === 0}

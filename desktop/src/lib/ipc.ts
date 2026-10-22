@@ -50,6 +50,7 @@ export type Command =
   | "skill_install"
   | "skill_run"
   | "skill_uninstall"
+  | "start_dictation"
   | "start_chat"
   | "start_embed_job"
   | "start_folder_watch"

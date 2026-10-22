@@ -1138,6 +1138,38 @@ describe("chat threads", { timeout: 30000 }, () => {
     expect(getMockIpcCalls().some((c) => c.cmd === "start_chat")).toBe(false);
   });
 
+  it("hides dictation on Linux and invokes start_dictation on Mac", async () => {
+    const platformSpy = vi.spyOn(window.navigator, "platform", "get");
+    platformSpy.mockReturnValue("Linux x86_64");
+    await renderAppAtRoute("/course/cell-biology/chat");
+    await waitForChatReady();
+    expect(
+      within(screen.getByTestId("chat-view")).queryByRole("button", {
+        name: "Dictate (or press Fn twice)",
+      }),
+    ).not.toBeInTheDocument();
+
+    cleanup();
+    clearTauriMocks();
+    clearMockIpcLog();
+    resetAuthRefreshForTests();
+    resetChatDraftsStoreForTests();
+
+    platformSpy.mockReturnValue("MacIntel");
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/chat");
+    await waitForChatReady();
+    await user.click(
+      within(screen.getByTestId("chat-view")).getByRole("button", {
+        name: "Dictate (or press Fn twice)",
+      }),
+    );
+    await waitFor(() => {
+      expect(getMockIpcCalls().some((c) => c.cmd === "start_dictation")).toBe(true);
+    });
+    platformSpy.mockRestore();
+  });
+
   it("auto-sends prompt once under StrictMode into a new thread", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {

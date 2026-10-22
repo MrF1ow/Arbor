@@ -872,6 +872,8 @@ export function createMockHandler(
         mockThreadsSeedDisabled.add(key);
         return null;
       }
+      case "start_dictation":
+        return null;
       case "start_chat": {
         const channelId = parseMockChannelId(payload.onEvent);
         if (channelId == null) {
