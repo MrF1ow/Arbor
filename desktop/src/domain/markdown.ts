@@ -60,6 +60,7 @@ interface ListItemMatch {
   kind: ListKind;
   indent: number;
   content: string;
+  orderStart?: number;
 }
 
 function matchListItem(line: string): ListItemMatch | null {
@@ -71,9 +72,14 @@ function matchListItem(line: string): ListItemMatch | null {
   if (unordered) {
     return { kind: "ul", indent, content: unordered[1] };
   }
-  const ordered = rest.match(/^\d+\. (.+)$/);
+  const ordered = rest.match(/^(\d+)\. (.+)$/);
   if (ordered) {
-    return { kind: "ol", indent, content: ordered[1] };
+    return {
+      kind: "ol",
+      indent,
+      content: ordered[2],
+      orderStart: Number.parseInt(ordered[1], 10),
+    };
   }
   return null;
 }
@@ -82,6 +88,15 @@ interface OpenList {
   kind: ListKind;
   indent: number;
   items: string[];
+  start?: number;
+}
+
+function listOpenTag(list: OpenList, pageAttr: () => string): string {
+  const page = pageAttr();
+  if (list.kind === "ol" && list.start != null && list.start !== 1) {
+    return `<ol start="${list.start}"${page}>`;
+  }
+  return `<${list.kind}${page}>`;
 }
 
 function renderItems(items: string[], pageAttr: () => string): string {
@@ -97,7 +112,7 @@ function closeListsThrough(
   while (stack.length > 0 && stack[stack.length - 1].indent > indent) {
     const closed = stack.pop();
     if (!closed) break;
-    const html = `<${closed.kind}${pageAttr()}>${renderItems(closed.items, pageAttr)}</${closed.kind}>`;
+    const html = `${listOpenTag(closed, pageAttr)}${renderItems(closed.items, pageAttr)}</${closed.kind}>`;
     if (stack.length === 0) {
       parts.push(html);
     } else {
@@ -121,12 +136,28 @@ function appendListItem(
   closeListsThrough(stack, item.indent, parts, pageAttr);
   const top = stack.length > 0 ? stack[stack.length - 1] : null;
   if (!top || top.indent < item.indent) {
-    stack.push({ kind: item.kind, indent: item.indent, items: [inlineFormat(item.content)] });
+    const opened: OpenList = {
+      kind: item.kind,
+      indent: item.indent,
+      items: [inlineFormat(item.content)],
+    };
+    if (item.kind === "ol" && item.orderStart != null && item.orderStart !== 1) {
+      opened.start = item.orderStart;
+    }
+    stack.push(opened);
     return;
   }
   if (top.kind !== item.kind) {
     closeListsThrough(stack, item.indent - 1, parts, pageAttr);
-    stack.push({ kind: item.kind, indent: item.indent, items: [inlineFormat(item.content)] });
+    const opened: OpenList = {
+      kind: item.kind,
+      indent: item.indent,
+      items: [inlineFormat(item.content)],
+    };
+    if (item.kind === "ol" && item.orderStart != null && item.orderStart !== 1) {
+      opened.start = item.orderStart;
+    }
+    stack.push(opened);
     return;
   }
   top.items.push(inlineFormat(item.content));
@@ -189,6 +220,40 @@ function splitLineByArborMarkers(line: string): LineSegment[] {
   return segments;
 }
 
+function nextNonBlankLineIndex(lines: string[], fromIndex: number): number {
+  for (let j = fromIndex + 1; j < lines.length; j += 1) {
+    if (lines[j].replace(/\s+$/, "").trim() !== "") {
+      return j;
+    }
+  }
+  return -1;
+}
+
+function keepListsOpenAcrossBlankLine(
+  lines: string[],
+  blankIndex: number,
+  stack: OpenList[],
+): boolean {
+  if (stack.length === 0) {
+    return false;
+  }
+  const nextIndex = nextNonBlankLineIndex(lines, blankIndex);
+  if (nextIndex < 0) {
+    return false;
+  }
+  const lookAhead = lines[nextIndex].replace(/\s+$/, "");
+  if (matchListItem(lookAhead)) {
+    return true;
+  }
+  const indentMatch = lookAhead.match(/^(\s*)(.*)$/);
+  if (!indentMatch) {
+    return false;
+  }
+  const indent = indentMatch[1].replace(/\t/g, "  ").length;
+  const top = stack[stack.length - 1];
+  return indent > top.indent;
+}
+
 export function renderMarkdown(source: string): {
   html: string;
   pageChip: string | null;
@@ -236,6 +301,9 @@ export function renderMarkdown(source: string): {
 
     if (segments.length === 0) {
       flushParagraph();
+      if (line.trim() === "" && keepListsOpenAcrossBlankLine(lines, i, lists)) {
+        continue;
+      }
       closeAllLists(lists, parts, pageAttr);
       continue;
     }
@@ -245,7 +313,9 @@ export function renderMarkdown(source: string): {
       !segments.some((seg) => seg.kind === "open" || seg.kind === "close");
     if (lineHasOnlyWhitespace && line.trim() === "") {
       flushParagraph();
-      closeAllLists(lists, parts, pageAttr);
+      if (!keepListsOpenAcrossBlankLine(lines, i, lists)) {
+        closeAllLists(lists, parts, pageAttr);
+      }
       continue;
     }
 
@@ -318,6 +388,21 @@ export function renderMarkdown(source: string): {
         appendListItem(lists, listItem, parts, pageAttr);
         atLineStart = false;
         continue;
+      }
+
+      if (atLineStart && lists.length > 0) {
+        const indentMatch = segmentLine.match(/^(\s*)(.*)$/);
+        const lineIndent = indentMatch
+          ? indentMatch[1].replace(/\t/g, "  ").length
+          : 0;
+        const top = lists[lists.length - 1];
+        if (lineIndent > top.indent) {
+          flushParagraph();
+          const last = top.items.length - 1;
+          top.items[last] = `${top.items[last]} ${inlineFormat(trimmed)}`;
+          atLineStart = false;
+          continue;
+        }
       }
 
       closeAllLists(lists, parts, pageAttr);

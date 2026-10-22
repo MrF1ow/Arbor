@@ -27,6 +27,46 @@ test("renders numbered lists instead of a paragraph", async () => {
   assert.doesNotMatch(html, /<p>1\. First idea/);
 });
 
+test("keeps one ordered list across blank lines between items", async () => {
+  const { renderMarkdown } = await subject();
+  const { html } = renderMarkdown("1. a\n\n2. b\n\n3. c\n");
+  const olCount = (html.match(/<ol/g) ?? []).length;
+  const liCount = (html.match(/<li/g) ?? []).length;
+  assert.equal(olCount, 1);
+  assert.equal(liCount, 3);
+});
+
+test("preserves ordered list start number", async () => {
+  const { renderMarkdown } = await subject();
+  const { html } = renderMarkdown("3. c\n4. d\n");
+  assert.match(html, /<ol start="3">/);
+  assert.match(html, /<li>c<\/li>/);
+  assert.match(html, /<li>d<\/li>/);
+});
+
+test("keeps one bullet list across blank lines", async () => {
+  const { renderMarkdown } = await subject();
+  const { html } = renderMarkdown("- a\n\n- b\n");
+  const ulCount = (html.match(/<ul/g) ?? []).length;
+  assert.equal(ulCount, 1);
+  assert.match(html, /<li>a<\/li>/);
+  assert.match(html, /<li>b<\/li>/);
+});
+
+test("nested bullets under a loose ordered item stay inside one outer ol", async () => {
+  const { renderMarkdown } = await subject();
+  const { html } = renderMarkdown("1. outer\n\n   - nested\n\n2. second\n");
+  assert.equal((html.match(/<ol/g) ?? []).length, 1);
+  assert.match(html, /<li>outer<ul>.*<li>nested<\/li>.*<\/ul>.*second/s);
+});
+
+test("closes a list before a paragraph after a blank line", async () => {
+  const { renderMarkdown } = await subject();
+  const { html } = renderMarkdown("1. only\n\nNot a list item.\n");
+  assert.match(html, /<ol>.*<li>only<\/li>.*<\/ol>/s);
+  assert.match(html, /<p>Not a list item\.<\/p>/);
+});
+
 test("renders asterisk bullets", async () => {
   const { renderMarkdown } = await subject();
   const { html } = renderMarkdown("* mitochondria\n* nucleus\n");
