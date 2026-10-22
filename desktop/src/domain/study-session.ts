@@ -75,7 +75,7 @@ function quizAtIndex(review: QuizReview, index: number): QuizReview {
   };
 }
 
-function parseSavedFlashcards(value: unknown): SavedFlashcards | null {
+export function parseSavedFlashcards(value: unknown): SavedFlashcards | null {
   if (!isRecord(value)) {
     return null;
   }
@@ -172,6 +172,37 @@ export function snapshotFlashcards(
     index: review.index,
     flipped: review.flipped,
   };
+}
+
+/** Intersect a due-mode snapshot with current due ids; fix index when ids drop out. */
+export function intersectDueFlashcardSession(
+  parsed: SavedFlashcards,
+  dueIds: readonly string[],
+): SavedFlashcards | null {
+  const dueSet = new Set(dueIds);
+  const targetId = parsed.cardIds[parsed.index];
+  const cardIds = parsed.cardIds.filter((id) => dueSet.has(id));
+  if (cardIds.length === 0) {
+    return null;
+  }
+  let index = targetId !== undefined ? cardIds.indexOf(targetId) : -1;
+  let flipped = parsed.flipped;
+  if (index >= 0) {
+    return { ...parsed, cardIds, index, flipped };
+  }
+  index = -1;
+  for (let i = parsed.index; i < parsed.cardIds.length; i += 1) {
+    const id = parsed.cardIds[i];
+    if (dueSet.has(id)) {
+      index = cardIds.indexOf(id);
+      break;
+    }
+  }
+  if (index < 0) {
+    index = cardIds.length - 1;
+  }
+  flipped = false;
+  return { ...parsed, cardIds, index, flipped };
 }
 
 export function restoreFlashcards(

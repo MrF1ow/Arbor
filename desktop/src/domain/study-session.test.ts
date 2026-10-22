@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { createReview as createFlashReview } from "~/domain/flashcards";
 import { createReview as createQuizReview } from "~/domain/quiz";
 import {
+  intersectDueFlashcardSession,
   restoreFlashcards,
   restoreQuiz,
   snapshotFlashcards,
@@ -125,6 +126,36 @@ describe("study-session domain", () => {
   it("ignores corrupt flashcard snapshots", () => {
     expect(restoreFlashcards(null, deck, identity)).toBeNull();
     expect(restoreFlashcards({ identity }, deck, identity)).toBeNull();
+  });
+
+  it("intersects due flashcard sessions by id and re-anchors index", () => {
+    const saved: SavedFlashcards = {
+      identity,
+      savedAt: 1,
+      deckMode: "due",
+      cardIds: ["a", "b", "c"],
+      index: 1,
+      flipped: true,
+    };
+    const adjusted = intersectDueFlashcardSession(saved, ["b", "c"]);
+    expect(adjusted?.cardIds).toEqual(["b", "c"]);
+    expect(adjusted?.index).toBe(0);
+    expect(adjusted?.flipped).toBe(true);
+  });
+
+  it("falls back when the saved current id is no longer due", () => {
+    const saved: SavedFlashcards = {
+      identity,
+      savedAt: 1,
+      deckMode: "due",
+      cardIds: ["a", "b", "c"],
+      index: 0,
+      flipped: true,
+    };
+    const adjusted = intersectDueFlashcardSession(saved, ["b", "c"]);
+    expect(adjusted?.cardIds).toEqual(["b", "c"]);
+    expect(adjusted?.index).toBe(0);
+    expect(adjusted?.flipped).toBe(false);
   });
 
   it("restores quiz with submitted state at index", () => {
