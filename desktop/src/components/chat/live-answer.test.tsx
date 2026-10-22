@@ -12,6 +12,8 @@ import {
   resetChatLiveStoreForTests,
 } from "~/stores/chat-live-store";
 
+const THREAD_ID = "t-20261020T160000Z-000001";
+
 afterEach(() => {
   cleanup();
   resetChatLiveStoreForTests();
@@ -19,10 +21,10 @@ afterEach(() => {
 
 describe("LiveAnswer", () => {
   it("renders markdown deltas as HTML in the live bubble", async () => {
-    const key = chatLiveKey(FIXTURE_ROOT_FALL, "cell-biology");
+    const key = chatLiveKey(FIXTURE_ROOT_FALL, "cell-biology", THREAD_ID);
     beginChatLiveStream(key);
     renderWithProviders(
-      <LiveAnswer root={FIXTURE_ROOT_FALL} course="cell-biology" />,
+      <LiveAnswer root={FIXTURE_ROOT_FALL} course="cell-biology" threadId={THREAD_ID} />,
       { minimal: true },
     );
     await act(async () => {
@@ -36,10 +38,10 @@ describe("LiveAnswer", () => {
   });
 
   it("shows only the new stream text on the first render after a prior answer", async () => {
-    const key = chatLiveKey(FIXTURE_ROOT_FALL, "cell-biology");
+    const key = chatLiveKey(FIXTURE_ROOT_FALL, "cell-biology", THREAD_ID);
     beginChatLiveStream(key);
     renderWithProviders(
-      <LiveAnswer root={FIXTURE_ROOT_FALL} course="cell-biology" />,
+      <LiveAnswer root={FIXTURE_ROOT_FALL} course="cell-biology" threadId={THREAD_ID} />,
       { minimal: true },
     );
     act(() => {
@@ -60,10 +62,10 @@ describe("LiveAnswer", () => {
   });
 
   it("clears the live bubble when the stream finishes", async () => {
-    const key = chatLiveKey(FIXTURE_ROOT_FALL, "cell-biology");
+    const key = chatLiveKey(FIXTURE_ROOT_FALL, "cell-biology", THREAD_ID);
     beginChatLiveStream(key);
     renderWithProviders(
-      <LiveAnswer root={FIXTURE_ROOT_FALL} course="cell-biology" />,
+      <LiveAnswer root={FIXTURE_ROOT_FALL} course="cell-biology" threadId={THREAD_ID} />,
       { minimal: true },
     );
     act(() => {

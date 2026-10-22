@@ -3,37 +3,30 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
-  buildSessionLine,
   buildUserLine,
   chatNotePath,
   citationLabel,
   formatChatCitationLabel,
   phaseLabel,
   renderAnswerHtml,
+  titleFromUserMessage,
   unsupportedBanner,
-  visibleTranscript,
   workerHistory,
 } from "../src/domain/chat.ts";
 
-test("visibleTranscript drops lines before the last session boundary", () => {
-  const lines = [
-    buildUserLine("ask", "old"),
-    buildSessionLine(),
-    buildUserLine("ask", "new"),
-  ];
-  const visible = visibleTranscript(lines);
-  assert.equal(visible.length, 1);
-  assert.equal(visible[0].content, "new");
+test("titleFromUserMessage collapses whitespace", () => {
+  assert.equal(titleFromUserMessage("  hello   world  "), "hello world");
 });
 
-test("workerHistory maps visible user and assistant lines oldest first", () => {
+test("workerHistory maps user and assistant lines oldest first", () => {
   const lines = [
     { role: "user", mode: "ask", content: "one", ts: "t1" },
     { role: "assistant", mode: "ask", content: "two", supported: true, citations: [] },
-    buildSessionLine(),
     { role: "user", mode: "ask", content: "three", ts: "t2" },
   ];
   assert.deepEqual(workerHistory(lines), [
+    { role: "user", content: "one" },
+    { role: "assistant", content: "two" },
     { role: "user", content: "three" },
   ]);
 });

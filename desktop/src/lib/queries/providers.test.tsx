@@ -5,7 +5,7 @@ import { clearTauriMocks } from "~/test/mock-ipc";
 
 import { createAppQueryClient } from "~/lib/query-client";
 import { useAuth, useProviderSecretStatus } from "~/lib/queries/auth";
-import { useChatHistory } from "~/lib/queries/chat";
+import { useChatThreads } from "~/lib/queries/chat";
 import { useJobEvents, useJobs } from "~/lib/queries/jobs";
 import { useCourses, useDigests, useLibrary } from "~/lib/queries/library";
 import { useCourseOverview, useMarkdown } from "~/lib/queries/notes";
@@ -41,7 +41,7 @@ function AllReadHooks() {
   useSyncState(root);
   useSyncConflict(root);
   useSkillIndex();
-  useChatHistory(root, course);
+  useChatThreads(root, course);
   useSearch(root, "membrane");
   useSemanticSearch(root, "membrane");
   return null;
