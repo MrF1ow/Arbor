@@ -999,6 +999,108 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
     expect(screen.getByText("Question one")).toBeInTheDocument();
   });
 
+  it.each([
+    ["due only", { deckMode: "due" }],
+    ["due with null cardIds", { deckMode: "due", cardIds: null }],
+    ["non-object", "not-an-object"],
+  ] as const)("ignores corrupt due-shaped persisted session (%s)", async (_label, corrupt) => {
+    const key = studySessionKey(FIXTURE_ROOT_FALL, "cell-biology", "flashcards");
+    useStudySessionStore.setState({
+      sessions: { [key]: corrupt as never },
+    });
+    await renderAppAtRoute("/course/cell-biology/flashcards", {
+      read_study_json: (payload) => {
+        if (readStudyFile(payload) === "flashcards.json") {
+          return smallDeck;
+        }
+        return { schema_version: 1, course: "cell-biology", failures: [] };
+      },
+    });
+    await waitForFlashcardsReady();
+    expect(screen.getByText("Question one")).toBeInTheDocument();
+  });
+
+  it("keeps due again requeue order live and after a Notes round trip", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/flashcards", {
+      read_study_json: (payload) => {
+        if (readStudyFile(payload) === "flashcards.json") {
+          return smallDeck;
+        }
+        return { schema_version: 1, course: "cell-biology", failures: [] };
+      },
+      study_progress: (args) => {
+        if (studyProgressAction(args) === "overview") {
+          return {
+            ...fixtureCourseOverview,
+            due: { due_ids: ["fc-1", "fc-2", "fc-99"], count: 3, deck_count: 3 },
+          };
+        }
+        return {};
+      },
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/Due today · 3/i)).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole("button", { name: /^Flip$/i }));
+    await user.click(screen.getByRole("button", { name: /^Again/i }));
+    await waitFor(() => {
+      expect(screen.getByText("Question two")).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole("button", { name: /^Next/i }));
+    expect(screen.getByText("Question ninety-nine")).toBeInTheDocument();
+    await user.click(screen.getByRole("link", { name: /Notes/i }));
+    await waitFor(() => {
+      expect(screen.getByText("Course overview")).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole("link", { name: /Flashcards/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Due today · 3/i)).toBeInTheDocument();
+    });
+    expect(screen.getByText("Question ninety-nine")).toBeInTheDocument();
+    expect(screen.getByText("2 / 3")).toBeInTheDocument();
+  });
+
+  it("restores due mode on the saved card after earlier ids leave the due list", async () => {
+    const deckIdentity = `${FIXTURE_ROOT_FALL}|cell-biology:fc-1\u0000fc-2\u0000fc-99`;
+    const key = studySessionKey(FIXTURE_ROOT_FALL, "cell-biology", "flashcards");
+    useStudySessionStore.setState({
+      sessions: {
+        [key]: {
+          identity: deckIdentity,
+          savedAt: 1,
+          deckMode: "due",
+          cardIds: ["fc-1", "fc-2", "fc-99"],
+          index: 1,
+          flipped: true,
+        },
+      },
+    });
+    await renderAppAtRoute("/course/cell-biology/flashcards", {
+      read_study_json: (payload) => {
+        if (readStudyFile(payload) === "flashcards.json") {
+          return smallDeck;
+        }
+        return { schema_version: 1, course: "cell-biology", failures: [] };
+      },
+      study_progress: (args) => {
+        if (studyProgressAction(args) === "overview") {
+          return {
+            ...fixtureCourseOverview,
+            due: { due_ids: ["fc-2", "fc-99"], count: 2, deck_count: 3 },
+          };
+        }
+        return {};
+      },
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/Due today · 2/i)).toBeInTheDocument();
+    });
+    expect(screen.getByText("Question two")).toBeInTheDocument();
+    expect(screen.getByText("1 / 2")).toBeInTheDocument();
+    expect(screen.getByText("Answer two")).toBeInTheDocument();
+  });
+
   it("restart clears saved position and returns to the first card", async () => {
     const user = userEvent.setup();
     await renderAppAtRoute("/course/cell-biology/flashcards", {
@@ -1014,8 +1116,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
     await user.click(screen.getByRole("button", { name: /^Next$/i }));
     expect(screen.getByText("Question two")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /^Restart$/i }));
-    const restartButtons = screen.getAllByRole("button", { name: /^Restart$/i });
-    await user.click(restartButtons.at(-1)!);
+    await user.click(screen.getByRole("button", { name: /^Restart deck$/i }));
     await waitFor(() => {
       expect(screen.getByText("Question one")).toBeInTheDocument();
     });

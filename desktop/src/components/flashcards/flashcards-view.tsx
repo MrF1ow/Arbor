@@ -39,6 +39,8 @@ import {
   type FlashcardGrade,
 } from "~/domain/flashcards";
 import {
+  intersectDueFlashcardSession,
+  parseSavedFlashcards,
   restoreFlashcards,
   snapshotFlashcards,
   studySessionKey,
@@ -251,15 +253,16 @@ export function FlashcardsView({
         nextReview = focused.review;
       } else if (activeRoot) {
         const key = studySessionKey(activeRoot, course, "flashcards");
-        const saved = useStudySessionStore.getState().sessions[key];
-        let restored = restoreFlashcards(saved, parsedDeck, identity);
-        if (saved && "deckMode" in saved && saved.deckMode === "due") {
-          const dueSet = new Set(dueFromOverview);
-          const cardIds = saved.cardIds.filter((id) => dueSet.has(id));
-          if (cardIds.length === 0) {
-            restored = null;
-          } else if (cardIds.length !== saved.cardIds.length) {
-            restored = restoreFlashcards({ ...saved, cardIds }, parsedDeck, identity);
+        const savedRaw = useStudySessionStore.getState().sessions[key];
+        const parsedSaved = parseSavedFlashcards(savedRaw);
+        let restored: ReturnType<typeof restoreFlashcards> = null;
+        if (parsedSaved && parsedSaved.identity === identity) {
+          let snapshot: typeof parsedSaved | null = parsedSaved;
+          if (parsedSaved.deckMode === "due") {
+            snapshot = intersectDueFlashcardSession(parsedSaved, dueFromOverview);
+          }
+          if (snapshot) {
+            restored = restoreFlashcards(snapshot, parsedDeck, identity);
           }
         }
         if (restored) {
@@ -346,32 +349,26 @@ export function FlashcardsView({
       if (!prev) {
         return prev;
       }
-      const modeCards =
-        deckMode === "full"
-          ? syncedDeck.cards
-          : cardsForIds(syncedDeck, dueIds);
-      const currentId = prev.cards[prev.index]?.id;
-      let index = prev.index;
-      let idFound = true;
-      if (currentId) {
-        const found = modeCards.findIndex((c) => c.id === currentId);
-        if (found >= 0) {
-          index = found;
-        } else {
-          idFound = false;
+      const byId = new Map(syncedDeck.cards.map((c) => [c.id, c]));
+      const cards = [];
+      for (const { id } of prev.cards) {
+        const card = byId.get(id);
+        if (card) {
+          cards.push(card);
         }
       }
-      if (!idFound) {
-        index = Math.min(prev.index, modeCards.length - 1);
-      }
-      if (modeCards.length === 0) {
+      if (cards.length === 0) {
         return { cards: [], index: 0, flipped: false };
       }
-      return {
-        ...prev,
-        cards: modeCards,
-        index: Math.min(index, modeCards.length - 1),
-      };
+      const currentId = prev.cards[prev.index]?.id;
+      let index = Math.min(prev.index, cards.length - 1);
+      if (currentId) {
+        const found = cards.findIndex((c) => c.id === currentId);
+        if (found >= 0) {
+          index = found;
+        }
+      }
+      return { ...prev, cards, index };
     });
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [
@@ -381,9 +378,7 @@ export function FlashcardsView({
     deckQuery.data,
     deckQuery.dataUpdatedAt,
     overview.dataUpdatedAt,
-    deckMode,
     course,
-    dueIds,
     review,
   ]);
 
@@ -649,7 +644,9 @@ export function FlashcardsView({
             </AlertDialogDescription>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={confirmRestart}>Restart</AlertDialogAction>
+              <AlertDialogAction onClick={confirmRestart}>
+                Restart deck
+              </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
