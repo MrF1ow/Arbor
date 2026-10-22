@@ -861,8 +861,7 @@ describe("quiz PR9", { timeout: 20000 }, () => {
     await user.click(screen.getByRole("button", { name: /Next/i }));
     expect(screen.getByText("Quiz prompt two")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /^Restart$/i }));
-    const restartButtons = screen.getAllByRole("button", { name: /^Restart$/i });
-    await user.click(restartButtons.at(-1)!);
+    await user.click(screen.getByRole("button", { name: /^Restart quiz$/i }));
     await waitFor(() => {
       expect(screen.getByText("Quiz prompt one")).toBeInTheDocument();
     });

@@ -526,7 +526,9 @@ export function QuizView({
             </AlertDialogDescription>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={confirmRestart}>Restart</AlertDialogAction>
+              <AlertDialogAction onClick={confirmRestart}>
+                Restart quiz
+              </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
