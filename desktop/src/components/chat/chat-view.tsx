@@ -239,6 +239,15 @@ export function ChatView({
     if (!el) {
       return;
     }
+    const selection = window.getSelection();
+    if (
+      selection &&
+      !selection.isCollapsed &&
+      selection.anchorNode &&
+      el.contains(selection.anchorNode)
+    ) {
+      return;
+    }
     el.scrollTop = el.scrollHeight;
   }, [lines, liveSnapshot.text.length]);
 
@@ -302,6 +311,7 @@ export function ChatView({
       try {
         await appendLines.mutateAsync([userLine]);
         linesRef.current = [...linesRef.current, userLine];
+        stickToBottomRef.current = true;
         if (course === courseAtSend && mountedRef.current) {
           setLines(linesRef.current);
           setInput("");
@@ -540,9 +550,6 @@ export function ChatView({
           </ToggleGroupItem>
           <ToggleGroupItem value="explain" aria-label="Explain mode">
             Explain
-          </ToggleGroupItem>
-          <ToggleGroupItem value="quiz" aria-label="Quiz mode">
-            Quiz
           </ToggleGroupItem>
         </ToggleGroup>
         <div className="ml-auto flex flex-wrap items-center gap-2">

@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from arbor_worker import cli
-from arbor_worker.chat import _fts_search, _system_prompt, answer, heading_id
+from arbor_worker.chat import _MODE_SENTENCES, _fts_search, _system_prompt, answer, heading_id
 from arbor_worker.embed import embed_root
 from arbor_worker.embedder.hashed import HashedNgramEmbedder
 from arbor_worker.events import EventEmitter, parse_lines
@@ -286,12 +286,28 @@ def test_read_only_course_and_arbor(biology_root: Path):
 def test_mode_system_sentences():
     ask = _system_prompt("ask")
     explain = _system_prompt("explain")
-    quiz = _system_prompt("quiz")
     assert "Answer directly and concisely." in ask
     assert "Explain step by step." in explain
     assert "Every step must still come from the sources and be cited." in explain
-    assert "grade the answer as correct, incorrect, or partial" in quiz
-    assert "latest user message" in quiz
+    assert "quiz" not in _MODE_SENTENCES
+
+
+def test_chat_command_rejects_quiz_mode(biology_root: Path, monkeypatch):
+    payload = {
+        "root": str(biology_root),
+        "course": "Biology",
+        "question": "Hi",
+        "mode": "quiz",
+        "provider": "fake",
+        "model": "fake-model",
+        "history": [],
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
+    out = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", out)
+    code = cli.main(["chat"])
+    assert code == 1
+    assert "invalid mode" in out.getvalue()
 
 
 def test_chat_cli_ndjson(monkeypatch, biology_root: Path):

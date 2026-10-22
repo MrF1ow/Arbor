@@ -1556,7 +1556,7 @@ fn validate_chat_line_role(line: &serde_json::Value) -> Result<(), String> {
 }
 
 fn validate_chat_mode(mode: &str) -> Result<(), String> {
-    if mode == "ask" || mode == "explain" || mode == "quiz" {
+    if mode == "ask" || mode == "explain" {
         Ok(())
     } else {
         Err(format!("Invalid chat mode: {mode}"))
@@ -2742,6 +2742,13 @@ mod tests {
             assert!(block_on_cmd(append_chat_lines(root_string.clone(), bad.into(), vec![line.clone()])).is_err());
             assert!(block_on_cmd(clear_chat_history(root_string.clone(), bad.into())).is_err());
         }
+    }
+
+    #[test]
+    fn validate_chat_mode_rejects_quiz() {
+        assert!(validate_chat_mode("ask").is_ok());
+        assert!(validate_chat_mode("explain").is_ok());
+        assert!(validate_chat_mode("quiz").is_err());
     }
 
     #[test]

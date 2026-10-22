@@ -30,12 +30,6 @@ _MODE_SENTENCES = {
     "explain": (
         "Explain step by step. Every step must still come from the sources and be cited."
     ),
-    "quiz": (
-        "If the history does not already contain a quiz question you asked, ask exactly one "
-        "question drawn from the sources and do not reveal the answer. If the latest user "
-        "message answers that quiz question, grade the answer as correct, incorrect, or partial, "
-        "cite the sources, and do not ask a new question."
-    ),
 }
 
 _CITATION_RE = re.compile(r"\[(\d+)\]")

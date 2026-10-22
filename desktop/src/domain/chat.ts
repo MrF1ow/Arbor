@@ -8,9 +8,9 @@ function digestSlugFromPath(path: string): string {
   return file.replace(/\.md$/i, "");
 }
 
-export type ChatMode = "ask" | "explain" | "quiz";
+export type ChatMode = "ask" | "explain";
 
-const CHAT_MODES: ChatMode[] = ["ask", "explain", "quiz"];
+const CHAT_MODES: ChatMode[] = ["ask", "explain"];
 
 export function isChatMode(value: string | undefined): value is ChatMode {
   return value != null && CHAT_MODES.includes(value as ChatMode);
