@@ -11,13 +11,17 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { CourseIconDisplay } from "~/components/app/course-icon-display";
+import { CourseIconPicker } from "~/components/app/course-icon-picker";
 import { SidebarHeaderTrigger } from "~/components/app/sidebar-header-trigger";
 import { Button, IconButton } from "~/components/ui/button";
 import { Kbd } from "~/components/ui/kbd";
 import { courseDisplayName, workspaceRootLabel } from "~/domain/course";
+import { VIEWER_WRITE_REASON, viewerBlocksWrite } from "~/domain/library-role";
 import { pickActiveRoot } from "~/lib/knowledge-root";
 import { openDialog } from "~/lib/ipc";
-import { useDigests, useImportSourcesMutation } from "~/lib/queries/library";
+import { useCourseMeta } from "~/lib/queries/course-meta";
+import { useDigests, useImportSourcesMutation, useLibrary } from "~/lib/queries/library";
 import { useSettings } from "~/lib/queries/settings";
 import { modShortcut } from "~/lib/shortcuts";
 import { cn } from "~/lib/utils";
@@ -49,6 +53,10 @@ export function CourseHeader({
   const rootEntry = roots.find((r) => r.path === activeRoot);
   const rootLabel = rootEntry ? workspaceRootLabel(rootEntry, roots) : activeRoot ?? "";
   const digests = useDigests(activeRoot, course);
+  const courseMeta = useCourseMeta(activeRoot);
+  const library = useLibrary(activeRoot);
+  const role = library.data?.present === true ? library.data.role : null;
+  const viewerBlocked = viewerBlocksWrite(role);
   const digestCount = digests.data?.length ?? 0;
   const importSources = useImportSourcesMutation(activeRoot);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -81,6 +89,31 @@ export function CourseHeader({
     <header className="@container/course-header flex h-header min-w-0 shrink-0 items-stretch gap-2 border-b border-border px-4 @[880px]/course-header:gap-3">
       <SidebarHeaderTrigger className="self-center" />
       <div className="flex min-w-0 flex-1 items-baseline gap-2 self-center">
+        {activeRoot ? (
+          <CourseIconPicker
+            root={activeRoot}
+            course={course}
+            meta={courseMeta.data}
+            role={role}
+            trigger={
+              <span
+                className="inline-flex self-center shrink-0"
+                title={viewerBlocked ? VIEWER_WRITE_REASON : undefined}
+              >
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Change course icon"
+                  disabled={viewerBlocked}
+                  className="shrink-0"
+                >
+                  <CourseIconDisplay meta={courseMeta.data} course={course} className="size-icon" />
+                </Button>
+              </span>
+            }
+          />
+        ) : null}
         <h1 className="truncate font-serif text-title font-medium">{courseDisplayName(course)}</h1>
         <span className="min-w-0 truncate text-xs text-faint-foreground">
           {rootLabel} · {digestCount} digests
