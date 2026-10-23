@@ -2,11 +2,18 @@
 
 Package version for the worker, desktop, and Tauri app. See [Version numbering](PROJECT.md#version-numbering) in `PROJECT.md`.
 
-**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is complete as package `3.0.0`. **Version 4** is complete as package `4.0.0`. **Version 5** is complete as package `5.0.0`. **Current package:** `5.25.1`. **Current tag:** `v5.25.1`. `v5.0.1` is cut when that release lands. `v5.0.0` is cut when that release lands. `v4.5.0` is cut when that release lands. `v4.4.0` is tagged. `v4.3.0` is not tagged yet. `v4.2.0` is tagged. `v4.1.0` and `v4.0.0` are tagged. `v3.0.0` through `v3.5.0` are already tagged. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) was retested on the 2026-10-17 Linux live run.
+**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is complete as package `3.0.0`. **Version 4** is complete as package `4.0.0`. **Version 5** is complete as package `5.0.0`. **Current package:** `5.25.2`. **Current tag:** `v5.25.2`. `v5.0.1` is cut when that release lands. `v5.0.0` is cut when that release lands. `v4.5.0` is cut when that release lands. `v4.4.0` is tagged. `v4.3.0` is not tagged yet. `v4.2.0` is tagged. `v4.1.0` and `v4.0.0` are tagged. `v3.0.0` through `v3.5.0` are already tagged. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) was retested on the 2026-10-17 Linux live run.
 
 ## Unreleased
 
-Nothing pending above `5.25.1`.
+Nothing pending above `5.25.2`.
+
+## 5.25.2 — 2026-10-23
+
+Git tag `v5.25.2`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `5.25.2`. UI cutover stays `6.0.0`.
+
+- Fixes Codex and Claude usage, which never loaded. The worker called the usage readers without a process launcher, so they raised `TypeError` and the popover always said "Could not read usage limits." They now fall back to `subprocess.Popen`.
+- Fixes the Codex usage probe timing out: it started a second stdout reader for `account/rateLimits/read` that raced the first and lost the reply. Both phases now share one reader, and the popover shows the app-server's error message (for example, when Codex isn't signed in).
 
 ## 5.25.1 — 2026-10-23
 
