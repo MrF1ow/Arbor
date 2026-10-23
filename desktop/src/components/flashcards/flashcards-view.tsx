@@ -8,6 +8,15 @@ import { StudyColumn, StudyViewShell } from "~/components/study/study-layout";
 import { StudyProgressBar } from "~/components/study/study-progress-bar";
 import { StudySourceChip } from "~/components/study/study-source-chip";
 import { StudyUnverifiedBadge } from "~/components/study/study-unverified-badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogTitle,
+} from "~/components/ui/alert-dialog";
 import { Button } from "~/components/ui/button";
 import { Kbd } from "~/components/ui/kbd";
 import { Skeleton } from "~/components/ui/skeleton";
@@ -29,6 +38,13 @@ import {
   shuffleCards,
   type FlashcardGrade,
 } from "~/domain/flashcards";
+import {
+  intersectDueFlashcardSession,
+  parseSavedFlashcards,
+  restoreFlashcards,
+  snapshotFlashcards,
+  studySessionKey,
+} from "~/domain/study-session";
 import type { FlashcardDeck, FlashcardReview } from "~/domain/types";
 import type { CourseOverviewPayload, DigestInfo } from "~/domain/types";
 import { useStudyJobLauncher } from "~/hooks/use-study-job-launcher";
@@ -41,6 +57,7 @@ import { useSettings } from "~/lib/queries/settings";
 import { useStudyArtifactStale, useStudyJson } from "~/lib/queries/study";
 import { isDialogOpen, isEditableTarget } from "~/lib/shortcuts";
 import { flushStudyWrites, useEnqueueStudyWrite } from "~/lib/study-writes";
+import { useStudySessionStore } from "~/stores/study-session-store";
 type DeckMode = "due" | "full";
 
 function deckIdentity(deck: FlashcardDeck): string {
@@ -127,6 +144,7 @@ export function FlashcardsView({
   const [deck, setDeck] = useState<FlashcardDeck | null>(null);
   const [sessionIdentity, setSessionIdentity] = useState<string | null>(null);
   const [flushAt, setFlushAt] = useState(0);
+  const [restartOpen, setRestartOpen] = useState(false);
 
   const focusClearPendingRef = useRef(false);
   const lastSyncedDataRef = useRef({ deck: 0, overview: 0 });
@@ -227,13 +245,45 @@ export function FlashcardsView({
       }
     } else if (parsedDeck && identity && identity !== sessionIdentity) {
       const dueFromOverview = [...overview.data!.due.due_ids];
-      const focused = sessionWithOptionalFocus(parsedDeck, dueFromOverview, focusCardId);
+      let nextMode: DeckMode;
+      let nextReview: FlashcardReview;
+      if (focusCardId) {
+        const focused = sessionWithOptionalFocus(parsedDeck, dueFromOverview, focusCardId);
+        nextMode = focused.mode;
+        nextReview = focused.review;
+      } else if (activeRoot) {
+        const key = studySessionKey(activeRoot, course, "flashcards");
+        const savedRaw = useStudySessionStore.getState().sessions[key];
+        const parsedSaved = parseSavedFlashcards(savedRaw);
+        let restored: ReturnType<typeof restoreFlashcards> = null;
+        if (parsedSaved && parsedSaved.identity === identity) {
+          let snapshot: typeof parsedSaved | null = parsedSaved;
+          if (parsedSaved.deckMode === "due") {
+            snapshot = intersectDueFlashcardSession(parsedSaved, dueFromOverview);
+          }
+          if (snapshot) {
+            restored = restoreFlashcards(snapshot, parsedDeck, identity);
+          }
+        }
+        if (restored) {
+          nextMode = restored.deckMode;
+          nextReview = restored.review;
+        } else {
+          const focused = sessionWithOptionalFocus(parsedDeck, dueFromOverview, undefined);
+          nextMode = focused.mode;
+          nextReview = focused.review;
+        }
+      } else {
+        const focused = sessionWithOptionalFocus(parsedDeck, dueFromOverview, undefined);
+        nextMode = focused.mode;
+        nextReview = focused.review;
+      }
       setSessionIdentity(identity);
       setDeck(parsedDeck);
-      setDeckMode(focused.mode);
+      setDeckMode(nextMode);
       setDueIds(dueFromOverview);
       setDeckCount(overview.data!.due.deck_count);
-      setReview(focused.review);
+      setReview(nextReview);
     }
   }
 
@@ -299,32 +349,26 @@ export function FlashcardsView({
       if (!prev) {
         return prev;
       }
-      const modeCards =
-        deckMode === "full"
-          ? syncedDeck.cards
-          : cardsForIds(syncedDeck, dueIds);
-      const currentId = prev.cards[prev.index]?.id;
-      let index = prev.index;
-      let idFound = true;
-      if (currentId) {
-        const found = modeCards.findIndex((c) => c.id === currentId);
-        if (found >= 0) {
-          index = found;
-        } else {
-          idFound = false;
+      const byId = new Map(syncedDeck.cards.map((c) => [c.id, c]));
+      const cards = [];
+      for (const { id } of prev.cards) {
+        const card = byId.get(id);
+        if (card) {
+          cards.push(card);
         }
       }
-      if (!idFound) {
-        index = Math.min(prev.index, modeCards.length - 1);
-      }
-      if (modeCards.length === 0) {
+      if (cards.length === 0) {
         return { cards: [], index: 0, flipped: false };
       }
-      return {
-        ...prev,
-        cards: modeCards,
-        index: Math.min(index, modeCards.length - 1),
-      };
+      const currentId = prev.cards[prev.index]?.id;
+      let index = Math.min(prev.index, cards.length - 1);
+      if (currentId) {
+        const found = cards.findIndex((c) => c.id === currentId);
+        if (found >= 0) {
+          index = found;
+        }
+      }
+      return { ...prev, cards, index };
     });
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [
@@ -334,9 +378,7 @@ export function FlashcardsView({
     deckQuery.data,
     deckQuery.dataUpdatedAt,
     overview.dataUpdatedAt,
-    deckMode,
     course,
-    dueIds,
     review,
   ]);
 
@@ -347,6 +389,32 @@ export function FlashcardsView({
     focusClearPendingRef.current = false;
     onFocusCardHandled();
   }, [review, onFocusCardHandled]);
+
+  useEffect(() => {
+    if (
+      !activeRoot ||
+      !identity ||
+      identity !== sessionIdentity ||
+      !review ||
+      review.cards.length === 0
+    ) {
+      return;
+    }
+    const key = studySessionKey(activeRoot, course, "flashcards");
+    useStudySessionStore
+      .getState()
+      .save(key, snapshotFlashcards(review, deckMode, identity));
+  }, [activeRoot, course, identity, sessionIdentity, review, deckMode]);
+
+  function confirmRestart() {
+    if (!deck || !activeRoot) {
+      return;
+    }
+    const key = studySessionKey(activeRoot, course, "flashcards");
+    useStudySessionStore.getState().clear(key);
+    setReview(sessionForMode(deck, deckMode, dueIds));
+    setRestartOpen(false);
+  }
 
   const citationsReport = (() => {
     if (!citationsQuery.isSuccess || citationsQuery.data == null) {
@@ -556,7 +624,32 @@ export function FlashcardsView({
           <span className="text-xs whitespace-nowrap text-muted-foreground">
             {emptySession ? "0 / 0" : `${session.index + 1} / ${session.cards.length}`}
           </span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            className="ml-auto"
+            onClick={() => setRestartOpen(true)}
+          >
+            <RotateCcw className="size-icon-sm" />
+            Restart
+          </Button>
         </div>
+
+        <AlertDialog open={restartOpen} onOpenChange={setRestartOpen}>
+          <AlertDialogContent>
+            <AlertDialogTitle>Restart this deck?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Your grades are kept; only your place in the deck resets.
+            </AlertDialogDescription>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmRestart}>
+                Restart deck
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         <StudyArtifactToolbar
           stale={Boolean(staleQuery.data)}

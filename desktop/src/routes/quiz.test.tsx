@@ -14,7 +14,9 @@ import {
   getMockIpcLog,
   resetMockHandlerTimers,
 } from "~/test/mock-handlers";
+import { studySessionKey } from "~/domain/study-session";
 import { useJobStore } from "~/stores/job-store";
+import { useStudySessionStore } from "~/stores/study-session-store";
 import { useUiStore } from "~/stores/ui-store";
 import { renderAppAtRoute } from "~/test/render";
 
@@ -91,6 +93,8 @@ describe("quiz PR9", { timeout: 20000 }, () => {
     resetStudyWriteQueueForTests();
     localStorage.clear();
     useUiStore.persist.clearStorage();
+    useStudySessionStore.persist.clearStorage();
+    useStudySessionStore.setState({ sessions: {} });
     useUiStore.setState({
       appearance: "system",
       sidebarOpen: true,
@@ -743,5 +747,170 @@ describe("quiz PR9", { timeout: 20000 }, () => {
         c.cmd === "study_progress" && (c.args as { action?: string }).action === "quiz",
     );
     expect(quizCall?.args).toMatchObject({ result: "wrong" });
+  });
+
+  it("resumes a submitted question after a Notes round trip", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/quiz", {
+      read_study_json: (payload) => {
+        if (readStudyFile(payload) === "quiz.json") {
+          return smallQuiz;
+        }
+        return { schema_version: 1, course: "cell-biology", failures: [] };
+      },
+      read_quiz_progress: () => ({}),
+    });
+    await waitForQuizReady();
+    await user.click(screen.getByRole("button", { name: /^Beta/i }));
+    await user.click(screen.getByRole("button", { name: /^Submit$/i }));
+    await waitFor(() => {
+      expect(screen.getByText("Explanation one")).toBeInTheDocument();
+    });
+    expect(screen.getByText("1 / 2 correct")).toBeInTheDocument();
+    await user.click(screen.getByRole("link", { name: /Notes/i }));
+    await waitFor(() => {
+      expect(screen.getByText("Course overview")).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole("link", { name: /Quiz/i }));
+    await waitForQuizReady();
+    expect(screen.getByText("Explanation one")).toBeInTheDocument();
+    expect(screen.getByText("1 / 2 correct")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Beta/i }).className).toMatch(/success/);
+  });
+
+  it("starts fresh when quiz pack identity changes", async () => {
+    const user = userEvent.setup();
+    let packPayload = smallQuiz;
+    await renderAppAtRoute("/course/cell-biology/quiz", {
+      read_study_json: (payload) => {
+        if (readStudyFile(payload) === "quiz.json") {
+          return packPayload;
+        }
+        return { schema_version: 1, course: "cell-biology", failures: [] };
+      },
+      read_quiz_progress: () => ({}),
+    });
+    await waitForQuizReady();
+    await user.click(screen.getByRole("button", { name: /^Beta/i }));
+    await user.click(screen.getByRole("button", { name: /^Submit$/i }));
+    await user.click(screen.getByRole("button", { name: /Next/i }));
+    expect(screen.getByText("Quiz prompt two")).toBeInTheDocument();
+    cleanup();
+    packPayload = {
+      ...smallQuiz,
+      questions: [
+        ...smallQuiz.questions,
+        {
+          id: "q-3",
+          type: "multiple_choice" as const,
+          prompt: "Quiz prompt three",
+          choices: ["A", "B", "C", "D"],
+          answer_index: 0,
+          explanation: "Explanation three",
+          source: { digest: "2026-09-12-membranes", heading: null },
+        },
+      ],
+    };
+    await renderAppAtRoute("/course/cell-biology/quiz", {
+      read_study_json: (payload) => {
+        if (readStudyFile(payload) === "quiz.json") {
+          return packPayload;
+        }
+        return { schema_version: 1, course: "cell-biology", failures: [] };
+      },
+      read_quiz_progress: () => ({}),
+    });
+    await waitFor(() => {
+      expect(screen.getByText("Quiz prompt one")).toBeInTheDocument();
+      expect(screen.getByText("0 / 3 correct")).toBeInTheDocument();
+    });
+  });
+
+  it("ignores corrupt persisted quiz sessions", async () => {
+    const key = studySessionKey(FIXTURE_ROOT_FALL, "cell-biology", "quiz");
+    useStudySessionStore.setState({
+      sessions: { [key]: { identity: "x", savedAt: 1 } as never },
+    });
+    await renderAppAtRoute("/course/cell-biology/quiz", {
+      read_study_json: (payload) => {
+        if (readStudyFile(payload) === "quiz.json") {
+          return smallQuiz;
+        }
+        return { schema_version: 1, course: "cell-biology", failures: [] };
+      },
+      read_quiz_progress: () => ({}),
+    });
+    await waitForQuizReady();
+    expect(screen.getByText("Quiz prompt one")).toBeInTheDocument();
+  });
+
+  it("restart clears in-session answers and returns to question 1", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/quiz", {
+      read_study_json: (payload) => {
+        if (readStudyFile(payload) === "quiz.json") {
+          return smallQuiz;
+        }
+        return { schema_version: 1, course: "cell-biology", failures: [] };
+      },
+      read_quiz_progress: () => ({}),
+    });
+    await waitForQuizReady();
+    await user.click(screen.getByRole("button", { name: /^Beta/i }));
+    await user.click(screen.getByRole("button", { name: /^Submit$/i }));
+    await user.click(screen.getByRole("button", { name: /Next/i }));
+    expect(screen.getByText("Quiz prompt two")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^Restart$/i }));
+    await user.click(screen.getByRole("button", { name: /^Restart quiz$/i }));
+    await waitFor(() => {
+      expect(screen.getByText("Quiz prompt one")).toBeInTheDocument();
+    });
+    expect(screen.getByText("0 / 2 correct")).toBeInTheDocument();
+    const key = studySessionKey(FIXTURE_ROOT_FALL, "cell-biology", "quiz");
+    const saved = useStudySessionStore.getState().sessions[key];
+    expect(saved && "index" in saved ? saved.index : -1).toBe(0);
+  });
+
+  it("tab-switch round trip lands on question 3 after advancing twice", async () => {
+    const user = userEvent.setup();
+    const quizThree = {
+      ...smallQuiz,
+      questions: [
+        ...smallQuiz.questions,
+        {
+          id: "q-3",
+          type: "multiple_choice" as const,
+          prompt: "Quiz prompt three",
+          choices: ["A", "B", "C", "D"],
+          answer_index: 0,
+          explanation: "Explanation three",
+          source: { digest: "2026-09-12-membranes", heading: null },
+        },
+      ],
+    };
+    await renderAppAtRoute("/course/cell-biology/quiz", {
+      read_study_json: (payload) => {
+        if (readStudyFile(payload) === "quiz.json") {
+          return quizThree;
+        }
+        return { schema_version: 1, course: "cell-biology", failures: [] };
+      },
+      read_quiz_progress: () => ({}),
+    });
+    await waitFor(() => {
+      expect(screen.getByText("Quiz prompt one")).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole("button", { name: /Next/i }));
+    await user.click(screen.getByRole("button", { name: /Next/i }));
+    expect(screen.getByText("Quiz prompt three")).toBeInTheDocument();
+    await user.click(screen.getByRole("link", { name: /Notes/i }));
+    await waitFor(() => {
+      expect(screen.getByText("Course overview")).toBeInTheDocument();
+    });
+    await user.click(screen.getByRole("link", { name: /Quiz/i }));
+    await waitFor(() => {
+      expect(screen.getByText("Quiz prompt three")).toBeInTheDocument();
+    });
+    expect(screen.getByText(/Question 3 of 3/i)).toBeInTheDocument();
   });
 });

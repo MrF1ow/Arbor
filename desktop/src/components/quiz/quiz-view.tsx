@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, RotateCcw, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { EmptyState } from "~/components/app/empty-state";
@@ -8,6 +8,15 @@ import { StudyColumn, StudyViewShell } from "~/components/study/study-layout";
 import { StudyProgressBar } from "~/components/study/study-progress-bar";
 import { StudySourceChip } from "~/components/study/study-source-chip";
 import { StudyUnverifiedBadge } from "~/components/study/study-unverified-badge";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogTitle,
+} from "~/components/ui/alert-dialog";
 import { Button } from "~/components/ui/button";
 import { Kbd } from "~/components/ui/kbd";
 import { Skeleton } from "~/components/ui/skeleton";
@@ -25,6 +34,7 @@ import {
   sessionScore,
   submitChoice,
 } from "~/domain/quiz";
+import { restoreQuiz, snapshotQuiz, studySessionKey } from "~/domain/study-session";
 import type { DigestInfo, QuizPack, QuizProgress, QuizReview } from "~/domain/types";
 import { useStudyJobLauncher } from "~/hooks/use-study-job-launcher";
 import { invoke } from "~/lib/ipc";
@@ -35,6 +45,7 @@ import { useSettings } from "~/lib/queries/settings";
 import { useQuizProgress, useStudyArtifactStale, useStudyJson } from "~/lib/queries/study";
 import { isDialogOpen, isEditableTarget } from "~/lib/shortcuts";
 import { flushStudyWrites, useEnqueueStudyWrite } from "~/lib/study-writes";
+import { useStudySessionStore } from "~/stores/study-session-store";
 function packIdentity(pack: QuizPack): string {
   return `${pack.course}:${pack.questions.map((q) => q.id).join("\0")}`;
 }
@@ -71,6 +82,7 @@ export function QuizView({
   const [progress, setProgress] = useState<QuizProgress>({});
   const [review, setReview] = useState<QuizReview | null>(null);
   const [sessionIdentity, setSessionIdentity] = useState<string | null>(null);
+  const [restartOpen, setRestartOpen] = useState(false);
   const lastSyncedDataRef = useRef({ pack: 0, progress: 0 });
   const prevSessionIdentityRef = useRef<string | null>(null);
 
@@ -178,10 +190,19 @@ export function QuizView({
           parsedProgress = {};
         }
       }
+      let nextReview = createReview(parsedPack);
+      if (activeRoot) {
+        const key = studySessionKey(activeRoot, course, "quiz");
+        const saved = useStudySessionStore.getState().sessions[key];
+        const restored = restoreQuiz(saved, parsedPack, identity);
+        if (restored) {
+          nextReview = restored;
+        }
+      }
       setSessionIdentity(identity);
       setPack(parsedPack);
       setProgress(parsedProgress);
-      setReview(createReview(parsedPack));
+      setReview(nextReview);
     }
   }
 
@@ -292,6 +313,27 @@ export function QuizView({
     course,
     review,
   ]);
+
+  useEffect(() => {
+    if (!activeRoot || !identity || identity !== sessionIdentity || !review) {
+      return;
+    }
+    if (review.questions.length === 0) {
+      return;
+    }
+    const key = studySessionKey(activeRoot, course, "quiz");
+    useStudySessionStore.getState().save(key, snapshotQuiz(review, identity));
+  }, [activeRoot, course, identity, sessionIdentity, review]);
+
+  function confirmRestart() {
+    if (!pack || !activeRoot) {
+      return;
+    }
+    const key = studySessionKey(activeRoot, course, "quiz");
+    useStudySessionStore.getState().clear(key);
+    setReview(createReview(pack));
+    setRestartOpen(false);
+  }
 
   const citationsReport = (() => {
     if (!citationsQuery.isSuccess || citationsQuery.data == null) {
@@ -462,13 +504,34 @@ export function QuizView({
           </span>
         </div>
 
-        <StudyArtifactToolbar
-          stale={Boolean(staleQuery.data)}
-          viewerBlocked={viewerBlocked}
-          jobDisabled={jobDisabled}
-          onRefresh={() => void launchStudyJob(course, true)}
-          modelHint={modelHint}
-        />
+        <div className="flex w-full flex-wrap items-center gap-2">
+          <StudyArtifactToolbar
+            stale={Boolean(staleQuery.data)}
+            viewerBlocked={viewerBlocked}
+            jobDisabled={jobDisabled}
+            onRefresh={() => void launchStudyJob(course, true)}
+            modelHint={modelHint}
+          />
+          <Button type="button" variant="ghost" size="xs" onClick={() => setRestartOpen(true)}>
+            <RotateCcw className="size-icon-sm" />
+            Restart
+          </Button>
+        </div>
+
+        <AlertDialog open={restartOpen} onOpenChange={setRestartOpen}>
+          <AlertDialogContent>
+            <AlertDialogTitle>Restart this quiz?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Your past answers stay in your stats; the quiz starts again from question 1.
+            </AlertDialogDescription>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmRestart}>
+                Restart quiz
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         <div
           data-testid="quiz-card"
