@@ -57,7 +57,7 @@ def cmd_check_auth(args) -> int:
 
 
 def cmd_usage(_args) -> int:
-    from arbor_worker.usage import read_provider_usage
+    from arbor_worker.usage import make_unavailable, read_provider_usage, utc_now_iso
 
     try:
         raw = sys.stdin.read()
@@ -67,7 +67,14 @@ def cmd_usage(_args) -> int:
     provider_id = payload.get("provider")
     if not isinstance(provider_id, str) or not provider_id.strip():
         provider_id = "codex"
-    limits = read_provider_usage(provider_id.strip())
+    try:
+        limits = read_provider_usage(provider_id.strip())
+    except Exception:
+        limits = make_unavailable(
+            checked_at=utc_now_iso(),
+            reason="probe_failed",
+            message="Could not read usage limits.",
+        )
     print(json.dumps(limits))
     return 0
 

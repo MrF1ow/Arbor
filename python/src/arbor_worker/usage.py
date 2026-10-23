@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import json
+import math
 import os
+import queue
 import re
 import shutil
 import subprocess
 import threading
+import time
 from collections.abc import Callable, Iterable, Mapping
 from datetime import datetime, timezone
 from pathlib import Path
@@ -34,6 +37,7 @@ CLAUDE_WINDOWS = {
 }
 
 GROK_BILLING_URL = "https://cli-chat-proxy.grok.com/v1/billing?format=credits"
+GROK_PROBE_FAILED_MESSAGE = "Grok could not read usage limits."
 
 GROK_CREDENTIAL_KEYS = (
     "https://auth.x.ai::b1a00492-073a-47ea-816f-4c329264a828",
@@ -334,9 +338,9 @@ def parse_period_boundary(value: str | None) -> float:
         month = int(date_part[5:7])
         day = int(date_part[8:10])
         datetime(year, month, day, tzinfo=timezone.utc)
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
         return float("nan")
-    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     if parsed.month != int(date_part[5:7]) or parsed.day != int(date_part[8:10]):
         return float("nan")
     return parsed.timestamp() * 1000
@@ -386,11 +390,24 @@ def grok_usage_response_to_limits(response: Mapping[str, Any], checked_at: str) 
     return make_usage_limits(checked_at=checked_at, windows=[window])
 
 
+def grok_billing_http_transport(
+    method: str,
+    url: str,
+    headers: dict[str, str] | None = None,
+    timeout: float = 10,
+) -> tuple[int, str, str]:
+    status, body_bytes = urllib_http_request(
+        method, url, headers or {}, None, float(timeout)
+    )
+    return status, body_bytes.decode("utf-8", errors="replace"), ""
+
+
 def read_grok_credential(
     env: Mapping[str, str],
     *,
     home: os.PathLike[str] | None = None,
     read_text: Callable[[str], str] | None = None,
+    system_config_paths: Iterable[os.PathLike[str]] | None = None,
 ) -> dict[str, Any] | None:
     if env.get("XAI_API_KEY", "").strip():
         return None
@@ -412,12 +429,16 @@ def read_grok_credential(
     else:
         home_dir = Path.home() if home is None else Path(home)
         base = home_dir / ".grok"
+    if system_config_paths is None:
+        system_config_paths = (
+            Path("/etc/grok/managed_config.toml"),
+            Path("/etc/grok/requirements.toml"),
+        )
     config_paths = [
         base / "config.toml",
         base / "managed_config.toml",
         base / "requirements.toml",
-        Path("/etc/grok/managed_config.toml"),
-        Path("/etc/grok/requirements.toml"),
+        *[Path(p) for p in system_config_paths],
     ]
     for config_path in config_paths:
         config = _read(str(config_path))
@@ -445,25 +466,32 @@ def read_grok_usage(
     *,
     env: Mapping[str, str] | None = None,
     home: os.PathLike[str] | None = None,
-    transport=urllib_http_request,
+    system_config_paths: Iterable[os.PathLike[str]] | None = None,
+    transport: Callable[..., tuple[int, str, str]] | None = None,
 ) -> dict[str, Any]:
     checked_at = utc_now_iso()
     probe_failed = make_unavailable(
         checked_at=checked_at,
         reason="probe_failed",
-        message="Grok could not read usage limits.",
+        message=GROK_PROBE_FAILED_MESSAGE,
     )
     environment = os.environ if env is None else env
-    credential = read_grok_credential(environment, home=home)
+    credential = read_grok_credential(
+        environment,
+        home=home,
+        system_config_paths=system_config_paths,
+    )
     if credential is None:
         return make_unavailable(checked_at=checked_at, reason="unsupported")
     if credential.get("__invalid__"):
         return probe_failed
-    token = str(credential.get("key") or "").strip()
-    if not token:
-        return make_unavailable(checked_at=checked_at, reason="unsupported")
+    raw_key = credential.get("key")
+    if not isinstance(raw_key, str) or not raw_key.strip():
+        return probe_failed
+    token = raw_key.strip()
+    billing_transport = transport if transport is not None else grok_billing_http_transport
     try:
-        status, body, err = transport(
+        status, body, _err = billing_transport(
             "GET",
             GROK_BILLING_URL,
             headers={"Authorization": f"Bearer {token}"},
@@ -477,32 +505,90 @@ def read_grok_usage(
             message=message,
         )
     if status != 200:
-        message = redact_secret(err or body or f"HTTP {status}", token)
-        return make_unavailable(
-            checked_at=checked_at,
-            reason="probe_failed",
-            message=message,
-        )
+        return probe_failed
     try:
         payload = json.loads(body)
     except json.JSONDecodeError:
         return probe_failed
     if not isinstance(payload, dict):
         return probe_failed
+    config = payload.get("config")
+    if isinstance(config, dict):
+        percent = config.get("creditUsagePercent")
+        if percent is not None and (
+            not isinstance(percent, (int, float)) or not math.isfinite(float(percent))
+        ):
+            return probe_failed
     return grok_usage_response_to_limits(payload, checked_at)
 
 
-def _terminate_proc(proc: Any) -> None:
-    try:
-        if proc.poll() is None:
-            proc.terminate()
-            proc.wait(timeout=2)
-    except Exception:
+def _reap_process(proc: Any) -> None:
+    if proc.stdin is not None:
         try:
-            proc.kill()
-            proc.wait(timeout=2)
+            proc.stdin.close()
+        except OSError:
+            pass
+    if proc.poll() is None:
+        try:
+            proc.terminate()
+        except OSError:
+            pass
+        try:
+            proc.wait(timeout=1)
+        except subprocess.TimeoutExpired:
+            try:
+                proc.kill()
+            except OSError:
+                pass
+            try:
+                proc.wait()
+            except Exception:
+                pass
         except Exception:
             pass
+
+
+def _start_stderr_drain(proc: Any) -> None:
+    stderr = proc.stderr
+    if stderr is None:
+        return
+
+    def drain() -> None:
+        try:
+            stderr.read()
+        except (OSError, ValueError):
+            pass
+
+    threading.Thread(target=drain, daemon=True).start()
+
+
+def _iter_stdout_lines(proc: Any, deadline: float):
+    stdout = proc.stdout
+    if stdout is None:
+        return
+    line_queue: queue.Queue[str | None] = queue.Queue()
+
+    def reader() -> None:
+        try:
+            for line in stdout:
+                line_queue.put(line)
+        except (OSError, ValueError):
+            pass
+        finally:
+            line_queue.put(None)
+
+    threading.Thread(target=reader, daemon=True).start()
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return
+        try:
+            item = line_queue.get(timeout=min(remaining, 0.25))
+        except queue.Empty:
+            continue
+        if item is None:
+            break
+        yield item
 
 
 def read_claude_usage(
@@ -572,11 +658,10 @@ def read_claude_usage(
 
     threading.Thread(target=write_stdin, daemon=True).start()
     response_payload: dict[str, Any] | None = None
-    deadline = datetime.now(timezone.utc).timestamp() + timeout
+    deadline = time.monotonic() + timeout
+    _start_stderr_drain(proc)
     try:
-        for line in proc.stdout:
-            if datetime.now(timezone.utc).timestamp() > deadline:
-                break
+        for line in _iter_stdout_lines(proc, deadline):
             line = line.strip()
             if not line:
                 continue
@@ -600,7 +685,7 @@ def read_claude_usage(
                     response_payload = inner
                 break
     finally:
-        _terminate_proc(proc)
+        _reap_process(proc)
     if response_payload is None:
         return make_unavailable(checked_at=checked_at, reason="probe_failed")
     return claude_usage_response_to_limits(response=response_payload, checked_at=checked_at)
@@ -658,24 +743,14 @@ def read_codex_usage(
     rate_line = json.dumps(
         {"id": 2, "method": "account/rateLimits/read", "params": None}
     )
-    pending = iter([init_line + "\n", json.dumps({"method": "initialized"}) + "\n", rate_line + "\n"])
-
-    def write_stdin() -> None:
-        try:
-            for item in pending:
-                proc.stdin.write(item if item.endswith("\n") else item + "\n")
-            proc.stdin.close()
-        except OSError:
-            pass
-
-    threading.Thread(target=write_stdin, daemon=True).start()
     init_ok = False
     rate_payload: dict[str, Any] | None = None
-    deadline = datetime.now(timezone.utc).timestamp() + timeout
+    deadline = time.monotonic() + timeout
+    _start_stderr_drain(proc)
     try:
-        for line in proc.stdout:
-            if datetime.now(timezone.utc).timestamp() > deadline:
-                break
+        proc.stdin.write(init_line + "\n")
+        proc.stdin.flush()
+        for line in _iter_stdout_lines(proc, deadline):
             line = line.strip()
             if not line:
                 continue
@@ -683,18 +758,33 @@ def read_codex_usage(
                 message = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            if message.get("id") == 1 and message.get("result") is not None:
-                init_ok = True
-                continue
-            if message.get("id") == 2:
+            if message.get("id") == 1:
                 if message.get("error"):
                     return make_unavailable(checked_at=checked_at, reason="probe_failed")
-                result = message.get("result")
-                if isinstance(result, dict):
-                    rate_payload = result
-                break
+                if message.get("result") is not None:
+                    init_ok = True
+                    break
+        if init_ok:
+            proc.stdin.write(json.dumps({"method": "initialized"}) + "\n")
+            proc.stdin.write(rate_line + "\n")
+            proc.stdin.flush()
+            for line in _iter_stdout_lines(proc, deadline):
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    message = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if message.get("id") == 2:
+                    if message.get("error"):
+                        return make_unavailable(checked_at=checked_at, reason="probe_failed")
+                    result = message.get("result")
+                    if isinstance(result, dict):
+                        rate_payload = result
+                    break
     finally:
-        _terminate_proc(proc)
+        _reap_process(proc)
     if not init_ok or rate_payload is None:
         return make_unavailable(checked_at=checked_at, reason="probe_failed")
     snapshot = rate_payload.get("rateLimits") or {}

@@ -10,9 +10,13 @@ from pathlib import Path
 import pytest
 
 from arbor_worker.usage import (
+    GROK_BILLING_URL,
+    GROK_PROBE_FAILED_MESSAGE,
     claude_usage_response_to_limits,
     codex_rate_limits_to_limits,
+    grok_billing_http_transport,
     grok_usage_response_to_limits,
+    parse_period_boundary,
     read_claude_usage,
     read_codex_usage,
     read_grok_credential,
@@ -57,6 +61,11 @@ def test_claude_unavailable_when_rate_limits_missing():
     assert result["unavailable"]["reason"] == "unsupported"
 
 
+@pytest.fixture(autouse=True)
+def _clear_claudecode_env(monkeypatch):
+    monkeypatch.delenv("CLAUDECODE", raising=False)
+
+
 class FakePopen:
     instances: list["FakePopen"] = []
 
@@ -65,9 +74,12 @@ class FakePopen:
         self._stdin_buffer = io.StringIO()
         self.stdin = self._StdinProxy(self._stdin_buffer)
         self._stdout_lines: list[str] = []
+        self._stderr_data = ""
         self._lock = threading.Lock()
         self._closed = False
-        self._proc = self
+        self._running = True
+        self.terminated = False
+        self.killed = False
         FakePopen.instances.append(self)
 
     class _StdinProxy:
@@ -80,11 +92,17 @@ class FakePopen:
         def close(self) -> None:
             self._buffer.seek(0)
 
+        def flush(self) -> None:
+            pass
+
         def getvalue(self) -> str:
             return self._buffer.getvalue()
 
     def set_stdout_lines(self, lines: list[str]) -> None:
         self._stdout_lines = lines
+
+    def set_stderr_data(self, data: str) -> None:
+        self._stderr_data = data
 
     def stdin_text(self) -> str:
         return self.stdin.getvalue()
@@ -93,21 +111,28 @@ class FakePopen:
     def stdout(self):
         return self
 
+    @property
+    def stderr(self):
+        return io.StringIO(self._stderr_data)
+
     def __iter__(self):
         for line in self._stdout_lines:
             yield line
 
     def poll(self):
-        return 0
+        return None if self._running else 0
 
     def wait(self, timeout=None):
+        self._running = False
         return 0
 
     def terminate(self):
-        pass
+        self.terminated = True
+        self._running = False
 
     def kill(self):
-        pass
+        self.killed = True
+        self._running = False
 
 
 def test_read_claude_usage_writes_control_requests_and_maps_success():
@@ -160,18 +185,71 @@ def test_read_claude_usage_error_subtype_probe_failed():
 def test_read_claude_usage_timeout_probe_failed():
     FakePopen.instances.clear()
 
-    class SlowPopen(FakePopen):
+    class _BlockingStdout:
         def __iter__(self):
-            time.sleep(0.05)
-            yield from super().__iter__()
+            while True:
+                time.sleep(0.02)
+                yield from ()
+
+    class SilentPopen(FakePopen):
+        @property
+        def stdout(self):
+            return _BlockingStdout()
 
     def popen_factory(*args, **kwargs):
-        proc = SlowPopen(*args, **kwargs)
+        proc = SilentPopen(*args, **kwargs)
         proc.set_stdout_lines([])
         return proc
 
-    limits = read_claude_usage(popen=popen_factory, which=lambda _: "/bin/claude", timeout=0.01)
+    start = time.monotonic()
+    limits = read_claude_usage(popen=popen_factory, which=lambda _: "/bin/claude", timeout=0.15)
+    elapsed = time.monotonic() - start
     assert limits["unavailable"]["reason"] == "probe_failed"
+    assert elapsed < 0.15 + 0.5
+    proc = FakePopen.instances[0]
+    assert proc.terminated or proc.killed
+
+
+def test_read_claude_usage_claudecode_guard(monkeypatch):
+    monkeypatch.setenv("CLAUDECODE", "1")
+    from arbor_worker.provider.claude import CLAUDECODE_GUARD
+
+    limits = read_claude_usage(popen=FakePopen, which=lambda _: "/bin/claude")
+    assert limits["unavailable"]["reason"] == "probe_failed"
+    assert limits["unavailable"]["message"] == CLAUDECODE_GUARD
+
+
+def test_read_claude_usage_drains_large_stderr_within_timeout():
+    FakePopen.instances.clear()
+    big_stderr = "x" * 200_000
+
+    def popen_factory(*args, **kwargs):
+        proc = FakePopen(*args, **kwargs)
+        proc.set_stderr_data(big_stderr)
+        proc.set_stdout_lines([])
+        return proc
+
+    start = time.monotonic()
+    limits = read_claude_usage(popen=popen_factory, which=lambda _: "/bin/claude", timeout=0.2)
+    assert time.monotonic() - start < 0.2 + 0.5
+    assert limits["unavailable"]["reason"] == "probe_failed"
+    assert FakePopen.instances[0].terminated or FakePopen.instances[0].killed
+
+
+def test_read_claude_usage_error_subtype_terminates():
+    FakePopen.instances.clear()
+    err = {
+        "type": "control_response",
+        "response": {"request_id": "arbor-usage", "subtype": "error"},
+    }
+
+    def popen_factory(*args, **kwargs):
+        proc = FakePopen(*args, **kwargs)
+        proc.set_stdout_lines([json.dumps(err) + "\n"])
+        return proc
+
+    read_claude_usage(popen=popen_factory, which=lambda _: "/bin/claude")
+    assert FakePopen.instances[0].terminated or FakePopen.instances[0].killed
 
 
 def test_codex_free_plan_monthly_fallback():
@@ -236,7 +314,25 @@ def test_read_codex_usage_json_rpc_flow():
 
     limits = read_codex_usage(popen=popen_factory, which=lambda _: "/bin/codex")
     assert limits["windows"][0]["used_percent"] == 12
-    assert "app-server" in FakePopen.instances[0].argv
+    proc = FakePopen.instances[0]
+    assert "app-server" in proc.argv
+    written = proc.stdin_text()
+    assert written.index("initialize") < written.index("initialized")
+    assert written.index("initialized") < written.index("rateLimits/read")
+
+
+def test_read_codex_usage_init_error_probe_failed():
+    FakePopen.instances.clear()
+    init_err = {"id": 1, "error": {"code": -32603, "message": "fail"}}
+
+    def popen_factory(*args, **kwargs):
+        proc = FakePopen(*args, **kwargs)
+        proc.set_stdout_lines([json.dumps(init_err) + "\n"])
+        return proc
+
+    limits = read_codex_usage(popen=popen_factory, which=lambda _: "/bin/codex")
+    assert limits["unavailable"]["reason"] == "probe_failed"
+    assert FakePopen.instances[0].terminated or FakePopen.instances[0].killed
 
 
 def test_grok_zero_percent_with_valid_period():
@@ -267,10 +363,10 @@ def test_grok_invalid_period_empty_windows():
 
 def test_read_grok_credential_skips_api_key_and_overrides(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("XAI_API_KEY", "secret")
-    assert read_grok_credential({"XAI_API_KEY": "secret"}) is None
+    assert read_grok_credential({"XAI_API_KEY": "secret"}, system_config_paths=[]) is None
     monkeypatch.delenv("XAI_API_KEY", raising=False)
-    monkeypatch.setenv("GROK_MODELS_BASE_URL", "https://custom.example")
-    assert read_grok_credential(os.environ) is None
+    env = {"GROK_MODELS_BASE_URL": "https://custom.example", "GROK_HOME": str(tmp_path)}
+    assert read_grok_credential(env, home=tmp_path, system_config_paths=[]) is None
 
 
 def test_read_grok_usage_api_key_auth_unsupported(tmp_path: Path):
@@ -278,23 +374,36 @@ def test_read_grok_usage_api_key_auth_unsupported(tmp_path: Path):
         "https://accounts.x.ai/sign-in": {"key": "k", "auth_mode": "api_key"},
     }
     env = {"GROK_HOME": str(tmp_path), "GROK_AUTH": json.dumps(auth)}
-    limits = read_grok_usage(env=env, transport=lambda *a, **k: (200, "{}", ""))
+    limits = read_grok_usage(
+        env=env,
+        home=tmp_path,
+        system_config_paths=[],
+        transport=lambda *a, **k: (_ for _ in ()).throw(AssertionError("no transport")),
+    )
     assert limits["unavailable"]["reason"] == "unsupported"
 
 
-def test_read_grok_usage_http_401_redacts_token(tmp_path: Path):
+def test_read_grok_usage_http_401_fixed_message(tmp_path: Path):
     token = "super-secret-session-token"
     auth = {"https://accounts.x.ai/sign-in": {"key": token}}
-    env = {"GROK_AUTH": json.dumps(auth)}
+    env = {"GROK_HOME": str(tmp_path), "GROK_AUTH": json.dumps(auth)}
+    calls = []
 
     def transport(method, url, headers=None, timeout=10):
-        assert headers["Authorization"] == f"Bearer {token}"
-        return 401, "unauthorized", "denied"
+        calls.append((method, url, headers))
+        return 401, "unauthorized body with " + token, "denied"
 
-    limits = read_grok_usage(env=env, transport=transport)
+    limits = read_grok_usage(
+        env=env,
+        home=tmp_path,
+        system_config_paths=[],
+        transport=transport,
+    )
+    assert calls[0][0] == "GET"
+    assert calls[0][1] == GROK_BILLING_URL
+    assert calls[0][2]["Authorization"] == f"Bearer {token}"
     assert limits["unavailable"]["reason"] == "probe_failed"
-    message = limits["unavailable"].get("message", "")
-    assert token not in message
+    assert limits["unavailable"]["message"] == GROK_PROBE_FAILED_MESSAGE
 
 
 def test_read_provider_usage_ollama_unsupported():
