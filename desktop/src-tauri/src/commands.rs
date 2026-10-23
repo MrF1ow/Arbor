@@ -86,7 +86,7 @@ fn worker_env_pairs(app: &tauri::AppHandle, sub_args: &[&str]) -> Vec<(String, S
     secrets::worker_env_for_sub_args(sub_args, &store, &settings)
 }
 
-fn run_worker_json_app(
+pub(crate) fn run_worker_json_app(
     app: &tauri::AppHandle,
     sub_args: &[&str],
 ) -> Result<serde_json::Value, String> {
