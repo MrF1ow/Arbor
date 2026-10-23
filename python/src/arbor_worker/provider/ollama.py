@@ -3,7 +3,10 @@ from __future__ import annotations
 import base64
 import json
 import os
+from collections.abc import Iterator
+
 from arbor_worker.provider.base import (
+    DeltaFn,
     Model,
     ProviderError,
     ProviderRequest,
@@ -16,6 +19,7 @@ from arbor_worker.provider.http_transport import (
     parse_json_body,
     strip_trailing_slash,
     urllib_http_request,
+    urllib_http_stream,
 )
 
 OLLAMA_DOCS_URL = "https://github.com/ollama/ollama/blob/main/docs/api.md"
@@ -34,11 +38,15 @@ class OllamaProvider:
         models: list[Model],
         *,
         transport=None,
+        stream_transport=None,
         base_url: str | None = None,
         api_key: str | None = None,
     ):
         self._models = models
         self._transport = transport if transport is not None else urllib_http_request
+        self._stream_transport = (
+            stream_transport if stream_transport is not None else urllib_http_stream
+        )
         self._base = strip_trailing_slash(
             base_url or os.environ.get(ENV_OLLAMA_BASE_URL) or DEFAULT_OLLAMA_BASE
         )
@@ -90,7 +98,7 @@ class OllamaProvider:
                 out.append(Model(id=name, label=name))
         return out if out else list(self._models)
 
-    def _build_chat_body(self, request: ProviderRequest) -> dict:
+    def _build_chat_body(self, request: ProviderRequest, *, stream: bool = False) -> dict:
         messages: list[dict] = []
         if request.system is not None:
             messages.append({"role": "system", "content": request.system})
@@ -103,7 +111,33 @@ class OllamaProvider:
                 images.append(base64.standard_b64encode(path.read_bytes()).decode("ascii"))
             user_msg["images"] = images
         messages.append(user_msg)
-        return {"model": request.model_id, "messages": messages, "stream": False}
+        return {"model": request.model_id, "messages": messages, "stream": stream}
+
+    def stream(self, request: ProviderRequest, on_delta: DeltaFn) -> ProviderResult:
+        url = f"{self._base}/api/chat"
+        body_bytes = json.dumps(self._build_chat_body(request, stream=True)).encode("utf-8")
+        headers = {"Content-Type": "application/json"}
+        try:
+            status, line_iter = self._stream_transport(
+                "POST", url, headers, body_bytes, _RUN_TIMEOUT
+            )
+        except ConnectionRefusedError:
+            raise ProviderError(f"Ollama is not running at {self._base}")
+        except TimeoutError:
+            raise ProviderError("Ollama request timed out")
+        except OSError as exc:
+            if is_connection_refused(exc):
+                raise ProviderError(f"Ollama is not running at {self._base}")
+            raise ProviderError(str(exc) or "Ollama request failed")
+        except Exception as exc:
+            if is_connection_refused(exc):
+                raise ProviderError(f"Ollama is not running at {self._base}")
+            raise
+        if status >= 400:
+            err_body = b"".join(line_iter)
+            raise ProviderError(error_excerpt(status, err_body, None))
+        text = _iter_ollama_ndjson(line_iter, on_delta)
+        return ProviderResult(markdown=text)
 
     def run(self, request: ProviderRequest) -> ProviderResult:
         url = f"{self._base}/api/chat"
@@ -135,3 +169,32 @@ class OllamaProvider:
         if not isinstance(content, str):
             raise ProviderError("Ollama response did not include assistant text")
         return ProviderResult(markdown=content)
+
+
+def _iter_ollama_ndjson(lines: Iterator[bytes], on_delta: DeltaFn) -> str:
+    parts: list[str] = []
+    for raw in lines:
+        line = raw.decode("utf-8", errors="replace").strip()
+        if not line:
+            continue
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise ProviderError("Ollama stream returned malformed JSON") from exc
+        if not isinstance(payload, dict):
+            continue
+        err = payload.get("error")
+        if err:
+            raise ProviderError(str(err))
+        message = payload.get("message")
+        if isinstance(message, dict):
+            content = message.get("content")
+            if isinstance(content, str) and content:
+                on_delta(content)
+                parts.append(content)
+        if payload.get("done"):
+            break
+    joined = "".join(parts)
+    if not joined.strip():
+        raise ProviderError("Ollama response did not include assistant text")
+    return joined

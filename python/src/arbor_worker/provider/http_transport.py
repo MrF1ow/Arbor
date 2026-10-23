@@ -5,6 +5,7 @@ import json
 import os
 import urllib.error
 import urllib.request
+from collections.abc import Iterator
 from typing import Callable, Protocol
 from urllib.parse import urlparse
 
@@ -13,6 +14,9 @@ from arbor_worker.provider.base import ProviderError
 _BLOCKED_HOSTS = frozenset({"api.openai.com", "api.anthropic.com"})
 
 HttpRequestFn = Callable[[str, str, dict[str, str], bytes | None, float], tuple[int, bytes]]
+HttpStreamFn = Callable[
+    [str, str, dict[str, str], bytes | None, float], tuple[int, Iterator[bytes]]
+]
 
 
 class HttpTransport(Protocol):
@@ -64,6 +68,48 @@ def _http_opener() -> urllib.request.OpenerDirector:
     return urllib.request.build_opener(_NoRedirectHTTPRedirectHandler())
 
 
+def urllib_http_stream(
+    method: str,
+    url: str,
+    headers: dict[str, str],
+    body: bytes | None,
+    timeout: float,
+) -> tuple[int, Iterator[bytes]]:
+    _check_remote_allowed(url)
+    req = urllib.request.Request(url, data=body, headers=headers, method=method.upper())
+    opener = _http_opener()
+    try:
+        resp = opener.open(req, timeout=timeout)
+    except urllib.error.HTTPError as exc:
+        try:
+            err_body = exc.read()
+        finally:
+            exc.close()
+
+        def err_iter() -> Iterator[bytes]:
+            yield err_body
+
+        return exc.code, err_iter()
+    except urllib.error.URLError as exc:
+        if is_connection_refused(exc):
+            raise ConnectionRefusedError(errno.ECONNREFUSED, "Connection refused") from exc
+        raise
+
+    status = resp.status
+
+    def body_iter() -> Iterator[bytes]:
+        try:
+            while True:
+                chunk = resp.readline()
+                if not chunk:
+                    break
+                yield chunk
+        finally:
+            resp.close()
+
+    return status, body_iter()
+
+
 def urllib_http_request(
     method: str,
     url: str,
@@ -78,7 +124,11 @@ def urllib_http_request(
         with opener.open(req, timeout=timeout) as resp:
             return resp.status, resp.read()
     except urllib.error.HTTPError as exc:
-        return exc.code, exc.read()
+        try:
+            body = exc.read()
+        finally:
+            exc.close()
+        return exc.code, body
     except urllib.error.URLError as exc:
         if is_connection_refused(exc):
             raise ConnectionRefusedError(errno.ECONNREFUSED, "Connection refused") from exc

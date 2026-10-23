@@ -1,25 +1,70 @@
-import { useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
+import { renderAnswerHtml } from "~/domain/chat";
 import {
   chatLiveKey,
   getChatLiveText,
   subscribeChatLive,
 } from "~/stores/chat-live-store";
 
-export function LiveAnswer({ root, course }: { root: string; course: string }) {
+export function LiveAnswer({
+  root,
+  course,
+  onContentChange,
+}: {
+  root: string;
+  course: string;
+  onContentChange?: () => void;
+}) {
   const key = chatLiveKey(root, course);
-  const text = useSyncExternalStore(subscribeChatLive, () => getChatLiveText(key));
+  const textFromStore = useSyncExternalStore(subscribeChatLive, () => getChatLiveText(key));
+  const [displayText, setDisplayText] = useState(textFromStore);
+  const rafRef = useRef<number | null>(null);
 
-  if (!text) {
+  if (textFromStore === "" || !textFromStore.startsWith(displayText)) {
+    if (displayText !== textFromStore) {
+      setDisplayText(textFromStore);
+    }
+  }
+
+  useEffect(() => {
+    if (rafRef.current != null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+  }, [key]);
+
+  useEffect(() => {
+    if (textFromStore === displayText) {
+      return;
+    }
+    if (textFromStore === "" || !textFromStore.startsWith(displayText)) {
+      return;
+    }
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null;
+      setDisplayText(textFromStore);
+    });
+    return () => {
+      if (rafRef.current != null) {
+        cancelAnimationFrame(rafRef.current);
+      }
+    };
+  }, [textFromStore, displayText]);
+
+  useEffect(() => {
+    onContentChange?.();
+  }, [displayText, onContentChange]);
+
+  if (!textFromStore) {
     return null;
   }
 
   return (
-    <div className="mb-4 text-sm text-foreground" data-testid="chat-live-answer">
-      <span>{text}</span>
-      <span
-        className="ml-0.5 inline-block h-3.5 w-0.5 animate-pulse bg-muted-foreground align-middle"
-        aria-hidden
+    <div className="mb-4 flex w-full flex-col gap-2" data-testid="chat-live-answer">
+      <div
+        className="prose-arbor live-caret mx-0 w-full max-w-none text-sm"
+        dangerouslySetInnerHTML={{ __html: renderAnswerHtml(displayText) }}
       />
     </div>
   );

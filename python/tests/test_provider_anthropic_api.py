@@ -7,6 +7,7 @@ import pytest
 from arbor_worker.provider.anthropic_api import (
     ANTHROPIC_SESSION_GUARD,
     AnthropicApiProvider,
+    _iter_anthropic_sse,
 )
 from arbor_worker.provider.base import Model, ProviderError, ProviderRequest
 from arbor_worker.provider.http_transport import urllib_http_request
@@ -201,3 +202,16 @@ def test_no_system_omitted(tmp_path: Path):
     prov.run(ProviderRequest(prompt="p", model_id="m", cwd=tmp_path, system=None))
     body = json.loads(transport.calls[0]["body"])
     assert "system" not in body
+
+
+def test_iter_anthropic_sse_error_redacts_api_key():
+    lines = iter(
+        [
+            b"event: error\n",
+            f'data: {{"type":"error","error":{{"message":"bad {TEST_KEY}"}}}}\n'.encode(),
+        ]
+    )
+    with pytest.raises(ProviderError) as exc:
+        _iter_anthropic_sse(lines, lambda _t: None, api_key=TEST_KEY)
+    assert TEST_KEY not in str(exc.value)
+    assert "[redacted]" in str(exc.value)

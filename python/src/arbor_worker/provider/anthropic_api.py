@@ -4,7 +4,10 @@ import base64
 import json
 import os
 
+from collections.abc import Iterator
+
 from arbor_worker.provider.base import (
+    DeltaFn,
     Model,
     ProviderError,
     ProviderRequest,
@@ -16,8 +19,10 @@ from arbor_worker.provider.http_transport import (
     error_excerpt,
     is_connection_refused,
     parse_json_body,
+    redact_secret,
     strip_trailing_slash,
     urllib_http_request,
+    urllib_http_stream,
 )
 
 ANTHROPIC_API_DOCS_URL = "https://docs.anthropic.com/en/api/messages"
@@ -44,11 +49,15 @@ class AnthropicApiProvider:
         models: list[Model],
         *,
         transport=None,
+        stream_transport=None,
         base_url: str | None = None,
         api_key: str | None = None,
     ):
         self._models = models if models else list(DEFAULT_ANTHROPIC_API_MODELS)
         self._transport = transport if transport is not None else urllib_http_request
+        self._stream_transport = (
+            stream_transport if stream_transport is not None else urllib_http_stream
+        )
         self._base = strip_trailing_slash(
             base_url or os.environ.get(ENV_ANTHROPIC_BASE_URL) or DEFAULT_ANTHROPIC_BASE
         )
@@ -81,7 +90,7 @@ class AnthropicApiProvider:
     def list_models(self) -> list[Model]:
         return list(self._models)
 
-    def _build_body(self, request: ProviderRequest) -> dict:
+    def _build_body(self, request: ProviderRequest, *, stream: bool = False) -> dict:
         if request.image_paths:
             content: list[dict] = [{"type": "text", "text": request.prompt}]
             for path in request.image_paths:
@@ -108,7 +117,47 @@ class AnthropicApiProvider:
         }
         if request.system is not None:
             body["system"] = request.system
+        if stream:
+            body["stream"] = True
         return body
+
+    def _stream_http(self, request: ProviderRequest, on_delta: DeltaFn) -> ProviderResult:
+        if self._guard_active():
+            raise ProviderError(ANTHROPIC_SESSION_GUARD)
+        key = self._resolved_key()
+        if not key:
+            raise ProviderError("key missing")
+        url = f"{self._base}/v1/messages"
+        body_bytes = json.dumps(self._build_body(request, stream=True)).encode("utf-8")
+        headers = {
+            "x-api-key": key,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+        }
+        try:
+            status, line_iter = self._stream_transport(
+                "POST", url, headers, body_bytes, _RUN_TIMEOUT
+            )
+        except ProviderError:
+            raise
+        except ConnectionRefusedError:
+            raise ProviderError(f"Could not reach Anthropic API at {self._base}")
+        except TimeoutError:
+            raise ProviderError("Anthropic API request timed out")
+        except OSError as exc:
+            if is_connection_refused(exc):
+                raise ProviderError(f"Could not reach Anthropic API at {self._base}")
+            raise
+        if status in (401, 403):
+            raise ProviderError(f"Anthropic API key was rejected (HTTP {status})")
+        if status >= 400:
+            err_body = b"".join(line_iter)
+            raise ProviderError(error_excerpt(status, err_body, key))
+        text = _iter_anthropic_sse(line_iter, on_delta, api_key=key)
+        return ProviderResult(markdown=text)
+
+    def stream(self, request: ProviderRequest, on_delta: DeltaFn) -> ProviderResult:
+        return self._stream_http(request, on_delta)
 
     def run(self, request: ProviderRequest) -> ProviderResult:
         if self._guard_active():
@@ -155,3 +204,45 @@ class AnthropicApiProvider:
         if not joined:
             raise ProviderError("Anthropic API response did not include assistant text")
         return ProviderResult(markdown=joined)
+
+
+def _iter_anthropic_sse(
+    lines: Iterator[bytes], on_delta: DeltaFn, *, api_key: str | None = None
+) -> str:
+    event_type: str | None = None
+    parts: list[str] = []
+    for raw in lines:
+        line = raw.decode("utf-8", errors="replace").strip()
+        if not line:
+            continue
+        if line.startswith("event: "):
+            event_type = line[7:].strip()
+            continue
+        if not line.startswith("data: "):
+            continue
+        try:
+            data = json.loads(line[6:])
+        except json.JSONDecodeError as exc:
+            raise ProviderError("Anthropic API stream returned invalid JSON") from exc
+        if event_type == "error":
+            message = "Anthropic API stream error"
+            if isinstance(data, dict):
+                err = data.get("error")
+                if isinstance(err, dict) and isinstance(err.get("message"), str):
+                    message = err["message"]
+                elif isinstance(data.get("message"), str):
+                    message = data["message"]
+            raise ProviderError(redact_secret(message, api_key))
+        if event_type != "content_block_delta" or not isinstance(data, dict):
+            continue
+        delta = data.get("delta")
+        if not isinstance(delta, dict) or delta.get("type") != "text_delta":
+            continue
+        text = delta.get("text")
+        if isinstance(text, str) and text:
+            on_delta(text)
+            parts.append(text)
+    joined = "".join(parts)
+    if not joined.strip():
+        raise ProviderError("Anthropic API response did not include assistant text")
+    return joined
