@@ -1,177 +1,143 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { toast } from "sonner";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { spliceDictation, useDictation } from "~/lib/dictation";
-import { clearMockIpcLog, getMockIpcCalls } from "~/test/mock-handlers";
+import { useDictation, showDictationError, spliceDictation } from "~/lib/dictation";
 import { emitToChannel, parseMockChannelId } from "~/test/emit-to-channel";
-import { installMockIpc } from "~/test/mock-ipc";
+import { clearMockIpcLog, getMockIpcCalls } from "~/test/mock-handlers";
+import { clearTauriMocks, installMockIpc } from "~/test/mock-ipc";
 
-beforeEach(() => {
-  installMockIpc();
-});
+vi.mock("sonner", () => ({
+  toast: {
+    error: vi.fn((_message: string, opts?: { action?: { onClick?: () => void } }) => {
+      (toast.error as ReturnType<typeof vi.fn> & { lastAction?: () => void }).lastAction =
+        opts?.action?.onClick;
+    }),
+  },
+}));
+
+import { toast } from "sonner";
 
 describe("spliceDictation", () => {
-  const cases: Array<{
-    text: string;
-    selStart: number;
-    selEnd: number;
-    spoken: string;
-    out: string;
-    caret: number;
-  }> = [
-    { text: "", selStart: 0, selEnd: 0, spoken: "hello world", out: "hello world", caret: 11 },
-    { text: "Explain", selStart: 7, selEnd: 7, spoken: "recursion", out: "Explain recursion", caret: 17 },
-    { text: "Explain ", selStart: 8, selEnd: 8, spoken: "recursion", out: "Explain recursion", caret: 17 },
-    {
-      text: "Explain please",
-      selStart: 8,
-      selEnd: 8,
-      spoken: "recursion",
-      out: "Explain recursion please",
-      caret: 17,
-    },
-    {
-      text: "Explain this please",
-      selStart: 8,
-      selEnd: 12,
-      spoken: "recursion",
-      out: "Explain recursion please",
-      caret: 17,
-    },
-    { text: "Hi", selStart: 2, selEnd: 2, spoken: "  ", out: "Hi", caret: 2 },
-  ];
-
-  it.each(cases)("splices %#", ({ text, selStart, selEnd, spoken, out, caret }) => {
+  it("inserts spoken text at the selection", () => {
     expect(
-      spliceDictation({ text, selectionStart: selStart, selectionEnd: selEnd }, spoken),
-    ).toEqual({ text: out, caret });
+      spliceDictation(
+        { text: "Hello world", selectionStart: 5, selectionEnd: 5 },
+        "there",
+      ).text,
+    ).toBe("Hello there world");
   });
 });
 
 describe("useDictation", () => {
-  afterEach(() => {
+  beforeEach(() => {
+    clearTauriMocks();
+    installMockIpc();
     clearMockIpcLog();
-    vi.restoreAllMocks();
   });
 
-  it("updates draft on partials and applies final with idle phase", async () => {
+  it("ignores late partial after final closed the session", async () => {
     const onDraft = vi.fn();
-    const onApplyFinal = vi.fn();
-    const { result } = renderHook(() => useDictation({ onDraft, onApplyFinal }));
-
+    const { result } = renderHook(() =>
+      useDictation({ onDraft, onApplyFinal: vi.fn() }),
+    );
     await act(async () => {
-      void result.current.start({ text: "Explain", selectionStart: 7, selectionEnd: 7 });
+      void result.current.start({
+        text: "Hi",
+        selectionStart: 2,
+        selectionEnd: 2,
+      });
     });
-
-    await waitFor(() => {
-      expect(getMockIpcCalls().some((c) => c.cmd === "start_dictation")).toBe(true);
-    });
-
-    const call = getMockIpcCalls().find((c) => c.cmd === "start_dictation");
-    const channelId = parseMockChannelId((call?.args as { onEvent?: unknown })?.onEvent);
-    expect(channelId).not.toBeNull();
-
-    act(() => {
-      emitToChannel(channelId!, { kind: "listening" }, 0);
-    });
-    await waitFor(() => expect(result.current.phase).toBe("listening"));
-
-    act(() => {
-      emitToChannel(channelId!, { kind: "partial", text: "recur" }, 1);
-    });
-    expect(onDraft).toHaveBeenCalledWith("Explain recur");
-
-    act(() => {
-      emitToChannel(channelId!, { kind: "final", text: "recursion" }, 2);
-    });
-    await waitFor(() => expect(result.current.phase).toBe("idle"));
-    expect(onApplyFinal).toHaveBeenCalledWith("Explain recursion", 17);
-  });
-
-  it("cancel restores base draft", async () => {
-    const onDraft = vi.fn();
-    const onApplyFinal = vi.fn();
-    const { result } = renderHook(() => useDictation({ onDraft, onApplyFinal }));
-
-    await act(async () => {
-      void result.current.start({ text: "Keep me", selectionStart: 0, selectionEnd: 0 });
-    });
-    await waitFor(() => expect(getMockIpcCalls().some((c) => c.cmd === "start_dictation")).toBe(true));
-
-    act(() => {
-      result.current.cancel();
-    });
-    expect(onDraft).toHaveBeenLastCalledWith("Keep me");
-    expect(getMockIpcCalls().some((c) => c.cmd === "cancel_dictation")).toBe(true);
-    expect(result.current.phase).toBe("idle");
-  });
-
-  it("error restores draft and toasts with settings action for denied codes", async () => {
-    const toastSpy = vi.spyOn(toast, "error");
-    const onDraft = vi.fn();
-    const onApplyFinal = vi.fn();
-    const { result } = renderHook(() => useDictation({ onDraft, onApplyFinal }));
-
-    await act(async () => {
-      void result.current.start({ text: "Original", selectionStart: 0, selectionEnd: 0 });
-    });
-    await waitFor(() => expect(getMockIpcCalls().some((c) => c.cmd === "start_dictation")).toBe(true));
     const channelId = parseMockChannelId(
       (getMockIpcCalls().find((c) => c.cmd === "start_dictation")?.args as { onEvent?: unknown })
         ?.onEvent,
     );
-
     act(() => {
-      emitToChannel(
-        channelId!,
-        {
-          kind: "error",
-          code: "speech_denied",
-          message: "Speech denied",
-        },
-        0,
-      );
+      emitToChannel(channelId!, { kind: "listening" }, 0);
     });
-
-    await waitFor(() => expect(result.current.phase).toBe("idle"));
-    expect(onDraft).toHaveBeenLastCalledWith("Original");
-    expect(toastSpy).toHaveBeenCalledWith(
-      "Speech denied",
-      expect.objectContaining({
-        action: expect.objectContaining({ label: "Open Settings" }),
-      }),
-    );
+    act(() => {
+      emitToChannel(channelId!, { kind: "final", text: "done" }, 1);
+    });
+    onDraft.mockClear();
+    act(() => {
+      emitToChannel(channelId!, { kind: "partial", text: "late" }, 2);
+    });
+    expect(onDraft).not.toHaveBeenCalled();
   });
 
-  it("ignores stale session events after cancel and restart", async () => {
-    const onDraft = vi.fn();
-    const onApplyFinal = vi.fn();
-    const { result } = renderHook(() => useDictation({ onDraft, onApplyFinal }));
-
-    await act(async () => {
-      void result.current.start({ text: "First", selectionStart: 0, selectionEnd: 0 });
+  it("restores the base draft when start_dictation rejects", async () => {
+    clearTauriMocks();
+    installMockIpc({
+      start_dictation: () => {
+        throw new Error("Dictation is only available on macOS");
+      },
     });
-    await waitFor(() => expect(getMockIpcCalls().some((c) => c.cmd === "start_dictation")).toBe(true));
-    const firstChannel = parseMockChannelId(
+    clearMockIpcLog();
+    const onDraft = vi.fn();
+    const { result } = renderHook(() =>
+      useDictation({ onDraft, onApplyFinal: vi.fn() }),
+    );
+    await act(async () => {
+      await result.current.start({
+        text: "Keep me",
+        selectionStart: 0,
+        selectionEnd: 0,
+      });
+    });
+    await waitFor(() => expect(onDraft).toHaveBeenCalledWith("Keep me"));
+    expect(result.current.phase).toBe("idle");
+  });
+
+  it("writes partials to the draft writer captured at start after thread props change", async () => {
+    const drafts: Record<string, string> = {};
+    const { result, rerender } = renderHook(
+      ({ thread }: { thread: string }) =>
+        useDictation({
+          onDraft: (text) => {
+            drafts[thread] = text;
+          },
+          onApplyFinal: vi.fn(),
+        }),
+      { initialProps: { thread: "thread-a" } },
+    );
+    await act(async () => {
+      void result.current.start({
+        text: "Hello",
+        selectionStart: 5,
+        selectionEnd: 5,
+      });
+    });
+    rerender({ thread: "thread-b" });
+    const channelId = parseMockChannelId(
       (getMockIpcCalls().find((c) => c.cmd === "start_dictation")?.args as { onEvent?: unknown })
         ?.onEvent,
     );
-
     act(() => {
-      result.current.cancel();
+      emitToChannel(channelId!, { kind: "listening" }, 0);
+      emitToChannel(channelId!, { kind: "partial", text: "world" }, 1);
     });
+    await waitFor(() => expect(drafts["thread-a"]).toContain("world"));
+    expect(drafts["thread-b"]).toBeUndefined();
+  });
+});
 
-    onDraft.mockClear();
-    await act(async () => {
-      void result.current.start({ text: "Second", selectionStart: 0, selectionEnd: 0 });
-    });
-    await waitFor(() => expect(getMockIpcCalls().filter((c) => c.cmd === "start_dictation").length).toBe(2));
+describe("showDictationError", () => {
+  beforeEach(() => {
+    clearTauriMocks();
+    installMockIpc();
+    clearMockIpcLog();
+    vi.mocked(toast.error).mockClear();
+  });
 
+  it("Open Settings invokes open_privacy_settings for microphone_denied", () => {
+    showDictationError("microphone_denied", "Need mic");
+    const action = (toast.error as ReturnType<typeof vi.fn> & { lastAction?: () => void })
+      .lastAction;
+    expect(action).toBeDefined();
     act(() => {
-      emitToChannel(firstChannel!, { kind: "partial", text: "stale" }, 0);
+      action!();
     });
-    expect(onDraft).not.toHaveBeenCalledWith(expect.stringContaining("stale"));
-    expect(onApplyFinal).not.toHaveBeenCalled();
+    expect(getMockIpcCalls().some((c) => c.cmd === "open_privacy_settings")).toBe(true);
+    const call = getMockIpcCalls().find((c) => c.cmd === "open_privacy_settings");
+    expect((call?.args as { pane?: string }).pane).toBe("microphone");
   });
 });

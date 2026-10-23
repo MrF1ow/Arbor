@@ -50,6 +50,33 @@ pub fn emit_dictation_event(channel: &Channel<DictationEvent>, event: DictationE
     let _ = channel.send(event);
 }
 
+/// Maps Speech task errors to a terminal event (final transcript vs hard failure).
+pub fn terminal_for_task_error(
+    stopping: bool,
+    last_partial: &str,
+    detail: Option<&str>,
+) -> DictationEvent {
+    if stopping || !last_partial.is_empty() {
+        DictationEvent::Final {
+            text: last_partial.to_string(),
+        }
+    } else {
+        error_event("failed", failed_message(detail))
+    }
+}
+
+pub fn privacy_settings_url(pane: &str) -> Result<&'static str, String> {
+    match pane {
+        "microphone" => Ok(
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone",
+        ),
+        "speech" => Ok(
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition",
+        ),
+        _ => Err(format!("Unknown privacy pane: {pane}")),
+    }
+}
+
 #[cfg(not(target_os = "macos"))]
 pub fn open_privacy_settings_impl(_pane: &str) -> Result<(), String> {
     Err(dictation_unavailable_message())
@@ -59,15 +86,7 @@ pub fn open_privacy_settings_impl(_pane: &str) -> Result<(), String> {
 pub fn open_privacy_settings_impl(pane: &str) -> Result<(), String> {
     use std::process::Command;
 
-    let url = match pane {
-        "microphone" => {
-            "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
-        }
-        "speech" => {
-            "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition"
-        }
-        _ => return Err(format!("Unknown privacy pane: {pane}")),
-    };
+    let url = privacy_settings_url(pane)?;
     Command::new("open")
         .arg(url)
         .spawn()
@@ -91,7 +110,15 @@ pub async fn start_dictation(
     #[cfg(target_os = "macos")]
     {
         let session_id = NEXT_SESSION_ID.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        macos::kickoff_session(app, on_event, session_id);
+        tauri::async_runtime::spawn_blocking(move || {
+            let app_main = app.clone();
+            app.run_on_main_thread(move || {
+                macos::kickoff_session(app_main, on_event, session_id);
+            })
+            .map_err(|e| e.to_string())
+        })
+        .await
+        .map_err(|e| e.to_string())??;
         Ok(())
     }
 }
@@ -107,8 +134,9 @@ pub async fn stop_dictation(app: tauri::AppHandle) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
         tauri::async_runtime::spawn_blocking(move || {
+            let app_main = app.clone();
             app.run_on_main_thread(move || {
-                macos::stop_active_session(app);
+                macos::stop_active_session(app_main);
             })
             .map_err(|e| e.to_string())
         })
@@ -210,26 +238,52 @@ mod tests {
     }
 
     #[test]
-    fn open_privacy_settings_pane_validation() {
+    fn privacy_settings_url_mapping() {
+        assert_eq!(
+            privacy_settings_url("microphone").unwrap(),
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
+        );
+        assert_eq!(
+            privacy_settings_url("speech").unwrap(),
+            "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition"
+        );
+        assert_eq!(
+            privacy_settings_url("camera").unwrap_err(),
+            "Unknown privacy pane: camera"
+        );
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn open_privacy_settings_unavailable_off_macos() {
         assert_eq!(
             open_privacy_settings_impl("microphone").unwrap_err(),
-            dictation_unavailable_message()
-        );
-        assert_eq!(
-            open_privacy_settings_impl("speech").unwrap_err(),
-            dictation_unavailable_message()
-        );
-        assert_eq!(
-            open_privacy_settings_impl("camera").unwrap_err(),
             dictation_unavailable_message()
         );
     }
 
     #[test]
-    fn non_mac_start_dictation_message() {
+    fn terminal_for_task_error_cases() {
         assert_eq!(
-            dictation_unavailable_message(),
-            "Dictation is only available on macOS"
+            terminal_for_task_error(false, "", Some("x")),
+            DictationEvent::Error {
+                code: "failed".into(),
+                message: "Dictation stopped unexpectedly. (x)".into(),
+            }
+        );
+        assert_eq!(
+            terminal_for_task_error(false, "hello", Some("x")),
+            DictationEvent::Final {
+                text: "hello".into(),
+            }
+        );
+        assert_eq!(
+            terminal_for_task_error(true, "", Some("x")),
+            DictationEvent::Final { text: "".into() }
+        );
+        assert_eq!(
+            terminal_for_task_error(true, "hi", None),
+            DictationEvent::Final { text: "hi".into() }
         );
     }
 }

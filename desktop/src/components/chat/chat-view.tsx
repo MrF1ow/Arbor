@@ -173,6 +173,8 @@ export function ChatView({
     onDraft: onDictationDraft,
     onApplyFinal: onDictationApplyFinal,
   });
+  const dictationRef = useRef(dictation);
+  dictationRef.current = dictation;
   const stickToBottomRef = useRef(true);
   const forceScrollRef = useRef(false);
   const sendingRef = useRef(false);
@@ -238,13 +240,17 @@ export function ChatView({
 
   useEffect(() => {
     return () => {
-      dictation.cancel();
+      if (dictationRef.current.dictationActive) {
+        dictationRef.current.cancel();
+      }
     };
-  }, [dictation.cancel]);
+  }, []);
 
   useEffect(() => {
-    dictation.cancel();
-  }, [course, threadId, dictation.cancel]);
+    if (dictationRef.current.dictationActive) {
+      dictationRef.current.cancel();
+    }
+  }, [course, threadId]);
 
   const scrollTranscriptIfSticky = () => {
     if (!stickToBottomRef.current) {

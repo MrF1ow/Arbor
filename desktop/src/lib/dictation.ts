@@ -62,7 +62,7 @@ function parseDictationEvent(raw: unknown): DictationEvent | null {
   return null;
 }
 
-function showDictationError(code: string, message: string) {
+export function showDictationError(code: string, message: string) {
   if (code === "microphone_denied" || code === "speech_denied") {
     const pane = code === "microphone_denied" ? "microphone" : "speech";
     toast.error(message, {
@@ -89,6 +89,7 @@ export function useDictation({ onDraft, onApplyFinal }: UseDictationOpts) {
   const [elapsedTick, setElapsedTick] = useState(0);
   const baseRef = useRef<DictationBase | null>(null);
   const sessionRef = useRef(0);
+  const sessionDraftWriterRef = useRef(onDraft);
 
   useEffect(() => {
     if (phase !== "listening" || listeningStartedAt == null) {
@@ -106,6 +107,9 @@ export function useDictation({ onDraft, onApplyFinal }: UseDictationOpts) {
       : null;
 
   const cancel = useCallback(() => {
+    if (phase === "idle" && baseRef.current === null) {
+      return;
+    }
     sessionRef.current += 1;
     const base = baseRef.current;
     baseRef.current = null;
@@ -113,15 +117,18 @@ export function useDictation({ onDraft, onApplyFinal }: UseDictationOpts) {
     setListeningStartedAt(null);
     void invoke("cancel_dictation");
     if (base) {
-      onDraft(base.text);
+      sessionDraftWriterRef.current(base.text);
     }
-  }, [onDraft]);
+  }, [phase]);
 
   const start = useCallback(
     async (base: DictationBase) => {
       const token = sessionRef.current + 1;
       sessionRef.current = token;
       baseRef.current = base;
+      const writeDraft = onDraft;
+      const applyFinal = onApplyFinal;
+      sessionDraftWriterRef.current = writeDraft;
       setPhase("starting");
       setListeningStartedAt(null);
 
@@ -141,24 +148,26 @@ export function useDictation({ onDraft, onApplyFinal }: UseDictationOpts) {
           return;
         }
         if (event.kind === "partial") {
-          onDraft(spliceDictation(base, event.text).text);
+          writeDraft(spliceDictation(base, event.text).text);
           return;
         }
         if (event.kind === "final") {
+          sessionRef.current += 1;
           const { text, caret } = spliceDictation(base, event.text);
           baseRef.current = null;
           setPhase("idle");
           setListeningStartedAt(null);
-          onApplyFinal(text, caret);
+          applyFinal(text, caret);
           return;
         }
         if (event.kind === "error") {
-          const base = baseRef.current;
+          sessionRef.current += 1;
+          const saved = baseRef.current;
           baseRef.current = null;
           setPhase("idle");
           setListeningStartedAt(null);
-          if (base) {
-            onDraft(base.text);
+          if (saved) {
+            writeDraft(saved.text);
           }
           showDictationError(event.code, event.message);
         }
@@ -170,12 +179,13 @@ export function useDictation({ onDraft, onApplyFinal }: UseDictationOpts) {
         if (sessionRef.current !== token) {
           return;
         }
-        const base = baseRef.current;
+        sessionRef.current += 1;
+        const saved = baseRef.current;
         baseRef.current = null;
         setPhase("idle");
         setListeningStartedAt(null);
-        if (base) {
-          onDraft(base.text);
+        if (saved) {
+          writeDraft(saved.text);
         }
         toast.error(error instanceof Error ? error.message : String(error));
       }

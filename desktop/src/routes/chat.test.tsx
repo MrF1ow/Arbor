@@ -1266,6 +1266,35 @@ describe("chat threads", { timeout: 30000 }, () => {
     platformSpy.mockRestore();
   });
 
+  it("does not send on Enter while dictation is listening", async () => {
+    const platformSpy = vi.spyOn(window.navigator, "platform", "get");
+    platformSpy.mockReturnValue("MacIntel");
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/chat");
+    await waitForChatReady();
+    const view = screen.getByTestId("chat-view");
+    const textarea = within(view).getByRole("textbox", { name: "Chat message" });
+    await user.type(textarea, "Question");
+    await user.click(within(view).getByRole("button", { name: "Dictate" }));
+    await waitFor(() =>
+      expect(getMockIpcCalls().some((c) => c.cmd === "start_dictation")).toBe(true),
+    );
+    const channelId = parseMockChannelId(
+      (getMockIpcCalls().find((c) => c.cmd === "start_dictation")?.args as { onEvent?: unknown })
+        ?.onEvent,
+    );
+    act(() => {
+      emitToChannel(channelId!, { kind: "listening" }, 0);
+    });
+    await waitFor(() =>
+      expect(within(view).getByRole("button", { name: "Stop dictation" })).toBeInTheDocument(),
+    );
+    clearMockIpcLog();
+    fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
+    expect(getMockIpcCalls().some((c) => c.cmd === "start_chat")).toBe(false);
+    platformSpy.mockRestore();
+  });
+
   it("auto-sends prompt once under StrictMode into a new thread", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {

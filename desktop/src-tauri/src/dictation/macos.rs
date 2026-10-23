@@ -6,24 +6,24 @@ use std::time::Duration;
 
 use block2::RcBlock;
 use objc2::rc::Retained;
-use objc2::runtime::ProtocolObject;
-use objc2::{Allocated, MainThreadMarker};
+use objc2::runtime::Bool;
+use objc2::{ClassType, MainThreadMarker};
 use objc2_av_foundation::{
     AVCaptureDevice, AVAuthorizationStatus, AVMediaTypeAudio,
 };
-use objc2_avf_audio::{AVAudioEngine, AVAudioNode, AVAudioPCMBuffer, AVAudioTime};
+use objc2_avf_audio::{AVAudioEngine, AVAudioPCMBuffer, AVAudioTime};
 use objc2_foundation::NSError;
 use objc2_speech::{
-    SFSpeechAudioBufferRecognitionRequest, SFSpeechRecognitionRequest,
-    SFSpeechRecognitionResult, SFSpeechRecognitionTask, SFSpeechRecognizer,
-    SFSpeechRecognizerAuthorizationStatus,
+    SFSpeechAudioBufferRecognitionRequest, SFSpeechRecognitionResult,
+    SFSpeechRecognitionTask, SFSpeechRecognizer, SFSpeechRecognizerAuthorizationStatus,
 };
 use tauri::AppHandle;
 use tauri::ipc::Channel;
 
 use super::{
-    emit_dictation_event, error_event, failed_message, DictationEvent, DICTATION_AUTO_STOP_SECS,
-    FINAL_TIMEOUT_SECS,
+    emit_dictation_event, error_event, failed_message, terminal_for_task_error, unavailable_message,
+    DictationEvent, DICTATION_AUTO_STOP_SECS, FINAL_TIMEOUT_SECS, microphone_denied_message,
+    speech_denied_message,
 };
 
 struct LiveObjects {
@@ -37,12 +37,11 @@ struct LiveObjects {
 struct SessionControl {
     id: u64,
     cancelled: AtomicBool,
-    ended: AtomicBool,
+    terminal_sent: AtomicBool,
+    released: AtomicBool,
     stopping: AtomicBool,
     last_partial: Mutex<String>,
     channel: Channel<DictationEvent>,
-    final_timer: Mutex<Option<thread::JoinHandle<()>>>,
-    auto_stop_timer: Mutex<Option<thread::JoinHandle<()>>>,
 }
 
 thread_local! {
@@ -50,35 +49,34 @@ thread_local! {
     static CONTROL: RefCell<Option<Arc<SessionControl>>> = const { RefCell::new(None) };
 }
 
-fn with_control<F, R>(f: F) -> R
-where
-    F: FnOnce(Option<Arc<SessionControl>>) -> R,
-{
-    CONTROL.with(|cell| f(cell.borrow().clone()))
+fn control_is_current(control: &SessionControl) -> bool {
+    CONTROL.with(|cell| {
+        cell.borrow()
+            .as_ref()
+            .is_some_and(|c| c.id == control.id)
+    })
 }
 
-fn clear_live_objects() {
-    LIVE.with(|cell| {
-        if let Some(live) = cell.borrow_mut().take() {
-            let input = unsafe { live.engine.inputNode() };
-            unsafe { input.removeTapOnBus(0) };
-            unsafe { live.engine.stop() };
-            unsafe { live.task.cancel() };
-        }
-    });
+fn session_aborted(control: &SessionControl) -> bool {
+    control.cancelled.load(Ordering::SeqCst)
+        || control.stopping.load(Ordering::SeqCst)
+        || control.terminal_sent.load(Ordering::SeqCst)
 }
 
-fn tear_down_session(control: &SessionControl) {
-    if control.ended.swap(true, Ordering::SeqCst) {
+fn release(control: &SessionControl) {
+    if control.released.swap(true, Ordering::SeqCst) {
         return;
     }
-    if let Some(handle) = control.final_timer.lock().ok().and_mut(|slot| slot.take()) {
-        let _ = handle.join();
+    let live = LIVE.with(|cell| cell.borrow_mut().take());
+    if let Some(live) = live {
+        let input = unsafe { live.engine.inputNode() };
+        let node = input.as_super().as_super();
+        unsafe { node.removeTapOnBus(0) };
+        unsafe { live.engine.stop() };
+        if control.cancelled.load(Ordering::SeqCst) {
+            unsafe { live.task.cancel() };
+        }
     }
-    if let Some(handle) = control.auto_stop_timer.lock().ok().and_mut(|slot| slot.take()) {
-        let _ = handle.join();
-    }
-    clear_live_objects();
     CONTROL.with(|cell| {
         if cell
             .borrow()
@@ -90,41 +88,47 @@ fn tear_down_session(control: &SessionControl) {
     });
 }
 
-fn emit_terminal(control: &SessionControl, event: DictationEvent) {
+fn emit_terminal_on_main(control: &SessionControl, event: DictationEvent) {
     if control.cancelled.load(Ordering::SeqCst) {
-        tear_down_session(control);
+        release(control);
         return;
     }
-    if control.ended.swap(true, Ordering::SeqCst) {
+    if control.terminal_sent.swap(true, Ordering::SeqCst) {
         return;
     }
     emit_dictation_event(&control.channel, event);
-    tear_down_session(control);
+    release(control);
 }
 
 fn schedule_final_timeout(app: AppHandle, control: Arc<SessionControl>) {
-    let handle = thread::spawn(move || {
+    let session_id = control.id;
+    thread::spawn(move || {
         thread::sleep(Duration::from_secs(FINAL_TIMEOUT_SECS));
+        let app_main = app.clone();
+        let control_main = control.clone();
         let _ = app.run_on_main_thread(move || {
-            if control.cancelled.load(Ordering::SeqCst) || control.ended.load(Ordering::SeqCst) {
+            if control_main.id != session_id || !control_is_current(&control_main) {
                 return;
             }
-            let text = control
+            if session_aborted(&control_main) {
+                return;
+            }
+            let text = control_main
                 .last_partial
                 .lock()
                 .map(|v| v.clone())
                 .unwrap_or_default();
-            emit_terminal(&control, DictationEvent::Final { text });
+            emit_terminal_on_main(&control_main, DictationEvent::Final { text });
         });
     });
-    if let Ok(mut slot) = control.final_timer.lock() {
-        *slot = Some(handle);
-    }
 }
 
 fn begin_listening(app: AppHandle, control: Arc<SessionControl>) {
+    if !control_is_current(&control) || session_aborted(&control) {
+        return;
+    }
     let Some(mtm) = MainThreadMarker::new() else {
-        emit_terminal(
+        emit_terminal_on_main(
             &control,
             error_event("failed", failed_message(None)),
         );
@@ -132,34 +136,40 @@ fn begin_listening(app: AppHandle, control: Arc<SessionControl>) {
     };
     let _ = mtm;
 
-    let recognizer = unsafe { SFSpeechRecognizer::new() };
-    let Some(recognizer) = recognizer else {
-        emit_terminal(
+    let alloc = SFSpeechRecognizer::alloc();
+    let Some(recognizer) = (unsafe { SFSpeechRecognizer::init(alloc) }) else {
+        emit_terminal_on_main(
             &control,
-            error_event("unavailable", super::unavailable_message()),
+            error_event("unavailable", unavailable_message()),
         );
         return;
     };
     if !unsafe { recognizer.isAvailable() } {
-        emit_terminal(
+        emit_terminal_on_main(
             &control,
-            error_event("unavailable", super::unavailable_message()),
+            error_event("unavailable", unavailable_message()),
         );
         return;
     }
 
+    if session_aborted(&control) {
+        return;
+    }
+
     let request = unsafe { SFSpeechAudioBufferRecognitionRequest::new() };
+    let request_super = request.as_super();
     unsafe {
-        request.setShouldReportPartialResults(true);
-        request.setAddsPunctuation(true);
+        request_super.setShouldReportPartialResults(true);
+        request_super.setAddsPunctuation(true);
         if recognizer.supportsOnDeviceRecognition() {
-            request.setRequiresOnDeviceRecognition(true);
+            request_super.setRequiresOnDeviceRecognition(true);
         }
     }
 
     let engine = unsafe { AVAudioEngine::new() };
     let input = unsafe { engine.inputNode() };
-    let format = unsafe { input.outputFormatForBus(0) };
+    let node = input.as_super().as_super();
+    let format = unsafe { node.outputFormatForBus(0) };
 
     let request_for_tap = request.clone();
     let tap_block = RcBlock::new(
@@ -169,26 +179,41 @@ fn begin_listening(app: AppHandle, control: Arc<SessionControl>) {
             }
         },
     );
-    let tap_ptr = tap_block.copy();
     unsafe {
-        input.installTapOnBus_bufferSize_format_block(0, 1024, Some(&format), tap_ptr);
+        node.installTapOnBus_bufferSize_format_block(
+            0,
+            4096,
+            Some(&format),
+            RcBlock::as_ptr(&tap_block),
+        );
     }
 
     unsafe { engine.prepare() };
     if let Err(err) = unsafe { engine.startAndReturnError() } {
+        unsafe { node.removeTapOnBus(0) };
         let detail = err.localizedDescription().to_string();
-        emit_terminal(
+        emit_terminal_on_main(
             &control,
             error_event("failed", failed_message(Some(&detail))),
         );
         return;
     }
 
+    if session_aborted(&control) {
+        unsafe { node.removeTapOnBus(0) };
+        unsafe { engine.stop() };
+        return;
+    }
+
+    let app_for_handler = app.clone();
     let control_for_handler = control.clone();
     let result_handler = RcBlock::new(
         move |result: *mut SFSpeechRecognitionResult, error: *mut NSError| {
             let control = control_for_handler.clone();
-            if control.cancelled.load(Ordering::SeqCst) || control.ended.load(Ordering::SeqCst) {
+            if control.cancelled.load(Ordering::SeqCst) || control.terminal_sent.load(Ordering::SeqCst) {
+                return;
+            }
+            if !control_is_current(&control) {
                 return;
             }
             if !result.is_null() {
@@ -198,7 +223,14 @@ fn begin_listening(app: AppHandle, control: Arc<SessionControl>) {
                     *partial = text.clone();
                 }
                 if unsafe { result.isFinal() } {
-                    emit_terminal(&control, DictationEvent::Final { text });
+                    let app_main = app_for_handler.clone();
+                    let control_main = control.clone();
+                    let _ = app_for_handler.run_on_main_thread(move || {
+                        if !control_is_current(&control_main) || session_aborted(&control_main) {
+                            return;
+                        }
+                        emit_terminal_on_main(&control_main, DictationEvent::Final { text });
+                    });
                 } else {
                     emit_dictation_event(&control.channel, DictationEvent::Partial { text });
                 }
@@ -207,19 +239,26 @@ fn begin_listening(app: AppHandle, control: Arc<SessionControl>) {
             if !error.is_null() {
                 let ns_err = unsafe { error.as_ref() }.unwrap();
                 let detail = ns_err.localizedDescription().to_string();
-                emit_terminal(
-                    &control,
-                    error_event("failed", failed_message(Some(&detail))),
-                );
+                let stopping = control.stopping.load(Ordering::SeqCst);
+                let last_partial = control
+                    .last_partial
+                    .lock()
+                    .map(|v| v.clone())
+                    .unwrap_or_default();
+                let event = terminal_for_task_error(stopping, &last_partial, Some(&detail));
+                let app_main = app_for_handler.clone();
+                let control_main = control.clone();
+                let _ = app_for_handler.run_on_main_thread(move || {
+                    if !control_is_current(&control_main) || control_main.cancelled.load(Ordering::SeqCst) {
+                        return;
+                    }
+                    emit_terminal_on_main(&control_main, event);
+                });
             }
         },
     );
-    let handler_ref = result_handler.copy();
     let task = unsafe {
-        recognizer.recognitionTaskWithRequest_resultHandler(
-            ProtocolObject::from_ref(request.as_ref()),
-            &handler_ref,
-        )
+        recognizer.recognitionTaskWithRequest_resultHandler(request_super, &result_handler)
     };
 
     LIVE.with(|cell| {
@@ -236,74 +275,82 @@ fn begin_listening(app: AppHandle, control: Arc<SessionControl>) {
 
     let app_auto = app.clone();
     let control_auto = control.clone();
-    let auto_handle = thread::spawn(move || {
+    let session_id = control.id;
+    thread::spawn(move || {
         thread::sleep(Duration::from_secs(DICTATION_AUTO_STOP_SECS));
         let app_stop = app_auto.clone();
+        let control_stop = control_auto.clone();
         let _ = app_auto.run_on_main_thread(move || {
-            stop_session_internal(app_stop, control_auto);
+            if control_stop.id != session_id || !control_is_current(&control_stop) {
+                return;
+            }
+            stop_session_internal(app_stop, control_stop);
         });
     });
-    if let Ok(mut slot) = control.auto_stop_timer.lock() {
-        *slot = Some(auto_handle);
-    }
 }
 
 fn continue_after_mic(app: AppHandle, control: Arc<SessionControl>) {
-    if control.cancelled.load(Ordering::SeqCst) {
+    if !control_is_current(&control) || session_aborted(&control) {
         return;
     }
     begin_listening(app, control);
 }
 
 fn continue_after_speech(app: AppHandle, control: Arc<SessionControl>) {
-    if control.cancelled.load(Ordering::SeqCst) {
+    if !control_is_current(&control) || session_aborted(&control) {
         return;
     }
-    let status = unsafe { AVCaptureDevice::authorizationStatusForMediaType(AVMediaTypeAudio) };
+    let Some(media_type) = AVMediaTypeAudio else {
+        emit_terminal_on_main(
+            &control,
+            error_event("failed", failed_message(None)),
+        );
+        return;
+    };
+    let status = unsafe { AVCaptureDevice::authorizationStatusForMediaType(media_type) };
     match status {
         AVAuthorizationStatus::Authorized => continue_after_mic(app, control),
         AVAuthorizationStatus::Denied | AVAuthorizationStatus::Restricted => {
-            emit_terminal(
+            emit_terminal_on_main(
                 &control,
-                error_event("microphone_denied", super::microphone_denied_message()),
+                error_event("microphone_denied", microphone_denied_message()),
             );
         }
         AVAuthorizationStatus::NotDetermined => {
             let app_for_cb = app.clone();
             let control_for_cb = control.clone();
-            let block = RcBlock::new(move |granted: bool| {
+            let block = RcBlock::new(move |granted: Bool| {
+                let granted = granted.as_bool();
                 let app = app_for_cb.clone();
                 let control = control_for_cb.clone();
+                let app_main = app.clone();
                 let _ = app.run_on_main_thread(move || {
+                    if !control_is_current(&control) || session_aborted(&control) {
+                        return;
+                    }
                     if !granted {
-                        emit_terminal(
+                        emit_terminal_on_main(
                             &control,
-                            error_event(
-                                "microphone_denied",
-                                super::microphone_denied_message(),
-                            ),
+                            error_event("microphone_denied", microphone_denied_message()),
                         );
                         return;
                     }
-                    continue_after_mic(app, control);
+                    continue_after_mic(app_main, control);
                 });
             });
             unsafe {
-                AVCaptureDevice::requestAccessForMediaType_completionHandler(
-                    AVMediaTypeAudio,
-                    &block,
-                );
+                AVCaptureDevice::requestAccessForMediaType_completionHandler(media_type, &block);
             }
         }
-        _ => emit_terminal(
+        _ => emit_terminal_on_main(
             &control,
-            error_event("microphone_denied", super::microphone_denied_message()),
+            error_event("microphone_denied", microphone_denied_message()),
         ),
     }
 }
 
 fn start_session_on_main(app: AppHandle, control: Arc<SessionControl>) {
-    if control.cancelled.load(Ordering::SeqCst) {
+    if !control_is_current(&control) || control.cancelled.load(Ordering::SeqCst) {
         return;
     }
     let status = unsafe { SFSpeechRecognizer::authorizationStatus() };
@@ -313,9 +360,9 @@ fn start_session_on_main(app: AppHandle, control: Arc<SessionControl>) {
         }
         SFSpeechRecognizerAuthorizationStatus::Denied
         | SFSpeechRecognizerAuthorizationStatus::Restricted => {
-            emit_terminal(
+            emit_terminal_on_main(
                 &control,
-                error_event("speech_denied", super::speech_denied_message()),
+                error_event("speech_denied", speech_denied_message()),
             );
         }
         SFSpeechRecognizerAuthorizationStatus::NotDetermined => {
@@ -325,16 +372,17 @@ fn start_session_on_main(app: AppHandle, control: Arc<SessionControl>) {
                 move |auth: SFSpeechRecognizerAuthorizationStatus| {
                     let app = app_for_cb.clone();
                     let control = control_for_cb.clone();
+                    let app_main = app.clone();
                     let _ = app.run_on_main_thread(move || {
+                        if !control_is_current(&control) || session_aborted(&control) {
+                            return;
+                        }
                         if auth == SFSpeechRecognizerAuthorizationStatus::Authorized {
-                            continue_after_speech(app, control);
+                            continue_after_speech(app_main, control);
                         } else {
-                            emit_terminal(
+                            emit_terminal_on_main(
                                 &control,
-                                error_event(
-                                    "speech_denied",
-                                    super::speech_denied_message(),
-                                ),
+                                error_event("speech_denied", speech_denied_message()),
                             );
                         }
                     });
@@ -342,34 +390,43 @@ fn start_session_on_main(app: AppHandle, control: Arc<SessionControl>) {
             );
             unsafe { SFSpeechRecognizer::requestAuthorization(&block) };
         }
-        _ => emit_terminal(
+        _ => emit_terminal_on_main(
             &control,
-            error_event("speech_denied", super::speech_denied_message()),
+            error_event("speech_denied", speech_denied_message()),
         ),
     }
 }
 
 fn stop_session_internal(_app: AppHandle, control: Arc<SessionControl>) {
-    if control.cancelled.load(Ordering::SeqCst) || control.ended.load(Ordering::SeqCst) {
+    if control.cancelled.load(Ordering::SeqCst) || control.terminal_sent.load(Ordering::SeqCst) {
         return;
     }
     if control.stopping.swap(true, Ordering::SeqCst) {
         return;
     }
-    LIVE.with(|cell| {
-        if let Some(live) = cell.borrow().as_ref() {
-            unsafe { live.request.endAudio() };
-        }
+    let snapshot = LIVE.with(|cell| {
+        cell.borrow().as_ref().map(|live| {
+            (live.engine.clone(), live.request.clone())
+        })
     });
+    if let Some((engine, request)) = snapshot {
+        let input = unsafe { engine.inputNode() };
+        let node = input.as_super().as_super();
+        unsafe { node.removeTapOnBus(0) };
+        unsafe { engine.stop() };
+        unsafe { request.endAudio() };
+    }
     schedule_final_timeout(_app, control);
 }
 
 pub fn cancel_session_silent() {
-    if let Some(control) = with_control(|c| c) {
+    if let Some(control) = CONTROL.with(|cell| cell.borrow().clone()) {
         control.cancelled.store(true, Ordering::SeqCst);
-        tear_down_session(&control);
+        release(&control);
     } else {
-        clear_live_objects();
+        LIVE.with(|cell| {
+            let _ = cell.borrow_mut().take();
+        });
     }
 }
 
@@ -378,12 +435,11 @@ pub fn kickoff_session(app: AppHandle, channel: Channel<DictationEvent>, session
     let control = Arc::new(SessionControl {
         id: session_id,
         cancelled: AtomicBool::new(false),
-        ended: AtomicBool::new(false),
+        terminal_sent: AtomicBool::new(false),
+        released: AtomicBool::new(false),
         stopping: AtomicBool::new(false),
         last_partial: Mutex::new(String::new()),
         channel,
-        final_timer: Mutex::new(None),
-        auto_stop_timer: Mutex::new(None),
     });
     CONTROL.with(|cell| {
         *cell.borrow_mut() = Some(control.clone());
@@ -392,7 +448,7 @@ pub fn kickoff_session(app: AppHandle, channel: Channel<DictationEvent>, session
 }
 
 pub fn stop_active_session(app: AppHandle) {
-    if let Some(control) = with_control(|c| c) {
+    if let Some(control) = CONTROL.with(|cell| cell.borrow().clone()) {
         stop_session_internal(app, control);
     }
 }
