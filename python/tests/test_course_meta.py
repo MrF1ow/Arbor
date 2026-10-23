@@ -93,6 +93,18 @@ def test_non_git_root_writes_only(tmp_path: Path) -> None:
     assert data["courses"]["bio"]["icon"] == "leaf"
 
 
+def test_folder_inside_another_repo_is_not_committed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    outer = _init_git_root(tmp_path, monkeypatch, "owner@test.local")
+    head_before = _run_git(outer, "rev-parse", "HEAD").stdout.strip()
+    root = outer / "knowledge"
+    root.mkdir()
+    set_course_meta(root, "bio", "leaf", None)
+    assert (root / COURSES_REL).is_file()
+    assert _run_git(outer, "rev-parse", "HEAD").stdout.strip() == head_before
+
+
 def test_invalid_course_and_icon_rejected(tmp_path: Path) -> None:
     root = tmp_path / "plain"
     root.mkdir()

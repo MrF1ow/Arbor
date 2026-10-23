@@ -95,8 +95,14 @@ def _git(root: Path, args: list[str], runner=subprocess.run) -> subprocess.Compl
 
 
 def _is_git_work_tree(root: Path, runner=subprocess.run) -> bool:
-    proc = _git(root, ["rev-parse", "--is-inside-work-tree"], runner)
-    return proc.returncode == 0 and (proc.stdout or "").strip() == "true"
+    """True only when root is the top of its own repo, never a folder inside another repo."""
+    proc = _git(root, ["rev-parse", "--show-toplevel"], runner)
+    if proc.returncode != 0:
+        return False
+    top = (proc.stdout or "").strip()
+    if not top:
+        return False
+    return Path(top).resolve() == Path(root).resolve()
 
 
 def read_course_meta_map(root: Path) -> dict[str, Any]:
