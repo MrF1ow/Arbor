@@ -56,6 +56,22 @@ def cmd_check_auth(args) -> int:
     return 0 if res.ok else 1
 
 
+def cmd_usage(_args) -> int:
+    from arbor_worker.usage import read_provider_usage
+
+    try:
+        raw = sys.stdin.read()
+        payload = json.loads(raw) if raw.strip() else {}
+    except json.JSONDecodeError:
+        payload = {}
+    provider_id = payload.get("provider")
+    if not isinstance(provider_id, str) or not provider_id.strip():
+        provider_id = "codex"
+    limits = read_provider_usage(provider_id.strip())
+    print(json.dumps(limits))
+    return 0
+
+
 def _models_json_override(root: Path, provider_id: str) -> bool:
     cfg = root / ".arbor" / "models.json"
     if not cfg.is_file():
