@@ -888,7 +888,7 @@ export function createMockHandler(
         return { path: dest, name, kind: "shared" };
       }
       case "test_worker_connection":
-        return "arbor-worker 5.25.2 (mock)";
+        return "arbor-worker 5.26.0 (mock)";
       case "list_jobs":
         return mockJobSummariesList();
       case "get_job_events":
@@ -963,6 +963,11 @@ export function createMockHandler(
         return null;
       }
       case "start_dictation":
+        return null;
+      case "stop_dictation":
+      case "cancel_dictation":
+        return null;
+      case "open_privacy_settings":
         return null;
       case "start_chat": {
         const channelId = parseMockChannelId(payload.onEvent);

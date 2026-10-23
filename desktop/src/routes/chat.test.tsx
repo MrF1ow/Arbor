@@ -1201,7 +1201,7 @@ describe("chat threads", { timeout: 30000 }, () => {
     await waitForChatReady();
     expect(
       within(screen.getByTestId("chat-view")).queryByRole("button", {
-        name: "Dictate (or press Fn twice)",
+        name: "Dictate",
       }),
     ).not.toBeInTheDocument();
 
@@ -1217,12 +1217,81 @@ describe("chat threads", { timeout: 30000 }, () => {
     await waitForChatReady();
     await user.click(
       within(screen.getByTestId("chat-view")).getByRole("button", {
-        name: "Dictate (or press Fn twice)",
+        name: "Dictate",
       }),
     );
     await waitFor(() => {
       expect(getMockIpcCalls().some((c) => c.cmd === "start_dictation")).toBe(true);
     });
+    platformSpy.mockRestore();
+  });
+
+  it("dictation locks the composer while listening and Escape cancels", async () => {
+    const platformSpy = vi.spyOn(window.navigator, "platform", "get");
+    platformSpy.mockReturnValue("MacIntel");
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/chat");
+    await waitForChatReady();
+    const view = screen.getByTestId("chat-view");
+    const textarea = within(view).getByRole("textbox", { name: "Chat message" });
+    await user.type(textarea, "Explain");
+    await user.click(within(view).getByRole("button", { name: "Dictate" }));
+    await waitFor(() =>
+      expect(getMockIpcCalls().some((c) => c.cmd === "start_dictation")).toBe(true),
+    );
+    const channelId = parseMockChannelId(
+      (getMockIpcCalls().find((c) => c.cmd === "start_dictation")?.args as { onEvent?: unknown })
+        ?.onEvent,
+    );
+    act(() => {
+      emitToChannel(channelId!, { kind: "listening" }, 0);
+    });
+    await waitFor(() =>
+      expect(within(view).getByRole("button", { name: "Stop dictation" })).toBeInTheDocument(),
+    );
+    expect(textarea).toHaveAttribute("readonly");
+    expect(within(view).getByRole("button", { name: "Send" })).toBeDisabled();
+
+    act(() => {
+      emitToChannel(channelId!, { kind: "partial", text: "recur" }, 1);
+    });
+    await waitFor(() => expect(textarea).toHaveValue("Explain recur"));
+
+    fireEvent.keyDown(textarea, { key: "Escape" });
+    await waitFor(() =>
+      expect(getMockIpcCalls().some((c) => c.cmd === "cancel_dictation")).toBe(true),
+    );
+    await waitFor(() => expect(textarea).toHaveValue("Explain"));
+    expect(within(view).getByRole("button", { name: "Dictate" })).toBeInTheDocument();
+    platformSpy.mockRestore();
+  });
+
+  it("does not send on Enter while dictation is listening", async () => {
+    const platformSpy = vi.spyOn(window.navigator, "platform", "get");
+    platformSpy.mockReturnValue("MacIntel");
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/chat");
+    await waitForChatReady();
+    const view = screen.getByTestId("chat-view");
+    const textarea = within(view).getByRole("textbox", { name: "Chat message" });
+    await user.type(textarea, "Question");
+    await user.click(within(view).getByRole("button", { name: "Dictate" }));
+    await waitFor(() =>
+      expect(getMockIpcCalls().some((c) => c.cmd === "start_dictation")).toBe(true),
+    );
+    const channelId = parseMockChannelId(
+      (getMockIpcCalls().find((c) => c.cmd === "start_dictation")?.args as { onEvent?: unknown })
+        ?.onEvent,
+    );
+    act(() => {
+      emitToChannel(channelId!, { kind: "listening" }, 0);
+    });
+    await waitFor(() =>
+      expect(within(view).getByRole("button", { name: "Stop dictation" })).toBeInTheDocument(),
+    );
+    clearMockIpcLog();
+    fireEvent.keyDown(textarea, { key: "Enter", code: "Enter" });
+    expect(getMockIpcCalls().some((c) => c.cmd === "start_chat")).toBe(false);
     platformSpy.mockRestore();
   });
 

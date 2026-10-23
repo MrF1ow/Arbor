@@ -1,6 +1,6 @@
 [package]
 name = "desktop"
-version = "5.25.2"
+version = "5.26.0"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
@@ -38,5 +38,9 @@ keyring = { version = "3", features = ["apple-native", "windows-native", "sync-s
 libc = "0.2"
 
 [target.'cfg(target_os = "macos")'.dependencies]
+block2 = "0.6"
 objc2 = { version = "0.6", features = ["std"] }
-objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSResponder"] }
+objc2-av-foundation = { version = "0.3", default-features = false, features = ["std", "AVCaptureDevice", "AVMediaFormat", "block2"] }
+objc2-avf-audio = { version = "0.3", default-features = false, features = ["std", "AVAudioEngine", "AVAudioFormat", "AVAudioBuffer", "AVAudioNode", "AVAudioTime", "AVAudioTypes", "AVAudioIONode", "block2"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSError", "NSString", "NSLocale"] }
+objc2-speech = { version = "0.3", default-features = false, features = ["std", "block2", "objc2-avf-audio", "SFSpeechRecognizer", "SFSpeechRecognitionRequest", "SFSpeechRecognitionResult", "SFSpeechRecognitionTask", "SFTranscription"] }
