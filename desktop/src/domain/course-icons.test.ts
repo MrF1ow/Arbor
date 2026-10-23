@@ -1,12 +1,8 @@
 import { BookOpen } from "lucide-react";
 import { describe, expect, it } from "vitest";
 
-import {
-  COURSE_ICONS,
-  courseColorClass,
-  courseIconFor,
-  courseIconKey,
-} from "~/domain/course-icons";
+import { courseColorClass, courseIconKey } from "~/domain/course-icons";
+import { COURSE_ICONS, courseIconFor } from "~/domain/course-icons-catalog";
 
 describe("course icons domain", () => {
   it("every key is unique and has an Icon", () => {

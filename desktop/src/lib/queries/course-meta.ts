@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 import type { CourseMetaMap } from "~/domain/course-icons";
 import { canUseDesktopIpc } from "~/domain/tauri";
@@ -56,10 +57,18 @@ export function useSetCourseMeta(root: string | null) {
       });
       return { previous };
     },
-    onError: (_err, _input, context) => {
-      if (root && context?.previous) {
-        queryClient.setQueryData(qk.courseMeta(root), context.previous);
+    onError: (err, _input, context) => {
+      if (root) {
+        const key = qk.courseMeta(root);
+        if (context) {
+          if (context.previous === undefined) {
+            queryClient.removeQueries({ queryKey: key });
+          } else {
+            queryClient.setQueryData(key, context.previous);
+          }
+        }
       }
+      toast.error(String(err));
     },
     onSettled: () => {
       if (root) {

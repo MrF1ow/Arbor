@@ -2,12 +2,8 @@ import { useState } from "react";
 
 import { Button, IconButton } from "~/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "~/components/ui/popover";
-import {
-  COURSE_COLORS,
-  COURSE_ICONS,
-  courseIconKey,
-  type CourseMetaMap,
-} from "~/domain/course-icons";
+import { COURSE_COLORS, courseIconKey, type CourseMetaMap } from "~/domain/course-icons";
+import { COURSE_ICONS } from "~/domain/course-icons-catalog";
 import { VIEWER_WRITE_REASON, viewerBlocksWrite, type LibraryRole } from "~/domain/library-role";
 import { useSetCourseMeta } from "~/lib/queries/course-meta";
 import { cn } from "~/lib/utils";

@@ -9,11 +9,14 @@ import {
   Plus,
   Settings2,
 } from "lucide-react";
-import { useState } from "react";
+import { Suspense, lazy, useState } from "react";
 import { toast } from "sonner";
 
 import { CourseIconDisplay } from "~/components/app/course-icon-display";
-import { CourseIconPicker } from "~/components/app/course-icon-picker";
+
+const CourseIconPicker = lazy(() =>
+  import("~/components/app/course-icon-picker").then((m) => ({ default: m.CourseIconPicker })),
+);
 import { ListRow } from "~/components/app/list-row";
 import { SectionLabel } from "~/components/app/section-label";
 import { Badge } from "~/components/ui/badge";
@@ -64,6 +67,7 @@ function CourseNavRow({
   course,
   meta,
   role,
+  iconChangeDisabled,
   activeRoot,
   activeCourse,
   digestCount,
@@ -73,6 +77,7 @@ function CourseNavRow({
   course: string;
   meta: CourseMetaMap | undefined;
   role: LibraryRole | null;
+  iconChangeDisabled: boolean;
   activeRoot: string | null;
   activeCourse: string | null;
   digestCount?: number;
@@ -86,7 +91,7 @@ function CourseNavRow({
       <ListRow
         title={courseDisplayName(course)}
         meta={digestCount != null ? String(digestCount) : undefined}
-        iconNode={<CourseIconDisplay meta={meta} course={course} active={active} />}
+        iconNode={<CourseIconDisplay meta={meta} course={course} />}
         active={active}
         onSelect={() => onSelect(root, course)}
         className="w-full pl-4 pr-8"
@@ -105,7 +110,7 @@ function CourseNavRow({
         />
         <DropdownMenuContent align="end">
           <DropdownMenuItem
-            disabled={viewerBlocked}
+            disabled={viewerBlocked || iconChangeDisabled}
             title={viewerBlocked ? VIEWER_WRITE_REASON : undefined}
             onClick={() => setPickerOpen(true)}
           >
@@ -113,22 +118,24 @@ function CourseNavRow({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      <CourseIconPicker
-        root={root}
-        course={course}
-        meta={meta}
-        role={role}
-        open={pickerOpen}
-        onOpenChange={setPickerOpen}
-        trigger={
-          <button
-            type="button"
-            tabIndex={-1}
-            aria-hidden
-            className="pointer-events-none absolute left-4 top-1/2 size-icon-sm -translate-y-1/2 opacity-0"
-          />
-        }
-      />
+      <Suspense fallback={null}>
+        <CourseIconPicker
+          root={root}
+          course={course}
+          meta={meta}
+          role={role}
+          open={pickerOpen}
+          onOpenChange={setPickerOpen}
+          trigger={
+            <button
+              type="button"
+              tabIndex={-1}
+              aria-hidden
+              className="pointer-events-none absolute left-4 top-1/2 size-icon-sm -translate-y-1/2 opacity-0"
+            />
+          }
+        />
+      </Suspense>
     </div>
   );
 }
@@ -360,6 +367,7 @@ function RootGroup({
   const rootCourseMeta = useCourseMeta(entry.path);
   const library = useLibrary(entry.path);
   const role = library.data?.present === true ? library.data.role : null;
+  const iconChangeDisabled = library.isPending;
   const metaForRoot = rootCourseMeta.data;
   const label = workspaceRootLabel(entry, all);
   const [open, setOpen] = useState(true);
@@ -398,6 +406,7 @@ function RootGroup({
               course={course}
               meta={metaForRoot}
               role={role}
+              iconChangeDisabled={iconChangeDisabled}
               activeRoot={activeRoot}
               activeCourse={activeCourse}
               digestCount={
