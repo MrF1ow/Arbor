@@ -1,5 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -28,7 +29,7 @@ import {
 import { Textarea } from "~/components/ui/textarea";
 import type { ChatMode } from "~/domain/chat";
 import { isChatMode, parseSlashCommand, workerHistory } from "~/domain/chat";
-import { startDictation } from "~/lib/dictation";
+import { useDictation } from "~/lib/dictation";
 import { isMacPlatform } from "~/lib/shortcuts";
 import { CourseIconDisplay } from "~/components/app/course-icon-display";
 import { courseDisplayName, workspaceRootLabel } from "~/domain/course";
@@ -55,7 +56,7 @@ import {
 import { useChatDraftsStore } from "~/stores/chat-drafts-store";
 import { useUiStore } from "~/stores/ui-store";
 import { useJobStore } from "~/stores/job-store";
-import { Mic } from "lucide-react";
+import { Loader2, Mic, Square } from "lucide-react";
 
 type ArtifactKind = "flashcards" | "quiz";
 
@@ -143,6 +144,35 @@ export function ChatView({
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
+
+  const onDictationDraft = useCallback(
+    (text: string) => {
+      if (activeRoot) {
+        setDraft(activeRoot, course, threadId, text);
+      }
+    },
+    [activeRoot, course, setDraft, threadId],
+  );
+  const onDictationApplyFinal = useCallback(
+    (text: string, caret: number) => {
+      if (activeRoot) {
+        setDraft(activeRoot, course, threadId, text);
+      }
+      requestAnimationFrame(() => {
+        const el = composerRef.current;
+        if (!el) {
+          return;
+        }
+        el.focus();
+        el.setSelectionRange(caret, caret);
+      });
+    },
+    [activeRoot, course, setDraft, threadId],
+  );
+  const dictation = useDictation({
+    onDraft: onDictationDraft,
+    onApplyFinal: onDictationApplyFinal,
+  });
   const stickToBottomRef = useRef(true);
   const forceScrollRef = useRef(false);
   const sendingRef = useRef(false);
@@ -180,8 +210,9 @@ export function ChatView({
   const statusTone =
     !inFlight && gateStatus.text ? gateStatus.tone : liveStatusTone;
 
-  const controlsDisabled = inFlight;
+  const controlsDisabled = inFlight || dictation.dictationActive;
   const composerDisabled = inFlight;
+  const composerLocked = dictation.dictationActive;
   const artifactLauncher =
     artifactKind === "quiz" ? quizLauncher : flashcardLauncher;
   const artifactJobDisabled = artifactLauncher.jobDisabled;
@@ -204,6 +235,16 @@ export function ChatView({
       }
     };
   }, [liveKey]);
+
+  useEffect(() => {
+    return () => {
+      dictation.cancel();
+    };
+  }, [dictation.cancel]);
+
+  useEffect(() => {
+    dictation.cancel();
+  }, [course, threadId, dictation.cancel]);
 
   const scrollTranscriptIfSticky = () => {
     if (!stickToBottomRef.current) {
@@ -240,6 +281,7 @@ export function ChatView({
       !question ||
       !activeRoot ||
       composerDisabled ||
+      composerLocked ||
       sendingRef.current ||
       !effective.providerId
     ) {
@@ -380,6 +422,16 @@ export function ChatView({
   };
 
   const onComposerKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (composerLocked && event.key === "Escape") {
+      event.preventDefault();
+      dictation.cancel();
+      return;
+    }
+    if (composerLocked && event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      return;
+    }
+
     if (event.key === "Tab" && event.shiftKey) {
       if (event.nativeEvent.isComposing || event.keyCode === 229) {
         return;
@@ -425,9 +477,39 @@ export function ChatView({
   };
 
   const onDictationClick = () => {
+    if (dictation.phase === "listening") {
+      dictation.stop();
+      return;
+    }
+    if (dictation.phase !== "idle") {
+      return;
+    }
     composerRef.current?.focus();
-    void startDictation();
+    const el = composerRef.current;
+    const base = {
+      text: draftText,
+      selectionStart: el?.selectionStart ?? draftText.length,
+      selectionEnd: el?.selectionEnd ?? draftText.length,
+    };
+    void dictation.start(base);
   };
+
+  const dictationMicLabel =
+    dictation.phase === "listening"
+      ? "Stop dictation"
+      : dictation.phase === "starting" || dictation.phase === "stopping"
+        ? "Dictation"
+        : "Dictate";
+  const DictationIcon =
+    dictation.phase === "listening"
+      ? Square
+      : dictation.phase === "starting" || dictation.phase === "stopping"
+        ? Loader2
+        : Mic;
+  const dictationButtonClass =
+    dictation.phase === "starting" || dictation.phase === "stopping"
+      ? "[&_svg]:animate-spin"
+      : undefined;
 
   const composerPlaceholder =
     mode === "explain"
@@ -545,6 +627,7 @@ export function ChatView({
                 ref={composerRef}
                 value={draftText}
                 disabled={composerDisabled}
+                readOnly={composerLocked}
                 placeholder={composerPlaceholder}
                 rows={1}
                 className="max-h-36 min-h-10 w-full"
@@ -566,18 +649,38 @@ export function ChatView({
                 <ModeChip mode={mode} disabled={controlsDisabled} onToggle={toggleChatMode} />
                 <div className="flex items-center gap-2">
                   {isMacPlatform() ? (
-                    <IconButton
-                      icon={Mic}
-                      label="Dictate (or press Fn twice)"
-                      size="icon-sm"
-                      variant="ghost"
-                      disabled={composerDisabled}
-                      onClick={onDictationClick}
-                    />
+                    <div className="flex items-center gap-1.5">
+                      {dictation.phase === "listening" && dictation.elapsedLabel ? (
+                        <>
+                          <span
+                            className="size-2 animate-pulse rounded-full bg-destructive"
+                            aria-hidden
+                          />
+                          <span className="tabular-nums text-xs text-muted-foreground">
+                            {dictation.elapsedLabel}
+                          </span>
+                        </>
+                      ) : null}
+                      <IconButton
+                        icon={DictationIcon}
+                        label={dictationMicLabel}
+                        size="icon-sm"
+                        className={dictationButtonClass}
+                        variant={dictation.phase === "listening" ? "destructive-outline" : "ghost"}
+                        disabled={
+                          composerDisabled ||
+                          dictation.phase === "starting" ||
+                          dictation.phase === "stopping"
+                        }
+                        onClick={onDictationClick}
+                      />
+                    </div>
                   ) : null}
                   <Button
                     type="button"
-                    disabled={composerDisabled || draftText.trim().length === 0}
+                    disabled={
+                      composerDisabled || composerLocked || draftText.trim().length === 0
+                    }
                     onClick={() => void submitComposer(draftText)}
                   >
                     Send

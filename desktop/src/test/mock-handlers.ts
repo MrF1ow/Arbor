@@ -964,6 +964,11 @@ export function createMockHandler(
       }
       case "start_dictation":
         return null;
+      case "stop_dictation":
+      case "cancel_dictation":
+        return null;
+      case "open_privacy_settings":
+        return null;
       case "start_chat": {
         const channelId = parseMockChannelId(payload.onEvent);
         if (channelId == null) {
