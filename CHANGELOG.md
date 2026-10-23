@@ -6,7 +6,7 @@ Package version for the worker, desktop, and Tauri app. See [Version numbering](
 
 ## Unreleased
 
-Nothing pending above `5.25.2`.
+- On macOS, chat dictation uses in-app speech recognition with live partial text in the composer, stop/cancel controls, and privacy settings shortcuts when microphone or speech access is denied. Linux and Windows still hide the mic button.
 
 ## 5.25.2 — 2026-10-23
 

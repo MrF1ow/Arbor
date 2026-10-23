@@ -110,6 +110,9 @@ pub fn run() {
             commands::skill_uninstall,
             commands::skill_run,
             dictation::start_dictation,
+            dictation::stop_dictation,
+            dictation::cancel_dictation,
+            dictation::open_privacy_settings,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Arbor")
