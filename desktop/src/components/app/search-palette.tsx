@@ -14,6 +14,7 @@ import {
 import { Label } from "~/components/ui/label";
 import { Spinner } from "~/components/ui/spinner";
 import { Switch } from "~/components/ui/switch";
+import { CourseIconDisplay } from "~/components/app/course-icon-display";
 import { courseDisplayName } from "~/domain/course";
 import { resolveDigestSlug } from "~/domain/notes";
 import {
@@ -24,6 +25,7 @@ import {
   searchHitMeta,
 } from "~/domain/search-hit";
 import { pickActiveRoot } from "~/lib/knowledge-root";
+import { useCourseMeta } from "~/lib/queries/course-meta";
 import { useSearch, useSemanticSearch } from "~/lib/queries/search";
 import { useSettings } from "~/lib/queries/settings";
 import { cn } from "~/lib/utils";
@@ -67,6 +69,7 @@ function SearchPaletteBody({
   const navigate = useNavigate();
   const settings = useSettings();
   const activeRoot = pickActiveRoot(settings.data);
+  const courseMeta = useCourseMeta(activeRoot);
   const searchSemantic = useUiStore((s) => s.searchSemantic);
   const setSearchSemantic = useUiStore((s) => s.setSearchSemantic);
 
@@ -211,9 +214,13 @@ function SearchPaletteBody({
                 .slice(0, groupIndex)
                 .reduce((sum, [, list]) => sum + list.length, 0);
               return (
-                <CommandGroup key={course} heading={courseDisplayName(course)}>
-                  {renderHits(courseHits, indexOffset)}
-                </CommandGroup>
+                <div key={course}>
+                  <div className="flex items-center gap-2 px-2.5 py-1.5 text-xs font-medium text-muted-foreground">
+                    <CourseIconDisplay meta={courseMeta.data} course={course} />
+                    <span>{courseDisplayName(course)}</span>
+                  </div>
+                  <CommandGroup>{renderHits(courseHits, indexOffset)}</CommandGroup>
+                </div>
               );
             })
           : null}

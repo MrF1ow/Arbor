@@ -1,5 +1,6 @@
 export const qk = {
   courses: (root: string) => ["courses", root] as const,
+  courseMeta: (root: string) => ["courseMeta", root] as const,
   digests: (root: string, course: string) => ["digests", root, course] as const,
   markdown: (root: string, path: string) => ["markdown", root, path] as const,
   courseOverview: (root: string, course: string) =>

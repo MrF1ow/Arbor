@@ -1,17 +1,22 @@
 import { useNavigate, useParams, useRouterState } from "@tanstack/react-router";
 import {
   Activity,
-  BookOpen,
   ChevronDown,
   ChevronRight,
   FolderOpen,
+  Palette,
   PanelLeft,
   Plus,
   Settings2,
 } from "lucide-react";
-import { useState } from "react";
+import { Suspense, lazy, useState } from "react";
 import { toast } from "sonner";
 
+import { CourseIconDisplay } from "~/components/app/course-icon-display";
+
+const CourseIconPicker = lazy(() =>
+  import("~/components/app/course-icon-picker").then((m) => ({ default: m.CourseIconPicker })),
+);
 import { ListRow } from "~/components/app/list-row";
 import { SectionLabel } from "~/components/app/section-label";
 import { Badge } from "~/components/ui/badge";
@@ -32,6 +37,8 @@ import {
   useSidebar,
 } from "~/components/ui/sidebar";
 import { courseDisplayName, workspaceRootLabel } from "~/domain/course";
+import type { CourseMetaMap } from "~/domain/course-icons";
+import { VIEWER_WRITE_REASON, viewerBlocksWrite, type LibraryRole } from "~/domain/library-role";
 import type { KnowledgeRootEntry } from "~/domain/types";
 import { PROVIDER_FALLBACK, isWorkerUnavailableAuthReason, providerBadge } from "~/domain/provider";
 import { canUseDesktopIpc } from "~/domain/tauri";
@@ -39,7 +46,8 @@ import { pickActiveRoot } from "~/lib/knowledge-root";
 import { useChooseKnowledgeFolder } from "~/lib/hooks/use-choose-knowledge-folder";
 import { useSwitchActiveRootMutation } from "~/lib/queries/active-root";
 import { useAuth } from "~/lib/queries/auth";
-import { useCreateCourseMutation, useCourses, useDigests } from "~/lib/queries/library";
+import { useCourseMeta } from "~/lib/queries/course-meta";
+import { useCreateCourseMutation, useCourses, useDigests, useLibrary } from "~/lib/queries/library";
 import { useEffectiveProvider } from "~/lib/queries/effective-provider";
 import { useSettings } from "~/lib/queries/settings";
 import { modShortcut } from "~/lib/shortcuts";
@@ -51,6 +59,9 @@ import markDark from "~/assets/arbor-mark-dark.png";
 function CourseNavRow({
   root,
   course,
+  meta,
+  role,
+  iconChangeDisabled,
   activeRoot,
   activeCourse,
   digestCount,
@@ -58,21 +69,58 @@ function CourseNavRow({
 }: {
   root: string;
   course: string;
+  meta: CourseMetaMap | undefined;
+  role: LibraryRole | null;
+  iconChangeDisabled: boolean;
   activeRoot: string | null;
   activeCourse: string | null;
   digestCount?: number;
   onSelect: (root: string, course: string) => void;
 }) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const viewerBlocked = viewerBlocksWrite(role);
   const active = activeRoot === root && activeCourse === course;
   return (
-    <ListRow
-      title={courseDisplayName(course)}
-      meta={digestCount != null ? String(digestCount) : undefined}
-      icon={BookOpen}
-      active={active}
-      onSelect={() => onSelect(root, course)}
-      className="pl-4"
-    />
+    <div className="group relative flex w-full items-center">
+      <ListRow
+        title={courseDisplayName(course)}
+        meta={digestCount != null ? String(digestCount) : undefined}
+        iconNode={<CourseIconDisplay meta={meta} course={course} />}
+        active={active}
+        onSelect={() => onSelect(root, course)}
+        className="w-full pl-4 pr-8"
+      />
+      <IconButton
+        icon={Palette}
+        label="Change icon"
+        size="icon-xs"
+        variant="ghost"
+        disabled={viewerBlocked || iconChangeDisabled}
+        title={viewerBlocked ? VIEWER_WRITE_REASON : undefined}
+        className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100"
+        onClick={() => setPickerOpen(true)}
+      />
+      {pickerOpen ? (
+        <Suspense fallback={null}>
+          <CourseIconPicker
+            root={root}
+            course={course}
+            meta={meta}
+            role={role}
+            open={pickerOpen}
+            onOpenChange={setPickerOpen}
+            trigger={
+              <button
+                type="button"
+                tabIndex={-1}
+                aria-hidden
+                className="pointer-events-none absolute left-4 top-1/2 size-icon-sm -translate-y-1/2 opacity-0"
+              />
+            }
+          />
+        </Suspense>
+      ) : null}
+    </div>
   );
 }
 
@@ -300,6 +348,11 @@ function RootGroup({
   onRootSelect: (root: string) => void;
 }) {
   const courses = useCourses(entry.path);
+  const rootCourseMeta = useCourseMeta(entry.path);
+  const library = useLibrary(entry.path);
+  const role = library.data?.present === true ? library.data.role : null;
+  const iconChangeDisabled = library.isPending;
+  const metaForRoot = rootCourseMeta.data;
   const label = workspaceRootLabel(entry, all);
   const [open, setOpen] = useState(true);
 
@@ -335,6 +388,9 @@ function RootGroup({
               key={course}
               root={entry.path}
               course={course}
+              meta={metaForRoot}
+              role={role}
+              iconChangeDisabled={iconChangeDisabled}
               activeRoot={activeRoot}
               activeCourse={activeCourse}
               digestCount={

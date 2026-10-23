@@ -1175,6 +1175,39 @@ def cmd_library_provider(args) -> int:
     return 0
 
 
+def cmd_course_meta(args) -> int:
+    from arbor_worker.course_meta import CourseMetaError, set_course_meta
+    from arbor_worker.library import LibraryError
+
+    if args.course_meta_action != "set":
+        print("Unknown course-meta action", file=sys.stderr)
+        return 1
+    root = Path(args.root)
+    try:
+        fields = json.loads(args.fields)
+    except json.JSONDecodeError:
+        print("Invalid --fields JSON", file=sys.stderr)
+        return 1
+    if not isinstance(fields, dict):
+        print("Invalid --fields JSON", file=sys.stderr)
+        return 1
+    icon = fields.get("icon")
+    color = fields.get("color")
+    if icon is not None and not isinstance(icon, str):
+        print("Invalid icon in --fields", file=sys.stderr)
+        return 1
+    if color is not None and not isinstance(color, str):
+        print("Invalid color in --fields", file=sys.stderr)
+        return 1
+    try:
+        courses = set_course_meta(root, args.course, icon, color)
+    except (CourseMetaError, LibraryError) as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    print(json.dumps(courses))
+    return 0
+
+
 def cmd_library_migrate(args) -> int:
     from arbor_worker.gitstate import commit_batch
     from arbor_worker.library import (

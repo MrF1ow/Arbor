@@ -15,6 +15,7 @@ from arbor_worker import sync as sync_mod
 from arbor_worker.sync import (
     GitSyncError,
     SyncConflictError,
+    _is_derived_tracked,
     continue_sync,
     migrate_derived_files,
     redact_git_text,
@@ -538,6 +539,10 @@ def test_normalize_remote_url_treats_git_suffix_as_equal(tmp_path: Path):
     _run_git(root, "remote", "add", "arbor", "https://example.com/lib.git")
     assert sync_remote_name(root) == "origin"
     assert remote_note(root) is None
+
+
+def test_courses_json_is_not_derived_tracked():
+    assert _is_derived_tracked(".arbor/courses.json") is False
 
 
 def test_sync_show(tmp_path: Path):

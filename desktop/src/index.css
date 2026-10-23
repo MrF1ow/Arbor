@@ -35,6 +35,15 @@
   --backdrop: rgb(43 36 32 / 0.35);
   --card-shadow: 0 1px 2px rgb(43 36 32 / 0.05), 0 8px 24px rgb(43 36 32 / 0.05);
 
+  --course-olive: #586d37;
+  --course-bark: #6b5344;
+  --course-clay: #a65d42;
+  --course-sky: #4a6f86;
+  --course-plum: #6d4f6a;
+  --course-sand: #9a7b4f;
+  --course-slate: #5c6570;
+  --course-moss: #4a7355;
+
   --card-foreground: var(--foreground);
   --popover-foreground: var(--foreground);
   --secondary: var(--muted);
@@ -78,6 +87,15 @@
   --info: #8db1c7;
   --backdrop: rgb(0 0 0 / 0.5);
   --card-shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px rgb(0 0 0 / 0.25);
+
+  --course-olive: #9db46f;
+  --course-bark: #c4a88a;
+  --course-clay: #d4927a;
+  --course-sky: #8db1c7;
+  --course-plum: #b893b5;
+  --course-sand: #c9b07a;
+  --course-slate: #9aa3ad;
+  --course-moss: #7fb892;
 }
 
 @theme inline {
@@ -106,6 +124,14 @@
   --color-success-surface: var(--success-surface);
   --color-info: var(--info);
   --color-backdrop: var(--backdrop);
+  --color-course-olive: var(--course-olive);
+  --color-course-bark: var(--course-bark);
+  --color-course-clay: var(--course-clay);
+  --color-course-sky: var(--course-sky);
+  --color-course-plum: var(--course-plum);
+  --color-course-sand: var(--course-sand);
+  --color-course-slate: var(--course-slate);
+  --color-course-moss: var(--course-moss);
 
   --color-card-foreground: var(--card-foreground);
   --color-popover-foreground: var(--popover-foreground);

@@ -15,6 +15,7 @@ import {
   fixtureSettings,
   fixtureStudyPlanMarkdown,
 } from "~/test/fixtures/data";
+import type { CourseMetaMap } from "~/domain/course-icons";
 import type { ChatLine } from "~/domain/chat";
 import { titleFromUserMessage } from "~/domain/chat";
 import type { ChatMode } from "~/domain/chat";
@@ -35,6 +36,10 @@ import {
 import { emitToChannel, parseMockChannelId } from "~/test/emit-to-channel";
 
 let mockSettingsState = structuredClone(fixtureSettings);
+let mockCourseMetaState: CourseMetaMap = {
+  "cell-biology": { icon: "microscope", color: "olive" },
+  "organic-chemistry-ii": { icon: "flask-conical", color: "clay" },
+};
 let mockKnowledgeSettingsState = structuredClone(fixtureKnowledgeSettings);
 const mockProviderSecretReady = new Set<string>(["openai_api", "anthropic_api"]);
 let mockLibraryShowState: LibraryShowResult = { present: false };
@@ -176,6 +181,10 @@ export function resetMockSettingsForTests() {
   mockProviderSecretReady.add("openai_api");
   mockProviderSecretReady.add("anthropic_api");
   mockLibraryShowState = { present: false };
+  mockCourseMetaState = {
+    "cell-biology": { icon: "microscope", color: "olive" },
+    "organic-chemistry-ii": { icon: "flask-conical", color: "clay" },
+  };
   mockSyncShowState = { remote: null, shared: false, remote_note: null };
   mockSyncConflictState = structuredClone(fixtureSyncConflictSession);
   mockSkillPackagesState = structuredClone(fixtureSkillPackages);
@@ -652,6 +661,32 @@ export function createMockHandler(
         const root = String(payload.root ?? FIXTURE_ROOT_FALL);
         return fixtureCourses[root] ?? [];
       }
+      case "read_course_meta":
+        return { ...mockCourseMetaState };
+      case "set_course_meta": {
+        const course = String(payload.course ?? "");
+        const icon = payload.icon as string | null | undefined;
+        const color = payload.color as string | null | undefined;
+        const next = { ...mockCourseMetaState };
+        const entry = { ...(next[course] ?? {}) };
+        if (icon === null) {
+          delete entry.icon;
+        } else if (typeof icon === "string") {
+          entry.icon = icon;
+        }
+        if (color === null) {
+          delete entry.color;
+        } else if (typeof color === "string") {
+          entry.color = color;
+        }
+        if (!entry.icon && !entry.color) {
+          delete next[course];
+        } else {
+          next[course] = entry;
+        }
+        mockCourseMetaState = next;
+        return { ...mockCourseMetaState };
+      }
       case "list_digests":
         if (payload.course === "cell-biology") {
           return fixtureDigests;
@@ -798,7 +833,7 @@ export function createMockHandler(
         return { path: dest, name, kind: "shared" };
       }
       case "test_worker_connection":
-        return "arbor-worker 5.23.0 (mock)";
+        return "arbor-worker 5.24.0 (mock)";
       case "list_jobs":
         return mockJobSummariesList();
       case "get_job_events":

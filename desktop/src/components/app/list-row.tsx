@@ -7,6 +7,7 @@ export type ListRowProps = {
   meta?: string;
   trailing?: React.ReactNode;
   icon?: LucideIcon;
+  iconNode?: React.ReactNode;
   active?: boolean;
   /** Dashed leading bar (figure concept rows). */
   leadingDashed?: boolean;
@@ -21,6 +22,7 @@ export function ListRow({
   meta,
   trailing,
   icon: Icon,
+  iconNode,
   active = false,
   leadingDashed = false,
   twoLine = false,
@@ -30,7 +32,10 @@ export function ListRow({
 }: ListRowProps) {
   const content = (
     <>
-      {Icon ? <Icon className={cn("size-icon-sm shrink-0", active && "text-primary")} aria-hidden /> : null}
+      {iconNode ??
+        (Icon ? (
+          <Icon className={cn("size-icon-sm shrink-0", active && "text-primary")} aria-hidden />
+        ) : null)}
       <span className="min-w-0 flex-1">
         <span className={cn("block truncate text-sm", active && "text-foreground")}>{title}</span>
         {twoLine && meta ? (

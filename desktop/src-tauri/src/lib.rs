@@ -1,6 +1,7 @@
 mod auth_cache;
 mod chat_threads;
 mod commands;
+mod course_meta;
 mod dictation;
 mod db;
 mod jobs;
@@ -66,6 +67,8 @@ pub fn run() {
             commands::save_knowledge_settings,
             commands::start_folder_watch,
             commands::list_courses,
+            course_meta::read_course_meta,
+            course_meta::set_course_meta,
             commands::create_course,
             commands::import_sources,
             commands::list_digests,

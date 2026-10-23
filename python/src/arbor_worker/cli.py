@@ -235,6 +235,17 @@ def build_parser() -> argparse.ArgumentParser:
     lmig = sub.add_parser("library-migrate", help="Migrate library.json member format.")
     lmig.add_argument("--root", required=True, help="Path to the Knowledge git repo.")
 
+    cmeta = sub.add_parser("course-meta", help="Course icon and color metadata.")
+    cmeta_sub = cmeta.add_subparsers(dest="course_meta_action", required=True)
+    cmeta_set = cmeta_sub.add_parser("set", help="Update one course entry.")
+    cmeta_set.add_argument("--root", required=True, help="Path to the Knowledge root.")
+    cmeta_set.add_argument("--course", required=True, help="Course directory name.")
+    cmeta_set.add_argument(
+        "--fields",
+        required=True,
+        help='JSON object with "icon" and "color" keys (null clears).',
+    )
+
     si = sub.add_parser("skill-install", help="Install a skill package from a pinned git commit.")
     si.add_argument("--git", required=True, dest="git", help="Git URL or local repository path.")
     si.add_argument("--commit", required=True, help="Full 40-character lowercase commit SHA.")
@@ -351,6 +362,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "library-migrate":
         from arbor_worker.commands import cmd_library_migrate
         return cmd_library_migrate(args)
+    if args.command == "course-meta":
+        from arbor_worker.commands import cmd_course_meta
+        return cmd_course_meta(args)
     if args.command == "skill-index":
         from arbor_worker.skillpkg.index import cmd_skill_index
         return cmd_skill_index(args)

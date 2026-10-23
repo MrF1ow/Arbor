@@ -30,11 +30,13 @@ import type { ChatMode } from "~/domain/chat";
 import { isChatMode, parseSlashCommand, workerHistory } from "~/domain/chat";
 import { startDictation } from "~/lib/dictation";
 import { isMacPlatform } from "~/lib/shortcuts";
+import { CourseIconDisplay } from "~/components/app/course-icon-display";
 import { courseDisplayName, workspaceRootLabel } from "~/domain/course";
 import { PROVIDER_FALLBACK } from "~/domain/provider";
 import type { DigestInfo, KnowledgeRootEntry } from "~/domain/types";
 import { useStudyJobLauncher } from "~/hooks/use-study-job-launcher";
 import { sendChatMessage } from "~/lib/chat-runner";
+import { useCourseMeta } from "~/lib/queries/course-meta";
 import { useEffectiveProvider } from "~/lib/queries/effective-provider";
 import {
   useChatThread,
@@ -96,6 +98,7 @@ export function ChatView({
   initialArtifactKind?: ArtifactKind;
 }) {
   const queryClient = useQueryClient();
+  const courseMeta = useCourseMeta(activeRoot);
   const threadsQuery = useChatThreads(activeRoot, course);
   const threadQuery = useChatThread(activeRoot, course, threadId);
   const setThreadMode = useSetChatThreadMode(activeRoot, course);
@@ -494,7 +497,10 @@ export function ChatView({
               <SelectContent>
                 {courses.map((slug) => (
                   <SelectItem key={slug} value={slug}>
-                    {courseDisplayName(slug)}
+                    <span className="flex items-center gap-2">
+                      <CourseIconDisplay meta={courseMeta.data} course={slug} />
+                      {courseDisplayName(slug)}
+                    </span>
                   </SelectItem>
                 ))}
               </SelectContent>
