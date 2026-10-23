@@ -710,6 +710,61 @@ export function createMockHandler(
           return fixtureCourseOverview;
         }
         return {};
+      case "read_provider_usage": {
+        const provider = String(payload.provider ?? "codex");
+        const force = Boolean(payload.force);
+        if (provider === "grok") {
+          return {
+            checked_at: new Date().toISOString(),
+            windows: [
+              {
+                id: "subscription",
+                kind: "weekly",
+                label: "Weekly",
+                used_percent: 37,
+                resets_at: new Date(Date.now() + 2 * 86_400_000).toISOString(),
+              },
+            ],
+          };
+        }
+        if (provider === "claude") {
+          return {
+            checked_at: new Date().toISOString(),
+            windows: [
+              { id: "five_hour", kind: "session", label: "Session", used_percent: 62 },
+              { id: "seven_day", kind: "weekly", label: "Weekly", used_percent: 18 },
+              {
+                id: "seven_day_opus",
+                kind: "weekly",
+                label: "Weekly · Opus",
+                used_percent: 40,
+              },
+            ],
+          };
+        }
+        if (provider === "codex") {
+          return {
+            checked_at: new Date().toISOString(),
+            windows: [],
+            unavailable: {
+              reason: "probe_failed",
+              message: force ? "Forced refresh" : "Codex probe failed in mock",
+            },
+          };
+        }
+        if (provider === "ollama") {
+          return {
+            checked_at: new Date().toISOString(),
+            windows: [],
+            unavailable: { reason: "unsupported" },
+          };
+        }
+        return {
+          checked_at: new Date().toISOString(),
+          windows: [],
+          unavailable: { reason: "unsupported" },
+        };
+      }
       case "check_auth":
         return new Promise((resolve) => {
           setTimeout(

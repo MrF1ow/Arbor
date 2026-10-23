@@ -8,6 +8,7 @@ export const qk = {
   settings: () => ["settings"] as const,
   knowledgeSettings: (root: string) => ["knowledgeSettings", root] as const,
   auth: (provider: string) => ["auth", provider] as const,
+  providerUsage: (provider: string) => ["providerUsage", provider] as const,
   search: (root: string, query: string, semantic: boolean) =>
     ["search", root, semantic ? "semantic" : "knowledge", query] as const,
   models: (provider: string, root: string | null) =>
