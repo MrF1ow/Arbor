@@ -1,7 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import { Gauge, RotateCw, TrendingDown, TrendingUp } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+
+import { useNow } from "~/hooks/use-now";
 
 import { IconButton } from "~/components/ui/button";
 import {
@@ -69,6 +70,9 @@ function UsageWindowRow({ window, now }: { window: UsageWindow; now: number }) {
   const resetsOn = window.resets_at ? formatResetsOnDate(window.resets_at) : null;
   const barColor =
     remaining < 10 ? "bg-destructive" : "bg-primary";
+  const summary = `${window.label}: ${remaining}% left${
+    timeLeft === null ? "" : `, ${timeLeft}% of the window left`
+  }${resetsIn ? `, ${resetsIn}` : ""}`;
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 text-xs">
@@ -77,23 +81,48 @@ function UsageWindowRow({ window, now }: { window: UsageWindow; now: number }) {
         <span className="shrink-0 font-medium tabular-nums">{remaining}% left</span>
       </div>
       <div className="col-span-2 flex items-center gap-2">
-        <div className="relative h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
-          <div
-            className={cn("usage-window-fill absolute inset-y-0 left-0 rounded-full", barColor)}
-            style={{ "--usage-window-fill": `${remaining}%` } as React.CSSProperties}
-          />
-          {timeLeft !== null ? (
-            <span
-              aria-hidden
-              className="usage-window-pace absolute inset-y-0 w-px -translate-x-1/2 bg-foreground"
-              style={
-                {
-                  "--usage-window-pace": `clamp(2px, ${timeLeft}%, calc(100% - 2px))`,
-                } as React.CSSProperties
-              }
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <div
+                role="img"
+                aria-label={summary}
+                tabIndex={0}
+                className="relative h-2 min-w-0 flex-1 cursor-default overflow-hidden rounded-full bg-muted outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              />
+            }
+          >
+            <div
+              className={cn("usage-window-fill absolute inset-y-0 left-0 rounded-full", barColor)}
+              style={{ "--usage-window-fill": `${remaining}%` } as React.CSSProperties}
             />
-          ) : null}
-        </div>
+            {timeLeft !== null ? (
+              <span
+                aria-hidden
+                className="usage-window-pace absolute inset-y-0 w-px -translate-x-1/2 bg-foreground"
+                style={
+                  {
+                    "--usage-window-pace": `clamp(2px, ${timeLeft}%, calc(100% - 2px))`,
+                  } as React.CSSProperties
+                }
+              />
+            ) : null}
+          </TooltipTrigger>
+          <TooltipContent side="top">
+            <div className="flex flex-col gap-0.5">
+              <span>
+                {remaining}% left
+                {timeLeft !== null ? ` · ${timeLeft}% of the window left` : ""}
+              </span>
+              {resetsOn ? (
+                <span className="text-muted-foreground">
+                  Resets {resetsOn}
+                  {resetsIn ? ` · ${resetsIn}` : ""}
+                </span>
+              ) : null}
+            </div>
+          </TooltipContent>
+        </Tooltip>
         {pace ? <PaceIcon pace={pace} /> : null}
         <span className="shrink-0 whitespace-nowrap text-muted-foreground tabular-nums">
           {resetsIn ?? (resetsOn ? `Resets ${resetsOn}` : "")}
@@ -103,7 +132,7 @@ function UsageWindowRow({ window, now }: { window: UsageWindow; now: number }) {
   );
 }
 
-function UsagePanelBody({
+export function UsagePanelBody({
   providerId,
   providerLabel,
   modelLabel,
@@ -123,9 +152,20 @@ function UsagePanelBody({
   const usage = useProviderUsage(providerId, { enabled, refetchInterval });
 
   const onRefresh = () => {
-    void fetchProviderUsage(providerId, true).then((data) => {
-      queryClient.setQueryData(qk.providerUsage(providerId), data);
-    });
+    void fetchProviderUsage(providerId, true)
+      .then((data) => {
+        queryClient.setQueryData(qk.providerUsage(providerId), data);
+      })
+      .catch(() => {
+        queryClient.setQueryData(qk.providerUsage(providerId), {
+          checked_at: new Date().toISOString(),
+          windows: [],
+          unavailable: {
+            reason: "probe_failed",
+            message: "Could not read usage limits.",
+          },
+        });
+      });
   };
 
   if (auth.isLoading) {
@@ -255,21 +295,23 @@ export function ProviderUsagePopoverContent({
   modelLabel: string;
   open: boolean;
 }) {
-  const [now] = useState(() => Date.now());
+  const now = useNow(60_000);
   const auth = useAuth(effectiveProviderId);
   const signedIn = auth.data?.authenticated === true;
+  const effectiveEnabled = open && signedIn;
   const refetchInterval =
-    open && signedIn ? 5 * 60_000 : false;
+    effectiveEnabled ? 5 * 60_000 : false;
 
   const others = PROVIDER_FALLBACK.filter((row) => row.id !== effectiveProviderId);
 
   return (
     <div className="flex max-h-96 w-80 flex-col gap-3 overflow-y-auto p-3">
+      <h2 className="sr-only">{effectiveLabel}</h2>
       <UsagePanelBody
         providerId={effectiveProviderId}
         providerLabel={effectiveLabel}
         modelLabel={modelLabel}
-        enabled={open}
+        enabled={effectiveEnabled}
         refetchInterval={refetchInterval}
         now={now}
       />
