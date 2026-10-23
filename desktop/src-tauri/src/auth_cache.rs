@@ -74,8 +74,17 @@ mod tests {
     use super::*;
     use std::time::Duration;
 
+    /// The cache is process-wide and `invalidate_auth` drops every key for a provider,
+    /// so these tests must not interleave.
+    static TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    fn serial() -> std::sync::MutexGuard<'static, ()> {
+        TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
     #[test]
     fn ttl_returns_fresh_and_expires_stale() {
+        let _serial = serial();
         let key = "local:codex";
         let t0 = Instant::now();
         store_cached(key, t0, serde_json::json!({ "authenticated": true }));
@@ -85,6 +94,7 @@ mod tests {
 
     #[test]
     fn force_skips_cache() {
+        let _serial = serial();
         let key = "local:grok";
         let t0 = Instant::now();
         store_cached(key, t0, serde_json::json!({ "authenticated": true }));
@@ -93,6 +103,7 @@ mod tests {
 
     #[test]
     fn invalidate_drops_matching_provider() {
+        let _serial = serial();
         let t0 = Instant::now();
         store_cached("local:codex", t0, serde_json::json!({}));
         store_cached("ssh:host:grok", t0, serde_json::json!({}));
@@ -103,6 +114,7 @@ mod tests {
 
     #[test]
     fn auth_cache_key_and_invalidate_by_key() {
+        let _serial = serial();
         let transport = WorkerTransport::Ssh {
             host: "remote.example".to_string(),
             port: 22,

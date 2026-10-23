@@ -1,6 +1,6 @@
 # Arbor Desktop
 
-Tauri v2 shell for Arbor (package **5.25.0**). Drives the `arbor-worker` CLI (see `../python`).
+Tauri v2 shell for Arbor (package **5.25.1**). Drives the `arbor-worker` CLI (see `../python`).
 
 ## 6.0 UI rebuild (in progress)
 
