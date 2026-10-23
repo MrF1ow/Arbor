@@ -817,12 +817,14 @@ dependencies = [
 
 [[package]]
 name = "desktop"
-version = "5.21.0"
+version = "5.22.0"
 dependencies = [
  "chrono",
  "keyring",
  "libc",
  "notify",
+ "objc2",
+ "objc2-app-kit",
  "rusqlite",
  "serde",
  "serde_json",

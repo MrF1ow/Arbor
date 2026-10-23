@@ -110,6 +110,10 @@ function renderChatViewMinimal(
   );
 }
 
+function modeChipLabel(mode: "Ask" | "Explain") {
+  return `Mode: ${mode} (Shift+Tab to switch)`;
+}
+
 async function fillComposer(value: string) {
   const view = screen.getByTestId("chat-view");
   const textarea = within(view).getByLabelText("Chat message");
@@ -343,10 +347,14 @@ describe("chat threads", { timeout: 30000 }, () => {
     await waitForChatReady();
     await waitFor(() => {
       expect(
-        within(screen.getByTestId("chat-view")).getByRole("button", { name: "Explain mode" }),
-      ).toHaveAttribute("aria-pressed", "true");
+        within(screen.getByTestId("chat-view")).getByRole("button", {
+          name: modeChipLabel("Explain"),
+        }),
+      ).toBeInTheDocument();
     });
-    await user.click(within(screen.getByTestId("chat-view")).getByRole("button", { name: "Ask mode" }));
+    await user.click(
+      within(screen.getByTestId("chat-view")).getByRole("button", { name: modeChipLabel("Explain") }),
+    );
     await fillComposer("Explain this");
     await user.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(
@@ -362,8 +370,8 @@ describe("chat threads", { timeout: 30000 }, () => {
     await renderAppAtRoute("/course/cell-biology/chat?mode=quiz");
     await waitForChatReady();
     expect(
-      within(screen.getByTestId("chat-view")).getByRole("button", { name: "Ask mode" }),
-    ).toHaveAttribute("aria-pressed", "true");
+      within(screen.getByTestId("chat-view")).getByRole("button", { name: modeChipLabel("Ask") }),
+    ).toBeInTheDocument();
     expect(
       within(screen.getByTestId("chat-view")).queryByRole("button", { name: "Quiz mode" }),
     ).not.toBeInTheDocument();
@@ -659,8 +667,7 @@ describe("chat threads", { timeout: 30000 }, () => {
       await waitFor(() => {
         expect(within(view).getByRole("button", { name: "Send" })).toBeDisabled();
       });
-      expect(within(view).getByRole("button", { name: "Ask mode" })).toBeDisabled();
-      expect(within(view).getByRole("button", { name: "Explain mode" })).toBeDisabled();
+      expect(within(view).getByRole("button", { name: modeChipLabel("Ask") })).toBeDisabled();
       expect(within(view).getByRole("combobox", { name: "Course" })).toBeDisabled();
       await vi.advanceTimersByTimeAsync(200);
     } finally {
@@ -1030,7 +1037,7 @@ describe("chat threads", { timeout: 30000 }, () => {
     await renderAppAtRoute("/course/cell-biology/chat");
     await waitForChatReady();
     await user.click(screen.getByText("Membrane structure review"));
-    await user.click(screen.getByRole("button", { name: "Explain mode" }));
+    await user.click(screen.getByRole("button", { name: modeChipLabel("Ask") }));
     await waitFor(() => {
       expect(getMockIpcCalls().some((c) => c.cmd === "set_chat_thread_mode")).toBe(true);
     });
@@ -1040,6 +1047,183 @@ describe("chat threads", { timeout: 30000 }, () => {
       const start = getMockIpcCalls().find((c) => c.cmd === "start_chat");
       expect((start?.args as { mode?: string }).mode).toBe("explain");
     });
+  });
+
+  it("mode chip toggles and persists on a stored thread", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/chat");
+    await waitForChatReady();
+    await user.click(screen.getByText("Membrane structure review"));
+    await user.click(screen.getByRole("button", { name: modeChipLabel("Ask") }));
+    await waitFor(() => {
+      expect(
+        getMockIpcCalls().some(
+          (c) =>
+            c.cmd === "set_chat_thread_mode" &&
+            (c.args as { mode?: string }).mode === "explain",
+        ),
+      ).toBe(true);
+    });
+    await user.click(screen.getByRole("button", { name: modeChipLabel("Explain") }));
+    await waitFor(() => {
+      expect(
+        getMockIpcCalls().filter((c) => c.cmd === "set_chat_thread_mode").length,
+      ).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  it("Shift+Tab in the composer toggles mode", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/chat");
+    await waitForChatReady();
+    await openNewChat(user);
+    const textarea = within(screen.getByTestId("chat-view")).getByLabelText("Chat message");
+    await user.click(textarea);
+    fireEvent.keyDown(textarea, { key: "Tab", code: "Tab", shiftKey: true });
+    await waitFor(() => {
+      expect(
+        within(screen.getByTestId("chat-view")).getByRole("button", {
+          name: modeChipLabel("Explain"),
+        }),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("slash /explain sends with explain mode and stripped text", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/chat");
+    await waitForChatReady();
+    await openNewChat(user);
+    await fillComposer("/explain foo");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => {
+      const start = getMockIpcCalls().find((c) => c.cmd === "start_chat");
+      expect((start?.args as { mode?: string }).mode).toBe("explain");
+      expect((start?.args as { question?: string }).question).toBe("foo");
+    });
+  });
+
+  it("/ask alone switches mode without sending", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/chat?mode=explain");
+    await waitForChatReady();
+    await openNewChat(user);
+    await fillComposer("/ask");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => {
+      expect(
+        within(screen.getByTestId("chat-view")).getByRole("button", { name: modeChipLabel("Ask") }),
+      ).toBeInTheDocument();
+    });
+    expect(getMockIpcCalls().some((c) => c.cmd === "start_chat")).toBe(false);
+    expect(within(screen.getByTestId("chat-view")).getByLabelText("Chat message")).toHaveValue("");
+  });
+
+  it("slash suggestion Enter picks without sending", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/chat");
+    await waitForChatReady();
+    await openNewChat(user);
+    const view = screen.getByTestId("chat-view");
+    const textarea = within(view).getByLabelText("Chat message");
+    await user.click(textarea);
+    await user.keyboard("/e");
+    await waitFor(() => {
+      expect(within(view).getByRole("listbox", { name: "Slash commands" })).toBeInTheDocument();
+    });
+    await user.keyboard("{Enter}");
+    await waitFor(() => {
+      expect(textarea).toHaveValue("/explain ");
+    });
+    expect(getMockIpcCalls().some((c) => c.cmd === "start_chat")).toBe(false);
+  });
+
+  it("Escape dismisses slash suggestions without clearing the draft", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/chat");
+    await waitForChatReady();
+    await openNewChat(user);
+    const view = screen.getByTestId("chat-view");
+    const textarea = within(view).getByLabelText("Chat message");
+    await user.click(textarea);
+    await fillComposer("/explain");
+    await waitFor(() => {
+      expect(within(view).getByRole("listbox", { name: "Slash commands" })).toBeInTheDocument();
+    });
+    fireEvent.keyDown(textarea, { key: "Escape", code: "Escape" });
+    await waitFor(() => {
+      expect(within(view).queryByRole("listbox", { name: "Slash commands" })).not.toBeInTheDocument();
+    });
+    expect(textarea).toHaveValue("/explain");
+  });
+
+  it("Shift+Enter with slash list open inserts a newline instead of picking", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/chat");
+    await waitForChatReady();
+    await openNewChat(user);
+    const view = screen.getByTestId("chat-view");
+    const textarea = within(view).getByLabelText("Chat message");
+    await user.click(textarea);
+    await user.keyboard("/e");
+    await waitFor(() => {
+      expect(within(view).getByRole("listbox", { name: "Slash commands" })).toBeInTheDocument();
+    });
+    fireEvent.keyDown(textarea, { key: "Enter", shiftKey: true, code: "Enter" });
+    fireEvent.change(textarea, { target: { value: "/e\n" } });
+    expect(textarea).toHaveValue("/e\n");
+    expect(textarea).not.toHaveValue("/explain ");
+  });
+
+  it("mousedown on a slash suggestion inserts the command", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/chat");
+    await waitForChatReady();
+    await openNewChat(user);
+    const view = screen.getByTestId("chat-view");
+    const textarea = within(view).getByLabelText("Chat message");
+    await user.click(textarea);
+    await fillComposer("/e");
+    const listbox = await within(view).findByRole("listbox", { name: "Slash commands" });
+    const explainOption = within(listbox).getByText("/explain").closest("li");
+    expect(explainOption).not.toBeNull();
+    fireEvent.mouseDown(explainOption!, { button: 0 });
+    await waitFor(() => {
+      expect(textarea).toHaveValue("/explain ");
+    });
+    expect(getMockIpcCalls().some((c) => c.cmd === "start_chat")).toBe(false);
+  });
+
+  it("hides dictation on Linux and invokes start_dictation on Mac", async () => {
+    const platformSpy = vi.spyOn(window.navigator, "platform", "get");
+    platformSpy.mockReturnValue("Linux x86_64");
+    await renderAppAtRoute("/course/cell-biology/chat");
+    await waitForChatReady();
+    expect(
+      within(screen.getByTestId("chat-view")).queryByRole("button", {
+        name: "Dictate (or press Fn twice)",
+      }),
+    ).not.toBeInTheDocument();
+
+    cleanup();
+    clearTauriMocks();
+    clearMockIpcLog();
+    resetAuthRefreshForTests();
+    resetChatDraftsStoreForTests();
+
+    platformSpy.mockReturnValue("MacIntel");
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/chat");
+    await waitForChatReady();
+    await user.click(
+      within(screen.getByTestId("chat-view")).getByRole("button", {
+        name: "Dictate (or press Fn twice)",
+      }),
+    );
+    await waitFor(() => {
+      expect(getMockIpcCalls().some((c) => c.cmd === "start_dictation")).toBe(true);
+    });
+    platformSpy.mockRestore();
   });
 
   it("auto-sends prompt once under StrictMode into a new thread", async () => {

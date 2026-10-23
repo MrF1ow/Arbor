@@ -7,10 +7,17 @@ import {
   useSyncExternalStore,
 } from "react";
 
+import {
+  ComposerSlashSuggestions,
+  filterSlashCommands,
+  isSlashSuggestionOpen,
+  slashSuggestionInsert,
+} from "~/components/chat/composer-slash-suggestions";
 import { ChatThreadsPanel, ChatThreadsPanelShowButton } from "~/components/chat/chat-threads-panel";
 import { ChatTranscript } from "~/components/chat/chat-transcript";
 import { LiveAnswer } from "~/components/chat/live-answer";
-import { Button } from "~/components/ui/button";
+import { ModeChip } from "~/components/chat/mode-chip";
+import { Button, IconButton } from "~/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -19,9 +26,10 @@ import {
   SelectValue,
 } from "~/components/ui/select";
 import { Textarea } from "~/components/ui/textarea";
-import { ToggleGroup, ToggleGroupItem } from "~/components/ui/toggle-group";
 import type { ChatMode } from "~/domain/chat";
-import { isChatMode, workerHistory } from "~/domain/chat";
+import { isChatMode, parseSlashCommand, workerHistory } from "~/domain/chat";
+import { startDictation } from "~/lib/dictation";
+import { isMacPlatform } from "~/lib/shortcuts";
 import { courseDisplayName, workspaceRootLabel } from "~/domain/course";
 import { PROVIDER_FALLBACK } from "~/domain/provider";
 import type { DigestInfo, KnowledgeRootEntry } from "~/domain/types";
@@ -45,7 +53,11 @@ import {
 import { useChatDraftsStore } from "~/stores/chat-drafts-store";
 import { useUiStore } from "~/stores/ui-store";
 import { useJobStore } from "~/stores/job-store";
+import { Mic } from "lucide-react";
+
 type ArtifactKind = "flashcards" | "quiz";
+
+const COMPOSER_SLASH_LISTBOX_ID = "chat-composer-slash-listbox";
 
 const ARTIFACT_KIND_LABEL: Record<ArtifactKind, string> = {
   flashcards: "Flashcards",
@@ -123,8 +135,11 @@ export function ChatView({
   });
   const [artifactKind, setArtifactKind] = useState<ArtifactKind>(initialArtifactKind);
   const [streamingThreadId, setStreamingThreadId] = useState<string | null>(null);
+  const [slashActiveIndex, setSlashActiveIndex] = useState(0);
+  const [slashDismissed, setSlashDismissed] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
   const stickToBottomRef = useRef(true);
   const forceScrollRef = useRef(false);
   const sendingRef = useRef(false);
@@ -313,15 +328,112 @@ export function ChatView({
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [inFlight, threadId]);
 
+  const applyChatMode = (next: ChatMode) => {
+    if (threadId && activeRoot) {
+      void setThreadMode.mutateAsync({ thread: threadId, mode: next });
+    } else {
+      setLocalNewMode(next);
+    }
+    onModeSearchClear();
+  };
+
+  const toggleChatMode = () => {
+    applyChatMode(mode === "ask" ? "explain" : "ask");
+  };
+
+  const slashPrefixActive = isSlashSuggestionOpen(draftText) && !slashDismissed;
+  const slashOptions = slashPrefixActive ? filterSlashCommands(draftText) : [];
+  const slashListOpen = slashOptions.length > 0;
+
+  useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect -- reset slash highlight when filter changes */
+    setSlashActiveIndex(0);
+    /* eslint-enable react-hooks/set-state-in-effect */
+  }, [draftText]);
+
+  const submitComposer = async (raw: string) => {
+    const parsed = parseSlashCommand(raw);
+    if (parsed.mode) {
+      applyChatMode(parsed.mode);
+    }
+    const question = parsed.text.trim();
+    if (!question) {
+      if (activeRoot) {
+        setDraft(activeRoot, course, threadId, "");
+      }
+      return;
+    }
+    await sendMessage(question, parsed.mode ?? mode);
+  };
+
+  const pickSlashSuggestion = (index: number) => {
+    const entry = slashOptions[index];
+    if (!entry || !activeRoot) {
+      return;
+    }
+    setDraft(activeRoot, course, threadId, slashSuggestionInsert(entry.command));
+    setSlashActiveIndex(0);
+    composerRef.current?.focus();
+  };
+
   const onComposerKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Tab" && event.shiftKey) {
+      if (event.nativeEvent.isComposing || event.keyCode === 229) {
+        return;
+      }
+      event.preventDefault();
+      toggleChatMode();
+      return;
+    }
+
+    if (slashListOpen) {
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        setSlashActiveIndex((prev) => (prev + 1) % slashOptions.length);
+        return;
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        setSlashActiveIndex((prev) => (prev - 1 + slashOptions.length) % slashOptions.length);
+        return;
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setSlashDismissed(true);
+        return;
+      }
+      if (event.key === "Tab" || (event.key === "Enter" && !event.shiftKey)) {
+        if (event.nativeEvent.isComposing || event.keyCode === 229) {
+          return;
+        }
+        event.preventDefault();
+        pickSlashSuggestion(slashActiveIndex);
+        return;
+      }
+    }
+
     if (event.key === "Enter" && !event.shiftKey) {
       if (event.nativeEvent.isComposing || event.keyCode === 229) {
         return;
       }
       event.preventDefault();
-      void sendMessage(draftText);
+      void submitComposer(draftText);
     }
   };
+
+  const onDictationClick = () => {
+    composerRef.current?.focus();
+    void startDictation();
+  };
+
+  const composerPlaceholder =
+    mode === "explain"
+      ? "Ask for a step-by-step explanation…"
+      : "Ask about this course…";
+
+  const slashActiveDescendant = slashListOpen
+    ? `${COMPOSER_SLASH_LISTBOX_ID}-option-${slashOptions[slashActiveIndex]?.id ?? slashOptions[0]!.id}`
+    : undefined;
 
   const onTranscriptScroll = () => {
     const el = scrollRef.current;
@@ -387,29 +499,6 @@ export function ChatView({
                 ))}
               </SelectContent>
             </Select>
-            <ToggleGroup
-              value={[mode]}
-              disabled={controlsDisabled}
-              onValueChange={(values) => {
-                const next = values.length > 0 ? values[values.length - 1] : undefined;
-                if (!isChatMode(next)) {
-                  return;
-                }
-                if (threadId && activeRoot) {
-                  void setThreadMode.mutateAsync({ thread: threadId, mode: next });
-                } else {
-                  setLocalNewMode(next);
-                }
-                onModeSearchClear();
-              }}
-            >
-              <ToggleGroupItem value="ask" aria-label="Ask mode">
-                Ask
-              </ToggleGroupItem>
-              <ToggleGroupItem value="explain" aria-label="Explain mode">
-                Explain
-              </ToggleGroupItem>
-            </ToggleGroup>
           </div>
         </div>
 
@@ -437,28 +526,58 @@ export function ChatView({
             <p className={`min-h-4 text-xs ${statusClass}`} data-testid="chat-status">
               {statusText}
             </p>
-            <div className="flex gap-2">
+            <div className="relative flex flex-col gap-2">
+              {slashListOpen ? (
+                <ComposerSlashSuggestions
+                  draftPrefix={draftText}
+                  activeIndex={slashActiveIndex}
+                  listboxId={COMPOSER_SLASH_LISTBOX_ID}
+                  onPick={pickSlashSuggestion}
+                />
+              ) : null}
               <Textarea
+                ref={composerRef}
                 value={draftText}
                 disabled={composerDisabled}
-                placeholder="Ask about this course…"
+                placeholder={composerPlaceholder}
                 rows={1}
-                className="max-h-36 min-h-10 flex-1"
+                className="max-h-36 min-h-10 w-full"
                 onChange={(event) => {
+                  setSlashDismissed(false);
                   if (activeRoot) {
                     setDraft(activeRoot, course, threadId, event.target.value);
                   }
                 }}
                 onKeyDown={onComposerKeyDown}
                 aria-label="Chat message"
+                aria-activedescendant={slashActiveDescendant}
+                aria-controls={slashListOpen ? COMPOSER_SLASH_LISTBOX_ID : undefined}
+                aria-expanded={slashListOpen ? true : undefined}
+                aria-autocomplete={slashListOpen ? "list" : undefined}
+                role={slashListOpen ? "combobox" : undefined}
               />
-              <Button
-                type="button"
-                disabled={composerDisabled || draftText.trim().length === 0}
-                onClick={() => void sendMessage(draftText)}
-              >
-                Send
-              </Button>
+              <div className="flex items-center justify-between gap-2">
+                <ModeChip mode={mode} disabled={controlsDisabled} onToggle={toggleChatMode} />
+                <div className="flex items-center gap-2">
+                  {isMacPlatform() ? (
+                    <IconButton
+                      icon={Mic}
+                      label="Dictate (or press Fn twice)"
+                      size="icon-sm"
+                      variant="ghost"
+                      disabled={composerDisabled}
+                      onClick={onDictationClick}
+                    />
+                  ) : null}
+                  <Button
+                    type="button"
+                    disabled={composerDisabled || draftText.trim().length === 0}
+                    onClick={() => void submitComposer(draftText)}
+                  >
+                    Send
+                  </Button>
+                </div>
+              </div>
             </div>
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               <Select

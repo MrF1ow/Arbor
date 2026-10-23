@@ -4,11 +4,18 @@ export type ShortcutEntry = {
   group?: string;
 };
 
+export function isMacPlatform(): boolean {
+  if (typeof navigator === "undefined") {
+    return false;
+  }
+  return /Mac|iPhone|iPod|iPad/i.test(navigator.platform);
+}
+
 export function modKeyLabel(): "⌘" | "Ctrl" {
   if (typeof navigator === "undefined") {
     return "Ctrl";
   }
-  return /Mac|iPhone|iPod|iPad/i.test(navigator.platform) ? "⌘" : "Ctrl";
+  return isMacPlatform() ? "⌘" : "Ctrl";
 }
 
 export function modShortcut(key: string): string {

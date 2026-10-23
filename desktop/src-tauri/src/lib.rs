@@ -1,6 +1,7 @@
 mod auth_cache;
 mod chat_threads;
 mod commands;
+mod dictation;
 mod db;
 mod jobs;
 mod secrets;
@@ -103,6 +104,7 @@ pub fn run() {
             commands::skill_install,
             commands::skill_uninstall,
             commands::skill_run,
+            dictation::start_dictation,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Arbor")
