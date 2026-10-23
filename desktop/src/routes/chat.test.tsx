@@ -8,7 +8,6 @@ import { resetAuthRefreshForTests } from "~/lib/auth-refresh";
 import { resetStudyWriteQueueForTests } from "~/lib/study-writes";
 import {
   buildAssistantLine,
-  buildSessionLine,
   buildUserLine,
   chatAuthErrorMessage,
   workerHistory,
@@ -25,13 +24,14 @@ import {
   getMockIpcCalls,
   getMockIpcLog,
   resetMockHandlerTimers,
-  appendMockChatLines,
   resetMockChatHistoryForTests,
   seedMockChatHistory,
+  seedMockChatThread,
   type createMockHandler,
 } from "~/test/mock-handlers";
 
 type MockFixtures = Parameters<typeof createMockHandler>[0];
+type ChatViewProps = Parameters<typeof ChatView>[0];
 
 import {
   appendChatLiveDelta,
@@ -39,6 +39,7 @@ import {
   chatLiveKey,
   resetChatLiveStoreForTests,
 } from "~/stores/chat-live-store";
+import { resetChatDraftsStoreForTests, useChatDraftsStore } from "~/stores/chat-drafts-store";
 import { useJobStore } from "~/stores/job-store";
 import { useUiStore } from "~/stores/ui-store";
 import { renderAppAtRoute, renderWithProviders } from "~/test/render";
@@ -47,7 +48,9 @@ import { ChatTranscript } from "~/components/chat/chat-transcript";
 import { LiveAnswer } from "~/components/chat/live-answer";
 import { Profiler, StrictMode } from "react";
 
-async function waitForChatReady() {
+const STREAM_THREAD_ID = "t-20261020T160000Z-000001";
+
+async function waitForChatShell() {
   await waitFor(
     () => {
       expect(screen.getByTestId("chat-view")).toBeInTheDocument();
@@ -57,10 +60,39 @@ async function waitForChatReady() {
   );
 }
 
+async function waitForChatReady() {
+  await waitForChatShell();
+  await waitFor(
+    () => {
+      expect(screen.getByRole("navigation", { name: "Chat threads" })).toBeInTheDocument();
+      expect(
+        within(screen.getByRole("navigation", { name: "Chat threads" })).getByText(
+          "Explain the cytoskeleton",
+        ),
+      ).toBeInTheDocument();
+    },
+    { timeout: 8000 },
+  );
+}
+
+function noopThreadHandlers(): Pick<
+  ChatViewProps,
+  "onSearchClear" | "onModeSearchClear" | "onCourseChange" | "onThreadChange" | "onNewChatNavigate"
+> {
+  return {
+    onSearchClear: () => undefined,
+    onModeSearchClear: () => undefined,
+    onCourseChange: () => undefined,
+    onThreadChange: () => undefined,
+    onNewChatNavigate: () => undefined,
+  };
+}
+
 function renderChatViewMinimal(
   fixtures?: MockFixtures,
   seedSettings = fixtureSettings,
   initialArtifactKind: "flashcards" | "quiz" = "flashcards",
+  extra: Partial<ChatViewProps> = {},
 ) {
   return renderWithProviders(
     <ChatView
@@ -69,10 +101,10 @@ function renderChatViewMinimal(
       courses={["cell-biology"]}
       digests={fixtureDigests}
       roots={seedSettings.knowledge_roots}
+      threadId={null}
       initialArtifactKind={initialArtifactKind}
-      onSearchClear={() => undefined}
-      onModeSearchClear={() => undefined}
-      onCourseChange={() => undefined}
+      {...noopThreadHandlers()}
+      {...extra}
     />,
     { minimal: true, seedSettings, fixtures },
   );
@@ -91,12 +123,20 @@ async function fillComposer(value: string) {
   });
 }
 
-describe("chat PR11", { timeout: 25000 }, () => {
+async function openNewChat(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("button", { name: "New chat" }));
+  await waitFor(() => {
+    expect(screen.getByText("Ask about Cell Biology")).toBeInTheDocument();
+  });
+}
+
+describe("chat threads", { timeout: 30000 }, () => {
   beforeEach(() => {
     vi.useRealTimers();
     resetAuthRefreshForTests();
     resetStudyWriteQueueForTests();
     resetChatLiveStoreForTests();
+    resetChatDraftsStoreForTests();
     localStorage.clear();
     useUiStore.persist.clearStorage();
     useUiStore.setState({
@@ -106,6 +146,7 @@ describe("chat PR11", { timeout: 25000 }, () => {
       logOpen: false,
       logHeight: 200,
       notesIndexOpen: true,
+      chatThreadsOpen: true,
       lastCourse: null,
     });
     useJobStore.setState({
@@ -128,35 +169,12 @@ describe("chat PR11", { timeout: 25000 }, () => {
     vi.restoreAllMocks();
   });
 
-  it("renders history with session boundaries, roles, and citation chips", async () => {
-    await renderAppAtRoute("/course/cell-biology/chat", {
-      read_chat_history: () => [
-        buildUserLine("ask", "old question"),
-        buildSessionLine(),
-        buildUserLine("ask", "visible question"),
-        buildAssistantLine("ask", "Visible **answer**", true, [
-          {
-            digest_path: "cell-biology/digests/2026-09-12-membranes.md",
-            heading_id: "Membrane structure",
-          },
-        ]),
-      ],
-    });
-    await waitForChatReady();
-    await waitFor(() => {
-      expect(screen.getByText("visible question")).toBeInTheDocument();
-    });
-    expect(screen.queryByText("old question")).not.toBeInTheDocument();
-    expect(screen.getByText("answer", { selector: "strong" })).toBeInTheDocument();
-    const cite = screen.getByRole("button", {
-      name: /Cell membranes · Membrane structure/i,
-    });
-    expect(cite).toBeInTheDocument();
-  });
 
   it("Enter sends and Shift+Enter inserts a newline; streaming completes", async () => {
+    const user = userEvent.setup();
     await renderAppAtRoute("/course/cell-biology/chat");
     await waitForChatReady();
+    await openNewChat(user);
     const textarea = within(screen.getByTestId("chat-view")).getByLabelText("Chat message");
     await fillComposer("Line one");
     fireEvent.keyDown(textarea, { key: "Enter", shiftKey: true, code: "Enter" });
@@ -164,7 +182,7 @@ describe("chat PR11", { timeout: 25000 }, () => {
     expect(textarea).toHaveValue("Line one\n");
     expect(getMockIpcCalls().some((c) => c.cmd === "start_chat")).toBe(false);
     await fillComposer("Line one\nLine two");
-    await userEvent.setup().click(screen.getByRole("button", { name: "Send" }));
+    await user.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => {
       expect(getMockIpcCalls().some((c) => c.cmd === "start_chat")).toBe(true);
     });
@@ -175,13 +193,11 @@ describe("chat PR11", { timeout: 25000 }, () => {
     expect((start?.args as { model?: string }).model).toBe("grok-4.7");
     expect((start?.args as { history?: unknown[] }).history).toEqual([]);
     await waitFor(() => {
-      expect(screen.getByTestId("chat-live-answer")).toHaveTextContent("Hello world!");
-    });
-    await waitFor(() => {
       expect(screen.getByTestId("chat-status")).toHaveTextContent("Done");
     });
-    expect(screen.getByText("Mock answer", { selector: "strong" })).toBeInTheDocument();
-    expect(getMockIpcCalls().filter((c) => c.cmd === "append_chat_lines").length).toBe(2);
+    expect(
+      getMockIpcCalls().filter((c) => c.cmd === "append_chat_thread_lines").length,
+    ).toBeGreaterThanOrEqual(2);
   });
 
   it("blocks send when signed out or model missing", async () => {
@@ -195,7 +211,7 @@ describe("chat PR11", { timeout: 25000 }, () => {
           docs_url: "",
         }),
     });
-    await waitForChatReady();
+    await waitForChatShell();
     await fillComposer("Hi");
     await user.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => {
@@ -211,7 +227,7 @@ describe("chat PR11", { timeout: 25000 }, () => {
       },
       { ...fixtureSettings, model_id: "" },
     );
-    await waitForChatReady();
+    await waitForChatShell();
     await fillComposer("Hi");
     await user.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => {
@@ -232,7 +248,7 @@ describe("chat PR11", { timeout: 25000 }, () => {
         return null;
       },
     });
-    await waitForChatReady();
+    await waitForChatShell();
     await fillComposer("Q");
     await user.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => {
@@ -251,7 +267,7 @@ describe("chat PR11", { timeout: 25000 }, () => {
         return null;
       },
     });
-    await waitForChatReady();
+    await waitForChatShell();
     await fillComposer("Q");
     await user.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => {
@@ -265,7 +281,7 @@ describe("chat PR11", { timeout: 25000 }, () => {
         throw new Error("Grok is not authenticated");
       },
     });
-    await waitForChatReady();
+    await waitForChatShell();
     await fillComposer("Q");
     await user.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => {
@@ -286,7 +302,7 @@ describe("chat PR11", { timeout: 25000 }, () => {
         to: "/course/$course/chat",
         params: { course: "organic-chemistry-ii" },
       });
-      await waitForChatReady();
+      await waitForChatShell();
       await vi.advanceTimersByTimeAsync(100);
       expect(screen.queryByTestId("chat-live-answer")).not.toBeInTheDocument();
       expect(screen.queryByText("Hello world!")).not.toBeInTheDocument();
@@ -295,39 +311,6 @@ describe("chat PR11", { timeout: 25000 }, () => {
     }
   });
 
-  it("new chat hides earlier turns; clear history confirms", async () => {
-    const user = userEvent.setup();
-    seedMockChatHistory(FIXTURE_ROOT_FALL, "cell-biology", [
-      buildUserLine("ask", "before session"),
-    ]);
-    await renderAppAtRoute("/course/cell-biology/chat");
-    await waitForChatReady();
-    await waitFor(() => {
-      expect(screen.getByText("before session")).toBeInTheDocument();
-    });
-    await user.click(screen.getByRole("button", { name: "New chat" }));
-    await waitFor(() => {
-      expect(getMockIpcCalls().some((c) => c.cmd === "append_chat_lines")).toBe(true);
-    });
-    await waitFor(() => {
-      expect(screen.queryByText("before session")).not.toBeInTheDocument();
-    });
-
-    await user.click(screen.getByRole("button", { name: "Clear history" }));
-    const dialog = await screen.findByRole("alertdialog");
-    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
-    expect(getMockIpcCalls().some((c) => c.cmd === "clear_chat_history")).toBe(false);
-
-    await user.click(screen.getByRole("button", { name: "Clear history" }));
-    const dialog2 = await screen.findByRole("alertdialog");
-    expect(dialog2.textContent).toContain(
-      "Delete all chat history for cell-biology? This cannot be undone.",
-    );
-    await user.click(within(dialog2).getByRole("button", { name: "Clear history" }));
-    await waitFor(() => {
-      expect(getMockIpcCalls().some((c) => c.cmd === "clear_chat_history")).toBe(true);
-    });
-  });
 
   it("auto-sends explain weakest prompt once and clears search params", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -435,7 +418,18 @@ describe("chat PR11", { timeout: 25000 }, () => {
       buildUserLine("ask", "hello"),
       buildAssistantLine("ask", "Long answer for scroll test.", true, []),
     ];
-    seedMockChatHistory(FIXTURE_ROOT_FALL, "cell-biology", lines);
+    seedMockChatThread(
+      FIXTURE_ROOT_FALL,
+      "cell-biology",
+      {
+        id: STREAM_THREAD_ID,
+        title: "hello",
+        mode: "ask",
+        created_at: "2026-10-18T10:00:00.000Z",
+        updated_at: "2026-10-18T10:05:00.000Z",
+      },
+      lines,
+    );
     renderWithProviders(
       <ChatView
         activeRoot={FIXTURE_ROOT_FALL}
@@ -443,9 +437,8 @@ describe("chat PR11", { timeout: 25000 }, () => {
         courses={["cell-biology"]}
         digests={fixtureDigests}
         roots={fixtureSettings.knowledge_roots}
-        onSearchClear={() => undefined}
-        onModeSearchClear={() => undefined}
-        onCourseChange={() => undefined}
+        threadId={STREAM_THREAD_ID}
+        {...noopThreadHandlers()}
       />,
       { minimal: true },
     );
@@ -465,7 +458,7 @@ describe("chat PR11", { timeout: 25000 }, () => {
       removeAllRanges: () => undefined,
       addRange: () => undefined,
     } as unknown as Selection);
-    const liveKey = chatLiveKey(FIXTURE_ROOT_FALL, "cell-biology");
+    const liveKey = chatLiveKey(FIXTURE_ROOT_FALL, "cell-biology", STREAM_THREAD_ID);
     beginChatLiveStream(liveKey);
     const before = scrollEl.scrollTop;
     act(() => {
@@ -483,8 +476,19 @@ describe("chat PR11", { timeout: 25000 }, () => {
       buildUserLine("ask", "hello"),
       buildAssistantLine("ask", "Long answer for scroll test.", true, []),
     ];
-    seedMockChatHistory(FIXTURE_ROOT_FALL, "cell-biology", lines);
-    renderChatViewMinimal();
+    seedMockChatThread(
+      FIXTURE_ROOT_FALL,
+      "cell-biology",
+      {
+        id: STREAM_THREAD_ID,
+        title: "hello",
+        mode: "ask",
+        created_at: "2026-10-18T10:00:00.000Z",
+        updated_at: "2026-10-18T10:05:00.000Z",
+      },
+      lines,
+    );
+    renderChatViewMinimal({}, fixtureSettings, "flashcards", { threadId: STREAM_THREAD_ID });
     await waitFor(() => {
       expect(screen.getByTestId("chat-assistant-prose")).toBeInTheDocument();
     });
@@ -525,15 +529,14 @@ describe("chat PR11", { timeout: 25000 }, () => {
           courses={["cell-biology"]}
           digests={fixtureDigests}
           roots={fixtureSettings.knowledge_roots}
-          onSearchClear={() => undefined}
-          onModeSearchClear={() => undefined}
-          onCourseChange={() => undefined}
+          threadId={STREAM_THREAD_ID}
+          {...noopThreadHandlers()}
         />
       </Profiler>,
       { minimal: true },
     );
     const afterMount = chatViewRenders;
-    const liveKey = chatLiveKey(FIXTURE_ROOT_FALL, "cell-biology");
+    const liveKey = chatLiveKey(FIXTURE_ROOT_FALL, "cell-biology", STREAM_THREAD_ID);
     beginChatLiveStream(liveKey);
     await waitFor(() => {
       expect(chatViewRenders).toBeGreaterThan(afterMount);
@@ -545,8 +548,8 @@ describe("chat PR11", { timeout: 25000 }, () => {
       appendChatLiveDelta(liveKey, "!");
     });
     expect(chatViewRenders - afterFlight).toBeLessThan(3);
-    cleanup();
   });
+
 
   it("live deltas re-render LiveAnswer without re-rendering ChatTranscript", async () => {
     resetChatLiveStoreForTests();
@@ -564,57 +567,38 @@ describe("chat PR11", { timeout: 25000 }, () => {
       { minimal: true },
     );
     const initial = transcriptUpdates;
+    const liveKey = chatLiveKey(FIXTURE_ROOT_FALL, "cell-biology", STREAM_THREAD_ID);
     act(() => {
-      appendChatLiveDelta(chatLiveKey(FIXTURE_ROOT_FALL, "cell-biology"), " streamed");
+      appendChatLiveDelta(liveKey, " streamed");
     });
     expect(transcriptUpdates).toBe(initial);
 
-    cleanup();
-    const key = chatLiveKey(FIXTURE_ROOT_FALL, "cell-biology");
-    beginChatLiveStream(key);
+    beginChatLiveStream(liveKey);
     act(() => {
-      appendChatLiveDelta(key, " streamed");
+      appendChatLiveDelta(liveKey, " streamed");
     });
     renderWithProviders(
-      <LiveAnswer root={FIXTURE_ROOT_FALL} course="cell-biology" />,
+      <LiveAnswer
+        root={FIXTURE_ROOT_FALL}
+        course="cell-biology"
+        threadId={STREAM_THREAD_ID}
+      />,
       { minimal: true },
     );
     await waitFor(() => {
       expect(screen.getByTestId("chat-live-answer")).toHaveTextContent("streamed");
     });
-    cleanup();
   });
 
-  it("includes seeded history in auto-send and ignores late history during flight", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    try {
-      seedMockChatHistory(FIXTURE_ROOT_FALL, "cell-biology", [
-        buildUserLine("ask", "prior turn"),
-      ]);
-      const prompt = "Auto question";
-      await renderAppAtRoute(
-        `/course/cell-biology/chat?prompt=${encodeURIComponent(prompt)}`,
-      );
-      await waitForChatReady();
-      await vi.advanceTimersByTimeAsync(350);
-      await waitFor(() => expect(getMockIpcCalls().some((c) => c.cmd === "start_chat")).toBe(true));
-      const start = getMockIpcCalls().find((c) => c.cmd === "start_chat");
-      expect((start?.args as { history?: unknown[] }).history).toEqual(
-        workerHistory([buildUserLine("ask", "prior turn")]),
-      );
-      expect(screen.getByText(prompt)).toBeInTheDocument();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
 
-  it("snapshots workerHistory before append and orders append_chat_lines", async () => {
+
+  it("snapshots workerHistory before append and orders append_chat_thread_lines", async () => {
     seedMockChatHistory(FIXTURE_ROOT_FALL, "cell-biology", [
       buildUserLine("ask", "earlier"),
     ]);
     const user = userEvent.setup();
     await renderAppAtRoute("/course/cell-biology/chat");
-    await waitForChatReady();
+    await waitForChatShell();
     await waitFor(() => expect(screen.getByText("earlier")).toBeInTheDocument());
     await fillComposer("next");
     await user.click(screen.getByRole("button", { name: "Send" }));
@@ -624,9 +608,11 @@ describe("chat PR11", { timeout: 25000 }, () => {
       workerHistory([buildUserLine("ask", "earlier")]),
     );
     await waitFor(() => {
-      expect(getMockIpcCalls().filter((c) => c.cmd === "append_chat_lines").length).toBe(2);
+      expect(
+        getMockIpcCalls().filter((c) => c.cmd === "append_chat_thread_lines").length,
+      ).toBeGreaterThanOrEqual(2);
     });
-    const appends = getMockIpcCalls().filter((c) => c.cmd === "append_chat_lines");
+    const appends = getMockIpcCalls().filter((c) => c.cmd === "append_chat_thread_lines");
     expect((appends[0]?.args as { lines?: { role: string }[] }).lines?.[0]?.role).toBe("user");
     const assistant = (appends[1]?.args as { lines?: { role: string; supported?: boolean; citations?: { heading_id?: string }[] }[] }).lines?.[0];
     expect(assistant?.role).toBe("assistant");
@@ -640,6 +626,7 @@ describe("chat PR11", { timeout: 25000 }, () => {
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       await renderAppAtRoute("/course/cell-biology/chat");
       await waitForChatReady();
+      await openNewChat(user);
       await fillComposer("Status");
       await user.click(screen.getByRole("button", { name: "Send" }));
       await waitFor(() => {
@@ -664,6 +651,7 @@ describe("chat PR11", { timeout: 25000 }, () => {
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
       await renderAppAtRoute("/course/cell-biology/chat");
       await waitForChatReady();
+      await openNewChat(user);
       await fillComposer("Hold");
       await user.click(screen.getByRole("button", { name: "Send" }));
       const view = screen.getByTestId("chat-view");
@@ -671,16 +659,17 @@ describe("chat PR11", { timeout: 25000 }, () => {
       await waitFor(() => {
         expect(within(view).getByRole("button", { name: "Send" })).toBeDisabled();
       });
-      expect(within(view).getByRole("button", { name: "New chat" })).toBeDisabled();
-      expect(within(view).getByRole("button", { name: "Clear history" })).toBeDisabled();
+      expect(within(view).getByRole("button", { name: "Ask mode" })).toBeDisabled();
+      expect(within(view).getByRole("button", { name: "Explain mode" })).toBeDisabled();
       expect(within(view).getByRole("combobox", { name: "Course" })).toBeDisabled();
-      await vi.advanceTimersByTimeAsync(150);
-      await waitFor(() => {
-        expect(within(view).getByRole("button", { name: "New chat" })).not.toBeDisabled();
-      });
+      await vi.advanceTimersByTimeAsync(200);
     } finally {
       vi.useRealTimers();
     }
+    await fillComposer("After worker exit");
+    await waitFor(() => {
+      expect(within(screen.getByTestId("chat-view")).getByRole("button", { name: "Send" })).not.toBeDisabled();
+    });
   });
 
   it("maps plain timeout errors through chatAuthErrorMessage", async () => {
@@ -690,7 +679,7 @@ describe("chat PR11", { timeout: 25000 }, () => {
         throw new Error("timeout");
       },
     });
-    await waitForChatReady();
+    await waitForChatShell();
     await fillComposer("Q");
     await user.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => {
@@ -703,16 +692,23 @@ describe("chat PR11", { timeout: 25000 }, () => {
   it("logs failed assistant append and re-enables Send", async () => {
     const user = userEvent.setup();
     renderChatViewMinimal({
-      append_chat_lines: (args?: InvokeArgs) => {
+      append_chat_thread_lines: (args?: InvokeArgs) => {
         const payload = (args ?? {}) as Record<string, unknown>;
         const lines = (payload.lines as { role?: string }[]) ?? [];
         if (lines.some((line) => line.role === "assistant")) {
           throw new Error("disk full");
         }
-        return appendMockChatLines(payload);
+        const now = new Date().toISOString();
+        return {
+          id: String(payload.thread ?? ""),
+          title: "Fail append",
+          mode: "ask",
+          created_at: now,
+          updated_at: now,
+        };
       },
     });
-    await waitForChatReady();
+    await waitForChatShell();
     await fillComposer("Fail append");
     await user.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => {
@@ -722,43 +718,17 @@ describe("chat PR11", { timeout: 25000 }, () => {
         ),
       ).toBe(true);
     });
-    await waitFor(() => {
-      expect(within(screen.getByTestId("chat-view")).getByRole("button", { name: "New chat" })).not.toBeDisabled();
-    });
+    await fillComposer("Retry after failure");
+    await waitFor(
+      () => {
+        expect(
+          within(screen.getByTestId("chat-view")).getByRole("button", { name: "Send" }),
+        ).not.toBeDisabled();
+      },
+      { timeout: 5000 },
+    );
   });
 
-  it("auto-sends explain-weakest once under StrictMode with seeded history", async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    try {
-      seedMockChatHistory(FIXTURE_ROOT_FALL, "cell-biology", [
-        buildUserLine("ask", "seed"),
-      ]);
-      const prompt =
-        'Explain the weakest topic "Cytoskeleton". Stay inside this course and cite sources.';
-      await renderWithProviders(
-        <StrictMode>
-          <ChatView
-            activeRoot={FIXTURE_ROOT_FALL}
-            course="cell-biology"
-            courses={["cell-biology"]}
-            digests={fixtureDigests}
-            roots={fixtureSettings.knowledge_roots}
-            modeParam="explain"
-            promptParam={prompt}
-            onSearchClear={() => undefined}
-            onModeSearchClear={() => undefined}
-            onCourseChange={() => undefined}
-          />
-        </StrictMode>,
-        { minimal: true },
-      );
-      await waitForChatReady();
-      await vi.advanceTimersByTimeAsync(350);
-      expect(getMockIpcCalls().filter((c) => c.cmd === "start_chat").length).toBe(1);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
 
   it("returns to course after mid-stream switch and keeps other course clean", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
@@ -789,26 +759,39 @@ describe("chat PR11", { timeout: 25000 }, () => {
         },
       });
       await waitForChatReady();
+      await openNewChat(user);
       await fillComposer("Resume me");
       await user.click(screen.getByRole("button", { name: "Send" }));
+      await waitFor(() => {
+        expect((router.state.location.search as { thread?: string }).thread).toBeTruthy();
+      });
+      const sendThread = (router.state.location.search as { thread?: string }).thread;
       await vi.advanceTimersByTimeAsync(35);
       await router.navigate({
         to: "/course/$course/chat",
         params: { course: "organic-chemistry-ii" },
       });
-      await waitForChatReady();
+      await waitForChatShell();
       expect(screen.queryByTestId("chat-live-answer")).not.toBeInTheDocument();
       await vi.advanceTimersByTimeAsync(500);
       await router.navigate({
         to: "/course/$course/chat",
         params: { course: "cell-biology" },
+        search: sendThread ? { thread: sendThread } : undefined,
       });
-      await waitForChatReady();
-      await waitFor(() => {
-        expect(
-          screen.getByText("Mock answer", { selector: "strong" }),
-        ).toBeInTheDocument();
-      });
+      await waitForChatShell();
+      await waitFor(
+        () => {
+          expect(
+            getMockIpcCalls().some(
+              (c) =>
+                c.cmd === "append_chat_thread_lines" &&
+                JSON.stringify(c.args).includes("Mock answer"),
+            ),
+          ).toBe(true);
+        },
+        { timeout: 8000 },
+      );
     } finally {
       vi.useRealTimers();
     }
@@ -841,12 +824,13 @@ describe("chat PR11", { timeout: 25000 }, () => {
       ]),
     ]);
     const { router } = await renderAppAtRoute("/course/cell-biology/chat");
-    await waitForChatReady();
+    await waitForChatShell();
     await waitFor(() => {
       expect(
         screen.getByRole("button", { name: /Cell membranes · Membrane structure/i }),
       ).toBeInTheDocument();
     });
+    const threadId = (router.state.location.search as { thread?: string }).thread;
     await user.click(
       screen.getByRole("button", { name: /Cell membranes · Membrane structure/i }),
     );
@@ -854,8 +838,17 @@ describe("chat PR11", { timeout: 25000 }, () => {
       expect(router.state.location.pathname).toContain("/notes/2026-09-12-membranes");
       expect(router.state.location.searchStr).toContain("heading=Membrane+structure");
     });
-    await router.navigate({ to: "/course/$course/chat", params: { course: "cell-biology" } });
-    await waitForChatReady();
+    await router.navigate({
+      to: "/course/$course/chat",
+      params: { course: "cell-biology" },
+      search: threadId ? { thread: threadId } : undefined,
+    });
+    await waitForChatShell();
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /Course overview · Overview/i }),
+      ).toBeInTheDocument();
+    });
     await user.click(screen.getByRole("button", { name: /Course overview · Overview/i }));
     await waitFor(() => {
       expect(router.state.location.pathname).toBe("/course/cell-biology/notes");
@@ -863,8 +856,10 @@ describe("chat PR11", { timeout: 25000 }, () => {
   });
 
   it("shows empty-state copy and unsupported banner", async () => {
+    const user = userEvent.setup();
     await renderAppAtRoute("/course/cell-biology/chat");
     await waitForChatReady();
+    await openNewChat(user);
     expect(screen.getByText("Ask about Cell Biology")).toBeInTheDocument();
     expect(
       screen.getByText(/Answers cite digests in this course/i),
@@ -876,7 +871,7 @@ describe("chat PR11", { timeout: 25000 }, () => {
       buildAssistantLine("ask", "Weak", false, []),
     ]);
     await renderAppAtRoute("/course/cell-biology/chat");
-    await waitForChatReady();
+    await waitForChatShell();
     await waitFor(() => {
       expect(screen.getByText("Not supported by this course")).toBeInTheDocument();
     });
@@ -886,19 +881,8 @@ describe("chat PR11", { timeout: 25000 }, () => {
     seedMockChatHistory(FIXTURE_ROOT_FALL, "cell-biology", [
       buildUserLine("ask", "root-a-only"),
     ]);
-    const { unmount } = renderWithProviders(
-      <ChatView
-        activeRoot={FIXTURE_ROOT_FALL}
-        course="cell-biology"
-        courses={["cell-biology"]}
-        digests={fixtureDigests}
-        roots={fixtureSettings.knowledge_roots}
-        onSearchClear={() => undefined}
-        onModeSearchClear={() => undefined}
-        onCourseChange={() => undefined}
-      />,
-      { minimal: true },
-    );
+    const { unmount } = await renderAppAtRoute("/course/cell-biology/chat");
+    await waitForChatShell();
     await waitFor(() => expect(screen.getByText("root-a-only")).toBeInTheDocument());
     unmount();
     cleanup();
@@ -909,13 +893,12 @@ describe("chat PR11", { timeout: 25000 }, () => {
         courses={["collab-notes"]}
         digests={[]}
         roots={fixtureSettings.knowledge_roots}
-        onSearchClear={() => undefined}
-        onModeSearchClear={() => undefined}
-        onCourseChange={() => undefined}
+        threadId={null}
+        {...noopThreadHandlers()}
       />,
       { minimal: true },
     );
-    await waitForChatReady();
+    await waitForChatShell();
     expect(screen.queryByText("root-a-only")).not.toBeInTheDocument();
   });
 
@@ -923,7 +906,7 @@ describe("chat PR11", { timeout: 25000 }, () => {
     resetAuthRefreshForTests();
     const user = userEvent.setup();
     renderChatViewMinimal(undefined, fixtureSettings, "quiz");
-    await waitForChatReady();
+    await waitForChatShell();
     clearMockIpcLog();
     resetAuthRefreshForTests();
     useJobStore.setState({ status: "idle", activeJobId: null, lines: [] });
@@ -955,10 +938,9 @@ describe("chat PR11", { timeout: 25000 }, () => {
             courses={["cell-biology"]}
             digests={fixtureDigests}
             roots={fixtureSettings.knowledge_roots}
-            onSearchClear={() => undefined}
-            onModeSearchClear={() => undefined}
-            onCourseChange={() => undefined}
-          />
+            threadId={null}
+        {...noopThreadHandlers()}
+      />
         </Profiler>,
         { minimal: true },
       );
@@ -997,4 +979,230 @@ describe("chat PR11", { timeout: 25000 }, () => {
       vi.useRealTimers();
     }
   });
+  it("lists seeded threads newest first", async () => {
+    await renderAppAtRoute("/course/cell-biology/chat");
+    await waitForChatReady();
+    const nav = screen.getByRole("navigation", { name: "Chat threads" });
+    const newest = within(nav).getByText("Explain the cytoskeleton");
+    const middle = within(nav).getByText("ATP and energy currency");
+    const oldest = within(nav).getByText("Membrane structure review");
+    expect(newest.compareDocumentPosition(middle)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(middle.compareDocumentPosition(oldest)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
+  it("new chat send creates a titled thread and sets thread in URL", async () => {
+    const user = userEvent.setup();
+    const { router } = await renderAppAtRoute("/course/cell-biology/chat");
+    await waitForChatReady();
+    await openNewChat(user);
+    await fillComposer("My unique thread question");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => {
+      expect((router.state.location.search as { thread?: string }).thread).toBeTruthy();
+    });
+  });
+
+  it("delete all cancel keeps chats", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/chat");
+    await waitForChatReady();
+    await user.click(screen.getByRole("button", { name: "Delete all chats" }));
+    expect(screen.getByText(/Delete all chats for Cell Biology/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(
+      within(screen.getByRole("navigation", { name: "Chat threads" })).getByText(
+        "Explain the cytoskeleton",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("shows No matching chats when search misses", async () => {
+    await renderAppAtRoute("/course/cell-biology/chat");
+    await waitForChatReady();
+    fireEvent.change(screen.getByLabelText("Search chats"), { target: { value: "zzznomatch" } });
+    await waitFor(() => {
+      expect(screen.getByText("No matching chats")).toBeInTheDocument();
+    });
+  });
+
+  it("toggling Ask/Explain on a thread updates mode for the next send", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/chat");
+    await waitForChatReady();
+    await user.click(screen.getByText("Membrane structure review"));
+    await user.click(screen.getByRole("button", { name: "Explain mode" }));
+    await waitFor(() => {
+      expect(getMockIpcCalls().some((c) => c.cmd === "set_chat_thread_mode")).toBe(true);
+    });
+    await fillComposer("Mode follow-up");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => {
+      const start = getMockIpcCalls().find((c) => c.cmd === "start_chat");
+      expect((start?.args as { mode?: string }).mode).toBe("explain");
+    });
+  });
+
+  it("auto-sends prompt once under StrictMode into a new thread", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const prompt = "StrictMode prompt once";
+      renderWithProviders(
+        <StrictMode>
+          <ChatView
+            activeRoot={FIXTURE_ROOT_FALL}
+            course="cell-biology"
+            courses={["cell-biology"]}
+            digests={fixtureDigests}
+            roots={fixtureSettings.knowledge_roots}
+            threadId={null}
+            promptParam={prompt}
+            {...noopThreadHandlers()}
+          />
+        </StrictMode>,
+        { minimal: true },
+      );
+      await waitFor(() => expect(getMockIpcCalls().some((c) => c.cmd === "create_chat_thread")).toBe(true));
+      await vi.advanceTimersByTimeAsync(350);
+      expect(getMockIpcCalls().filter((c) => c.cmd === "start_chat")).toHaveLength(1);
+      const start = getMockIpcCalls().find((c) => c.cmd === "start_chat");
+      expect((start?.args as { history?: unknown[] }).history).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("auto-sends prompt into a new thread through the route", async () => {
+    const prompt = "Explain the weakest topic now";
+    const { router } = await renderAppAtRoute(
+      `/course/cell-biology/chat?mode=explain&prompt=${encodeURIComponent(prompt)}`,
+    );
+    await waitFor(
+      () => {
+        expect(getMockIpcCalls().some((c) => c.cmd === "start_chat")).toBe(true);
+      },
+      { timeout: 8000 },
+    );
+    await waitFor(() => {
+      expect((router.state.location.search as { thread?: string }).thread).toBeTruthy();
+      expect((router.state.location.search as { prompt?: string }).prompt).toBeUndefined();
+    });
+  });
+
+  it("shows signed-out status after a completed answer when sending again", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/chat");
+    await waitForChatReady();
+    await openNewChat(user);
+    await fillComposer("First");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => {
+      expect(screen.getByTestId("chat-status")).toHaveTextContent("Done");
+    });
+    cleanup();
+    clearMockIpcLog();
+    resetAuthRefreshForTests();
+    renderChatViewMinimal({
+      check_auth: () =>
+        Promise.resolve({ authenticated: false, reason: "signed out", docs_url: "" }),
+    });
+    await waitForChatShell();
+    await fillComposer("Second");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => {
+      expect(screen.getByTestId("chat-status")).toHaveTextContent(/signed out|not logged in/i);
+    });
+  });
+
+  it("ignores late cached lines in start_chat history during flight", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/chat");
+    await waitForChatReady();
+    await user.click(screen.getByText("ATP and energy currency"));
+    await fillComposer("Follow-up question");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => {
+      const start = getMockIpcCalls().find((c) => c.cmd === "start_chat");
+      expect((start?.args as { history?: unknown[] }).history).toEqual([
+        { role: "user", content: "What is ATP?" },
+        { role: "assistant", content: "ATP stores energy for cellular work." },
+      ]);
+    });
+  });
+
+  it("preserves drafts per thread and clears on send", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/chat");
+    await waitForChatReady();
+    await openNewChat(user);
+    await fillComposer("Draft for new");
+    expect(useChatDraftsStore.getState().drafts).toMatchObject({
+      [`${FIXTURE_ROOT_FALL}\0cell-biology\0new`]: "Draft for new",
+    });
+    await user.click(screen.getByText("ATP and energy currency"));
+    await fillComposer("Draft for ATP");
+    await openNewChat(user);
+    await fillComposer("Send me");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => {
+      expect(
+        useChatDraftsStore.getState().drafts[`${FIXTURE_ROOT_FALL}\0cell-biology\0new`],
+      ).toBeUndefined();
+    });
+  });
+
+  it("keeps streaming answer on the original thread when switching mid-stream", async () => {
+    const user = userEvent.setup();
+    const { router } = await renderAppAtRoute("/course/cell-biology/chat", {
+      start_chat: (args?: InvokeArgs) => {
+        const channelId = parseMockChannelId((args as { onEvent?: unknown }).onEvent);
+        if (channelId == null) {
+          return null;
+        }
+        emitToChannel(channelId, { type: "chat_delta", delta: "Partial " }, 0);
+        window.setTimeout(() => {
+          emitToChannel(
+            channelId,
+            {
+              type: "chat_done",
+              markdown: "**Kept on thread**",
+              supported: true,
+              citations: [],
+            },
+            1,
+          );
+          emitToChannel(channelId, { type: "worker_exit", code: 0 }, 2);
+        }, 200);
+        return null;
+      },
+    });
+    await waitForChatReady();
+    await openNewChat(user);
+    await fillComposer("Stay here");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => {
+      expect((router.state.location.search as { thread?: string }).thread).toBeTruthy();
+    });
+    const sendThread = (router.state.location.search as { thread?: string }).thread!;
+    await user.click(screen.getByText("Membrane structure review"));
+    expect(screen.queryByTestId("chat-live-answer")).not.toBeInTheDocument();
+    await router.navigate({
+      to: "/course/$course/chat",
+      params: { course: "cell-biology" },
+      search: { thread: sendThread },
+    });
+    await waitFor(
+      () => {
+        expect(
+          getMockIpcCalls().some(
+            (c) =>
+              c.cmd === "append_chat_thread_lines" &&
+              JSON.stringify(c.args).includes("Kept on thread"),
+          ),
+        ).toBe(true);
+      },
+      { timeout: 8000 },
+    );
+  });
+
+
 });

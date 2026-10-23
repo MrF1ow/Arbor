@@ -16,7 +16,9 @@ export const qk = {
   jobEvents: (root: string, jobId: string) => ["jobEvents", root, jobId] as const,
   library: (root: string) => ["library", root] as const,
   sync: (root: string) => ["sync", root] as const,
-  chatHistory: (root: string, course: string) => ["chatHistory", root, course] as const,
+  chatThreads: (root: string, course: string) => ["chatThreads", root, course] as const,
+  chatThread: (root: string, course: string, threadId: string) =>
+    ["chatThread", root, course, threadId] as const,
   studyJson: (root: string, course: string, kind: string) =>
     ["studyJson", root, course, kind] as const,
   quizProgress: (root: string, course: string) => ["quizProgress", root, course] as const,

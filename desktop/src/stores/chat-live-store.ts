@@ -17,8 +17,8 @@ export const EMPTY_CHAT_LIVE_SNAPSHOT: ChatLiveSnapshot = {
 const liveByKey = new Map<string, ChatLiveSnapshot>();
 const listeners = new Set<() => void>();
 
-export function chatLiveKey(root: string, course: string): string {
-  return `${root}\0${course}`;
+export function chatLiveKey(root: string, course: string, threadId: string): string {
+  return `${root}\0${course}\0${threadId}`;
 }
 
 function emitChange() {

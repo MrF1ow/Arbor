@@ -39,22 +39,32 @@ export interface ChatCitation {
   page_range?: string;
 }
 
+/** Legacy single-file history only; React UI uses per-thread lines. */
 export function visibleTranscript(lines: ChatLine[]): ChatLine[] {
-  let lastSession = -1;
-  for (let index = 0; index < lines.length; index += 1) {
-    if (lines[index]?.role === "session") lastSession = index;
-  }
-  if (lastSession < 0) return lines.slice();
-  return lines.slice(lastSession + 1);
+  return lines.filter((line) => line.role !== "session");
 }
 
 export function workerHistory(lines: ChatLine[]): Array<{ role: string; content: string }> {
-  return visibleTranscript(lines)
+  return lines
     .filter((line) => line.role === "user" || line.role === "assistant")
     .map((line) => ({
       role: line.role,
       content: line.content ?? "",
     }));
+}
+
+export function titleFromUserMessage(content: string): string {
+  const collapsed = content.trim().replace(/\s+/g, " ");
+  const chars = Array.from(collapsed);
+  if (chars.length <= 60) {
+    return collapsed;
+  }
+  const cut = chars.slice(0, 60).join("");
+  const lastSpace = cut.lastIndexOf(" ");
+  if (lastSpace > 0) {
+    return `${cut.slice(0, lastSpace)}…`;
+  }
+  return `${cut}…`;
 }
 
 export function chatNotePath(course: string, digestPath: string): string {
@@ -138,6 +148,15 @@ export function buildUserLine(mode: ChatMode, content: string): ChatLine {
   };
 }
 
+/** Legacy session markers only; stored threads do not write session lines. */
+export function buildSessionLine(): ChatLine {
+  return {
+    ts: new Date().toISOString(),
+    role: "session",
+    content: "",
+  };
+}
+
 export function buildAssistantLine(
   mode: ChatMode,
   content: string,
@@ -154,10 +173,3 @@ export function buildAssistantLine(
   };
 }
 
-export function buildSessionLine(): ChatLine {
-  return {
-    ts: new Date().toISOString(),
-    role: "session",
-    content: "",
-  };
-}

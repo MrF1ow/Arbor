@@ -1051,7 +1051,7 @@ fn is_safe_user_dir(email: &str) -> bool {
         && !email.contains("..")
 }
 
-fn git_user_dirname(root: &str) -> Result<String, String> {
+pub(crate) fn git_user_dirname(root: &str) -> Result<String, String> {
     let output = Command::new("git")
         .args(["-C", root, "config", "--get", "user.email"])
         .stdout(Stdio::piped())
@@ -1504,7 +1504,7 @@ pub async fn study_artifact_stale(root: String, course: String, skill: String) -
     .await
 }
 
-fn validate_chat_course(course: &str) -> Result<(), String> {
+pub(crate) fn validate_chat_course(course: &str) -> Result<(), String> {
     validate_path_component(course, "course name")?;
     if is_reserved_course_name(course) {
         return Err(format!(
@@ -1514,7 +1514,7 @@ fn validate_chat_course(course: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn chat_history_path(root: &str, course: &str) -> Result<PathBuf, String> {
+pub(crate) fn chat_history_path(root: &str, course: &str) -> Result<PathBuf, String> {
     validate_chat_course(course)?;
     let dirname = git_user_dirname(root)?;
     let new_path = Path::new(root)
@@ -1543,19 +1543,19 @@ fn kill_and_reap_child(child: &mut Child) {
     let _ = child.wait();
 }
 
-fn validate_chat_line_role(line: &serde_json::Value) -> Result<(), String> {
+pub(crate) fn validate_chat_line_role(line: &serde_json::Value) -> Result<(), String> {
     let role = line
         .get("role")
         .and_then(|value| value.as_str())
         .ok_or_else(|| "Chat line must have a role".to_string())?;
-    if role == "user" || role == "assistant" || role == "session" {
+    if role == "user" || role == "assistant" {
         Ok(())
     } else {
         Err(format!("Invalid chat line role: {role}"))
     }
 }
 
-fn validate_chat_mode(mode: &str) -> Result<(), String> {
+pub(crate) fn validate_chat_mode(mode: &str) -> Result<(), String> {
     if mode == "ask" || mode == "explain" {
         Ok(())
     } else {
@@ -1581,70 +1581,6 @@ pub(crate) fn chat_worker_stdin_payload(
         "model": model,
         "history": history,
     })
-}
-
-#[tauri::command]
-pub async fn read_chat_history(root: String, course: String) -> Result<Vec<serde_json::Value>, String> {
-    spawn_blocking_cmd(move || {
-        let path = chat_history_path(&root, &course)?;
-        if !path.is_file() {
-            return Ok(Vec::new());
-        }
-        let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
-        let mut lines = Vec::new();
-        for line in text.lines() {
-            if line.trim().is_empty() {
-                continue;
-            }
-            if let Ok(value) = serde_json::from_str(line) {
-                lines.push(value);
-            }
-        }
-        Ok(lines)
-    })
-    .await
-}
-
-#[tauri::command]
-pub async fn append_chat_lines(
-    root: String,
-    course: String,
-    lines: Vec<serde_json::Value>,
-) -> Result<(), String> {
-    spawn_blocking_cmd_unit(move || {
-        let path = chat_history_path(&root, &course)?;
-        for line in &lines {
-            validate_chat_line_role(line)?;
-        }
-        let parent = path
-            .parent()
-            .ok_or_else(|| "Invalid chat history path".to_string())?;
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-        let mut file = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&path)
-            .map_err(|e| e.to_string())?;
-        for line in lines {
-            let mut bytes = serde_json::to_vec(&line).map_err(|e| e.to_string())?;
-            bytes.push(b'\n');
-            file.write_all(&bytes).map_err(|e| e.to_string())?;
-        }
-        Ok(())
-    })
-    .await
-}
-
-#[tauri::command]
-pub async fn clear_chat_history(root: String, course: String) -> Result<(), String> {
-    spawn_blocking_cmd_unit(move || {
-        let path = chat_history_path(&root, &course)?;
-        if path.is_file() {
-            std::fs::remove_file(&path).map_err(|e| e.to_string())?;
-        }
-        Ok(())
-    })
-    .await
 }
 
 #[tauri::command]
@@ -1786,9 +1722,7 @@ mod tests {
 
     use super::*;
     use std::fs;
-    use std::sync::{Mutex, MutexGuard};
-
-    static GIT_IDENTITY_TEST_LOCK: Mutex<()> = Mutex::new(());
+    use std::sync::MutexGuard;
 
     struct IsolatedGitIdentityGuard {
         _mutex: MutexGuard<'static, ()>,
@@ -1808,7 +1742,7 @@ mod tests {
 
     impl IsolatedGitIdentityGuard {
         fn with_empty_identity() -> Self {
-            let mutex = GIT_IDENTITY_TEST_LOCK.lock().unwrap();
+            let mutex = crate::GIT_IDENTITY_TEST_LOCK.lock().unwrap();
             let saved_home = std::env::var("HOME").ok();
             let saved_git_config_global = std::env::var("GIT_CONFIG_GLOBAL").ok();
             let saved_git_config_nosystem = std::env::var("GIT_CONFIG_NOSYSTEM").ok();
@@ -1834,7 +1768,7 @@ mod tests {
         }
 
         fn with_global_email() -> Self {
-            let mutex = GIT_IDENTITY_TEST_LOCK.lock().unwrap();
+            let mutex = crate::GIT_IDENTITY_TEST_LOCK.lock().unwrap();
             let saved_home = std::env::var("HOME").ok();
             let saved_git_config_global = std::env::var("GIT_CONFIG_GLOBAL").ok();
             let saved_git_config_nosystem = std::env::var("GIT_CONFIG_NOSYSTEM").ok();
@@ -2295,28 +2229,6 @@ mod tests {
     }
 
     #[test]
-    fn chat_history_uses_fallback_user_dir_without_git_email() {
-        let _guard = IsolatedGitIdentityGuard::with_empty_identity();
-        let root = temp_root("chat-fallback-user");
-        let root_string = root.to_string_lossy().into_owned();
-        let line = serde_json::json!({
-            "ts": "2026-10-17T12:00:00Z",
-            "role": "user",
-            "mode": "ask",
-            "content": "Hello"
-        });
-        block_on_cmd(append_chat_lines(root_string.clone(), "Biology".into(), vec![line.clone()])).unwrap();
-        let expected = root
-            .join(".arbor")
-            .join("users")
-            .join("arbor@localhost")
-            .join("chat")
-            .join("Biology.jsonl");
-        assert!(expected.is_file());
-        assert_eq!(block_on_cmd(read_chat_history(root_string, "Biology".into())).unwrap().len(), 1);
-    }
-
-    #[test]
     fn study_artifact_stale_compares_sorted_raw_digest_bytes() {
         let root = temp_root("stale");
         let course = root.join("Biology");
@@ -2654,94 +2566,6 @@ mod tests {
             .expect("spawn sleep");
         kill_and_reap_child(&mut child);
         assert!(child.try_wait().unwrap().is_some());
-    }
-
-    #[test]
-    fn chat_history_round_trips_and_keeps_session_line() {
-        let _guard = IsolatedGitIdentityGuard::with_empty_identity();
-        let root = temp_root("chat-history");
-        let root_string = root.to_string_lossy().into_owned();
-        let empty = block_on_cmd(read_chat_history(root_string.clone(), "Biology".into())).unwrap();
-        assert!(empty.is_empty());
-
-        let user = serde_json::json!({
-            "ts": "2026-10-17T12:00:00Z",
-            "role": "user",
-            "mode": "ask",
-            "content": "What is ATP?"
-        });
-        let assistant = serde_json::json!({
-            "ts": "2026-10-17T12:00:01Z",
-            "role": "assistant",
-            "mode": "ask",
-            "content": "Energy currency.",
-            "supported": true,
-            "citations": []
-        });
-        let session = serde_json::json!({
-            "ts": "2026-10-17T12:01:00Z",
-            "role": "session",
-            "content": ""
-        });
-        block_on_cmd(append_chat_lines(
-            root_string.clone(),
-            "Biology".into(),
-            vec![user.clone(), assistant.clone()],
-        ))
-        .unwrap();
-        block_on_cmd(append_chat_lines(root_string.clone(), "Biology".into(), vec![session.clone()])).unwrap();
-
-        let read_back = block_on_cmd(read_chat_history(root_string.clone(), "Biology".into())).unwrap();
-        assert_eq!(read_back.len(), 3);
-        assert_eq!(read_back[2]["role"], "session");
-
-        block_on_cmd(clear_chat_history(root_string.clone(), "Biology".into())).unwrap();
-        assert!(block_on_cmd(read_chat_history(root_string.clone(), "Biology".into()))
-            .unwrap()
-            .is_empty());
-        assert!(root
-            .join(".arbor")
-            .join("chat")
-            .join("Chemistry.jsonl")
-            .exists()
-            == false);
-    }
-
-    #[test]
-    fn chat_history_clear_only_removes_one_course() {
-        let _guard = IsolatedGitIdentityGuard::with_empty_identity();
-        let root = temp_root("chat-clear");
-        let root_string = root.to_string_lossy().into_owned();
-        let line = serde_json::json!({
-            "ts": "2026-10-17T12:00:00Z",
-            "role": "user",
-            "mode": "ask",
-            "content": "Hi"
-        });
-        block_on_cmd(append_chat_lines(root_string.clone(), "Biology".into(), vec![line.clone()])).unwrap();
-        block_on_cmd(append_chat_lines(root_string.clone(), "Chemistry".into(), vec![line.clone()])).unwrap();
-        block_on_cmd(clear_chat_history(root_string.clone(), "Biology".into())).unwrap();
-        assert!(block_on_cmd(read_chat_history(root_string.clone(), "Biology".into()))
-            .unwrap()
-            .is_empty());
-        assert_eq!(block_on_cmd(read_chat_history(root_string.clone(), "Chemistry".into())).unwrap().len(), 1);
-    }
-
-    #[test]
-    fn chat_history_rejects_invalid_course_names() {
-        let root = temp_root("chat-reject");
-        let root_string = root.to_string_lossy().into_owned();
-        let line = serde_json::json!({
-            "ts": "2026-10-17T12:00:00Z",
-            "role": "user",
-            "mode": "ask",
-            "content": "Hi"
-        });
-        for bad in ["../x", "foo/bar", "/abs", "study"] {
-            assert!(block_on_cmd(read_chat_history(root_string.clone(), bad.into())).is_err());
-            assert!(block_on_cmd(append_chat_lines(root_string.clone(), bad.into(), vec![line.clone()])).is_err());
-            assert!(block_on_cmd(clear_chat_history(root_string.clone(), bad.into())).is_err());
-        }
     }
 
     #[test]

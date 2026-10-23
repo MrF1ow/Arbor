@@ -4,7 +4,7 @@ import { EmptyState } from "~/components/app/empty-state";
 import { ChatCitationChip } from "~/components/chat/chat-citation-chip";
 import type { ChatLine } from "~/domain/chat";
 import { courseDisplayName } from "~/domain/course";
-import { renderAnswerHtml, unsupportedBanner, visibleTranscript } from "~/domain/chat";
+import { renderAnswerHtml, unsupportedBanner } from "~/domain/chat";
 import type { DigestInfo } from "~/domain/types";
 
 export function ChatTranscript({
@@ -16,9 +16,7 @@ export function ChatTranscript({
   lines: ChatLine[];
   digests: DigestInfo[];
 }) {
-  const transcript = visibleTranscript(lines);
-
-  if (transcript.length === 0) {
+  if (lines.length === 0) {
     return (
       <EmptyState
         title={`Ask about ${courseDisplayName(course)}`}
@@ -29,7 +27,7 @@ export function ChatTranscript({
 
   return (
     <div className="flex flex-col gap-4 pb-4">
-      {transcript.map((line, index) => {
+      {lines.map((line, index) => {
         const key = `${line.ts ?? "line"}-${line.role}-${index}`;
         if (line.role === "user") {
           return (
