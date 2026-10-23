@@ -481,9 +481,11 @@ pub fn run_worker_json_with_stdin(
         .map_err(|e| format!("failed to launch worker: {e}"))?;
     if let Some(mut stdin) = child.stdin.take() {
         use std::io::Write;
-        stdin
-            .write_all(stdin_body.as_bytes())
-            .map_err(|e| format!("failed to write worker stdin: {e}"))?;
+        if let Err(e) = stdin.write_all(stdin_body.as_bytes()) {
+            kill_worker_tree(&mut child);
+            let _ = child.wait();
+            return Err(format!("failed to write worker stdin: {e}"));
+        }
     }
 
     let stdout = child
