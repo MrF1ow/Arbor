@@ -1,3 +1,6 @@
+// Most helpers here are only called from the macOS session in dictation/macos.rs.
+#![cfg_attr(not(target_os = "macos"), allow(dead_code))]
+
 #[cfg(target_os = "macos")]
 mod macos;
 
@@ -16,6 +19,7 @@ pub enum DictationEvent {
     Error { code: String, message: String },
 }
 
+#[cfg_attr(target_os = "macos", allow(dead_code))]
 pub fn dictation_unavailable_message() -> String {
     "Dictation is only available on macOS".into()
 }
