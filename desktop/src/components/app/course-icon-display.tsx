@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/static-components -- icons resolve from the lazy-loaded catalog */
 import { BookOpen, type LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 

@@ -4,7 +4,7 @@ import {
   ChevronDown,
   ChevronRight,
   FolderOpen,
-  MoreHorizontal,
+  Palette,
   PanelLeft,
   Plus,
   Settings2,
@@ -21,12 +21,6 @@ import { ListRow } from "~/components/app/list-row";
 import { SectionLabel } from "~/components/app/section-label";
 import { Badge } from "~/components/ui/badge";
 import { Button, IconButton } from "~/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "~/components/ui/dropdown-menu";
 import {
   Collapsible,
   CollapsibleContent,
@@ -96,46 +90,36 @@ function CourseNavRow({
         onSelect={() => onSelect(root, course)}
         className="w-full pl-4 pr-8"
       />
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
-            <IconButton
-              icon={MoreHorizontal}
-              label="Course actions"
-              size="icon-xs"
-              variant="ghost"
-              className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100"
-            />
-          }
-        />
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem
-            disabled={viewerBlocked || iconChangeDisabled}
-            title={viewerBlocked ? VIEWER_WRITE_REASON : undefined}
-            onClick={() => setPickerOpen(true)}
-          >
-            Change icon…
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <Suspense fallback={null}>
-        <CourseIconPicker
-          root={root}
-          course={course}
-          meta={meta}
-          role={role}
-          open={pickerOpen}
-          onOpenChange={setPickerOpen}
-          trigger={
-            <button
-              type="button"
-              tabIndex={-1}
-              aria-hidden
-              className="pointer-events-none absolute left-4 top-1/2 size-icon-sm -translate-y-1/2 opacity-0"
-            />
-          }
-        />
-      </Suspense>
+      <IconButton
+        icon={Palette}
+        label="Change icon"
+        size="icon-xs"
+        variant="ghost"
+        disabled={viewerBlocked || iconChangeDisabled}
+        title={viewerBlocked ? VIEWER_WRITE_REASON : undefined}
+        className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100"
+        onClick={() => setPickerOpen(true)}
+      />
+      {pickerOpen ? (
+        <Suspense fallback={null}>
+          <CourseIconPicker
+            root={root}
+            course={course}
+            meta={meta}
+            role={role}
+            open={pickerOpen}
+            onOpenChange={setPickerOpen}
+            trigger={
+              <button
+                type="button"
+                tabIndex={-1}
+                aria-hidden
+                className="pointer-events-none absolute left-4 top-1/2 size-icon-sm -translate-y-1/2 opacity-0"
+              />
+            }
+          />
+        </Suspense>
+      ) : null}
     </div>
   );
 }

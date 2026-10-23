@@ -30,23 +30,6 @@ fn read_courses_map_from_disk(path: &Path) -> Value {
         .unwrap_or_else(empty_courses_map)
 }
 
-fn normalize_full_document(mut doc: Value) -> Value {
-    if !doc.is_object() {
-        return json!({ "version": 1, "courses": {} });
-    }
-    let obj = doc.as_object_mut().expect("object");
-    match obj.get("courses").and_then(|c| c.as_object()) {
-        Some(_) => {}
-        _ => {
-            obj.insert("courses".into(), json!({}));
-        }
-    }
-    if obj.get("version").is_none() {
-        obj.insert("version".into(), json!(1));
-    }
-    doc
-}
-
 pub fn read_course_meta_sync(root: &str) -> Value {
     let path = courses_json_path(root);
     read_courses_map_from_disk(&path)
@@ -119,11 +102,5 @@ mod tests {
         fs::write(path.join("courses.json"), b"[]").unwrap();
         let root_s = root.to_string_lossy().into_owned();
         assert_eq!(read_course_meta_sync(&root_s), empty_courses_map());
-    }
-
-    #[test]
-    fn normalize_repairs_non_object_courses() {
-        let doc = normalize_full_document(json!({ "version": 1, "courses": [] }));
-        assert_eq!(doc["courses"], json!({}));
     }
 }
