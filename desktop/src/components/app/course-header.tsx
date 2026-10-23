@@ -96,7 +96,21 @@ export function CourseHeader({
       <SidebarHeaderTrigger className="self-center" />
       <div className="flex min-w-0 flex-1 items-baseline gap-2 self-center">
         {activeRoot ? (
-          <Suspense fallback={null}>
+          <Suspense
+            fallback={
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Change course icon"
+                disabled={iconChangeDisabled}
+                title={viewerBlocked ? VIEWER_WRITE_REASON : undefined}
+                className="inline-flex shrink-0 self-center"
+              >
+                <CourseIconDisplay meta={courseMeta.data} course={course} className="size-icon" />
+              </Button>
+            }
+          >
             <CourseIconPicker
               root={activeRoot}
               course={course}

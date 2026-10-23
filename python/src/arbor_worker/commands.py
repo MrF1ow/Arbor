@@ -56,6 +56,29 @@ def cmd_check_auth(args) -> int:
     return 0 if res.ok else 1
 
 
+def cmd_usage(_args) -> int:
+    from arbor_worker.usage import make_unavailable, read_provider_usage, utc_now_iso
+
+    try:
+        raw = sys.stdin.read()
+        payload = json.loads(raw) if raw.strip() else {}
+    except json.JSONDecodeError:
+        payload = {}
+    provider_id = payload.get("provider")
+    if not isinstance(provider_id, str) or not provider_id.strip():
+        provider_id = "codex"
+    try:
+        limits = read_provider_usage(provider_id.strip())
+    except Exception:
+        limits = make_unavailable(
+            checked_at=utc_now_iso(),
+            reason="probe_failed",
+            message="Could not read usage limits.",
+        )
+    print(json.dumps(limits))
+    return 0
+
+
 def _models_json_override(root: Path, provider_id: str) -> bool:
     cfg = root / ".arbor" / "models.json"
     if not cfg.is_file():

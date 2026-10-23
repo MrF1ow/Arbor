@@ -549,4 +549,12 @@
     line-height: 1.5;
     color: var(--muted-foreground);
   }
+
+  .usage-window-fill {
+    width: var(--usage-window-fill, 0%);
+  }
+
+  .usage-window-pace {
+    left: var(--usage-window-pace, 50%);
+  }
 }

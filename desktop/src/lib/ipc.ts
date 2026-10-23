@@ -39,6 +39,7 @@ export type Command =
   | "rename_chat_thread"
   | "set_chat_thread_mode"
   | "read_markdown"
+  | "read_provider_usage"
   | "read_quiz_progress"
   | "read_study_json"
   | "read_sync_conflict"

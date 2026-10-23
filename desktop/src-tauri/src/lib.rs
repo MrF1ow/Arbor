@@ -1,4 +1,5 @@
 mod auth_cache;
+mod usage_cache;
 mod chat_threads;
 mod commands;
 mod course_meta;
@@ -42,6 +43,7 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![
             commands::check_auth,
+            commands::read_provider_usage,
             commands::list_models,
             commands::list_providers,
             commands::plan_update,

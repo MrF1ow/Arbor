@@ -1,4 +1,5 @@
 use crate::auth_cache;
+use crate::usage_cache;
 use crate::jobs::{self, JobTrigger, SharedCoordinator};
 use crate::search::{self, SearchHit};
 use crate::secrets::{self, OsSecretStore};
@@ -270,6 +271,56 @@ pub async fn check_auth(
             &provider_id,
             force.unwrap_or(false),
         )
+    })
+    .await
+}
+
+fn cached_provider_usage_with(
+    app: &tauri::AppHandle,
+    provider_id: &str,
+    force: bool,
+    now: Instant,
+) -> Result<serde_json::Value, String> {
+    let key = usage_cache::usage_cache_key(provider_id);
+    if let Some(hit) = usage_cache::get_cached(&key, now, force) {
+        return Ok(hit);
+    }
+    let stdin_body = serde_json::to_string(&serde_json::json!({ "provider": provider_id }))
+        .map_err(|e| e.to_string())?;
+    let pairs = worker_env_pairs(app, &["usage"]);
+    let refs: Vec<(&str, &str)> = pairs
+        .iter()
+        .map(|(key, value)| (key.as_str(), value.as_str()))
+        .collect();
+    let value = worker::run_worker_json_with_stdin(
+        &repo_dir(app),
+        &["usage"],
+        &stdin_body,
+        &refs,
+        worker::worker_deadline(&["usage"]),
+    )?;
+    usage_cache::store_cached(&key, now, value.clone());
+    Ok(value)
+}
+
+fn cached_provider_usage(
+    app: &tauri::AppHandle,
+    provider_id: &str,
+    force: bool,
+) -> Result<serde_json::Value, String> {
+    cached_provider_usage_with(app, provider_id, force, Instant::now())
+}
+
+#[tauri::command]
+pub async fn read_provider_usage(
+    app: tauri::AppHandle,
+    provider: String,
+    force: Option<bool>,
+) -> Result<serde_json::Value, String> {
+    spawn_blocking_cmd(move || {
+        let provider_id = non_empty_provider(Some(provider))
+            .unwrap_or_else(|| "codex".to_string());
+        cached_provider_usage(&app, &provider_id, force.unwrap_or(false))
     })
     .await
 }

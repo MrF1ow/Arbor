@@ -17,6 +17,11 @@ import { CourseIconDisplay } from "~/components/app/course-icon-display";
 const CourseIconPicker = lazy(() =>
   import("~/components/app/course-icon-picker").then((m) => ({ default: m.CourseIconPicker })),
 );
+const ProviderUsagePopover = lazy(() =>
+  import("~/components/app/provider-usage-popover").then((m) => ({
+    default: m.ProviderUsagePopover,
+  })),
+);
 import { ListRow } from "~/components/app/list-row";
 import { SectionLabel } from "~/components/app/section-label";
 import { Badge } from "~/components/ui/badge";
@@ -127,6 +132,7 @@ function CourseNavRow({
 function ProviderStatusLine({ root }: { root: string | null }) {
   const effective = useEffectiveProvider(root);
   const auth = useAuth(effective.providerId);
+  const [usageOpen, setUsageOpen] = useState(false);
   if (!canUseDesktopIpc()) {
     return (
       <div className="flex items-center gap-2 px-2 py-2 text-xs text-muted-foreground">
@@ -160,11 +166,30 @@ function ProviderStatusLine({ root }: { root: string | null }) {
     }
   }
 
-  return (
-    <div className="flex items-center gap-2 px-2 py-2 text-xs text-muted-foreground">
+  const providerId = effective.providerId ?? "codex";
+
+  const trigger = (
+    <Button
+      type="button"
+      variant="ghost"
+      className="h-auto w-full justify-start gap-2 px-2 py-2 text-xs font-normal text-muted-foreground"
+    >
       <span className={cn("size-1.5 shrink-0 rounded-full", dotClass)} aria-hidden />
       <span className="truncate">{text}</span>
-    </div>
+    </Button>
+  );
+
+  return (
+    <Suspense fallback={trigger}>
+      <ProviderUsagePopover
+        open={usageOpen}
+        onOpenChange={setUsageOpen}
+        effectiveProviderId={providerId}
+        effectiveLabel={providerLabel}
+        modelLabel={modelLabel}
+        trigger={trigger}
+      />
+    </Suspense>
   );
 }
 

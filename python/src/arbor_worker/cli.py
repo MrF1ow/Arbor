@@ -20,6 +20,7 @@ def build_parser() -> argparse.ArgumentParser:
         choices=provider_choices(),
         help="Provider to check (default: codex).",
     )
+    sub.add_parser("usage", help="Read provider usage limits (JSON provider on stdin).")
     lm = sub.add_parser("list-models", help="List selectable models as JSON.")
     lm.add_argument("--root", default=None, help="Knowledge root to read .arbor/models.json from.")
     lm.add_argument(
@@ -296,6 +297,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "check-auth":
         from arbor_worker.commands import cmd_check_auth
         return cmd_check_auth(args)
+    if args.command == "usage":
+        from arbor_worker.commands import cmd_usage
+        return cmd_usage(args)
     if args.command == "list-models":
         from arbor_worker.commands import cmd_list_models
         return cmd_list_models(args)

@@ -343,6 +343,7 @@ pub fn uv_project_missing_error(argv: &[String]) -> Option<String> {
 pub fn worker_deadline(sub_args: &[&str]) -> Duration {
     let sub0 = sub_args.first().copied().unwrap_or("");
     match sub0 {
+        "usage" => Duration::from_secs(20),
         "check-auth" => Duration::from_secs(15),
         "list-models" => Duration::from_secs(20),
         "list-providers" => Duration::from_secs(30),
@@ -437,6 +438,122 @@ pub(crate) fn kill_worker_tree(child: &mut std::process::Child) {
 }
 
 #[cfg(feature = "desktop-runtime")]
+pub fn run_worker_json_with_stdin(
+    app_dir: &Path,
+    sub_args: &[&str],
+    stdin_body: &str,
+    extra_env: &[(&str, &str)],
+    deadline: Duration,
+) -> Result<serde_json::Value, String> {
+    let _slot = acquire_worker_spawn_slot();
+    let perf_start = Instant::now();
+    let sub0 = sub_args.first().copied().unwrap_or("");
+
+    let sidecar = if std::env::var("ARBOR_WORKER_NO_SIDECAR").as_deref() == Ok("1") {
+        None
+    } else {
+        packaged_sidecar()
+    };
+    let argv = resolve_worker_argv(
+        &|k| std::env::var(k).ok(),
+        &default_python_dir(app_dir),
+        sub_args,
+        sidecar.as_deref(),
+    );
+    if let Some(err) = uv_project_missing_error(&argv) {
+        return Err(err);
+    }
+    let mut command = Command::new(&argv[0]);
+    command
+        .args(&argv[1..])
+        .env("PATH", process_path())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+    }
+    crate::secrets::apply_env_pairs(&mut command, extra_env);
+    let mut child = command
+        .spawn()
+        .map_err(|e| format!("failed to launch worker: {e}"))?;
+    if let Some(mut stdin) = child.stdin.take() {
+        use std::io::Write;
+        if let Err(e) = stdin.write_all(stdin_body.as_bytes()) {
+            kill_worker_tree(&mut child);
+            let _ = child.wait();
+            return Err(format!("failed to write worker stdin: {e}"));
+        }
+    }
+
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| "worker stdout unavailable".to_string())?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| "worker stderr unavailable".to_string())?;
+
+    let stdout_handle = thread::spawn(move || {
+        let mut buf = Vec::new();
+        let mut reader = stdout;
+        let _ = reader.read_to_end(&mut buf);
+        buf
+    });
+    let stderr_handle = thread::spawn(move || {
+        let mut buf = Vec::new();
+        let mut reader = stderr;
+        let _ = reader.read_to_end(&mut buf);
+        buf
+    });
+
+    let poll = Duration::from_millis(10);
+    let deadline_at = Instant::now() + deadline;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) => {
+                if Instant::now() >= deadline_at {
+                    kill_worker_tree(&mut child);
+                    let _ = child.wait();
+                    drop(stdout_handle);
+                    drop(stderr_handle);
+                    if std::env::var("ARBOR_PERF").as_deref() == Ok("1") {
+                        eprintln!(
+                            "[arbor-perf] {sub0} {}ms exit=timeout",
+                            perf_start.elapsed().as_millis()
+                        );
+                    }
+                    let secs = deadline.as_secs();
+                    return Err(format!("worker timed out after {secs}s: {sub0}"));
+                }
+                thread::sleep(poll);
+            }
+            Err(error) => {
+                let _ = stdout_handle.join();
+                let _ = stderr_handle.join();
+                return Err(format!("failed waiting on worker: {error}"));
+            }
+        }
+    };
+
+    let stdout_bytes = stdout_handle
+        .join()
+        .map_err(|_| "worker stdout reader panicked".to_string())?;
+    let stderr_bytes = stderr_handle
+        .join()
+        .map_err(|_| "worker stderr reader panicked".to_string())?;
+    let exit_code = status.code();
+    parse_worker_json_output(
+        &String::from_utf8_lossy(&stdout_bytes),
+        &String::from_utf8_lossy(&stderr_bytes),
+        exit_code,
+    )
+}
+
 pub fn run_worker_json_with_deadline(
     app_dir: &Path,
     sub_args: &[&str],

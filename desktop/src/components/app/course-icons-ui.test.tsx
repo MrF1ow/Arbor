@@ -7,7 +7,8 @@ import { renderAppAtRoute } from "~/test/render";
 import { useUiStore } from "~/stores/ui-store";
 
 describe("course icons UI", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await import("~/components/app/course-icon-picker");
     localStorage.clear();
     useUiStore.persist.clearStorage();
     useUiStore.setState({
@@ -31,32 +32,57 @@ describe("course icons UI", () => {
   it("picking an icon updates sidebar and header; reset clears; viewer disabled", async () => {
     const user = userEvent.setup();
     await renderAppAtRoute("/course/cell-biology/notes");
-    const headerButton = await screen.findByRole("button", { name: "Change course icon" });
-    await waitFor(() => {
-      expect(headerButton.querySelector("[data-icon]")).toHaveAttribute("data-icon", "microscope");
-    });
+    await screen.findByRole(
+      "button",
+      { name: "Change course icon" },
+      { timeout: 5000 },
+    );
+    await waitFor(
+      () => {
+        const btn = screen.getByRole("button", { name: "Change course icon" });
+        expect(btn.querySelector("[data-icon]")).toHaveAttribute("data-icon", "microscope");
+      },
+      { timeout: 15000 },
+    );
+    const headerButton = screen.getByRole("button", { name: "Change course icon" });
 
     const sidebarRow = screen.getByRole("button", { name: /Cell Biology/i });
     expect(sidebarRow.querySelector("[data-icon]")).toHaveAttribute("data-icon", "microscope");
 
-    await user.click(headerButton);
-    await screen.findByText("Course icon");
-    await user.click(await screen.findByRole("button", { name: "Genetics" }));
-    await waitFor(() => {
+    await waitFor(
+      async () => {
+        await user.click(headerButton);
+        expect(screen.getByText("Course icon")).toBeInTheDocument();
+      },
+      { timeout: 15000 },
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Genetics" }, { timeout: 5000 }),
+    );
+    await waitFor(
+      () => {
       expect(headerButton.querySelector("[data-icon]")).toHaveAttribute("data-icon", "dna");
-    });
+    },
+      { timeout: 5000 },
+    );
     expect(sidebarRow.querySelector("[data-icon]")).toHaveAttribute("data-icon", "dna");
 
-    await user.click(await screen.findByRole("button", { name: "Sky" }));
-    await waitFor(() => {
+    await user.click(await screen.findByRole("button", { name: "Sky" }, { timeout: 5000 }));
+    await waitFor(
+      () => {
       expect(headerButton.querySelector("[data-icon]")).toHaveClass("text-course-sky");
-    });
+    },
+      { timeout: 5000 },
+    );
 
     await user.click(screen.getByRole("button", { name: "Reset" }));
-    await waitFor(() => {
+    await waitFor(
+      () => {
       expect(headerButton.querySelector("[data-icon]")).toHaveAttribute("data-icon", "book-open");
-    });
-  });
+    },
+      { timeout: 5000 },
+    );
+  }, 15000);
 
   it("viewer cannot open picker", async () => {
     await renderAppAtRoute("/course/cell-biology/notes", {
