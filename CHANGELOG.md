@@ -2,11 +2,45 @@
 
 Package version for the worker, desktop, and Tauri app. See [Version numbering](PROJECT.md#version-numbering) in `PROJECT.md`.
 
-**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is complete as package `3.0.0`. **Version 4** is complete as package `4.0.0`. **Version 5** is complete as package `5.0.0`. **Current package:** `5.18.0`. **Current tag:** `v5.18.0`. `v5.0.1` is cut when that release lands. `v5.0.0` is cut when that release lands. `v4.5.0` is cut when that release lands. `v4.4.0` is tagged. `v4.3.0` is not tagged yet. `v4.2.0` is tagged. `v4.1.0` and `v4.0.0` are tagged. `v3.0.0` through `v3.5.0` are already tagged. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) was retested on the 2026-10-17 Linux live run.
+**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is complete as package `3.0.0`. **Version 4** is complete as package `4.0.0`. **Version 5** is complete as package `5.0.0`. **Current package:** `5.22.0`. **Current tag:** `v5.22.0`. `v5.0.1` is cut when that release lands. `v5.0.0` is cut when that release lands. `v4.5.0` is cut when that release lands. `v4.4.0` is tagged. `v4.3.0` is not tagged yet. `v4.2.0` is tagged. `v4.1.0` and `v4.0.0` are tagged. `v3.0.0` through `v3.5.0` are already tagged. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) was retested on the 2026-10-17 Linux live run.
 
 ## Unreleased
 
-Nothing pending above `5.18.0`.
+Nothing pending above `5.22.0`.
+
+## 5.22.0 — 2026-10-23
+
+Git tag `v5.22.0`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `5.22.0`. UI cutover stays `6.0.0`.
+
+- The Ask/Explain switch moves into the message box. Shift+Tab toggles it.
+- `/ask` and `/explain` at the start of a message switch the mode, with a suggestion list.
+- On macOS, a mic button starts system dictation into the chat box. `Info.plist` adds the microphone and speech recognition usage strings.
+
+## 5.21.0 — 2026-10-23
+
+Git tag `v5.21.0`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `5.21.0`. UI cutover stays `6.0.0`.
+
+- Chats are stored threads per course, with a Chats panel: search, New chat, rename, delete, and delete all.
+- Existing chat history is split into threads at the old New chat points; the original file is kept as `<course>.jsonl.migrated`.
+- Each thread keeps its own draft and Ask/Explain mode. An answer keeps arriving in its own thread when you switch threads or tabs.
+
+## 5.20.0 — 2026-10-23
+
+Git tag `v5.20.0`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `5.20.0`. UI cutover stays `6.0.0`.
+
+- Chat answers stream in as they are written. Claude CLI and Grok CLI stream through one `stream-json` parser; Ollama, LM Studio, OpenAI, and Anthropic APIs stream over HTTP. Codex stays non-streaming.
+- The `supported:` trailer line never shows in the live answer. Streaming errors keep API keys redacted.
+- The live answer renders markdown, paints at most once per frame, and shows an inline caret.
+
+## 5.19.0 — 2026-10-23
+
+Git tag `v5.19.0`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `5.19.0`. UI cutover stays `6.0.0`.
+
+- Chat drops its Quiz mode (chat only; the Quiz tab is unchanged). Chat offers Ask and Explain.
+- Numbered lists in chat and notes count 1, 2, 3 across blank lines and keep their start number; indented continuation text becomes a paragraph inside the item.
+- Selected text uses a visible olive highlight in light and dark.
+- The chat stops auto-scrolling while you select text, and always scrolls to your own new message.
+- Plans for the 6.0 UX pass live in `docs/superpowers/plans/ux-6.0/`.
 
 ## 5.18.0 — 2026-10-20
 
