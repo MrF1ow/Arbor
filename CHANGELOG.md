@@ -2,11 +2,19 @@
 
 Package version for the worker, desktop, and Tauri app. See [Version numbering](PROJECT.md#version-numbering) in `PROJECT.md`.
 
-**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is complete as package `3.0.0`. **Version 4** is complete as package `4.0.0`. **Version 5** is complete as package `5.0.0`. **Current package:** `5.19.0`. **Current tag:** `v5.19.0`. `v5.0.1` is cut when that release lands. `v5.0.0` is cut when that release lands. `v4.5.0` is cut when that release lands. `v4.4.0` is tagged. `v4.3.0` is not tagged yet. `v4.2.0` is tagged. `v4.1.0` and `v4.0.0` are tagged. `v3.0.0` through `v3.5.0` are already tagged. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) was retested on the 2026-10-17 Linux live run.
+**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is complete as package `3.0.0`. **Version 4** is complete as package `4.0.0`. **Version 5** is complete as package `5.0.0`. **Current package:** `5.20.0`. **Current tag:** `v5.20.0`. `v5.0.1` is cut when that release lands. `v5.0.0` is cut when that release lands. `v4.5.0` is cut when that release lands. `v4.4.0` is tagged. `v4.3.0` is not tagged yet. `v4.2.0` is tagged. `v4.1.0` and `v4.0.0` are tagged. `v3.0.0` through `v3.5.0` are already tagged. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) was retested on the 2026-10-17 Linux live run.
 
 ## Unreleased
 
-Nothing pending above `5.19.0`.
+Nothing pending above `5.20.0`.
+
+## 5.20.0 — 2026-10-23
+
+Git tag `v5.20.0`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `5.20.0`. UI cutover stays `6.0.0`.
+
+- Chat answers stream in as they are written. Claude CLI and Grok CLI stream through one `stream-json` parser; Ollama, LM Studio, OpenAI, and Anthropic APIs stream over HTTP. Codex stays non-streaming.
+- The `supported:` trailer line never shows in the live answer. Streaming errors keep API keys redacted.
+- The live answer renders markdown, paints at most once per frame, and shows an inline caret.
 
 ## 5.19.0 — 2026-10-23
 
