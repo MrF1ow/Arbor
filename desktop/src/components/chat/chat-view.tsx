@@ -174,7 +174,9 @@ export function ChatView({
     onApplyFinal: onDictationApplyFinal,
   });
   const dictationRef = useRef(dictation);
-  dictationRef.current = dictation;
+  useLayoutEffect(() => {
+    dictationRef.current = dictation;
+  });
   const stickToBottomRef = useRef(true);
   const forceScrollRef = useRef(false);
   const sendingRef = useRef(false);
