@@ -7,7 +7,7 @@ use std::time::Duration;
 use block2::RcBlock;
 use objc2::rc::Retained;
 use objc2::runtime::Bool;
-use objc2::{ClassType, MainThreadMarker};
+use objc2::{AnyThread, ClassType, MainThreadMarker};
 use objc2_av_foundation::{
     AVCaptureDevice, AVAuthorizationStatus, AVMediaTypeAudio,
 };
@@ -57,6 +57,14 @@ fn control_is_current(control: &SessionControl) -> bool {
     })
 }
 
+/// The session can still emit its terminal event (stopping is fine: that is how a stop finishes).
+fn can_finish(control: &SessionControl) -> bool {
+    control_is_current(control)
+        && !control.cancelled.load(Ordering::SeqCst)
+        && !control.terminal_sent.load(Ordering::SeqCst)
+}
+
+/// Not yet listening and should not start (cancelled, stopped, or already finished).
 fn session_aborted(control: &SessionControl) -> bool {
     control.cancelled.load(Ordering::SeqCst)
         || control.stopping.load(Ordering::SeqCst)
@@ -73,9 +81,7 @@ fn release(control: &SessionControl) {
         let node = input.as_super().as_super();
         unsafe { node.removeTapOnBus(0) };
         unsafe { live.engine.stop() };
-        if control.cancelled.load(Ordering::SeqCst) {
-            unsafe { live.task.cancel() };
-        }
+        unsafe { live.task.cancel() };
     }
     CONTROL.with(|cell| {
         if cell
@@ -104,13 +110,9 @@ fn schedule_final_timeout(app: AppHandle, control: Arc<SessionControl>) {
     let session_id = control.id;
     thread::spawn(move || {
         thread::sleep(Duration::from_secs(FINAL_TIMEOUT_SECS));
-        let app_main = app.clone();
         let control_main = control.clone();
         let _ = app.run_on_main_thread(move || {
-            if control_main.id != session_id || !control_is_current(&control_main) {
-                return;
-            }
-            if session_aborted(&control_main) {
+            if control_main.id != session_id || !can_finish(&control_main) {
                 return;
             }
             let text = control_main
@@ -223,10 +225,9 @@ fn begin_listening(app: AppHandle, control: Arc<SessionControl>) {
                     *partial = text.clone();
                 }
                 if unsafe { result.isFinal() } {
-                    let app_main = app_for_handler.clone();
                     let control_main = control.clone();
                     let _ = app_for_handler.run_on_main_thread(move || {
-                        if !control_is_current(&control_main) || session_aborted(&control_main) {
+                        if !can_finish(&control_main) {
                             return;
                         }
                         emit_terminal_on_main(&control_main, DictationEvent::Final { text });
@@ -246,7 +247,6 @@ fn begin_listening(app: AppHandle, control: Arc<SessionControl>) {
                     .map(|v| v.clone())
                     .unwrap_or_default();
                 let event = terminal_for_task_error(stopping, &last_partial, Some(&detail));
-                let app_main = app_for_handler.clone();
                 let control_main = control.clone();
                 let _ = app_for_handler.run_on_main_thread(move || {
                     if !control_is_current(&control_main) || control_main.cancelled.load(Ordering::SeqCst) {
@@ -300,7 +300,7 @@ fn continue_after_speech(app: AppHandle, control: Arc<SessionControl>) {
     if !control_is_current(&control) || session_aborted(&control) {
         return;
     }
-    let Some(media_type) = AVMediaTypeAudio else {
+    let Some(media_type) = (unsafe { AVMediaTypeAudio }) else {
         emit_terminal_on_main(
             &control,
             error_event("failed", failed_message(None)),
