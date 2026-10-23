@@ -674,8 +674,8 @@ function refreshChatCourseOptions() {
   }
 }
 
-function setChatModeButtons(mode: ChatMode) {
-  chatMode = mode;
+function setChatModeButtons(mode: string) {
+  chatMode = mode as ChatMode;
   for (const button of [chatModeAskBtn, chatModeExplainBtn, chatModeQuizBtn]) {
     const active = button.dataset.chatMode === mode;
     button.classList.toggle("active", active);

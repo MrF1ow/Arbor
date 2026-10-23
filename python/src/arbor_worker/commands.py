@@ -965,7 +965,7 @@ def cmd_chat(_args) -> int:
         model = payload["model"]
         history = payload.get("history", [])
         budget_chars = int(payload.get("budget_chars", 12_000))
-        if mode not in {"ask", "explain", "quiz"}:
+        if mode not in {"ask", "explain"}:
             raise ValueError(f"invalid mode: {mode!r}")
         provider = make_provider(provider_name, root)
         answer(

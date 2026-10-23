@@ -21,6 +21,7 @@
   --primary-foreground: #ffffff;
   --accent: #e8ead8;
   --accent-foreground: #46562b;
+  --selection: color-mix(in oklab, var(--primary) 30%, transparent);
   --selected: #e8e2cf;
   --border: #e2d8c8;
   --input: #e2d8c8;
@@ -64,6 +65,7 @@
   --primary-foreground: #171411;
   --accent: #272b1e;
   --accent-foreground: #b9cc8e;
+  --selection: color-mix(in oklab, var(--primary) 30%, transparent);
   --selected: #2b2620;
   --border: #332d27;
   --input: #332d27;
@@ -92,6 +94,7 @@
   --color-primary-foreground: var(--primary-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+  --color-selection: var(--selection);
   --color-selected: var(--selected);
   --color-border: var(--border);
   --color-input: var(--input);
@@ -210,7 +213,8 @@
   }
 
   ::selection {
-    background: var(--accent);
+    background: var(--selection);
+    color: inherit;
   }
 
   @media (prefers-reduced-motion: reduce) {

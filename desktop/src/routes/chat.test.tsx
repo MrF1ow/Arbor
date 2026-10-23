@@ -35,6 +35,7 @@ type MockFixtures = Parameters<typeof createMockHandler>[0];
 
 import {
   appendChatLiveDelta,
+  beginChatLiveStream,
   chatLiveKey,
   resetChatLiveStoreForTests,
 } from "~/stores/chat-live-store";
@@ -355,15 +356,15 @@ describe("chat PR11", { timeout: 25000 }, () => {
 
   it("changes mode in start_chat payload from toggle", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/chat?mode=quiz");
+    await renderAppAtRoute("/course/cell-biology/chat?mode=explain");
     await waitForChatReady();
     await waitFor(() => {
       expect(
-        within(screen.getByTestId("chat-view")).getByRole("button", { name: "Quiz mode" }),
+        within(screen.getByTestId("chat-view")).getByRole("button", { name: "Explain mode" }),
       ).toHaveAttribute("aria-pressed", "true");
     });
     await user.click(within(screen.getByTestId("chat-view")).getByRole("button", { name: "Ask mode" }));
-    await fillComposer("Quiz time");
+    await fillComposer("Explain this");
     await user.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(
       () => {
@@ -372,6 +373,17 @@ describe("chat PR11", { timeout: 25000 }, () => {
       },
       { timeout: 3000 },
     );
+  });
+
+  it("?mode=quiz falls back to Ask and omits chat Quiz mode toggle", async () => {
+    await renderAppAtRoute("/course/cell-biology/chat?mode=quiz");
+    await waitForChatReady();
+    expect(
+      within(screen.getByTestId("chat-view")).getByRole("button", { name: "Ask mode" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(
+      within(screen.getByTestId("chat-view")).queryByRole("button", { name: "Quiz mode" }),
+    ).not.toBeInTheDocument();
   });
 
   it("generate study artifact launches flashcard or quiz jobs", async () => {
@@ -415,6 +427,86 @@ describe("chat PR11", { timeout: 25000 }, () => {
     expect(screen.getByRole("combobox", { name: "Study artifact type" })).toHaveTextContent(
       "Flashcards",
     );
+  });
+
+  it("does not auto-scroll the transcript while the user has a selection", async () => {
+    resetChatLiveStoreForTests();
+    const lines = [
+      buildUserLine("ask", "hello"),
+      buildAssistantLine("ask", "Long answer for scroll test.", true, []),
+    ];
+    seedMockChatHistory(FIXTURE_ROOT_FALL, "cell-biology", lines);
+    renderWithProviders(
+      <ChatView
+        activeRoot={FIXTURE_ROOT_FALL}
+        course="cell-biology"
+        courses={["cell-biology"]}
+        digests={fixtureDigests}
+        roots={fixtureSettings.knowledge_roots}
+        onSearchClear={() => undefined}
+        onModeSearchClear={() => undefined}
+        onCourseChange={() => undefined}
+      />,
+      { minimal: true },
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("chat-assistant-prose")).toBeInTheDocument();
+    });
+    const scrollEl = screen.getByTestId("chat-transcript-scroll");
+    Object.defineProperty(scrollEl, "scrollHeight", { value: 800, configurable: true });
+    Object.defineProperty(scrollEl, "clientHeight", { value: 400, configurable: true });
+    scrollEl.scrollTop = 390;
+    fireEvent.scroll(scrollEl);
+    const prose = screen.getByTestId("chat-assistant-prose");
+    const anchor = prose.firstChild ?? prose;
+    vi.spyOn(window, "getSelection").mockReturnValue({
+      isCollapsed: false,
+      anchorNode: anchor,
+      removeAllRanges: () => undefined,
+      addRange: () => undefined,
+    } as unknown as Selection);
+    const liveKey = chatLiveKey(FIXTURE_ROOT_FALL, "cell-biology");
+    beginChatLiveStream(liveKey);
+    const before = scrollEl.scrollTop;
+    act(() => {
+      appendChatLiveDelta(liveKey, " more text");
+    });
+    expect(scrollEl.scrollTop).toBe(before);
+    vi.restoreAllMocks();
+    cleanup();
+  });
+
+  it("scrolls to the bottom after send even when the transcript has a selection", async () => {
+    const user = userEvent.setup();
+    resetChatLiveStoreForTests();
+    const lines = [
+      buildUserLine("ask", "hello"),
+      buildAssistantLine("ask", "Long answer for scroll test.", true, []),
+    ];
+    seedMockChatHistory(FIXTURE_ROOT_FALL, "cell-biology", lines);
+    renderChatViewMinimal();
+    await waitFor(() => {
+      expect(screen.getByTestId("chat-assistant-prose")).toBeInTheDocument();
+    });
+    const scrollEl = screen.getByTestId("chat-transcript-scroll");
+    Object.defineProperty(scrollEl, "scrollHeight", { value: 800, configurable: true });
+    Object.defineProperty(scrollEl, "clientHeight", { value: 400, configurable: true });
+    scrollEl.scrollTop = 0;
+    const prose = screen.getByTestId("chat-assistant-prose");
+    const anchor = prose.firstChild ?? prose;
+    vi.spyOn(window, "getSelection").mockReturnValue({
+      isCollapsed: false,
+      anchorNode: anchor,
+      removeAllRanges: () => undefined,
+      addRange: () => undefined,
+    } as unknown as Selection);
+    await fillComposer("My new question");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => {
+      expect(scrollEl.scrollTop).toBe(800);
+    });
+    vi.restoreAllMocks();
+    cleanup();
   });
 
   it("live deltas re-render LiveAnswer without re-rendering ChatTranscript", () => {

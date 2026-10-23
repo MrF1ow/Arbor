@@ -22,7 +22,7 @@ export function ChatTranscript({
     return (
       <EmptyState
         title={`Ask about ${courseDisplayName(course)}`}
-        description="Answers cite digests in this course. Use Explain or Quiz modes for study-focused replies."
+        description="Answers cite digests in this course. Use Explain mode for step-by-step replies."
       />
     );
   }

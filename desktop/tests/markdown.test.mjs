@@ -27,6 +27,84 @@ test("renders numbered lists instead of a paragraph", async () => {
   assert.doesNotMatch(html, /<p>1\. First idea/);
 });
 
+test("keeps one ordered list across blank lines between items", async () => {
+  const { renderMarkdown } = await subject();
+  const { html } = renderMarkdown("1. a\n\n2. b\n\n3. c\n");
+  const olCount = (html.match(/<ol/g) ?? []).length;
+  const liCount = (html.match(/<li/g) ?? []).length;
+  assert.equal(olCount, 1);
+  assert.equal(liCount, 3);
+});
+
+test("preserves ordered list start number", async () => {
+  const { renderMarkdown } = await subject();
+  const { html } = renderMarkdown("3. c\n4. d\n");
+  assert.match(html, /<ol start="3">/);
+  assert.match(html, /<li>c<\/li>/);
+  assert.match(html, /<li>d<\/li>/);
+});
+
+test("keeps one bullet list across blank lines", async () => {
+  const { renderMarkdown } = await subject();
+  const { html } = renderMarkdown("- a\n\n- b\n");
+  const ulCount = (html.match(/<ul/g) ?? []).length;
+  assert.equal(ulCount, 1);
+  assert.match(html, /<li>a<\/li>/);
+  assert.match(html, /<li>b<\/li>/);
+});
+
+test("nested bullets under a loose ordered item stay inside one outer ol", async () => {
+  const { renderMarkdown } = await subject();
+  const { html } = renderMarkdown("1. outer\n\n   - nested\n\n2. second\n");
+  assert.equal((html.match(/<ol/g) ?? []).length, 1);
+  assert.match(html, /<li>outer<ul>.*<li>nested<\/li>.*<\/ul>.*second/s);
+});
+
+test("closes a list before a paragraph after a blank line", async () => {
+  const { renderMarkdown } = await subject();
+  const { html } = renderMarkdown("1. only\n\nNot a list item.\n");
+  assert.match(html, /<ol>.*<li>only<\/li>.*<\/ol>/s);
+  assert.match(html, /<p>Not a list item\.<\/p>/);
+});
+
+test("does not swallow a shallow paragraph after a blank line as list continuation", async () => {
+  const { renderMarkdown } = await subject();
+  for (const source of [
+    "1. only\n\n The next paragraph starts with one space.\n",
+    "1. only\n\n  The next paragraph starts with two spaces.\n",
+    "- only\n\n The next paragraph starts with one space.\n",
+  ]) {
+    const { html } = renderMarkdown(source);
+    assert.match(html, /(<\/ol>|<\/ul>)\s*<p>.*next paragraph/s);
+    assert.doesNotMatch(html, /<li>only The next paragraph/s);
+  }
+});
+
+test("nested list continuation after blank becomes a paragraph inside the parent item", async () => {
+  const { renderMarkdown } = await subject();
+  const { html } = renderMarkdown("1. outer\n\n   - nested\n\n    four spaces after nested\n");
+  assert.match(html, /<li>nested<\/li>.*<p>four spaces after nested<\/p>/s);
+  assert.doesNotMatch(html, /nested four spaces after nested/s);
+});
+
+test("indented continuation at content column becomes a paragraph inside the list item", async () => {
+  const { renderMarkdown } = await subject();
+  const { html } = renderMarkdown("1. a\n\n   more text\n");
+  assert.match(html, /<li>a<p>more text<\/p><\/li>/);
+});
+
+test("continuation at the content column belongs to the item regardless of case", async () => {
+  const { renderMarkdown } = await subject();
+  const { html } = renderMarkdown("1. only\n\n   The next paragraph starts with three spaces.\n");
+  assert.match(html, /<li>only<p>The next paragraph starts with three spaces\.<\/p><\/li><\/ol>/);
+});
+
+test("continuation paragraph runs inline format once across its joined lines", async () => {
+  const { renderMarkdown } = await subject();
+  const { html } = renderMarkdown("1. see\n\n   **ATP\n   synthase**\n");
+  assert.match(html, /<li>see<p><strong>ATP synthase<\/strong><\/p><\/li>/);
+});
+
 test("renders asterisk bullets", async () => {
   const { renderMarkdown } = await subject();
   const { html } = renderMarkdown("* mitochondria\n* nucleus\n");
