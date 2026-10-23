@@ -2,11 +2,19 @@
 
 Package version for the worker, desktop, and Tauri app. See [Version numbering](PROJECT.md#version-numbering) in `PROJECT.md`.
 
-**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is complete as package `3.0.0`. **Version 4** is complete as package `4.0.0`. **Version 5** is complete as package `5.0.0`. **Current package:** `5.25.2`. **Current tag:** `v5.25.2`. `v5.0.1` is cut when that release lands. `v5.0.0` is cut when that release lands. `v4.5.0` is cut when that release lands. `v4.4.0` is tagged. `v4.3.0` is not tagged yet. `v4.2.0` is tagged. `v4.1.0` and `v4.0.0` are tagged. `v3.0.0` through `v3.5.0` are already tagged. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) was retested on the 2026-10-17 Linux live run.
+**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is complete as package `3.0.0`. **Version 4** is complete as package `4.0.0`. **Version 5** is complete as package `5.0.0`. **Current package:** `5.26.0`. **Current tag:** `v5.26.0`. `v5.0.1` is cut when that release lands. `v5.0.0` is cut when that release lands. `v4.5.0` is cut when that release lands. `v4.4.0` is tagged. `v4.3.0` is not tagged yet. `v4.2.0` is tagged. `v4.1.0` and `v4.0.0` are tagged. `v3.0.0` through `v3.5.0` are already tagged. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) was retested on the 2026-10-17 Linux live run.
 
 ## Unreleased
 
-- On macOS, chat dictation uses in-app speech recognition with live partial text in the composer, stop/cancel controls, and privacy settings shortcuts when microphone or speech access is denied. Linux and Windows still hide the mic button.
+Nothing pending above `5.26.0`.
+
+## 5.26.0 — 2026-10-23
+
+Git tag `v5.26.0`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `5.26.0`. UI cutover stays `6.0.0`.
+
+- Replaces macOS system dictation, which did nothing in Arbor, with in-app speech recognition (`SFSpeechRecognizer` fed by `AVAudioEngine`, on-device when supported). Words appear in the composer as you speak. The first use asks for Speech Recognition and Microphone access.
+- While listening, the mic button becomes "Stop dictation", with a pulsing dot and a timer. The composer is read-only, Send and Enter are blocked, and Escape cancels and restores the draft. Dictation stops on its own after two minutes.
+- If access is denied, the error toast's "Open Settings" button opens the matching Privacy & Security pane. Linux and Windows still hide the mic button.
 
 ## 5.25.2 — 2026-10-23
 
