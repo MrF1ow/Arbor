@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import queue
 import threading
 import time
 from pathlib import Path
@@ -409,3 +410,72 @@ def test_read_grok_usage_http_401_fixed_message(tmp_path: Path):
 def test_read_provider_usage_ollama_unsupported():
     result = read_provider_usage("ollama")
     assert result["unavailable"]["reason"] == "unsupported"
+
+
+def test_read_provider_usage_codex_defaults_to_subprocess_popen(monkeypatch):
+    # cmd_usage calls read_provider_usage(provider) with no popen; it must fall back to the real one.
+    FakePopen.instances.clear()
+    rate_err = {"id": 2, "error": {"code": -32600, "message": "codex account authentication required"}}
+
+    def popen_factory(*args, **kwargs):
+        proc = FakePopen(*args, **kwargs)
+        proc.set_stdout_lines(
+            [json.dumps({"id": 1, "result": {}}) + "\n", json.dumps(rate_err) + "\n"]
+        )
+        return proc
+
+    monkeypatch.setattr("arbor_worker.usage.subprocess.Popen", popen_factory)
+    monkeypatch.setattr("arbor_worker.usage.resolve_codex_command", lambda *_: "/bin/codex")
+    limits = read_provider_usage("codex")
+    assert limits["unavailable"] == {
+        "reason": "probe_failed",
+        "message": "codex account authentication required",
+    }
+    assert FakePopen.instances
+
+
+def test_read_provider_usage_claude_defaults_to_subprocess_popen(monkeypatch):
+    monkeypatch.delenv("CLAUDECODE", raising=False)
+    FakePopen.instances.clear()
+    monkeypatch.setattr("arbor_worker.usage.subprocess.Popen", FakePopen)
+    monkeypatch.setattr("arbor_worker.usage.resolve_cli_command", lambda *_: "/bin/claude")
+    limits = read_provider_usage("claude", timeout=0.2)
+    assert limits["unavailable"]["reason"] == "probe_failed"
+    assert FakePopen.instances
+
+
+class _AppServerPopen(FakePopen):
+    """Single shared stdout that only answers a request after it is written, like the real app-server."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._out: "queue.Queue[str | None]" = queue.Queue()
+        server = self
+
+        class _Stdin(FakePopen._StdinProxy):
+            def write(self, text: str) -> int:
+                for raw in text.splitlines():
+                    message = json.loads(raw)
+                    if message.get("id") == 1:
+                        server._out.put(json.dumps({"id": 1, "result": {}}) + "\n")
+                    elif message.get("id") == 2:
+                        server._out.put(json.dumps({
+                            "id": 2,
+                            "result": {"rateLimits": {"primary": {"usedPercent": 40, "windowDurationMins": 300}}},
+                        }) + "\n")
+                return super().write(text)
+
+        self.stdin = _Stdin(self._stdin_buffer)
+
+    def __iter__(self):
+        while (line := self._out.get()) is not None:
+            yield line
+
+    def terminate(self):
+        super().terminate()
+        self._out.put(None)
+
+
+def test_read_codex_usage_reads_reply_sent_after_handshake():
+    limits = read_codex_usage(popen=_AppServerPopen, which=lambda _: "/bin/codex", timeout=2)
+    assert limits["windows"][0]["used_percent"] == 40

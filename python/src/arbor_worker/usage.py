@@ -593,7 +593,7 @@ def _iter_stdout_lines(proc: Any, deadline: float):
 
 def read_claude_usage(
     *,
-    popen,
+    popen=None,
     which=shutil.which,
     home: os.PathLike[str] | None = None,
     extra_dirs=None,
@@ -634,6 +634,8 @@ def read_claude_usage(
         '{"type":"control_request","request_id":"arbor-init","request":{"subtype":"initialize"}}\n'
         '{"type":"control_request","request_id":"arbor-usage","request":{"subtype":"get_usage","skip_behaviors":true}}\n'
     )
+    if popen is None:
+        popen = subprocess.Popen
     try:
         proc = popen(
             argv,
@@ -693,7 +695,7 @@ def read_claude_usage(
 
 def read_codex_usage(
     *,
-    popen,
+    popen=None,
     which=shutil.which,
     home: os.PathLike[str] | None = None,
     extra_dirs=None,
@@ -710,6 +712,8 @@ def read_codex_usage(
     argv = [cmd, "app-server"]
     env = os.environ.copy()
     env["PATH"] = gui_path(home, extra_dirs=extra_dirs)
+    if popen is None:
+        popen = subprocess.Popen
     try:
         proc = popen(
             argv,
@@ -750,7 +754,10 @@ def read_codex_usage(
     try:
         proc.stdin.write(init_line + "\n")
         proc.stdin.flush()
-        for line in _iter_stdout_lines(proc, deadline):
+        # One reader for both phases: a second reader thread would race the
+        # first for the rateLimits reply.
+        lines = _iter_stdout_lines(proc, deadline)
+        for line in lines:
             line = line.strip()
             if not line:
                 continue
@@ -768,7 +775,7 @@ def read_codex_usage(
             proc.stdin.write(json.dumps({"method": "initialized"}) + "\n")
             proc.stdin.write(rate_line + "\n")
             proc.stdin.flush()
-            for line in _iter_stdout_lines(proc, deadline):
+            for line in lines:
                 line = line.strip()
                 if not line:
                     continue
@@ -777,8 +784,14 @@ def read_codex_usage(
                 except json.JSONDecodeError:
                     continue
                 if message.get("id") == 2:
-                    if message.get("error"):
-                        return make_unavailable(checked_at=checked_at, reason="probe_failed")
+                    error = message.get("error")
+                    if error:
+                        detail = error.get("message") if isinstance(error, dict) else None
+                        return make_unavailable(
+                            checked_at=checked_at,
+                            reason="probe_failed",
+                            message=detail if isinstance(detail, str) and detail else None,
+                        )
                     result = message.get("result")
                     if isinstance(result, dict):
                         rate_payload = result
