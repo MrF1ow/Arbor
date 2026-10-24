@@ -21,9 +21,9 @@ use tauri::AppHandle;
 use tauri::ipc::Channel;
 
 use super::{
-    emit_dictation_event, error_event, failed_message, terminal_for_task_error, unavailable_message,
-    DictationEvent, DICTATION_AUTO_STOP_SECS, FINAL_TIMEOUT_SECS, microphone_denied_message,
-    speech_denied_message,
+    apply_recognizer_result, emit_dictation_event, error_event, failed_message,
+    terminal_for_task_error, unavailable_message, DictationEvent, DICTATION_AUTO_STOP_SECS,
+    FINAL_TIMEOUT_SECS, microphone_denied_message, speech_denied_message,
 };
 
 struct LiveObjects {
@@ -221,19 +221,52 @@ fn begin_listening(app: AppHandle, control: Arc<SessionControl>) {
             if !result.is_null() {
                 let result = unsafe { result.as_ref() }.unwrap();
                 let text = unsafe { result.bestTranscription().formattedString().to_string() };
-                if let Ok(mut partial) = control.last_partial.lock() {
-                    *partial = text.clone();
-                }
-                if unsafe { result.isFinal() } {
-                    let control_main = control.clone();
-                    let _ = app_for_handler.run_on_main_thread(move || {
-                        if !can_finish(&control_main) {
-                            return;
+                let is_final = unsafe { result.isFinal() };
+                match control.last_partial.lock() {
+                    Ok(mut partial) => {
+                        let decision = apply_recognizer_result(&partial, &text, is_final);
+                        *partial = decision.last_partial;
+                        match decision.event {
+                            Some(DictationEvent::Final { text }) => {
+                                let control_main = control.clone();
+                                let _ = app_for_handler.run_on_main_thread(move || {
+                                    if !can_finish(&control_main) {
+                                        return;
+                                    }
+                                    emit_terminal_on_main(
+                                        &control_main,
+                                        DictationEvent::Final { text },
+                                    );
+                                });
+                            }
+                            Some(DictationEvent::Partial { text }) => {
+                                emit_dictation_event(
+                                    &control.channel,
+                                    DictationEvent::Partial { text },
+                                );
+                            }
+                            _ => {}
                         }
-                        emit_terminal_on_main(&control_main, DictationEvent::Final { text });
-                    });
-                } else {
-                    emit_dictation_event(&control.channel, DictationEvent::Partial { text });
+                    }
+                    Err(_) => {
+                        if is_final {
+                            let control_main = control.clone();
+                            let _ = app_for_handler.run_on_main_thread(move || {
+                                if !can_finish(&control_main) {
+                                    return;
+                                }
+                                emit_terminal_on_main(
+                                    &control_main,
+                                    DictationEvent::Final { text },
+                                );
+                            });
+                        } else {
+                            emit_dictation_event(
+                                &control.channel,
+                                DictationEvent::Partial { text },
+                            );
+                        }
+                    }
                 }
                 return;
             }
