@@ -69,6 +69,59 @@ pub fn terminal_for_task_error(
     }
 }
 
+pub struct RecognizerResultDecision {
+    pub last_partial: String,
+    pub event: Option<DictationEvent>,
+}
+
+pub fn apply_recognizer_result(
+    last_partial: &str,
+    text: &str,
+    is_final: bool,
+) -> RecognizerResultDecision {
+    let incoming_blank = text.trim().is_empty();
+    let prior_non_blank = !last_partial.trim().is_empty();
+
+    if incoming_blank {
+        if is_final {
+            if prior_non_blank {
+                let kept = last_partial.to_string();
+                RecognizerResultDecision {
+                    last_partial: kept.clone(),
+                    event: Some(DictationEvent::Final { text: kept }),
+                }
+            } else {
+                RecognizerResultDecision {
+                    last_partial: String::new(),
+                    event: Some(DictationEvent::Final {
+                        text: String::new(),
+                    }),
+                }
+            }
+        } else {
+            RecognizerResultDecision {
+                last_partial: last_partial.to_string(),
+                event: None,
+            }
+        }
+    } else {
+        let updated = text.to_string();
+        let event = if is_final {
+            DictationEvent::Final {
+                text: updated.clone(),
+            }
+        } else {
+            DictationEvent::Partial {
+                text: updated.clone(),
+            }
+        };
+        RecognizerResultDecision {
+            last_partial: updated,
+            event: Some(event),
+        }
+    }
+}
+
 pub fn privacy_settings_url(pane: &str) -> Result<&'static str, String> {
     match pane {
         "microphone" => Ok(
@@ -288,6 +341,69 @@ mod tests {
         assert_eq!(
             terminal_for_task_error(true, "hi", None),
             DictationEvent::Final { text: "hi".into() }
+        );
+    }
+
+    #[test]
+    fn apply_recognizer_result_cases() {
+        use super::apply_recognizer_result;
+
+        let d = apply_recognizer_result("", "hello", false);
+        assert_eq!(d.last_partial, "hello");
+        assert_eq!(
+            d.event,
+            Some(DictationEvent::Partial {
+                text: "hello".into()
+            })
+        );
+
+        let d = apply_recognizer_result("hel", "hello", true);
+        assert_eq!(d.last_partial, "hello");
+        assert_eq!(
+            d.event,
+            Some(DictationEvent::Final {
+                text: "hello".into()
+            })
+        );
+
+        let d = apply_recognizer_result("hello", "  ", false);
+        assert_eq!(d.last_partial, "hello");
+        assert_eq!(d.event, None);
+
+        let d = apply_recognizer_result("hello", "", true);
+        assert_eq!(d.last_partial, "hello");
+        assert_eq!(
+            d.event,
+            Some(DictationEvent::Final {
+                text: "hello".into()
+            })
+        );
+
+        let d = apply_recognizer_result("hello", "   ", true);
+        assert_eq!(d.last_partial, "hello");
+        assert_eq!(
+            d.event,
+            Some(DictationEvent::Final {
+                text: "hello".into()
+            })
+        );
+
+        let d = apply_recognizer_result("", "", true);
+        assert_eq!(d.last_partial, "");
+        assert_eq!(
+            d.event,
+            Some(DictationEvent::Final { text: "".into() })
+        );
+
+        let d = apply_recognizer_result("", "", false);
+        assert_eq!(d.last_partial, "");
+        assert_eq!(d.event, None);
+
+        let d = apply_recognizer_result("", "   ", true);
+        assert_eq!(d.last_partial, "");
+        assert_eq!(
+            d.event,
+            Some(DictationEvent::Final { text: "".into() })
         );
     }
 }
