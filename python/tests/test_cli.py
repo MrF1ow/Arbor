@@ -17,7 +17,7 @@ def run(argv):
 def test_version_flag():
     code, out, _ = run(["--version"])
     assert code == 0
-    assert "5.26.1" in out
+    assert "5.26.2" in out
 
 
 def test_subcommands_registered():

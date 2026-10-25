@@ -43,6 +43,28 @@ pub fn failed_message(detail: Option<&str>) -> String {
     }
 }
 
+pub fn no_audio_message() -> String {
+    "Arbor didn't get any sound from the microphone. Check the input device in System Settings › Sound.".into()
+}
+
+pub fn no_speech_message() -> String {
+    "Arbor didn't catch any words. Try again, speaking a little closer to the microphone.".into()
+}
+
+/// An empty final transcript becomes an error that says why, so a silent session never ends quietly.
+pub fn finish_event(event: DictationEvent, audio_buffers: u64) -> DictationEvent {
+    match event {
+        DictationEvent::Final { ref text } if text.trim().is_empty() => {
+            if audio_buffers == 0 {
+                error_event("no_audio", no_audio_message())
+            } else {
+                error_event("no_speech", no_speech_message())
+            }
+        }
+        other => other,
+    }
+}
+
 pub fn error_event(code: &str, message: String) -> DictationEvent {
     DictationEvent::Error {
         code: code.into(),
@@ -342,6 +364,30 @@ mod tests {
             terminal_for_task_error(true, "hi", None),
             DictationEvent::Final { text: "hi".into() }
         );
+    }
+
+    #[test]
+    fn finish_event_cases() {
+        assert_eq!(
+            finish_event(DictationEvent::Final { text: "hi".into() }, 0),
+            DictationEvent::Final { text: "hi".into() }
+        );
+        assert_eq!(
+            finish_event(DictationEvent::Final { text: "  ".into() }, 0),
+            DictationEvent::Error {
+                code: "no_audio".into(),
+                message: no_audio_message(),
+            }
+        );
+        assert_eq!(
+            finish_event(DictationEvent::Final { text: "".into() }, 12),
+            DictationEvent::Error {
+                code: "no_speech".into(),
+                message: no_speech_message(),
+            }
+        );
+        let failed = error_event("failed", failed_message(None));
+        assert_eq!(finish_event(failed.clone(), 0), failed);
     }
 
     #[test]

@@ -138,7 +138,7 @@ export function CourseHeader({
         </span>
       </div>
       <nav
-        className="flex min-w-0 shrink items-end gap-2 self-stretch overflow-x-auto @[880px]/course-header:gap-3"
+        className="flex min-w-0 shrink items-stretch gap-2 self-stretch overflow-x-auto @[880px]/course-header:gap-3"
         aria-label="Course modes"
       >
         {MODES.map((mode) => {
@@ -152,8 +152,8 @@ export function CourseHeader({
               aria-current={active ? "page" : undefined}
               title={mode.label}
               className={cn(
-                "inline-flex shrink-0 items-center gap-1.5 border-b-2 border-transparent px-0.5 pb-2 text-sm text-muted-foreground transition-colors duration-fast ease-out-soft",
-                active && "border-primary text-foreground",
+                "inline-flex shrink-0 items-center gap-1.5 border-y-2 border-transparent px-0.5 text-sm text-muted-foreground transition-colors duration-fast ease-out-soft",
+                active && "border-b-primary text-foreground",
               )}
             >
               <mode.icon className={cn("size-icon-sm", active && "text-primary")} />

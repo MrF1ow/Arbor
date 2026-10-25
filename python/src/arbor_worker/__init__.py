@@ -1,3 +1,3 @@
 """Arbor knowledge worker package."""
 
-__version__ = "5.26.1"
+__version__ = "5.26.2"
