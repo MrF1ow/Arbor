@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -21,12 +21,14 @@ use tauri::AppHandle;
 use tauri::ipc::Channel;
 
 use super::{
-    apply_recognizer_result, emit_dictation_event, error_event, failed_message,
+    apply_recognizer_result, emit_dictation_event, error_event, failed_message, finish_event,
     terminal_for_task_error, unavailable_message, DictationEvent, DICTATION_AUTO_STOP_SECS,
     FINAL_TIMEOUT_SECS, microphone_denied_message, speech_denied_message,
 };
 
 struct LiveObjects {
+    // The task stops delivering results if its recognizer is released, so keep it alive.
+    _recognizer: Retained<SFSpeechRecognizer>,
     engine: Retained<AVAudioEngine>,
     request: Retained<SFSpeechAudioBufferRecognitionRequest>,
     task: Retained<SFSpeechRecognitionTask>,
@@ -40,6 +42,7 @@ struct SessionControl {
     terminal_sent: AtomicBool,
     released: AtomicBool,
     stopping: AtomicBool,
+    audio_buffers: AtomicU64,
     last_partial: Mutex<String>,
     channel: Channel<DictationEvent>,
 }
@@ -102,7 +105,8 @@ fn emit_terminal_on_main(control: &SessionControl, event: DictationEvent) {
     if control.terminal_sent.swap(true, Ordering::SeqCst) {
         return;
     }
-    emit_dictation_event(&control.channel, event);
+    let buffers = control.audio_buffers.load(Ordering::SeqCst);
+    emit_dictation_event(&control.channel, finish_event(event, buffers));
     release(control);
 }
 
@@ -163,9 +167,6 @@ fn begin_listening(app: AppHandle, control: Arc<SessionControl>) {
     unsafe {
         request_super.setShouldReportPartialResults(true);
         request_super.setAddsPunctuation(true);
-        if recognizer.supportsOnDeviceRecognition() {
-            request_super.setRequiresOnDeviceRecognition(true);
-        }
     }
 
     let engine = unsafe { AVAudioEngine::new() };
@@ -174,8 +175,10 @@ fn begin_listening(app: AppHandle, control: Arc<SessionControl>) {
     let format = unsafe { node.outputFormatForBus(0) };
 
     let request_for_tap = request.clone();
+    let control_for_tap = control.clone();
     let tap_block = RcBlock::new(
         move |buffer: core::ptr::NonNull<AVAudioPCMBuffer>, _when: core::ptr::NonNull<AVAudioTime>| {
+            control_for_tap.audio_buffers.fetch_add(1, Ordering::SeqCst);
             unsafe {
                 request_for_tap.appendAudioPCMBuffer(buffer.as_ref());
             }
@@ -296,6 +299,7 @@ fn begin_listening(app: AppHandle, control: Arc<SessionControl>) {
 
     LIVE.with(|cell| {
         *cell.borrow_mut() = Some(LiveObjects {
+            _recognizer: recognizer,
             engine,
             request,
             task,
@@ -471,6 +475,7 @@ pub fn kickoff_session(app: AppHandle, channel: Channel<DictationEvent>, session
         terminal_sent: AtomicBool::new(false),
         released: AtomicBool::new(false),
         stopping: AtomicBool::new(false),
+        audio_buffers: AtomicU64::new(0),
         last_partial: Mutex::new(String::new()),
         channel,
     });
