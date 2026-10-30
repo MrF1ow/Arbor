@@ -212,6 +212,49 @@ def test_fetch_index_bare_repo_installs_package(tmp_path: Path) -> None:
     assert not marker.exists()
 
 
+def _commit_index_repo(tmp_path: Path) -> tuple[Path, str]:
+    repo = tmp_path / "index-repo"
+    repo.mkdir()
+    index_path = repo / "marketplace" / "index.json"
+    index_path.parent.mkdir(parents=True)
+    index_path.write_text(json.dumps(_valid_index()), encoding="utf-8")
+    _git(repo, "init", "-b", "main")
+    _git(repo, "config", "user.email", "test@test")
+    _git(repo, "config", "user.name", "Test")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-m", "index")
+    sha = _git(repo, "rev-parse", "HEAD").stdout.strip()
+    _git(repo, "branch", "release/5.0")
+    _git(repo, "tag", "v1.2")
+    return repo, sha
+
+
+@pytest.mark.parametrize("bad_ref", ["-x", "--upload-pack=evil", "a..b", "main.lock", "foo/"])
+def test_fetch_index_rejects_invalid_ref_without_git(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, bad_ref: str
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    calls: list[object] = []
+
+    def spy(argv, *args, **kwargs):
+        calls.append(argv)
+        raise AssertionError(f"git should not run for {bad_ref!r}: {argv}")
+
+    monkeypatch.setattr("arbor_worker.skillpkg.index.subprocess.run", spy)
+    with pytest.raises(SkillPackageError, match="^invalid index ref$"):
+        fetch_index(str(repo), ref=bad_ref)
+    assert calls == []
+
+
+@pytest.mark.parametrize("ref_kind", ["main", "v1.2", "release/5.0", "HEAD", "sha"])
+def test_fetch_index_accepts_index_ref(tmp_path: Path, ref_kind: str) -> None:
+    repo, sha = _commit_index_repo(tmp_path)
+    ref = sha if ref_kind == "sha" else ref_kind
+    index = fetch_index(str(repo), ref=ref)
+    assert index.packages[0].id == "anki-export"
+
+
 def test_cli_skill_index(tmp_path: Path) -> None:
     path = tmp_path / "index.json"
     path.write_text(json.dumps(_valid_index()), encoding="utf-8")

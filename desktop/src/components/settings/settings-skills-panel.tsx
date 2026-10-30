@@ -156,6 +156,9 @@ export function SettingsSkillsPanel() {
     viewerBlocksWrite(libraryRole) && skillHasWritePermission(pkg.permissions);
 
   const onRun = async (pkg: SkillIndexPackage, skipPermCheck = false) => {
+    if (pkg.kind !== "skill") {
+      return;
+    }
     const root = pickActiveRoot(settings.data);
     if (!root) {
       setStatusLine("Choose a knowledge folder first");
@@ -180,6 +183,7 @@ export function SettingsSkillsPanel() {
       return;
     }
     try {
+      setStatusLine("Skill run started.");
       await runSkill.mutateAsync({
         root,
         id: pkg.id,
@@ -188,7 +192,7 @@ export function SettingsSkillsPanel() {
         exportDir,
         confirmed: true,
       });
-      setStatusLine("Skill run started.");
+      setStatusLine("Skill run finished.");
     } catch (error) {
       setStatusLine(String(error));
       toast.error(String(error));
@@ -196,6 +200,9 @@ export function SettingsSkillsPanel() {
   };
 
   const onUninstall = async (pkg: SkillIndexPackage) => {
+    if (pkg.kind !== "skill") {
+      return;
+    }
     try {
       await uninstallSkill.mutateAsync(pkg.id);
       await persistSettings.mutateAsync((current) => ({
@@ -287,25 +294,27 @@ export function SettingsSkillsPanel() {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {pkg.kind === "skill" ? (
-                    <Button type="button" variant="secondary" size="sm" onClick={() => void onInstall(pkg)}>
-                      Install
-                    </Button>
+                    <>
+                      <Button type="button" variant="secondary" size="sm" onClick={() => void onInstall(pkg)}>
+                        Install
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        disabled={runBlocked}
+                        title={runBlocked ? VIEWER_WRITE_REASON : undefined}
+                        onClick={() => void onRun(pkg)}
+                      >
+                        Run
+                      </Button>
+                      <Button type="button" variant="secondary" size="sm" onClick={() => setUninstallTarget(pkg)}>
+                        Uninstall
+                      </Button>
+                    </>
                   ) : (
                     <span className="text-xs text-muted-foreground">Provider packages are not installed</span>
                   )}
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    disabled={runBlocked}
-                    title={runBlocked ? VIEWER_WRITE_REASON : undefined}
-                    onClick={() => void onRun(pkg)}
-                  >
-                    Run
-                  </Button>
-                  <Button type="button" variant="secondary" size="sm" onClick={() => setUninstallTarget(pkg)}>
-                    Uninstall
-                  </Button>
                 </div>
               </div>
             );

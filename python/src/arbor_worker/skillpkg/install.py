@@ -82,7 +82,7 @@ def _git_env() -> dict[str, str]:
 
 def _run_git(args: list[str]) -> subprocess.CompletedProcess[str]:
     proc = subprocess.run(
-        ["git", *args],
+        ["git", "-c", "core.hooksPath=/dev/null", *args],
         capture_output=True,
         text=True,
         env=_git_env(),
@@ -112,7 +112,10 @@ def _inside_root(candidate: Path, root: Path) -> bool:
 
 def _prepare_skills_root(data_home: Path | None) -> tuple[Path, Path]:
     root = skills_root(data_home)
-    root.parent.mkdir(parents=True, exist_ok=True)
+    arbor_dir = root.parent
+    if arbor_dir.is_symlink() or root.is_symlink():
+        raise SkillPackageError("invalid skills root")
+    arbor_dir.mkdir(parents=True, exist_ok=True)
     if root.exists() and root.is_symlink():
         raise SkillPackageError("invalid skills root")
     if not root.exists():

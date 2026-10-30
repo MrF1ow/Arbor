@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -196,6 +197,89 @@ def test_reinstall_same_pin_succeeds(tmp_path: Path) -> None:
     assert second.path == dest
     assert (dest / "arbor-skill.json").is_file()
     assert not (dest / "arbor-skill.json").is_symlink()
+
+
+def test_install_git_calls_disable_hooks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    bare, sha = _bare_repo_with_package(tmp_path)
+    calls: list[list[str]] = []
+    real_run = subprocess.run
+
+    def spy(argv, *args, **kwargs):
+        if isinstance(argv, list) and argv and argv[0] == "git":
+            calls.append(list(argv))
+        return real_run(argv, *args, **kwargs)
+
+    monkeypatch.setattr("arbor_worker.skillpkg.install.subprocess.run", spy)
+    install_skill(str(bare), sha, data_home=tmp_path / "data")
+
+    assert calls
+    for argv in calls:
+        assert argv[:3] == ["git", "-c", "core.hooksPath=/dev/null"]
+
+
+def test_install_ignores_template_post_checkout_hook(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bare, sha = _bare_repo_with_package(tmp_path)
+    template = tmp_path / "template" / "hooks"
+    template.mkdir(parents=True)
+    marker = tmp_path / "hook-marker"
+    hook = template / "post-checkout"
+    hook.write_text(
+        "#!/bin/sh\n" + f"echo ran > {shlex.quote(str(marker))}\n",
+        encoding="utf-8",
+    )
+    hook.chmod(0o755)
+    monkeypatch.setenv("GIT_TEMPLATE_DIR", str(template.parent))
+
+    control = tmp_path / "control"
+    subprocess.run(
+        ["git", "clone", "--no-checkout", "--", str(bare), str(control)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(control), "checkout", "--detach", sha],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert marker.is_file()
+    marker.unlink()
+
+    installed = install_skill(str(bare), sha, data_home=tmp_path / "data")
+
+    assert installed.path.is_dir()
+    assert not marker.exists()
+
+
+def test_symlinked_arbor_dir_refused(tmp_path: Path) -> None:
+    bare, sha = _bare_repo_with_package(tmp_path)
+    data_home = tmp_path / "data"
+    data_home.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    os.symlink(outside, data_home / "arbor")
+
+    with pytest.raises(SkillPackageError, match="^invalid skills root$"):
+        install_skill(str(bare), sha, data_home=data_home)
+
+    assert not (outside / "skills").exists()
+    assert list(outside.iterdir()) == []
+
+
+def test_real_arbor_dir_still_installs(tmp_path: Path) -> None:
+    bare, sha = _bare_repo_with_package(tmp_path)
+    data_home = tmp_path / "data"
+    arbor = data_home / "arbor"
+    arbor.mkdir(parents=True)
+
+    installed = install_skill(str(bare), sha, data_home=data_home)
+
+    assert not arbor.is_symlink()
+    assert installed.path == arbor / "skills" / "demo-skill" / sha
+    assert installed.path.is_dir()
 
 
 def test_symlinked_skill_id_dir_refused(tmp_path: Path) -> None:
