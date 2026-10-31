@@ -2,11 +2,20 @@
 
 Package version for the worker, desktop, and Tauri app. See [Version numbering](PROJECT.md#version-numbering) in `PROJECT.md`.
 
-**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is complete as package `3.0.0`. **Version 4** is complete as package `4.0.0`. **Version 5** is complete as package `5.0.0`. **Current package:** `5.26.2`. **Current tag:** `v5.26.2`. `v5.0.1` is cut when that release lands. `v5.0.0` is cut when that release lands. `v4.5.0` is cut when that release lands. `v4.4.0` is tagged. `v4.3.0` is not tagged yet. `v4.2.0` is tagged. `v4.1.0` and `v4.0.0` are tagged. `v3.0.0` through `v3.5.0` are already tagged. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) was retested on the 2026-10-17 Linux live run.
+**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is complete as package `3.0.0`. **Version 4** is complete as package `4.0.0`. **Version 5** is complete as package `5.0.0`. **Current package:** `5.26.3`. **Current tag:** `v5.26.3`. `v5.0.1` is cut when that release lands. `v5.0.0` is cut when that release lands. `v4.5.0` is cut when that release lands. `v4.4.0` is tagged. `v4.3.0` is not tagged yet. `v4.2.0` is tagged. `v4.1.0` and `v4.0.0` are tagged. `v3.0.0` through `v3.5.0` are already tagged. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) was retested on the 2026-10-17 Linux live run.
 
 ## Unreleased
 
-Nothing pending above `5.26.2`.
+Nothing pending above `5.26.3`.
+
+## 5.26.3 — 2026-10-30
+
+Git tag `v5.26.3`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `5.26.3`. UI cutover stays `6.0.0`.
+
+- Skill installs run git with hooks disabled, so a cloned package can't run a checkout hook.
+- A symlink at the Arbor data folder or its `skills` folder is refused on install and on uninstall, including one created while the folder is being made.
+- Marketplace index refs are validated before any git call. A ref that could be read as an option, or isn't a valid branch or tag name, is refused.
+- Settings › Skills shows "Skill run started." while a run is going and "Skill run finished." when it ends. Provider packages no longer show Run or Uninstall.
 
 ## 5.26.2 — 2026-10-25
 
