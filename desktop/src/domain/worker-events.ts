@@ -142,13 +142,8 @@ export function formatWorkerEvent(ev: WorkerEvent, providerLabel = "Provider"): 
 
   const limited = providerLimitLine(ev);
   if (limited) {
-    if (ev.type === "skill_failed") {
-      line = `Study ${ev.skill ?? "skill"} failed: ${limited}`;
-    } else if (ev.type === "source_failed") {
-      line = `    ✗ ${ev.source ?? ""}: ${limited}`;
-    } else {
-      line = limited;
-    }
+    // Swap only the provider message so each step keeps its own prefix.
+    line = ev.message && line.includes(ev.message) ? line.replace(ev.message, limited) : limited;
     status = "failed";
   }
 

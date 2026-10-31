@@ -80,7 +80,19 @@ describe("formatWorkerEvent", () => {
     });
     expect(formatted.status).toBe("failed");
     expect(formatted.line).toBe(
-      "The provider usage limit was reached. Wait and try again.",
+      "Error: The provider usage limit was reached. Wait and try again.",
+    );
+  });
+
+  it("keeps the step name on a rate-limited chunk failure", () => {
+    const formatted = formatWorkerEvent({
+      type: "chunk_failed",
+      kind: "rate_limited",
+      message: "Codex is rate limited (HTTP 429) and its own retries ran out. Wait and try again.",
+    });
+    expect(formatted.status).toBe("failed");
+    expect(formatted.line).toBe(
+      "chunk_failed: The provider is rate limited (HTTP 429). Wait and try again.",
     );
   });
 

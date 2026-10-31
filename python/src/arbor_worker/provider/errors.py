@@ -8,17 +8,31 @@ MAX_DETAIL_LINES = 5
 MAX_DETAIL_CHARS = 500
 
 # Rust tracing: "<timestamp>  WARN <target>: ..." (level padded to five columns).
-_TRACING_NOISE = re.compile(r"^\d{4}-\d{2}-\d{2}T\S+\s+(?:WARN|INFO|DEBUG)\b")
+_TRACING = re.compile(r"^\d{4}-\d{2}-\d{2}T\S+\s+(ERROR|WARN|INFO|DEBUG|TRACE)\b")
+# A line the CLI itself marks as an error. Codex stderr also echoes the prompt
+# and transcript, so only these lines are classified, never course text.
+_ERROR_LINE = re.compile(r"^(?:error\b|fatal\b|api error\b)", re.IGNORECASE)
 _RATE_LIMITED = re.compile(
-    r"(?<!\d)429(?!\d)|too many requests|rate limit|exceeded retry limit",
+    r"\b429\s+too many requests\b|\btoo many requests\b"
+    r"|\b(?:status|http|code)[\s:=]*429\b|\brate[- ]limit(?:ed|s)?\b",
     re.IGNORECASE,
 )
 # Codex prints "You've hit your usage limit." for a spent allowance. That is
 # separate from a 429, which Codex retries on its own.
-_QUOTA = re.compile(r"quota|usage[- ]limit", re.IGNORECASE)
+_QUOTA = re.compile(
+    r"\bhit your usage limit\b|\busage limit (?:reached|exceeded)\b"
+    r"|\binsufficient_quota\b|\bquota (?:exceeded|reached)\b|\bexceeded (?:your )?(?:current )?quota\b",
+    re.IGNORECASE,
+)
 _AUTH = re.compile(
     r"authentication required|not authenticated|please log in|not logged in|login required",
     re.IGNORECASE,
+)
+_SECRETS = (
+    re.compile(r"(?i)\b(authorization\s*[:=]\s*)(?:bearer\s+)?\S+"),
+    re.compile(r"(?i)\b(bearer\s+)\S+"),
+    re.compile(r"(?i)\b((?:api[_-]?key|access[_-]?token|token|secret|password)\s*[:=]\s*)\S+"),
+    re.compile(r"()\b(?:sk|xai|sk-ant)-[A-Za-z0-9_-]{8,}"),
 )
 
 _DISPLAY = {"codex": "Codex", "claude": "Claude", "grok": "Grok"}
@@ -49,21 +63,46 @@ def prepare_cli_text(text: str) -> str:
     return re.sub(r"Worker exited\s*$", "", normalized).strip()
 
 
+def _lines(text: str) -> list[str]:
+    return [line.strip() for line in prepare_cli_text(text).splitlines() if line.strip()]
+
+
+def _level(line: str) -> str | None:
+    match = _TRACING.match(line)
+    return match.group(1) if match else None
+
+
+def _error_lines(lines: list[str]) -> list[str]:
+    return [line for line in lines if _level(line) == "ERROR" or _ERROR_LINE.match(line)]
+
+
 def classify_kind(text: str) -> str:
-    prepared = prepare_cli_text(text)
-    if _RATE_LIMITED.search(prepared):
+    """Classify from the CLI's own error lines, else its last line."""
+    lines = _lines(text)
+    candidates = _error_lines(lines) or lines[-1:]
+    joined = "\n".join(candidates)
+    if _RATE_LIMITED.search(joined):
         return "rate_limited"
-    if _QUOTA.search(prepared):
+    if _QUOTA.search(joined):
         return "quota"
-    if _AUTH.search(prepared):
+    if _AUTH.search(joined):
         return "auth"
     return "unknown"
 
 
+def redact_secrets(text: str) -> str:
+    for pattern in _SECRETS:
+        text = pattern.sub(lambda m: f"{m.group(1)}[redacted]", text)
+    return text
+
+
 def clean_cli_detail(text: str) -> str:
-    prepared = prepare_cli_text(text)
-    raw_lines = [line.strip() for line in prepared.splitlines() if line.strip()]
-    meaningful = [line for line in raw_lines if not _TRACING_NOISE.match(line)]
+    lines = _lines(text)
+    # Prefer the CLI's error lines. Without any, keep warnings too, since a
+    # warning may be the only report of the real failure.
+    meaningful = _error_lines(lines) or [
+        line for line in lines if _level(line) not in ("INFO", "DEBUG", "TRACE")
+    ]
     deduped: list[str] = []
     seen: set[str] = set()
     for line in meaningful:
@@ -73,11 +112,11 @@ def clean_cli_detail(text: str) -> str:
         deduped.append(line)
     if deduped:
         chosen = deduped[-MAX_DETAIL_LINES:]
-    elif raw_lines:
-        chosen = [raw_lines[-1]]
+    elif lines:
+        chosen = [lines[-1]]
     else:
         return ""
-    detail = "\n".join(chosen)
+    detail = redact_secrets("\n".join(chosen))
     if len(detail) <= MAX_DETAIL_CHARS:
         return detail
     tail = detail[-MAX_DETAIL_CHARS:]
@@ -117,6 +156,18 @@ def _classified(label: str, kind: str, text: str, exit_code: int | None) -> Prov
     )
 
 
+def _classify_message(text: str) -> str:
+    # A structured provider error message is the provider's own text, not
+    # echoed stderr, so the whole message is classified.
+    if _RATE_LIMITED.search(text):
+        return "rate_limited"
+    if _QUOTA.search(text):
+        return "quota"
+    if _AUTH.search(text):
+        return "auth"
+    return "unknown"
+
+
 def message_failure(
     label: str,
     message: str,
@@ -124,8 +175,8 @@ def message_failure(
     exit_code: int | None = None,
 ) -> ProviderError:
     """Classify a short provider message. Unknown text is left unchanged."""
-    text = (message or "").strip() or f"{label} error"
-    kind = classify_kind(text)
+    text = redact_secrets((message or "").strip() or f"{label} error")
+    kind = _classify_message(text)
     if kind == "unknown":
         return ProviderError(text, exit_code=exit_code)
     return _classified(label, kind, text, exit_code)

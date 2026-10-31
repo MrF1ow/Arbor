@@ -153,3 +153,53 @@ def test_claude_and_grok_nonzero_stderr_uses_the_same_classifier(tmp_path: Path,
     assert str(claude_exc.value).startswith("Claude is rate limited (HTTP 429)")
     assert grok_exc.value.kind == "rate_limited"
     assert str(grok_exc.value).startswith("Grok is rate limited (HTTP 429)")
+
+
+@pytest.mark.parametrize(
+    "stderr",
+    [
+        "Error: invalid quotation mark in JSON",
+        CACHE_ERROR.replace("line 139", "line 429"),
+        "Error: request req-429 failed",
+        "Error: bad rate limiter configuration",
+        "Error: Could not read usage limits.",
+    ],
+)
+def test_lookalike_words_are_not_limits(stderr: str):
+    assert cli_process_failure("codex", 1, stderr).kind == "unknown"
+
+
+def test_warning_and_echoed_course_text_do_not_classify():
+    stderr = "\n".join(
+        [
+            "2026-10-21T00:45:08.663416Z  WARN codex_core_plugins::remote: plugin quota sync failed",
+            "user",
+            "Explain why the rate limit of photosynthesis depends on light. Quota sampling.",
+            "Error: model not found",
+        ]
+    )
+    error = cli_process_failure("codex", 1, stderr)
+    assert error.kind == "unknown"
+    assert str(error) == "codex exec failed (1): Error: model not found"
+
+
+def test_warning_is_kept_when_it_is_the_only_report():
+    refused = "2026-10-21T00:45:08.663416Z  WARN codex_core::client: connection refused"
+    for tail in ("2026-10-21T00:45:09.000000Z DEBUG codex_core: shutting down", "codex exec finished"):
+        error = cli_process_failure("codex", 1, f"{refused}\n{tail}")
+        assert "connection refused" in str(error)
+        assert "DEBUG" not in str(error)
+
+
+def test_secrets_are_redacted_from_the_message():
+    stderr = "\n".join(
+        [
+            "ERROR: exceeded retry limit, last status: 429 Too Many Requests",
+            "Error: Authorization: Bearer sk-test-secret-token",
+            "Error: api_key=xai-abcdefghijklmnop rejected",
+        ]
+    )
+    message = str(cli_process_failure("codex", 1, stderr))
+    assert "sk-test-secret-token" not in message
+    assert "xai-abcdefghijklmnop" not in message
+    assert "[redacted]" in message
