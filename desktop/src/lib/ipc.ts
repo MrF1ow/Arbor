@@ -1,5 +1,6 @@
 import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 import { listen as tauriListen } from "@tauri-apps/api/event";
+import { homeDir } from "@tauri-apps/api/path";
 import { confirm as tauriConfirm, open as tauriOpen } from "@tauri-apps/plugin-dialog";
 
 import { hasTauriInvoke, TAURI_UNAVAILABLE } from "~/domain/tauri";
@@ -142,9 +143,19 @@ export function subscribe<T>(
   };
 }
 
-export function openDialog(opts: Parameters<typeof tauriOpen>[0]): Promise<string | string[] | null> {
+export async function openDialog(
+  opts: Parameters<typeof tauriOpen>[0],
+): Promise<string | string[] | null> {
   if (!hasTauriInvoke(globalThis)) {
     return rejectUnavailable();
+  }
+  // GTK's folder chooser opens on Recent without a start folder, and there Open
+  // stays disabled, so a typed path is never accepted (issue #70).
+  if (opts?.directory && !opts.defaultPath) {
+    const home = await homeDir().catch(() => null);
+    if (home) {
+      return tauriOpen({ ...opts, defaultPath: home });
+    }
   }
   return tauriOpen(opts);
 }

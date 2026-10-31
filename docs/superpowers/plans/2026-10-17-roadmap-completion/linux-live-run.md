@@ -125,18 +125,13 @@ Setup: bare remote `/tmp/arbor-v5/remote.git`. Clone A `owner-a@arbor.test` (own
 
 ## Folder picker under Xvfb
 
-Checked 2026-10-30 on the v5.26.2 debug build (`cd desktop && npm run tauri build -- --debug --no-bundle`). Private Xvfb `:97` at 1600x1000, `dbus-run-session`, `GDK_BACKEND=x11`, `WAYLAND_DISPLAY` unset, scratch `HOME` and XDG dirs under `/tmp/arbor-issue-70/`. Screenshots: `magick import -display :97 -window root`, kept in `/tmp/arbor-issue-70/shots/`. Real `~/.config/com.arbor.app/settings.json` stayed `87c2bcd705df9bebaa657bb89c3010e4cc90069b71f568af35a52d8883a2759b`. No provider run. The dialog is the in-process GTK window titled Select Folder. The button label is Open. There is no live-run helper under `scripts/`.
+Issue #70, checked 2026-10-30 on a v5.26.2 debug build (`cd desktop && npm run tauri build -- --debug --no-bundle`) on private Xvfb displays with `dbus-run-session`, `GDK_BACKEND=x11`, `WAYLAND_DISPLAY` unset, and scratch `HOME` and XDG dirs. No window manager. The real `~/.config/com.arbor.app/settings.json` was not touched.
 
-The app accepts a folder. Open on the empty Recent view does nothing, and Open does nothing while the Ctrl+L location entry is still up. That is the v3/v5 "never accepts Open" result. It is the driver, not Arbor.
+**Cause.** Every folder picker called the dialog without a start folder, so GTK 3.24 opened it on Recent. In `SELECT_FOLDER` mode on Recent, Open stays disabled, and a path typed after Ctrl+L never enables it. Return only activates that disabled button. That is the v3 and v5 "never accepts Open" result (C4's export picker too), and a person who presses Ctrl+L and Enter from Recent hits it as well. Window focus made no difference. A minimal rfd program with `set_directory` accepted a typed path, which is what pointed at the start folder.
 
-Working recipe, display `:97` only:
+**Fix.** `openDialog` in `desktop/src/lib/ipc.ts` now starts every folder picker in the home folder when the caller gives no `defaultPath`. On the fixed build the dialog opens on Home with Open enabled. Ctrl+L, typing `/tmp/zz70audit/leaf`, and Return saved that folder as the Knowledge root and ran `git init` in it.
 
-1. Click a place in the sidebar (Home) so the file list shows that directory.
-2. Click the folder row until it is highlighted.
-3. Click Open at the bottom right. The dialog closes and Arbor saves that path.
+Driver notes for live runs:
 
-Clicking `listed-folder` and then Open saved `/tmp/arbor-issue-70/home/listed-folder`, wrote the scratch `settings.json`, and ran `git init` in the folder (`05`–`07`).
-
-Ctrl+L types a path and does not accept it. An unambiguous `/tmp/arbor-issue-70/pick/knowledge-unique-zz` stayed in the location entry. Open, Alt+O, and `xdotool key Return` left the dialog up. One Escape closes the entry and returns to Recent. It does not cancel the dialog. Clicking Cancel after that Escape does. One XTest Return (keycode 36) did accept `knowledge-unique-zz` once the entry already held it. `xdotool key Return` did not repeat that after inline completion had loaded. Use the click recipe.
-
-Inline completion is what mangles a typed path. On the shared prefix `rfd-p` (`rfd-pick` beside `rfd-picker`), the entry completed to `rfd-pick` and highlighted `ick`. Typing the rest replaced the highlight, so the text stayed `/tmp/arbor-issue-70/pick/rfd-pick/notes`. A sibling `rfd-d-pick` also left `/tmp/arbor-issue-70/mangle/rfd-pick` intact. Open on that uncommitted entry still did nothing. A driver that types through the highlight, or that clicks Open before the entry is committed, never gets a path.
+- Type paths slowly (`xdotool type --delay 150`). At a 40 ms delay, GTK's inline completion can duplicate a path component when sibling names share a prefix.
+- Clicking a folder row and then Open also works, and does not depend on the location entry.
