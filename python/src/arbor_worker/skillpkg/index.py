@@ -229,13 +229,14 @@ def _fetch_index_from_git(git_url: str, ref: str) -> MarketplaceIndex:
 
 
 def fetch_index(source: str, *, ref: str | None = None) -> MarketplaceIndex:
+    if ref:
+        _validate_index_ref(ref)
     if source.startswith("file://"):
         parsed = urlparse(source)
         if parsed.scheme != "file":
             raise SkillPackageError("invalid git URL")
         git_path = unquote(parsed.path)
         checkout_ref = ref if ref else "HEAD"
-        _validate_index_ref(checkout_ref)
         return _fetch_index_from_git(git_path, checkout_ref)
 
     path = Path(source)
@@ -244,7 +245,6 @@ def fetch_index(source: str, *, ref: str | None = None) -> MarketplaceIndex:
 
     if path.is_dir():
         if ref:
-            _validate_index_ref(ref)
             return _fetch_index_from_git(str(path.resolve()), ref)
         if _is_bare_repo(path):
             return _fetch_index_from_git(str(path.resolve()), "HEAD")

@@ -282,6 +282,51 @@ def test_real_arbor_dir_still_installs(tmp_path: Path) -> None:
     assert installed.path.is_dir()
 
 
+def test_arbor_dir_symlinked_during_mkdir_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bare, sha = _bare_repo_with_package(tmp_path)
+    data_home = tmp_path / "data"
+    data_home.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    arbor = data_home / "arbor"
+    real_mkdir = Path.mkdir
+
+    def racing_mkdir(self: Path, *args, **kwargs) -> None:
+        if self == arbor:
+            os.symlink(outside, arbor)
+        real_mkdir(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "mkdir", racing_mkdir)
+    with pytest.raises(SkillPackageError, match="^invalid skills root$"):
+        install_skill(str(bare), sha, data_home=data_home)
+    assert list(outside.iterdir()) == []
+
+
+@pytest.mark.parametrize("linked", ["arbor", "skills"])
+def test_uninstall_through_symlinked_root_refused(tmp_path: Path, linked: str) -> None:
+    bare, sha = _bare_repo_with_package(tmp_path)
+    real_home = tmp_path / "real"
+    install_skill(str(bare), sha, data_home=real_home)
+    data_home = tmp_path / "data"
+    if linked == "arbor":
+        data_home.mkdir()
+        os.symlink(real_home / "arbor", data_home / "arbor")
+    else:
+        (data_home / "arbor").mkdir(parents=True)
+        os.symlink(real_home / "arbor" / "skills", data_home / "arbor" / "skills")
+
+    with pytest.raises(SkillPackageError, match="^invalid skills root$"):
+        uninstall_skill("demo-skill", data_home=data_home)
+    assert (skills_root(real_home) / "demo-skill" / sha).is_dir()
+
+
+def test_uninstall_without_skills_root_says_not_installed(tmp_path: Path) -> None:
+    with pytest.raises(SkillPackageError, match="^skill not installed: demo-skill$"):
+        uninstall_skill("demo-skill", data_home=tmp_path / "data")
+
+
 def test_symlinked_skill_id_dir_refused(tmp_path: Path) -> None:
     bare, sha = _bare_repo_with_package(tmp_path)
     data_home = tmp_path / "data"
