@@ -15,6 +15,7 @@ from arbor_worker.skillpkg.manifest import PERMISSIONS, SkillPackageError
 
 _COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 _ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
+_INDEX_REF_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]*$")
 
 
 class IndexPackage(BaseModel):
@@ -186,7 +187,22 @@ def _read_index_at_repo_root(root: Path) -> MarketplaceIndex:
     raise SkillPackageError("index not found")
 
 
+def _validate_index_ref(ref: str) -> None:
+    if ref == "HEAD" or _COMMIT_RE.fullmatch(ref):
+        return
+    if not _INDEX_REF_RE.fullmatch(ref):
+        raise SkillPackageError("invalid index ref")
+    if ".." in ref or "//" in ref or "@{" in ref:
+        raise SkillPackageError("invalid index ref")
+    if ref.endswith("/") or ref.endswith("."):
+        raise SkillPackageError("invalid index ref")
+    for part in ref.split("/"):
+        if not part or part.startswith(".") or part.endswith(".lock"):
+            raise SkillPackageError("invalid index ref")
+
+
 def _fetch_index_from_git(git_url: str, ref: str) -> MarketplaceIndex:
+    _validate_index_ref(ref)
     with tempfile.TemporaryDirectory(prefix="arbor-index-clone-") as tmp_name:
         clone_root = Path(tmp_name) / "repo"
         if _COMMIT_RE.fullmatch(ref):
@@ -207,11 +223,14 @@ def _fetch_index_from_git(git_url: str, ref: str) -> MarketplaceIndex:
                     str(clone_root),
                 ]
             )
-            _run_git(["-C", str(clone_root), "checkout", ref])
+            # `checkout -- <ref>` is a pathspec. `--detach` takes the ref as a start-point.
+            _run_git(["-C", str(clone_root), "checkout", "--detach", ref])
         return _read_index_at_repo_root(clone_root)
 
 
 def fetch_index(source: str, *, ref: str | None = None) -> MarketplaceIndex:
+    if ref:
+        _validate_index_ref(ref)
     if source.startswith("file://"):
         parsed = urlparse(source)
         if parsed.scheme != "file":
