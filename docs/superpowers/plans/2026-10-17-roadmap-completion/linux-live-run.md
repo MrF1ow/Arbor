@@ -122,3 +122,21 @@ Setup: bare remote `/tmp/arbor-v5/remote.git`. Clone A `owner-a@arbor.test` (own
 | C4 | Install, confirm, and uninstall passed. Run blocked | Browse of the local index listed Anki export. Install wrote `$XDG_DATA_HOME/arbor/skills/anki-export/429d15dc…` and the status said Installed (`c4-installed.png`). Confirm permissions persisted the grant (`c4-confirmed.png`). Run opened Select Folder. Ctrl+L accepted `/tmp/arbor-v5/export` (`c4-picker-ctrll.png`). Open, Cancel, Escape, and Alt+O did not dismiss the dialog (issue #70). The export directory stayed empty. Uninstall removed the skill directory and the grant (`C4-uninstalled.png`). Not marked Live run. |
 | C5 | Pass | Owner A set `member-b@arbor.test` to viewer and saved (`5410923`). B pulled. Update knowledge is disabled and the course shows the viewer reason (`C5-viewer-disabled.png`). `arbor-worker append-card` on B exited 1 with `Viewers cannot run write jobs or push…`. The deck stayed one card. |
 | C6 | Pass, with a marker caveat | Confirm on `remote-lamp.pdf` started `job-18dfaa64594062fc`. The private sshd on 127.0.0.1:22222 accepted the throwaway key. The remote tree is `/tmp/arbor-v5/ssh-work/0b0f395f328ef743/`, and its page images contain `REMOTEWORKERTOKEN`. Local commit `66a1e28` is `digest: RemoteLab`. The digest states the 590-nanometer sodium lamp (`C6-after-job.png`). Grok did not copy the literal marker into the digest. `~/.ssh` before and after match (sha256 and mtime of every entry). System sshd pid 1060 was untouched. |
+
+## Folder picker under Xvfb
+
+Checked 2026-10-30 on the v5.26.2 debug build (`cd desktop && npm run tauri build -- --debug --no-bundle`). Private Xvfb `:97` at 1600x1000, `dbus-run-session`, `GDK_BACKEND=x11`, `WAYLAND_DISPLAY` unset, scratch `HOME` and XDG dirs under `/tmp/arbor-issue-70/`. Screenshots: `magick import -display :97 -window root`, kept in `/tmp/arbor-issue-70/shots/`. Real `~/.config/com.arbor.app/settings.json` stayed `87c2bcd705df9bebaa657bb89c3010e4cc90069b71f568af35a52d8883a2759b`. No provider run. The dialog is the in-process GTK window titled Select Folder. The button label is Open. There is no live-run helper under `scripts/`.
+
+The app accepts a folder. Open on the empty Recent view does nothing, and Open does nothing while the Ctrl+L location entry is still up. That is the v3/v5 "never accepts Open" result. It is the driver, not Arbor.
+
+Working recipe, display `:97` only:
+
+1. Click a place in the sidebar (Home) so the file list shows that directory.
+2. Click the folder row until it is highlighted.
+3. Click Open at the bottom right. The dialog closes and Arbor saves that path.
+
+Clicking `listed-folder` and then Open saved `/tmp/arbor-issue-70/home/listed-folder`, wrote the scratch `settings.json`, and ran `git init` in the folder (`05`–`07`).
+
+Ctrl+L types a path and does not accept it. An unambiguous `/tmp/arbor-issue-70/pick/knowledge-unique-zz` stayed in the location entry. Open, Alt+O, and `xdotool key Return` left the dialog up. One Escape closes the entry and returns to Recent. It does not cancel the dialog. Clicking Cancel after that Escape does. One XTest Return (keycode 36) did accept `knowledge-unique-zz` once the entry already held it. `xdotool key Return` did not repeat that after inline completion had loaded. Use the click recipe.
+
+Inline completion is what mangles a typed path. On the shared prefix `rfd-p` (`rfd-pick` beside `rfd-picker`), the entry completed to `rfd-pick` and highlighted `ick`. Typing the rest replaced the highlight, so the text stayed `/tmp/arbor-issue-70/pick/rfd-pick/notes`. A sibling `rfd-d-pick` also left `/tmp/arbor-issue-70/mangle/rfd-pick` intact. Open on that uncommitted entry still did nothing. A driver that types through the highlight, or that clicks Open before the entry is committed, never gets a path.
