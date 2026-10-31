@@ -56,5 +56,6 @@ def test_iter_stream_json_empty_result():
 
 def test_iter_stream_json_error_line():
     lines = ['{"type":"error","message":"not logged in"}']
-    with pytest.raises(ProviderError, match="not logged in"):
+    with pytest.raises(ProviderError, match="not logged in") as exc:
         iter_stream_json(lines, lambda _t: None, label="claude")
+    assert exc.value.kind == "auth"

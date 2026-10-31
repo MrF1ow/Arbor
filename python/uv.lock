@@ -13,7 +13,7 @@ wheels = [
 
 [[package]]
 name = "arbor-worker"
-version = "5.26.2"
+version = "5.26.4"
 source = { editable = "." }
 dependencies = [
     { name = "pydantic" },

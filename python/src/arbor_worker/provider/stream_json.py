@@ -4,6 +4,9 @@ import json
 from collections.abc import Iterable
 
 from arbor_worker.provider.base import DeltaFn, ProviderError
+from arbor_worker.provider.errors import message_failure
+
+
 def _tool_call_from_stream_event(event: dict, label: str) -> None:
     event_type = event.get("type")
     if event_type == "content_block_start":
@@ -55,7 +58,7 @@ def iter_stream_json(lines: Iterable[str], on_delta: DeltaFn, *, label: str) -> 
         if line_type == "error":
             msg = payload.get("message")
             if isinstance(msg, str) and msg.strip():
-                raise ProviderError(msg.strip())
+                raise message_failure(label, msg.strip())
             raise ProviderError(f"{label} stream error")
 
         if line_type == "stream_event":
@@ -78,7 +81,7 @@ def iter_stream_json(lines: Iterable[str], on_delta: DeltaFn, *, label: str) -> 
         if line_type == "result":
             if payload.get("is_error"):
                 msg = payload.get("result") or payload.get("message") or f"{label} error"
-                raise ProviderError(str(msg).strip())
+                raise message_failure(label, str(msg).strip())
             raw_result = payload.get("result")
             if isinstance(raw_result, str):
                 result_text = raw_result

@@ -817,7 +817,7 @@ dependencies = [
 
 [[package]]
 name = "desktop"
-version = "5.26.2"
+version = "5.26.4"
 dependencies = [
  "block2",
  "chrono",

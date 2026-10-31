@@ -82,7 +82,7 @@ def _git_env() -> dict[str, str]:
 
 def _run_git(args: list[str]) -> subprocess.CompletedProcess[str]:
     proc = subprocess.run(
-        ["git", *args],
+        ["git", "-c", "core.hooksPath=/dev/null", *args],
         capture_output=True,
         text=True,
         env=_git_env(),
@@ -110,15 +110,32 @@ def _inside_root(candidate: Path, root: Path) -> bool:
         return False
 
 
+def _require_real_dir(path: Path) -> None:
+    if path.is_symlink() or not path.is_dir():
+        raise SkillPackageError("invalid skills root")
+
+
 def _prepare_skills_root(data_home: Path | None) -> tuple[Path, Path]:
     root = skills_root(data_home)
-    root.parent.mkdir(parents=True, exist_ok=True)
-    if root.exists() and root.is_symlink():
+    arbor_dir = root.parent
+    if arbor_dir.is_symlink() or root.is_symlink():
         raise SkillPackageError("invalid skills root")
-    if not root.exists():
-        root.mkdir()
-    root_res = root.resolve()
-    return root, root_res
+    arbor_dir.parent.mkdir(parents=True, exist_ok=True)
+    for path in (arbor_dir, root):
+        try:
+            path.mkdir()
+        except FileExistsError:
+            pass
+        # Recheck after mkdir: a symlink to a directory satisfies exist_ok-style checks.
+        _require_real_dir(path)
+    return root, root.resolve()
+
+
+def _existing_skills_root(data_home: Path | None) -> Path:
+    root = skills_root(data_home)
+    _require_real_dir(root.parent)
+    _require_real_dir(root)
+    return root
 
 
 def _prepare_skill_id_dir(root: Path, root_res: Path, skill_id: str) -> Path:
@@ -279,6 +296,9 @@ def install_skill(
 def uninstall_skill(skill_id: str, *, data_home: Path | None = None) -> Path:
     skill_id = _validate_skill_id(skill_id)
     root = skills_root(data_home)
+    if not root.parent.is_symlink() and not root.is_symlink() and not root.exists():
+        raise SkillPackageError(f"skill not installed: {skill_id}")
+    root = _existing_skills_root(data_home)
     id_dir = root / skill_id
     if not id_dir.exists():
         raise SkillPackageError(f"skill not installed: {skill_id}")

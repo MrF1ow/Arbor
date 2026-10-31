@@ -212,6 +212,73 @@ def test_fetch_index_bare_repo_installs_package(tmp_path: Path) -> None:
     assert not marker.exists()
 
 
+def _commit_index_repo(tmp_path: Path) -> tuple[Path, str]:
+    repo = tmp_path / "index-repo"
+    repo.mkdir()
+    index_path = repo / "marketplace" / "index.json"
+    index_path.parent.mkdir(parents=True)
+    index_path.write_text(json.dumps(_valid_index()), encoding="utf-8")
+    _git(repo, "init", "-b", "main")
+    _git(repo, "config", "user.email", "test@test")
+    _git(repo, "config", "user.name", "Test")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-m", "index")
+    sha = _git(repo, "rev-parse", "HEAD").stdout.strip()
+    # Each ref points at its own commit, so a checkout that ignored the ref would fail.
+    for ref, make in (("release/5.0", "branch"), ("v1.2", "tag")):
+        _git(repo, "checkout", "-q", "-b", f"tmp-{make}", "main")
+        data = _valid_index()
+        data["packages"][0]["name"] = f"Anki export {ref}"
+        index_path.write_text(json.dumps(data), encoding="utf-8")
+        _git(repo, "commit", "-qam", ref)
+        if make == "branch":
+            _git(repo, "branch", ref)
+        else:
+            _git(repo, "tag", ref)
+        _git(repo, "checkout", "-q", "main")
+        _git(repo, "branch", "-q", "-D", f"tmp-{make}")
+    return repo, sha
+
+
+@pytest.mark.parametrize("bad_ref", ["-x", "--upload-pack=evil", "a..b", "main.lock", "foo/"])
+def test_fetch_index_rejects_invalid_ref_without_git(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, bad_ref: str
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    calls: list[object] = []
+
+    def spy(argv, *args, **kwargs):
+        calls.append(argv)
+        raise AssertionError(f"git should not run for {bad_ref!r}: {argv}")
+
+    monkeypatch.setattr("arbor_worker.skillpkg.index.subprocess.run", spy)
+    with pytest.raises(SkillPackageError, match="^invalid index ref$"):
+        fetch_index(str(repo), ref=bad_ref)
+    assert calls == []
+
+
+@pytest.mark.parametrize("ref_kind", ["main", "v1.2", "release/5.0", "HEAD", "sha"])
+def test_fetch_index_accepts_index_ref(tmp_path: Path, ref_kind: str) -> None:
+    repo, sha = _commit_index_repo(tmp_path)
+    ref = sha if ref_kind == "sha" else ref_kind
+    index = fetch_index(str(repo), ref=ref)
+    assert index.packages[0].id == "anki-export"
+    expected_name = (
+        f"Anki export {ref}" if ref in ("release/5.0", "v1.2") else _valid_index()["packages"][0]["name"]
+    )
+    assert index.packages[0].name == expected_name
+
+
+@pytest.mark.parametrize("source_kind", ["file", "missing"])
+def test_fetch_index_rejects_invalid_ref_for_every_source(tmp_path: Path, source_kind: str) -> None:
+    path = tmp_path / "index.json"
+    if source_kind == "file":
+        path.write_text(json.dumps(_valid_index()), encoding="utf-8")
+    with pytest.raises(SkillPackageError, match="^invalid index ref$"):
+        fetch_index(str(path), ref="--upload-pack=evil")
+
+
 def test_cli_skill_index(tmp_path: Path) -> None:
     path = tmp_path / "index.json"
     path.write_text(json.dumps(_valid_index()), encoding="utf-8")

@@ -18,6 +18,7 @@ from arbor_worker.provider.base import (
     image_media_type,
 )
 from arbor_worker.provider.cli_stream import run_popen_stream
+from arbor_worker.provider.errors import cli_process_failure, message_failure
 from arbor_worker.provider.stream_json import iter_stream_json
 
 CLAUDE_DOCS_URL = "https://code.claude.com/docs"
@@ -140,15 +141,20 @@ class ClaudeCliProvider:
             env=env,
         )
         if proc.returncode != 0:
-            detail = (proc.stderr or proc.stdout or "").strip()
-            raise ProviderError(f"claude failed ({proc.returncode}): {detail}")
+            raise cli_process_failure(
+                "claude",
+                proc.returncode,
+                proc.stderr or proc.stdout or "",
+            )
         try:
             payload = json.loads(proc.stdout)
         except json.JSONDecodeError as exc:
             raise ProviderError(f"claude returned invalid JSON: {exc}") from exc
         if payload.get("is_error"):
-            raise ProviderError(
-                (payload.get("result") or payload.get("message") or "claude error").strip()
+            raise message_failure(
+                "claude",
+                (payload.get("result") or payload.get("message") or "claude error").strip(),
+                exit_code=proc.returncode,
             )
         result = payload.get("result")
         if not isinstance(result, str) or not result.strip():

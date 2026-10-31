@@ -558,6 +558,86 @@ describe("settings sharing (14b)", () => {
     });
   });
 
+  it("provider-kind rows hide run and uninstall", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/settings/skills", {
+      skill_index: () => ({
+        packages: [
+          ...fixtureSkillPackages,
+          {
+            id: "demo-provider",
+            kind: "provider",
+            name: "Demo provider",
+            description: "A model provider",
+            commit: "fff444",
+            permissions: [],
+          },
+        ],
+      }),
+    });
+    await user.click(within(settingsView()).getByRole("button", { name: "Browse index" }));
+    const providerHeading = await within(settingsView()).findByRole("heading", {
+      name: "Demo provider",
+    });
+    const row = providerHeading.closest("div");
+    const packageRow = row?.parentElement;
+    expect(packageRow).not.toBeNull();
+    expect(
+      within(packageRow as HTMLElement).getByText("Provider packages are not installed"),
+    ).toBeInTheDocument();
+    expect(within(packageRow as HTMLElement).queryByRole("button", { name: "Run" })).not.toBeInTheDocument();
+    expect(
+      within(packageRow as HTMLElement).queryByRole("button", { name: "Uninstall" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(packageRow as HTMLElement).queryByRole("button", { name: "Install" }),
+    ).not.toBeInTheDocument();
+    expect(within(settingsView()).getAllByRole("button", { name: "Run" })).toHaveLength(
+      fixtureSkillPackages.length,
+    );
+  });
+
+  it("skill run shows started before the command finishes", async () => {
+    useUiStore.setState({
+      lastCourse: { root: FIXTURE_ROOT_FALL, course: "cell-biology" },
+    });
+    vi.spyOn(ipcModule, "openDialog").mockResolvedValue("/tmp/export");
+    let releaseRun: (value: { id: string; commit: string; ok: boolean }) => void = () => {};
+    const pending = new Promise<{ id: string; commit: string; ok: boolean }>((resolve) => {
+      releaseRun = resolve;
+    });
+    const user = userEvent.setup();
+    await renderAppAtRoute("/settings/skills", {
+      get_settings: () => ({
+        ...fixtureSettings,
+        skill_grants: [
+          {
+            id: "demo-skill",
+            commit: "abc111",
+            permissions: ["read_course", "write_export_dir"],
+          },
+        ],
+      }),
+      skill_index: () => ({ packages: fixtureSkillPackages }),
+      skill_run: () => pending,
+    });
+    await user.click(within(settingsView()).getByRole("button", { name: "Browse index" }));
+    const runButtons = within(settingsView()).getAllByRole("button", { name: "Run" });
+    await user.click(runButtons[0]!);
+    await waitFor(() => {
+      expect(within(settingsView()).getByTestId("skill-status")).toHaveTextContent(
+        "Skill run started.",
+      );
+    });
+    expect(getMockIpcCalls().some((c) => c.cmd === "skill_run")).toBe(true);
+    releaseRun({ id: "demo-skill", commit: "abc111", ok: true });
+    await waitFor(() => {
+      expect(within(settingsView()).getByTestId("skill-status")).toHaveTextContent(
+        "Skill run finished.",
+      );
+    });
+  });
+
   it("skill run sends exact payload when last course matches root", async () => {
     useUiStore.setState({
       lastCourse: { root: FIXTURE_ROOT_FALL, course: "cell-biology" },

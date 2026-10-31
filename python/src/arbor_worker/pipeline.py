@@ -22,6 +22,7 @@ from arbor_worker.page_markers import PageRange as MarkerPageRange
 from arbor_worker.planning import SelectedSource, apply_selections, build_plan
 from arbor_worker.prepare import prepare_source, PrepareResult
 from arbor_worker.provider.base import CliProvider
+from arbor_worker.provider.errors import provider_failure_event_fields
 from arbor_worker.settings import WorkerSettings
 from arbor_worker.windowing import clip_window
 
@@ -324,7 +325,12 @@ def run_update(
                 break
             except Exception as e:
                 failed += 1
-                emitter.source_failed(course_dir=course_rel, source=sel.path, message=str(e))
+                emitter.source_failed(
+                    course_dir=course_rel,
+                    source=sel.path,
+                    message=str(e),
+                    **provider_failure_event_fields(e),
+                )
                 outcomes.append(SourceOutcome(course_rel, sel.path, False, "generate", str(e)))
                 continue
 
@@ -382,7 +388,10 @@ def run_update(
         except CourseSynthesisError as e:
             synthesis_ok = False
             emitter.course_synthesis_failed(
-                course_dir=course_rel, code=CourseSynthesisError.code, message=str(e)
+                course_dir=course_rel,
+                code=CourseSynthesisError.code,
+                message=str(e),
+                **provider_failure_event_fields(e),
             )
             course_markdown = build_course_toc(course_rel, manifest.read_digests())
 

@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from arbor_worker.provider.base import ProviderRequest, ProviderResult
+from arbor_worker.provider.base import ProviderError, ProviderRequest, ProviderResult
 from arbor_worker.skills.base import parse_and_validate, run_skill
 from arbor_worker.skills.concepts import ConceptsSkill
 from arbor_worker.skills.diagrams import DiagramsSkill
@@ -124,3 +124,24 @@ def test_run_skill_failure_leaves_prior_artifact_untouched(tmp_path: Path):
 
     assert len(provider.calls) == 3
     assert artifact_path.read_bytes() == prior
+
+
+def test_run_skill_does_not_retry_provider_error():
+    class Boom:
+        name = "boom"
+
+        def __init__(self):
+            self.calls = 0
+
+        def run(self, request: ProviderRequest) -> ProviderResult:
+            self.calls += 1
+            raise ProviderError("Codex is rate limited", kind="rate_limited", exit_code=1)
+
+    provider = Boom()
+    request = ProviderRequest(prompt="fixture", model_id="fake-model")
+
+    with pytest.raises(ProviderError) as exc:
+        run_skill(provider, request, FixtureSkill())
+
+    assert exc.value.kind == "rate_limited"
+    assert provider.calls == 1
