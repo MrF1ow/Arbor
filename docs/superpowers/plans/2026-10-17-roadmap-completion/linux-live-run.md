@@ -122,3 +122,16 @@ Setup: bare remote `/tmp/arbor-v5/remote.git`. Clone A `owner-a@arbor.test` (own
 | C4 | Install, confirm, and uninstall passed. Run blocked | Browse of the local index listed Anki export. Install wrote `$XDG_DATA_HOME/arbor/skills/anki-export/429d15dc…` and the status said Installed (`c4-installed.png`). Confirm permissions persisted the grant (`c4-confirmed.png`). Run opened Select Folder. Ctrl+L accepted `/tmp/arbor-v5/export` (`c4-picker-ctrll.png`). Open, Cancel, Escape, and Alt+O did not dismiss the dialog (issue #70). The export directory stayed empty. Uninstall removed the skill directory and the grant (`C4-uninstalled.png`). Not marked Live run. |
 | C5 | Pass | Owner A set `member-b@arbor.test` to viewer and saved (`5410923`). B pulled. Update knowledge is disabled and the course shows the viewer reason (`C5-viewer-disabled.png`). `arbor-worker append-card` on B exited 1 with `Viewers cannot run write jobs or push…`. The deck stayed one card. |
 | C6 | Pass, with a marker caveat | Confirm on `remote-lamp.pdf` started `job-18dfaa64594062fc`. The private sshd on 127.0.0.1:22222 accepted the throwaway key. The remote tree is `/tmp/arbor-v5/ssh-work/0b0f395f328ef743/`, and its page images contain `REMOTEWORKERTOKEN`. Local commit `66a1e28` is `digest: RemoteLab`. The digest states the 590-nanometer sodium lamp (`C6-after-job.png`). Grok did not copy the literal marker into the digest. `~/.ssh` before and after match (sha256 and mtime of every entry). System sshd pid 1060 was untouched. |
+
+## Folder picker under Xvfb
+
+Issue #70, checked 2026-10-30 on a v5.26.2 debug build (`cd desktop && npm run tauri build -- --debug --no-bundle`) on private Xvfb displays with `dbus-run-session`, `GDK_BACKEND=x11`, `WAYLAND_DISPLAY` unset, and scratch `HOME` and XDG dirs. No window manager. The real `~/.config/com.arbor.app/settings.json` was not touched.
+
+**Cause.** Every folder picker called the dialog without a start folder, so GTK 3.24 opened it on Recent. In `SELECT_FOLDER` mode on Recent, Open stays disabled, and a path typed after Ctrl+L never enables it. Return only activates that disabled button. That is the v3 and v5 "never accepts Open" result (C4's export picker too), and a person who presses Ctrl+L and Enter from Recent hits it as well. Window focus made no difference. A minimal rfd program with `set_directory` accepted a typed path, which is what pointed at the start folder.
+
+**Fix.** `openDialog` in `desktop/src/lib/ipc.ts` now starts every folder picker in the home folder when the caller gives no `defaultPath`. On the fixed build the dialog opens on Home with Open enabled. Ctrl+L, typing `/tmp/zz70audit/leaf`, and Return saved that folder as the Knowledge root and ran `git init` in it.
+
+Driver notes for live runs:
+
+- Type paths slowly (`xdotool type --delay 150`). At a 40 ms delay, GTK's inline completion can duplicate a path component when sibling names share a prefix.
+- Clicking a folder row and then Open also works, and does not depend on the location entry.

@@ -2,11 +2,17 @@
 
 Package version for the worker, desktop, and Tauri app. See [Version numbering](PROJECT.md#version-numbering) in `PROJECT.md`.
 
-**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is complete as package `3.0.0`. **Version 4** is complete as package `4.0.0`. **Version 5** is complete as package `5.0.0`. **Current package:** `5.26.4`. **Current tag:** `v5.26.4`. `v5.0.1` is cut when that release lands. `v5.0.0` is cut when that release lands. `v4.5.0` is cut when that release lands. `v4.4.0` is tagged. `v4.3.0` is not tagged yet. `v4.2.0` is tagged. `v4.1.0` and `v4.0.0` are tagged. `v3.0.0` through `v3.5.0` are already tagged. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) was retested on the 2026-10-17 Linux live run.
+**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is complete as package `3.0.0`. **Version 4** is complete as package `4.0.0`. **Version 5** is complete as package `5.0.0`. **Current package:** `5.26.5`. **Current tag:** `v5.26.5`. `v5.0.1` is cut when that release lands. `v5.0.0` is cut when that release lands. `v4.5.0` is cut when that release lands. `v4.4.0` is tagged. `v4.3.0` is not tagged yet. `v4.2.0` is tagged. `v4.1.0` and `v4.0.0` are tagged. `v3.0.0` through `v3.5.0` are already tagged. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) was retested on the 2026-10-17 Linux live run.
 
 ## Unreleased
 
-Nothing pending above `5.26.4`.
+Nothing pending above `5.26.5`.
+
+## 5.26.5 — 2026-10-30
+
+Git tag `v5.26.5`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `5.26.5`. UI cutover stays `6.0.0`.
+
+- Folder pickers (Knowledge folder, join library, and skill export) open in your home folder instead of GTK's Recent view. On Recent, Open stayed disabled on Linux, so a path typed with Ctrl+L and Enter was never accepted (issue #70).
 
 ## 5.26.4 — 2026-10-30
 

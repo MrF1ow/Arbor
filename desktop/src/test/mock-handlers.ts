@@ -888,7 +888,7 @@ export function createMockHandler(
         return { path: dest, name, kind: "shared" };
       }
       case "test_worker_connection":
-        return "arbor-worker 5.26.4 (mock)";
+        return "arbor-worker 5.26.5 (mock)";
       case "list_jobs":
         return mockJobSummariesList();
       case "get_job_events":
