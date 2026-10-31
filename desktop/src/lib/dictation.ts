@@ -63,8 +63,15 @@ function parseDictationEvent(raw: unknown): DictationEvent | null {
 }
 
 export function showDictationError(code: string, message: string) {
-  if (code === "microphone_denied" || code === "speech_denied") {
-    const pane = code === "microphone_denied" ? "microphone" : "speech";
+  const pane =
+    code === "microphone_denied"
+      ? "microphone"
+      : code === "speech_denied"
+        ? "speech"
+        : code === "dictation_disabled" || code === "assets_missing"
+          ? "dictation"
+          : null;
+  if (pane) {
     toast.error(message, {
       action: {
         label: "Open Settings",

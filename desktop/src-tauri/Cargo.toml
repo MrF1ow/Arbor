@@ -1,6 +1,6 @@
 [package]
 name = "desktop"
-version = "5.26.5"
+version = "5.26.6"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
@@ -41,6 +41,6 @@ libc = "0.2"
 block2 = "0.6"
 objc2 = { version = "0.6", features = ["std"] }
 objc2-av-foundation = { version = "0.3", default-features = false, features = ["std", "AVCaptureDevice", "AVMediaFormat", "block2"] }
-objc2-avf-audio = { version = "0.3", default-features = false, features = ["std", "AVAudioEngine", "AVAudioFormat", "AVAudioBuffer", "AVAudioNode", "AVAudioTime", "AVAudioTypes", "AVAudioIONode", "block2"] }
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSError", "NSString", "NSLocale"] }
+objc2-avf-audio = { version = "0.3", default-features = false, features = ["std", "AVAudioEngine", "AVAudioFormat", "AVAudioBuffer", "AVAudioMixerNode", "AVAudioNode", "AVAudioTime", "AVAudioTypes", "AVAudioIONode", "block2"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSError", "NSString", "NSLocale", "NSOperation"] }
 objc2-speech = { version = "0.3", default-features = false, features = ["std", "block2", "objc2-avf-audio", "SFSpeechRecognizer", "SFSpeechRecognitionRequest", "SFSpeechRecognitionResult", "SFSpeechRecognitionTask", "SFTranscription"] }
