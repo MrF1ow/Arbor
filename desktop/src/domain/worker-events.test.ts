@@ -55,6 +55,35 @@ describe("formatWorkerEvent", () => {
     expect(formatted.status).toBe("failed");
   });
 
+  it("formats a rate-limited skill failure as a short wait line", () => {
+    const formatted = formatWorkerEvent({
+      type: "skill_failed",
+      skill: "diagrams",
+      kind: "rate_limited",
+      exit_code: 1,
+      message:
+        "Codex is rate limited (HTTP 429) and its own retries ran out. Wait and try again.\nERROR: exceeded retry limit, last status: 429 Too Many Requests",
+    });
+    expect(formatted.status).toBe("failed");
+    expect(formatted.line).toBe(
+      "Study diagrams failed: The provider is rate limited (HTTP 429). Wait and try again.",
+    );
+    expect(formatted.line).not.toContain("WARN");
+    expect(formatted.line).not.toContain("exceeded retry limit");
+  });
+
+  it("formats a quota failure as a short wait line", () => {
+    const formatted = formatWorkerEvent({
+      type: "error",
+      kind: "quota",
+      message: "Codex has reached its usage limit.",
+    });
+    expect(formatted.status).toBe("failed");
+    expect(formatted.line).toBe(
+      "The provider usage limit was reached. Wait and try again.",
+    );
+  });
+
   it("covers every renderEvent case from legacy", () => {
     for (const ev of EVENT_CASES) {
       const formatted = formatWorkerEvent(ev, "Grok");

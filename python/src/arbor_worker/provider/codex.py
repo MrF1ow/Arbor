@@ -14,6 +14,7 @@ from arbor_worker.provider.base import (
     ProviderResult,
     ProviderStatus,
 )
+from arbor_worker.provider.errors import cli_process_failure
 
 
 class CodexCliProvider:
@@ -65,8 +66,11 @@ class CodexCliProvider:
                 env=env,
             )
             if proc.returncode != 0:
-                detail = (proc.stderr or proc.stdout or "").strip()
-                raise ProviderError(f"codex exec failed ({proc.returncode}): {detail}")
+                raise cli_process_failure(
+                    "codex",
+                    proc.returncode,
+                    proc.stderr or proc.stdout or "",
+                )
             if not out_file.is_file():
                 raise ProviderError("codex exec produced no output file")
             markdown = out_file.read_text()

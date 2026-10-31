@@ -8,6 +8,7 @@ from pathlib import Path
 
 from arbor_worker import cli
 from arbor_worker.events import parse_lines
+from arbor_worker.provider.errors import cli_process_failure
 from arbor_worker.provider.fake import FakeProvider
 from arbor_worker.skills import SKILLS
 from arbor_worker.skills.concepts import ConceptsSkill
@@ -307,3 +308,40 @@ def test_concepts_refresh_keeps_figure_nodes(git_repo: Path, monkeypatch):
     assert by_id["fig-mitochondrion-diagram"]["kind"] == "figure"
     pairs = {(edge["from"], edge["to"]) for edge in artifact["edges"]}
     assert ("fig-mitochondrion-diagram", "glycolysis") in pairs
+
+
+def test_generate_diagrams_rate_limit_emits_kind_and_keeps_concepts(git_repo: Path, monkeypatch):
+    _write_digest(git_repo)
+    _seed_text_concepts(git_repo)
+    artifact = git_repo / "Biology" / "study" / "concepts.json"
+    prior = artifact.read_bytes()
+    stderr = (
+        Path(__file__).resolve().parent
+        / "fixtures"
+        / "providers"
+        / "codex-issue-116-stderr.txt"
+    ).read_text()
+
+    class RateLimited(FakeProvider):
+        def run(self, request):
+            raise cli_process_failure("codex", 1, stderr)
+
+    monkeypatch.setattr(
+        "arbor_worker.provider.registry.FakeProvider",
+        lambda markdown, models=None, available=True: RateLimited(markdown),
+    )
+
+    code, events = _run_generate(git_repo)
+
+    assert code != 0
+    assert "skill_progress" not in [event["type"] for event in events]
+    failed = events[-1]
+    assert failed["type"] == "skill_failed"
+    assert failed["kind"] == "rate_limited"
+    assert failed["exit_code"] == 1
+    assert failed["message"].startswith(
+        "Codex is rate limited (HTTP 429) and its own retries ran out."
+    )
+    assert "WARN" not in failed["message"]
+    assert artifact.read_bytes() == prior
+    assert not (git_repo / "Biology" / "study" / "figures.json").exists()

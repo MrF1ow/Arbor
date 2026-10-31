@@ -9,7 +9,26 @@ DeltaFn = Callable[[str], None]
 
 
 class ProviderError(Exception):
-    pass
+    def __init__(
+        self,
+        message: str,
+        *,
+        kind: str = "unknown",
+        exit_code: int | None = None,
+        summary: str | None = None,
+        detail: str = "",
+    ) -> None:
+        super().__init__(message)
+        self.kind = kind
+        self.exit_code = exit_code
+        self.summary = message if summary is None else summary
+        self.detail = detail
+
+    def event_fields(self) -> dict[str, object]:
+        fields: dict[str, object] = {"kind": self.kind}
+        if self.exit_code is not None:
+            fields["exit_code"] = self.exit_code
+        return fields
 
 
 @dataclass(frozen=True)

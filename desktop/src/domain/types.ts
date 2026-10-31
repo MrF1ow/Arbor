@@ -371,4 +371,6 @@ export interface WorkerEvent {
   attempt?: number;
   attempts?: number;
   files?: string[];
+  kind?: string;
+  exit_code?: number;
 }
