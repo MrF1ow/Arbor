@@ -8,22 +8,20 @@ use block2::RcBlock;
 use objc2::rc::Retained;
 use objc2::runtime::Bool;
 use objc2::{AnyThread, ClassType, MainThreadMarker};
-use objc2_av_foundation::{
-    AVCaptureDevice, AVAuthorizationStatus, AVMediaTypeAudio,
-};
-use objc2_avf_audio::{AVAudioEngine, AVAudioPCMBuffer, AVAudioTime};
-use objc2_foundation::NSError;
+use objc2_av_foundation::{AVAuthorizationStatus, AVCaptureDevice, AVMediaTypeAudio};
+use objc2_avf_audio::{AVAudioEngine, AVAudioFormat, AVAudioNode, AVAudioPCMBuffer, AVAudioTime};
+use objc2_foundation::{NSError, NSOperationQueue};
 use objc2_speech::{
-    SFSpeechAudioBufferRecognitionRequest, SFSpeechRecognitionResult,
-    SFSpeechRecognitionTask, SFSpeechRecognizer, SFSpeechRecognizerAuthorizationStatus,
+    SFSpeechAudioBufferRecognitionRequest, SFSpeechRecognitionResult, SFSpeechRecognitionTask,
+    SFSpeechRecognizer, SFSpeechRecognizerAuthorizationStatus,
 };
-use tauri::AppHandle;
 use tauri::ipc::Channel;
+use tauri::AppHandle;
 
 use super::{
-    apply_recognizer_result, emit_dictation_event, error_event, failed_message, finish_event,
-    terminal_for_task_error, unavailable_message, DictationEvent, DICTATION_AUTO_STOP_SECS,
-    FINAL_TIMEOUT_SECS, microphone_denied_message, speech_denied_message,
+    apply_recognizer_result, channel_is_audible, emit_dictation_event, error_event, failed_message,
+    finish_event, microphone_denied_message, speech_denied_message, speech_task_terminal,
+    unavailable_message, DictationEvent, DICTATION_AUTO_STOP_SECS, FINAL_TIMEOUT_SECS,
 };
 
 struct LiveObjects {
@@ -32,7 +30,8 @@ struct LiveObjects {
     engine: Retained<AVAudioEngine>,
     request: Retained<SFSpeechAudioBufferRecognitionRequest>,
     task: Retained<SFSpeechRecognitionTask>,
-    _tap_block: RcBlock<dyn Fn(core::ptr::NonNull<AVAudioPCMBuffer>, core::ptr::NonNull<AVAudioTime>)>,
+    _tap_block:
+        RcBlock<dyn Fn(core::ptr::NonNull<AVAudioPCMBuffer>, core::ptr::NonNull<AVAudioTime>)>,
     _result_handler: RcBlock<dyn Fn(*mut SFSpeechRecognitionResult, *mut NSError)>,
 }
 
@@ -53,11 +52,7 @@ thread_local! {
 }
 
 fn control_is_current(control: &SessionControl) -> bool {
-    CONTROL.with(|cell| {
-        cell.borrow()
-            .as_ref()
-            .is_some_and(|c| c.id == control.id)
-    })
+    CONTROL.with(|cell| cell.borrow().as_ref().is_some_and(|c| c.id == control.id))
 }
 
 /// The session can still emit its terminal event (stopping is fine: that is how a stop finishes).
@@ -87,12 +82,66 @@ fn release(control: &SessionControl) {
         unsafe { live.task.cancel() };
     }
     CONTROL.with(|cell| {
-        if cell
-            .borrow()
-            .as_ref()
-            .is_some_and(|c| c.id == control.id)
-        {
+        if cell.borrow().as_ref().is_some_and(|c| c.id == control.id) {
             *cell.borrow_mut() = None;
+        }
+    });
+}
+
+fn format_is_usable(format: &AVAudioFormat) -> bool {
+    unsafe { format.sampleRate() > 0.0 && format.channelCount() > 0 }
+}
+
+/// The hardware input format. The input node cannot convert, so the tap and the
+/// mixer connection both have to use it. The output format is often 0 Hz until
+/// that connection exists.
+fn microphone_format(node: &AVAudioNode) -> Result<Retained<AVAudioFormat>, String> {
+    let input = unsafe { node.inputFormatForBus(0) };
+    if format_is_usable(&input) {
+        return Ok(input);
+    }
+    let output = unsafe { node.outputFormatForBus(0) };
+    if format_is_usable(&output) {
+        return Ok(output);
+    }
+    Err("The microphone isn't ready. Check the input device in System Settings › Sound.".into())
+}
+
+fn buffer_is_audible(buffer: &AVAudioPCMBuffer) -> bool {
+    let frames = unsafe { buffer.frameLength() } as usize;
+    if frames == 0 {
+        return false;
+    }
+    let channels = unsafe { buffer.floatChannelData() };
+    if channels.is_null() {
+        // Not float PCM. A delivered buffer still counts as audio.
+        return true;
+    }
+    let samples = unsafe { std::slice::from_raw_parts((*channels).as_ptr(), frames) };
+    channel_is_audible(samples)
+}
+
+/// Speech calls the result handler on its queue. Session thread-locals live on
+/// the main thread, so every event is delivered there before it is applied.
+fn deliver_on_main(app: &AppHandle, control: Arc<SessionControl>, event: DictationEvent) {
+    let app = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        if control.cancelled.load(Ordering::SeqCst) || !control_is_current(&control) {
+            return;
+        }
+        match event {
+            DictationEvent::Partial { text } => {
+                if control.terminal_sent.load(Ordering::SeqCst) {
+                    return;
+                }
+                emit_dictation_event(&control.channel, DictationEvent::Partial { text });
+            }
+            other => {
+                if !can_finish(&control) {
+                    return;
+                }
+                emit_terminal_on_main(&control, other);
+            }
         }
     });
 }
@@ -134,29 +183,22 @@ fn begin_listening(app: AppHandle, control: Arc<SessionControl>) {
         return;
     }
     let Some(mtm) = MainThreadMarker::new() else {
-        emit_terminal_on_main(
-            &control,
-            error_event("failed", failed_message(None)),
-        );
+        emit_terminal_on_main(&control, error_event("failed", failed_message(None)));
         return;
     };
     let _ = mtm;
 
     let alloc = SFSpeechRecognizer::alloc();
     let Some(recognizer) = (unsafe { SFSpeechRecognizer::init(alloc) }) else {
-        emit_terminal_on_main(
-            &control,
-            error_event("unavailable", unavailable_message()),
-        );
+        emit_terminal_on_main(&control, error_event("unavailable", unavailable_message()));
         return;
     };
     if !unsafe { recognizer.isAvailable() } {
-        emit_terminal_on_main(
-            &control,
-            error_event("unavailable", unavailable_message()),
-        );
+        emit_terminal_on_main(&control, error_event("unavailable", unavailable_message()));
         return;
     }
+    // Keep callbacks on the main thread, where the session thread-locals live.
+    unsafe { recognizer.setQueue(&NSOperationQueue::mainQueue()) };
 
     if session_aborted(&control) {
         return;
@@ -166,21 +208,39 @@ fn begin_listening(app: AppHandle, control: Arc<SessionControl>) {
     let request_super = request.as_super();
     unsafe {
         request_super.setShouldReportPartialResults(true);
-        request_super.setAddsPunctuation(true);
+        // Punctuation stays off. On macOS it combines with on-device recognition
+        // and the transcript comes back empty.
     }
 
     let engine = unsafe { AVAudioEngine::new() };
     let input = unsafe { engine.inputNode() };
     let node = input.as_super().as_super();
-    let format = unsafe { node.outputFormatForBus(0) };
+    // A tap on an unconnected input node records silence on macOS. Connect it
+    // to the mixer, muted, so the hardware format is real and nothing plays back.
+    let format = match microphone_format(node) {
+        Ok(format) => format,
+        Err(message) => {
+            emit_terminal_on_main(&control, error_event("failed", message));
+            return;
+        }
+    };
+    let mixer = unsafe { engine.mainMixerNode() };
+    unsafe {
+        engine.connect_to_format(node, mixer.as_super(), Some(&format));
+        mixer.setOutputVolume(0.0);
+    }
 
     let request_for_tap = request.clone();
     let control_for_tap = control.clone();
     let tap_block = RcBlock::new(
-        move |buffer: core::ptr::NonNull<AVAudioPCMBuffer>, _when: core::ptr::NonNull<AVAudioTime>| {
-            control_for_tap.audio_buffers.fetch_add(1, Ordering::SeqCst);
+        move |buffer: core::ptr::NonNull<AVAudioPCMBuffer>,
+              _when: core::ptr::NonNull<AVAudioTime>| {
+            let pcm = unsafe { buffer.as_ref() };
+            if buffer_is_audible(pcm) {
+                control_for_tap.audio_buffers.fetch_add(1, Ordering::SeqCst);
+            }
             unsafe {
-                request_for_tap.appendAudioPCMBuffer(buffer.as_ref());
+                request_for_tap.appendAudioPCMBuffer(pcm);
             }
         },
     );
@@ -215,81 +275,51 @@ fn begin_listening(app: AppHandle, control: Arc<SessionControl>) {
     let result_handler = RcBlock::new(
         move |result: *mut SFSpeechRecognitionResult, error: *mut NSError| {
             let control = control_for_handler.clone();
-            if control.cancelled.load(Ordering::SeqCst) || control.terminal_sent.load(Ordering::SeqCst) {
+            if control.cancelled.load(Ordering::SeqCst)
+                || control.terminal_sent.load(Ordering::SeqCst)
+            {
                 return;
             }
-            if !control_is_current(&control) {
-                return;
-            }
+            // This block is not guaranteed to run on the main thread. Only atomics
+            // and `last_partial` are touched here. `CONTROL` is thread-local.
             if !result.is_null() {
                 let result = unsafe { result.as_ref() }.unwrap();
                 let text = unsafe { result.bestTranscription().formattedString().to_string() };
                 let is_final = unsafe { result.isFinal() };
-                match control.last_partial.lock() {
+                let event = match control.last_partial.lock() {
                     Ok(mut partial) => {
                         let decision = apply_recognizer_result(&partial, &text, is_final);
                         *partial = decision.last_partial;
-                        match decision.event {
-                            Some(DictationEvent::Final { text }) => {
-                                let control_main = control.clone();
-                                let _ = app_for_handler.run_on_main_thread(move || {
-                                    if !can_finish(&control_main) {
-                                        return;
-                                    }
-                                    emit_terminal_on_main(
-                                        &control_main,
-                                        DictationEvent::Final { text },
-                                    );
-                                });
-                            }
-                            Some(DictationEvent::Partial { text }) => {
-                                emit_dictation_event(
-                                    &control.channel,
-                                    DictationEvent::Partial { text },
-                                );
-                            }
-                            _ => {}
-                        }
+                        decision.event
                     }
                     Err(_) => {
                         if is_final {
-                            let control_main = control.clone();
-                            let _ = app_for_handler.run_on_main_thread(move || {
-                                if !can_finish(&control_main) {
-                                    return;
-                                }
-                                emit_terminal_on_main(
-                                    &control_main,
-                                    DictationEvent::Final { text },
-                                );
-                            });
+                            Some(DictationEvent::Final { text })
+                        } else if text.trim().is_empty() {
+                            None
                         } else {
-                            emit_dictation_event(
-                                &control.channel,
-                                DictationEvent::Partial { text },
-                            );
+                            Some(DictationEvent::Partial { text })
                         }
                     }
+                };
+                if let Some(event) = event {
+                    deliver_on_main(&app_for_handler, control, event);
                 }
                 return;
             }
             if !error.is_null() {
                 let ns_err = unsafe { error.as_ref() }.unwrap();
                 let detail = ns_err.localizedDescription().to_string();
+                let code = ns_err.code() as i64;
                 let stopping = control.stopping.load(Ordering::SeqCst);
                 let last_partial = control
                     .last_partial
                     .lock()
                     .map(|v| v.clone())
                     .unwrap_or_default();
-                let event = terminal_for_task_error(stopping, &last_partial, Some(&detail));
-                let control_main = control.clone();
-                let _ = app_for_handler.run_on_main_thread(move || {
-                    if !control_is_current(&control_main) || control_main.cancelled.load(Ordering::SeqCst) {
-                        return;
-                    }
-                    emit_terminal_on_main(&control_main, event);
-                });
+                if let Some(event) = speech_task_terminal(stopping, &last_partial, code, &detail) {
+                    deliver_on_main(&app_for_handler, control, event);
+                }
             }
         },
     );
@@ -338,10 +368,7 @@ fn continue_after_speech(app: AppHandle, control: Arc<SessionControl>) {
         return;
     }
     let Some(media_type) = (unsafe { AVMediaTypeAudio }) else {
-        emit_terminal_on_main(
-            &control,
-            error_event("failed", failed_message(None)),
-        );
+        emit_terminal_on_main(&control, error_event("failed", failed_message(None)));
         return;
     };
     let status = unsafe { AVCaptureDevice::authorizationStatusForMediaType(media_type) };
@@ -405,26 +432,24 @@ fn start_session_on_main(app: AppHandle, control: Arc<SessionControl>) {
         SFSpeechRecognizerAuthorizationStatus::NotDetermined => {
             let app_for_cb = app.clone();
             let control_for_cb = control.clone();
-            let block = RcBlock::new(
-                move |auth: SFSpeechRecognizerAuthorizationStatus| {
-                    let app = app_for_cb.clone();
-                    let control = control_for_cb.clone();
-                    let app_main = app.clone();
-                    let _ = app.run_on_main_thread(move || {
-                        if !control_is_current(&control) || session_aborted(&control) {
-                            return;
-                        }
-                        if auth == SFSpeechRecognizerAuthorizationStatus::Authorized {
-                            continue_after_speech(app_main, control);
-                        } else {
-                            emit_terminal_on_main(
-                                &control,
-                                error_event("speech_denied", speech_denied_message()),
-                            );
-                        }
-                    });
-                },
-            );
+            let block = RcBlock::new(move |auth: SFSpeechRecognizerAuthorizationStatus| {
+                let app = app_for_cb.clone();
+                let control = control_for_cb.clone();
+                let app_main = app.clone();
+                let _ = app.run_on_main_thread(move || {
+                    if !control_is_current(&control) || session_aborted(&control) {
+                        return;
+                    }
+                    if auth == SFSpeechRecognizerAuthorizationStatus::Authorized {
+                        continue_after_speech(app_main, control);
+                    } else {
+                        emit_terminal_on_main(
+                            &control,
+                            error_event("speech_denied", speech_denied_message()),
+                        );
+                    }
+                });
+            });
             unsafe { SFSpeechRecognizer::requestAuthorization(&block) };
         }
         _ => emit_terminal_on_main(
@@ -442,16 +467,19 @@ fn stop_session_internal(_app: AppHandle, control: Arc<SessionControl>) {
         return;
     }
     let snapshot = LIVE.with(|cell| {
-        cell.borrow().as_ref().map(|live| {
-            (live.engine.clone(), live.request.clone())
-        })
+        cell.borrow()
+            .as_ref()
+            .map(|live| (live.engine.clone(), live.request.clone(), live.task.clone()))
     });
-    if let Some((engine, request)) = snapshot {
+    if let Some((engine, request, task)) = snapshot {
         let input = unsafe { engine.inputNode() };
         let node = input.as_super().as_super();
         unsafe { node.removeTapOnBus(0) };
         unsafe { engine.stop() };
+        // endAudio tells the request no more samples are coming. finish asks
+        // the task to produce the final transcript from what it already has.
         unsafe { request.endAudio() };
+        unsafe { task.finish() };
     }
     schedule_final_timeout(_app, control);
 }

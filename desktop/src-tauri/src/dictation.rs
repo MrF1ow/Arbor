@@ -51,6 +51,67 @@ pub fn no_speech_message() -> String {
     "Arbor didn't catch any words. Try again, speaking a little closer to the microphone.".into()
 }
 
+pub fn dictation_disabled_message() -> String {
+    "Dictation is turned off in macOS. Turn it on in System Settings › Keyboard › Dictation.".into()
+}
+
+pub fn assets_missing_message() -> String {
+    "The speech recognition language isn't downloaded. Turn on Dictation in System Settings › Keyboard › Dictation and download your language.".into()
+}
+
+/// True when a PCM channel has a sample louder than digital silence.
+/// The step keeps the microphone tap from scanning every frame.
+pub fn channel_is_audible(samples: &[f32]) -> bool {
+    if samples.is_empty() {
+        return false;
+    }
+    let step = (samples.len() / 32).max(1);
+    let mut index = 0;
+    while index < samples.len() {
+        if samples[index].abs() > 0.015 {
+            return true;
+        }
+        index += step;
+    }
+    false
+}
+
+/// Maps an `SFSpeechRecognitionTask` error onto a terminal event.
+/// `None` means the session should keep listening.
+pub fn speech_task_terminal(
+    stopping: bool,
+    last_partial: &str,
+    code: i64,
+    detail: &str,
+) -> Option<DictationEvent> {
+    match code {
+        // The task was canceled. Keep whatever was already heard.
+        301 => Some(DictationEvent::Final {
+            text: last_partial.to_string(),
+        }),
+        // "Failed to recognize any speech." Ignore this while still listening
+        // so a spurious early error does not wipe the session.
+        1110 if stopping || !last_partial.trim().is_empty() => Some(DictationEvent::Final {
+            text: last_partial.to_string(),
+        }),
+        1110 => None,
+        // Siri or Dictation is disabled.
+        201 => Some(error_event(
+            "dictation_disabled",
+            dictation_disabled_message(),
+        )),
+        // Speech assets are not installed for this language.
+        102 => Some(error_event("assets_missing", assets_missing_message())),
+        // The recognition request is not authorized.
+        1700 => Some(error_event("speech_denied", speech_denied_message())),
+        _ => Some(terminal_for_task_error(
+            stopping,
+            last_partial,
+            Some(detail),
+        )),
+    }
+}
+
 /// An empty final transcript becomes an error that says why, so a silent session never ends quietly.
 pub fn finish_event(event: DictationEvent, audio_buffers: u64) -> DictationEvent {
     match event {
@@ -146,12 +207,15 @@ pub fn apply_recognizer_result(
 
 pub fn privacy_settings_url(pane: &str) -> Result<&'static str, String> {
     match pane {
-        "microphone" => Ok(
-            "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone",
-        ),
-        "speech" => Ok(
-            "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition",
-        ),
+        "microphone" => {
+            Ok("x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")
+        }
+        "speech" => {
+            Ok("x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition")
+        }
+        "dictation" => {
+            Ok("x-apple.systempreferences:com.apple.Keyboard-Settings.extension?Dictation")
+        }
         _ => Err(format!("Unknown privacy pane: {pane}")),
     }
 }
@@ -266,10 +330,7 @@ mod tests {
             text: "hello".into(),
         })
         .unwrap();
-        assert_eq!(
-            partial,
-            json!({"kind":"partial","text":"hello"})
-        );
+        assert_eq!(partial, json!({"kind":"partial","text":"hello"}));
 
         let final_ev = serde_json::to_value(DictationEvent::Final {
             text: "done".into(),
@@ -306,10 +367,7 @@ mod tests {
             unavailable_message(),
             "Speech recognition isn't available for your language right now."
         );
-        assert_eq!(
-            failed_message(None),
-            "Dictation stopped unexpectedly."
-        );
+        assert_eq!(failed_message(None), "Dictation stopped unexpectedly.");
         assert_eq!(
             failed_message(Some("Network lost")),
             "Dictation stopped unexpectedly. (Network lost)"
@@ -327,8 +385,65 @@ mod tests {
             "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition"
         );
         assert_eq!(
+            privacy_settings_url("dictation").unwrap(),
+            "x-apple.systempreferences:com.apple.Keyboard-Settings.extension?Dictation"
+        );
+        assert_eq!(
             privacy_settings_url("camera").unwrap_err(),
             "Unknown privacy pane: camera"
+        );
+    }
+
+    #[test]
+    fn channel_is_audible_ignores_digital_silence() {
+        assert!(!channel_is_audible(&[]));
+        assert!(!channel_is_audible(&[0.0, 0.0, 0.001]));
+        assert!(channel_is_audible(&[0.0, 0.0, 0.2]));
+    }
+
+    #[test]
+    fn speech_task_terminal_cases() {
+        assert_eq!(speech_task_terminal(false, "", 1110, "no speech"), None);
+        assert_eq!(
+            speech_task_terminal(true, "", 1110, "no speech"),
+            Some(DictationEvent::Final { text: "".into() })
+        );
+        assert_eq!(
+            speech_task_terminal(false, "hello", 1110, "no speech"),
+            Some(DictationEvent::Final {
+                text: "hello".into()
+            })
+        );
+        assert_eq!(
+            speech_task_terminal(true, "hi", 301, "canceled"),
+            Some(DictationEvent::Final { text: "hi".into() })
+        );
+        assert_eq!(
+            speech_task_terminal(false, "", 201, "disabled"),
+            Some(DictationEvent::Error {
+                code: "dictation_disabled".into(),
+                message: dictation_disabled_message(),
+            })
+        );
+        assert_eq!(
+            speech_task_terminal(false, "", 102, "assets"),
+            Some(DictationEvent::Error {
+                code: "assets_missing".into(),
+                message: assets_missing_message(),
+            })
+        );
+        assert_eq!(
+            speech_task_terminal(false, "", 1700, "denied"),
+            Some(DictationEvent::Error {
+                code: "speech_denied".into(),
+                message: speech_denied_message(),
+            })
+        );
+        assert_eq!(
+            speech_task_terminal(false, "kept", 203, "boom"),
+            Some(DictationEvent::Final {
+                text: "kept".into()
+            })
         );
     }
 
@@ -436,10 +551,7 @@ mod tests {
 
         let d = apply_recognizer_result("", "", true);
         assert_eq!(d.last_partial, "");
-        assert_eq!(
-            d.event,
-            Some(DictationEvent::Final { text: "".into() })
-        );
+        assert_eq!(d.event, Some(DictationEvent::Final { text: "".into() }));
 
         let d = apply_recognizer_result("", "", false);
         assert_eq!(d.last_partial, "");
@@ -447,9 +559,6 @@ mod tests {
 
         let d = apply_recognizer_result("", "   ", true);
         assert_eq!(d.last_partial, "");
-        assert_eq!(
-            d.event,
-            Some(DictationEvent::Final { text: "".into() })
-        );
+        assert_eq!(d.event, Some(DictationEvent::Final { text: "".into() }));
     }
 }

@@ -140,4 +140,15 @@ describe("showDictationError", () => {
     const call = getMockIpcCalls().find((c) => c.cmd === "open_privacy_settings");
     expect((call?.args as { pane?: string }).pane).toBe("microphone");
   });
+
+  it("Open Settings for dictation_disabled opens the Keyboard dictation pane", () => {
+    showDictationError("dictation_disabled", "Turn dictation on");
+    const action = (toast.error as ReturnType<typeof vi.fn> & { lastAction?: () => void })
+      .lastAction;
+    act(() => {
+      action!();
+    });
+    const call = getMockIpcCalls().find((c) => c.cmd === "open_privacy_settings");
+    expect((call?.args as { pane?: string }).pane).toBe("dictation");
+  });
 });
