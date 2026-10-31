@@ -2,11 +2,20 @@
 
 Package version for the worker, desktop, and Tauri app. See [Version numbering](PROJECT.md#version-numbering) in `PROJECT.md`.
 
-**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is complete as package `3.0.0`. **Version 4** is complete as package `4.0.0`. **Version 5** is complete as package `5.0.0`. **Current package:** `5.26.3`. **Current tag:** `v5.26.3`. `v5.0.1` is cut when that release lands. `v5.0.0` is cut when that release lands. `v4.5.0` is cut when that release lands. `v4.4.0` is tagged. `v4.3.0` is not tagged yet. `v4.2.0` is tagged. `v4.1.0` and `v4.0.0` are tagged. `v3.0.0` through `v3.5.0` are already tagged. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) was retested on the 2026-10-17 Linux live run.
+**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is complete as package `3.0.0`. **Version 4** is complete as package `4.0.0`. **Version 5** is complete as package `5.0.0`. **Current package:** `5.26.4`. **Current tag:** `v5.26.4`. `v5.0.1` is cut when that release lands. `v5.0.0` is cut when that release lands. `v4.5.0` is cut when that release lands. `v4.4.0` is tagged. `v4.3.0` is not tagged yet. `v4.2.0` is tagged. `v4.1.0` and `v4.0.0` are tagged. `v3.0.0` through `v3.5.0` are already tagged. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) was retested on the 2026-10-17 Linux live run.
 
 ## Unreleased
 
-Nothing pending above `5.26.3`.
+Nothing pending above `5.26.4`.
+
+## 5.26.4 — 2026-10-30
+
+Git tag `v5.26.4`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `5.26.4`. UI cutover stays `6.0.0`.
+
+- A provider failure now leads with its cause. A Codex 429 whose own retries ran out reads "Codex is rate limited (HTTP 429) and its own retries ran out. Wait and try again." instead of a page of plugin warnings. Quota and sign-in failures are labelled the same way.
+- Only the CLI's own error lines are classified, so course text echoed into stderr can't mislabel a failure. Tokens and API keys are redacted from the message.
+- A failed study skill now names itself in the Jobs row and the notification instead of "worker exited with code 1", locally and over SSH.
+- Failure events carry `kind` and `exit_code` for diagnosis. A failed diagram run leaves existing graph files untouched.
 
 ## 5.26.3 — 2026-10-30
 

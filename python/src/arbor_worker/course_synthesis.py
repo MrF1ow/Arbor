@@ -79,7 +79,7 @@ def synthesize_course(
     except CourseSynthesisError:
         raise
     except Exception as e:
-        raise CourseSynthesisError(f"{course_name}: course synthesis failed: {e}")
+        raise CourseSynthesisError(f"{course_name}: course synthesis failed: {e}") from e
     return result.markdown
 
 

@@ -951,11 +951,15 @@ fn spawn_worker_stream(
         let mut last_line = String::new();
         let mut terminal_status = None::<jobs::JobStatus>;
         let mut terminal_summary = None::<String>;
+        let mut skill_failure = None::<String>;
         if let Some(stdout) = child.stdout.take() {
             let reader = BufReader::new(stdout);
             for line in reader.lines().map_while(Result::ok) {
                 last_line = line.clone();
                 if let Ok(value) = serde_json::from_str::<serde_json::Value>(&line) {
+                    if let Some(summary) = jobs::skill_failure_summary(&value) {
+                        skill_failure = Some(summary);
+                    }
                     match value.get("type").and_then(|t| t.as_str()) {
                         Some("cancelled") => terminal_status = Some(jobs::JobStatus::Cancelled),
                         Some("auth_failed") => {
@@ -992,7 +996,11 @@ fn spawn_worker_stream(
         let (status, summary) = terminal_status
             .map(|s| (s, terminal_summary))
             .unwrap_or_else(|| {
-                jobs::resolve_terminal_status(&last_line, code, &provider_label)
+                jobs::prefer_skill_failure(
+                    jobs::resolve_terminal_status(&last_line, code, &provider_label),
+                    code,
+                    skill_failure,
+                )
             });
         let _ = jobs::finish_job(&knowledge_root, &job_id, status, code, summary.clone());
         if let Some(ref id) = provider_id {

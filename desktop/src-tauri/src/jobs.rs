@@ -277,6 +277,35 @@ pub fn resolve_terminal_status(
     (JobStatus::Succeeded, None)
 }
 
+/// Job summary for a `skill_failed` event, used when the worker then exits nonzero.
+/// Without it the Jobs row only says "worker exited with code 1".
+pub fn skill_failure_summary(value: &serde_json::Value) -> Option<String> {
+    if value.get("type").and_then(|t| t.as_str()) != Some("skill_failed") {
+        return None;
+    }
+    let skill = value.get("skill").and_then(|s| s.as_str()).unwrap_or("skill");
+    Some(match value.get("message").and_then(|m| m.as_str()) {
+        Some(message) if !message.trim().is_empty() => {
+            format!("Study {skill} failed: {}", message.trim())
+        }
+        _ => format!("Study {skill} failed"),
+    })
+}
+
+/// A nonzero exit without its own summary takes the last skill failure instead.
+pub fn prefer_skill_failure(
+    resolved: (JobStatus, Option<String>),
+    exit_code: i32,
+    skill_failure: Option<String>,
+) -> (JobStatus, Option<String>) {
+    match (resolved, skill_failure) {
+        ((JobStatus::Failed, _), Some(summary)) if exit_code != 0 && exit_code != 3 => {
+            (JobStatus::Failed, Some(summary))
+        }
+        (resolved, _) => resolved,
+    }
+}
+
 pub type SharedCoordinator = Mutex<JobCoordinator>;
 
 #[cfg(test)]
@@ -336,6 +365,34 @@ mod tests {
             resolve_terminal_status(r#"{"type":"auth_failed"}"#, 0, "Claude");
         assert_eq!(status, JobStatus::Failed);
         assert_eq!(summary.as_deref(), Some("Claude is not authenticated"));
+    }
+
+    #[test]
+    fn skill_failure_becomes_the_summary_on_nonzero_exit() {
+        let event: serde_json::Value = serde_json::from_str(
+            r#"{"type":"skill_failed","skill":"diagrams","message":"Codex is rate limited (HTTP 429).","kind":"rate_limited"}"#,
+        )
+        .unwrap();
+        let failure = skill_failure_summary(&event);
+        assert_eq!(
+            failure.as_deref(),
+            Some("Study diagrams failed: Codex is rate limited (HTTP 429).")
+        );
+        let resolved = resolve_terminal_status(r#"{"type":"worker_exit"}"#, 1, "Codex");
+        let (status, summary) = prefer_skill_failure(resolved, 1, failure.clone());
+        assert_eq!(status, JobStatus::Failed);
+        assert_eq!(summary, failure);
+    }
+
+    #[test]
+    fn skill_failure_does_not_fail_a_successful_exit_or_mask_auth() {
+        let failure = Some("Study diagrams failed".to_string());
+        let ok = prefer_skill_failure(resolve_terminal_status("", 0, "Codex"), 0, failure.clone());
+        assert_eq!(ok, (JobStatus::Succeeded, None));
+        let auth = prefer_skill_failure(resolve_terminal_status("", 3, "Grok"), 3, failure);
+        assert_eq!(auth.1.as_deref(), Some("Grok is not authenticated"));
+        let other: serde_json::Value = serde_json::from_str(r#"{"type":"skill_done"}"#).unwrap();
+        assert_eq!(skill_failure_summary(&other), None);
     }
 
     #[test]

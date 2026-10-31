@@ -97,8 +97,9 @@ def test_run_raises_on_is_error(tmp_path: Path):
         return R()
 
     prov = ClaudeCliProvider(models=[Model("m", "M")], runner=runner, which=lambda name: "/usr/bin/claude")
-    with pytest.raises(ProviderError, match="Authentication"):
+    with pytest.raises(ProviderError, match="Authentication") as exc:
         prov.run(ProviderRequest(prompt="p", model_id="m", cwd=tmp_path))
+    assert exc.value.kind == "auth"
 
 
 def test_claude_guard_blocks_run(monkeypatch, tmp_path: Path):

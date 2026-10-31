@@ -13,6 +13,7 @@ from arbor_worker.cache import ensure_gitignored
 from arbor_worker.events import EventEmitter
 from arbor_worker.gitstate import GitStateError, commit_and_note, path_has_pending_changes
 from arbor_worker.provider.base import ProviderRequest
+from arbor_worker.provider.errors import provider_failure_event_fields
 from arbor_worker.provider.fake import FakeProvider
 from arbor_worker.provider.registry import PROVIDERS, PROVIDER_ORDER, make_provider
 from arbor_worker.settings import default_settings, load_models, load_settings
@@ -226,7 +227,7 @@ def cmd_update(args) -> int:
             commit=not args.no_commit,
         )
     except Exception as e:
-        emitter.error(message=str(e))
+        emitter.error(message=str(e), **provider_failure_event_fields(e))
         emitter.run_done(processed=0, failed=0, skipped=0)
         return 1
     return 0 if result.failed == 0 else 1
@@ -572,6 +573,7 @@ def cmd_generate(args) -> int:
             course=args.course,
             skill=skill.name,
             message=str(error),
+            **provider_failure_event_fields(error),
         )
         return 1
 
@@ -1003,7 +1005,7 @@ def cmd_chat(_args) -> int:
             emitter=emitter,
         )
     except ProviderError as error:
-        emitter.error(message=str(error))
+        emitter.error(message=str(error), **provider_failure_event_fields(error))
         return 1
     except (KeyError, TypeError, ValueError, FileNotFoundError) as error:
         emitter.error(message=str(error))

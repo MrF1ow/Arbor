@@ -9,6 +9,16 @@ export type FormattedWorkerEvent = {
   status: "idle" | "running" | "failed" | "done";
 };
 
+function providerLimitLine(ev: WorkerEvent): string | null {
+  if (ev.kind === "rate_limited") {
+    return "The provider is rate limited (HTTP 429). Wait and try again.";
+  }
+  if (ev.kind === "quota") {
+    return "The provider usage limit was reached. Wait and try again.";
+  }
+  return null;
+}
+
 export function formatWorkerEvent(ev: WorkerEvent, providerLabel = "Provider"): FormattedWorkerEvent {
   let line: string;
   let step: string | null = null;
@@ -128,6 +138,13 @@ export function formatWorkerEvent(ev: WorkerEvent, providerLabel = "Provider"): 
     default:
       line = ev.message ? `${ev.type}: ${ev.message}` : ev.type;
       break;
+  }
+
+  const limited = providerLimitLine(ev);
+  if (limited) {
+    // Swap only the provider message so each step keeps its own prefix.
+    line = ev.message && line.includes(ev.message) ? line.replace(ev.message, limited) : limited;
+    status = "failed";
   }
 
   return { line, step, status };

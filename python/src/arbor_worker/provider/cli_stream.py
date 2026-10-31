@@ -7,6 +7,7 @@ from collections.abc import Callable, Iterable
 from typing import Any
 
 from arbor_worker.provider.base import DeltaFn, ProviderError
+from arbor_worker.provider.errors import cli_process_failure
 
 
 def run_popen_stream(
@@ -69,12 +70,10 @@ def run_popen_stream(
         if parse_error is not None:
             empty_msg = f"{label} returned empty result"
             if parse_error.args and str(parse_error.args[0]) == empty_msg and code != 0:
-                detail = stderr or "no stderr"
-                raise ProviderError(f"{label} failed ({code}): {detail}") from parse_error
+                raise cli_process_failure(label, code, stderr) from parse_error
             raise parse_error
         if code != 0:
-            detail = stderr or "no stderr"
-            raise ProviderError(f"{label} failed ({code}): {detail}")
+            raise cli_process_failure(label, code, stderr)
         return result
     finally:
         if proc.poll() is None:

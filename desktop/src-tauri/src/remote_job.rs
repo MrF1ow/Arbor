@@ -152,13 +152,21 @@ pub fn prepare_remote_worker_tokens(
     Ok(tokens)
 }
 
-fn parse_ndjson_line(line: &str, commit_paths: &mut Vec<String>, error: &mut Option<String>) {
+fn parse_ndjson_line(
+    line: &str,
+    commit_paths: &mut Vec<String>,
+    error: &mut Option<String>,
+    skill_failure: &mut Option<String>,
+) {
     let Ok(value) = serde_json::from_str::<Value>(line) else {
         return;
     };
     let Some(kind) = value.get("type").and_then(|v| v.as_str()) else {
         return;
     };
+    if let Some(summary) = crate::jobs::skill_failure_summary(&value) {
+        *skill_failure = Some(summary);
+    }
     match kind {
         "commit_paths" => {
             if let Some(paths) = value.get("paths").and_then(|v| v.as_array()) {
@@ -299,6 +307,7 @@ pub fn run_remote_job(
     };
 
     let mut worker_error: Option<String> = None;
+    let mut skill_failure: Option<String> = None;
     let mut lines_seen = 0usize;
     let interrupt = Arc::new(AtomicBool::new(false));
     let interrupt_flag = interrupt.clone();
@@ -306,7 +315,12 @@ pub fn run_remote_job(
         &remote_tokens,
         &mut |line| {
             outcome.lines.push(line.to_string());
-            parse_ndjson_line(line, &mut outcome.commit_paths, &mut worker_error);
+            parse_ndjson_line(
+                line,
+                &mut outcome.commit_paths,
+                &mut worker_error,
+                &mut skill_failure,
+            );
             if let Some(cb) = on_line.as_deref_mut() {
                 cb(line);
             }
@@ -325,16 +339,18 @@ pub fn run_remote_job(
         return outcome;
     }
 
+    // A skill failure explains a nonzero exit, but never fails a clean one.
+    let exit_error = worker_error.clone().or(skill_failure);
     match run_result {
         Ok(0) => {}
         Ok(_code) if outcome.killed => {}
         Ok(code) => {
-            outcome.error = Some(resolve_run_error("", code, &worker_error));
+            outcome.error = Some(resolve_run_error("", code, &exit_error));
             return outcome;
         }
         Err(_stderr) if outcome.killed => {}
         Err(stderr) => {
-            outcome.error = Some(resolve_run_error(&stderr, 255, &worker_error));
+            outcome.error = Some(resolve_run_error(&stderr, 255, &exit_error));
             return outcome;
         }
     }

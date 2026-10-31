@@ -19,6 +19,7 @@ from arbor_worker.provider.base import (
     image_media_type,
 )
 from arbor_worker.provider.cli_stream import run_popen_stream
+from arbor_worker.provider.errors import cli_process_failure, message_failure
 from arbor_worker.provider.stream_json import iter_stream_json
 
 GROK_DOCS_URL = "https://x.ai/grok"
@@ -145,10 +146,8 @@ class GrokCliProvider:
             payload = json.loads(stdout)
         except json.JSONDecodeError as exc:
             raise ProviderError(f"grok returned invalid JSON: {exc}") from exc
-        if payload.get("type") == "error":
-            raise ProviderError(str(payload.get("message") or "grok error"))
-        if payload.get("is_error"):
-            raise ProviderError(str(payload.get("message") or "grok error"))
+        if payload.get("type") == "error" or payload.get("is_error"):
+            raise message_failure("grok", str(payload.get("message") or "grok error"))
         _raise_if_tool_call(payload)
         text = payload.get("text")
         if not isinstance(text, str) or not text.strip():
@@ -206,10 +205,17 @@ class GrokCliProvider:
                 payload = None
             if isinstance(payload, dict):
                 if payload.get("type") == "error" or payload.get("is_error"):
-                    raise ProviderError(str(payload.get("message") or "grok error"))
+                    raise message_failure(
+                        "grok",
+                        str(payload.get("message") or "grok error"),
+                        exit_code=proc.returncode,
+                    )
                 _raise_if_tool_call(payload)
-            detail = (proc.stderr or proc.stdout or "").strip() or "grok failed"
-            raise ProviderError(f"grok failed ({proc.returncode}): {detail}")
+            raise cli_process_failure(
+                "grok",
+                proc.returncode,
+                proc.stderr or proc.stdout or "",
+            )
         return self._parse_stdout(proc.stdout or "")
 
     def stream(self, request: ProviderRequest, on_delta: DeltaFn) -> ProviderResult:
