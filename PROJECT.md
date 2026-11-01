@@ -498,7 +498,7 @@ Package releases (`0.0.1`, `0.0.2`, `0.1.0`, `0.2.0`, …) are in [`CHANGELOG.md
 
 **Product milestones** (Version 1–5 below) are capability eras. **Git tags** track what is shipped.
 
-**Numbering (since 2026-11-01):** tags stay below 1.0. Version N completes at `v0.N.0`, and every release on the way to the next Version bumps the patch (`v0.5.35`, `v0.5.36`, …). The UI cutover that completes Version 6 is `v0.6.0`. Before 2026-11-01 the tags ran `v1.0.0`–`v5.26.5`; each old major X became `0.X` with its releases numbered in order (`v2.1.0` → `v0.2.1`, `v5.26.5` → `v0.5.34`, and the untagged 5.26.6 → `v0.5.35`), and the early `0.1.0`/`0.2.0` became `0.0.1`/`0.0.2`. Older plans under `docs/` still use the old numbers.
+**Numbering (since 2026-11-01):** tags stay below 1.0. Version N completes at `v0.N.0`, and every release on the way to the next Version bumps the patch (`v0.5.35`, `v0.5.36`, …). The UI cutover that completes Version 6 is `v0.6.0`. Before 2026-11-01 the tags ran `v1.0.0`–`v5.26.5`; each old major X became `0.X` with its releases numbered in order (`v2.1.0` → `v0.2.1`, `v5.26.5` → `v0.5.34`, and the untagged 5.26.6 → `v0.5.35`), and the early `0.1.0`/`0.2.0` became `0.0.1`/`0.0.2`. Plans and docs under `docs/` use the new numbers too; historical branch names such as `release/v3.0.0` keep their real names.
 
 | Tag | Product milestone | Meaning |
 |-----|-------------------|---------|

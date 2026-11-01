@@ -1,6 +1,6 @@
 # Open issue tracks
 
-> **Status (2026-08-19):** Landed on `main` in **0.2.0** ([PR #22](https://github.com/MrF1ow/Arbor/pull/22)). Runtime ingest writes `arbor-course.json` `version` 2 with fingerprints and `arbor-pages` markers. PATH and auth, digest prompt rules, and the single-digest `course.md` index are live. #4 (packaging) and #20 (chat) remain later. Do not re-run this program from the old Context paragraph.
+> **Status (2026-08-19):** Landed on `main` in **0.0.2** ([PR #22](https://github.com/MrF1ow/Arbor/pull/22)). Runtime ingest writes `arbor-course.json` `version` 2 with fingerprints and `arbor-pages` markers. PATH and auth, digest prompt rules, and the single-digest `course.md` index are live. #4 (packaging) and #20 (chat) remain later. Do not re-run this program from the old Context paragraph.
 >
 > **Playbook:** poteto-mode multi-phase plan. Plan only. Do not implement from this document until the user starts execution.
 >
@@ -78,7 +78,7 @@ Two owners may run at once in wave 1. One owner runs the fingerprinting stack. T
 
 **Lever for wave 2.** Each owner reads [2026-08-12-page-fingerprinting/overview.md](../2026-08-12-page-fingerprinting/overview.md) and one named phase file. No parallel design. The coordinator inspects `git diff` after every phase.
 
-Root `README.md`, `python/README.md`, and `desktop/README.md` now match ranges, markers, and 0.2.0. This file stays as the original execution plan.
+Root `README.md`, `python/README.md`, and `desktop/README.md` now match ranges, markers, and 0.0.2. This file stays as the original execution plan.
 
 ## Phases
 
@@ -121,6 +121,6 @@ Implementers must:
 | Desktop auth | `desktop/src/main.ts` (`refreshAuth`, `window` `focus`) |
 | Prompts | `python/src/arbor_worker/digest.py`, `python/tests/test_digest.py` |
 | Course rollup | `python/src/arbor_worker/course_synthesis.py`, `pipeline.py` (wave 2 only), `python/tests/test_course_synthesis.py` |
-| Manifest | `python/src/arbor_worker/course_manifest.py` (pipeline calls `set_source` on 0.2.0) |
+| Manifest | `python/src/arbor_worker/course_manifest.py` (pipeline calls `set_source` on 0.0.2) |
 | Fingerprinting plan | `docs/superpowers/plans/2026-08-12-page-fingerprinting/` |
 | Specs | `docs/superpowers/specs/2026-08-12-page-fingerprinting-design.md`, `docs/superpowers/specs/2026-08-12-course-centric-knowledge-design.md` |

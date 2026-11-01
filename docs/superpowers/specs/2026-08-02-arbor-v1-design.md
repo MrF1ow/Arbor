@@ -1,7 +1,7 @@
 # Arbor V1 Design
 
 **Date:** 2026-08-02  
-**Status:** Historical. Living product is package **0.2.0** (tag `v0.2.0`), still PROJECT.md Version 1.  
+**Status:** Historical. Living product is package **0.0.2** (tag `v0.0.2`), still PROJECT.md Version 1.  
 **Product name:** Arbor  
 **Category:** Academic Knowledge System (see `PROJECT.md`)  
 **Source vision:** `PROJECT.md` (narrowed for V1)

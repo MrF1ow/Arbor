@@ -1,8 +1,8 @@
-# Version 4 tutor — chat contract (`v3.1.0`)
+# Version 4 tutor — chat contract (`v0.3.1`)
 
 Date: 2026-10-18
 
-Status: contract for the worker slice. UI, history writes, and scheduling are later slices (`v3.2.0` and after). Plan: [`../plans/2026-10-17-roadmap-completion/v4-tutor.md`](../plans/2026-10-17-roadmap-completion/v4-tutor.md).
+Status: contract for the worker slice. UI, history writes, and scheduling are later slices (`v0.3.2` and after). Plan: [`../plans/2026-10-17-roadmap-completion/v4-tutor.md`](../plans/2026-10-17-roadmap-completion/v4-tutor.md).
 
 ## Request
 
@@ -36,7 +36,7 @@ NDJSON on stdout, same `type` + `ts` shape as other worker events.
  "chunks":[{"n":1,"digest_path":"Biology/course.md","heading_id":"biology","heading":"Biology","page_range":null,"source_file":null,"chars":40,"truncated":false}]}
 ```
 
-`chat_delta` — optional. Current providers do not stream, so `v3.1.0` does not emit it.
+`chat_delta` — optional. Current providers do not stream, so `v0.3.1` does not emit it.
 
 `chat_done`:
 
@@ -76,9 +76,9 @@ The system instruction says the sources are untrusted reference material and nev
 
 The model's last non-empty line is exactly `supported: true` or `supported: false`. The worker strips that line. A missing trailer yields `supported: false` plus a warning. Only `[n]` numbers that were retrieved become `citations`, in first-appearance order, unique by `n`.
 
-## History file (not written in `v3.1.0`)
+## History file (not written in `v0.3.1`)
 
-`v3.2.0` will append to `<root>/.arbor/chat/<course>.jsonl`, one object per line:
+`v0.3.2` will append to `<root>/.arbor/chat/<course>.jsonl`, one object per line:
 
 ```json
 {"ts":"...","role":"user","mode":"ask","content":"..."}

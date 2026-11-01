@@ -1,6 +1,6 @@
 # Issue #95: macOS DMG worker fails to start; provider CLIs not detected
 
-Target release: **5.0.1** (patch). Branch: `fix/issue-95-macos-worker`.
+Target release: **0.5.1** (patch). Branch: `fix/issue-95-macos-worker`.
 
 ## Root causes
 
@@ -34,10 +34,10 @@ Target release: **5.0.1** (patch). Branch: `fix/issue-95-macos-worker`.
 - `worker.rs` `run_worker_json`: when stdout has no JSON and the exit status is non-zero, return `worker failed to start (exit N): <trimmed stderr tail, ≤600 chars>`. Keep `parse_worker_json_output`'s current behaviour for its existing tests, or extend it with an exit-code parameter and update the tests.
 - `main.ts` `refreshAuth` catch: capture the error and set `authCheckReason` to `Arbor worker unavailable: <message>`. The badge should read as a worker problem, not "not authenticated". Hide the "Set up {provider}" docs link in this case. Add or adjust a desktop test.
 
-### E. Release 5.0.1
-- Bump to `5.0.1` in every file listed in `.cursor/rules/arbor-versioning.mdc` rule 5, plus `python/uv.lock`, `desktop/package-lock.json`, `desktop/src-tauri/Cargo.lock`, and `python/tests/test_cli.py`.
-- CHANGELOG `## 5.0.1 — 2026-10-18`: list the fixes and reference #95. Update the "Current package" line.
-- Add a row for `v5.0.1` to the versioning rule table.
+### E. Release 0.5.1
+- Bump to `0.5.1` in every file listed in `.cursor/rules/arbor-versioning.mdc` rule 5, plus `python/uv.lock`, `desktop/package-lock.json`, `desktop/src-tauri/Cargo.lock`, and `python/tests/test_cli.py`.
+- CHANGELOG `## 0.5.1 — 2026-10-18`: list the fixes and reference #95. Update the "Current package" line.
+- Add a row for `v0.5.1` to the versioning rule table.
 
 ## Verification
 - Local (Linux): `cd python && uv run pytest`; `cd desktop && npm test && npx tsc --noEmit && npm run build`; `mkdir -p desktop/dist && cargo test --manifest-path desktop/src-tauri/Cargo.toml`; `bash -n scripts/smoke-macos-bundle.sh`; `shellcheck` if installed.

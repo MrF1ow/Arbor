@@ -1,6 +1,6 @@
 # Version 3 closeout Implementation Plan
 
-> **Status (2026-10-17):** Landed in `v2.2.0`. Do not execute these tasks. Current release is `v2.3.0`. The open gate is the Mac batch in [mac-e2e.md](mac-e2e.md). Versioning: [`.cursor/rules/arbor-versioning.mdc`](../../../../.cursor/rules/arbor-versioning.mdc).
+> **Status (2026-10-17):** Landed in `v0.2.2`. Do not execute these tasks. Current release is `v0.2.3`. The open gate is the Mac batch in [mac-e2e.md](mac-e2e.md). Versioning: [`.cursor/rules/arbor-versioning.mdc`](../../../../.cursor/rules/arbor-versioning.mdc).
 
 > **For agentic workers:** This plan is a record. The checkboxes below were the original task list. Do not implement them again.
 
@@ -14,8 +14,8 @@
 
 ## Global Constraints
 
-- Package versions stay `2.1.0` until the tagged Wave 8 implementation commit (`pyproject.toml`, `desktop/package.json`, `desktop/src-tauri/Cargo.toml`, `arbor_worker.__version__`).
-- Do not publish `3.1.0`. Do not backfill `v2.2.0` through `v2.8.0`.
+- Package versions stay `0.2.1` until the tagged Wave 8 implementation commit (`pyproject.toml`, `desktop/package.json`, `desktop/src-tauri/Cargo.toml`, `arbor_worker.__version__`).
+- Do not publish `0.3.1`. Do not backfill `v0.2.2` through `v0.2.8`.
 - Chat, Anki, pretty canvas, extra providers, and due-date SRS stay out.
 - Progress files stay gitignored under `.arbor/progress/`.
 - Flip and Next do not increment flashcard `seen` after this wave. Again / Wrong / Mastered do.
@@ -442,16 +442,16 @@ git commit -m "feat(desktop): scroll source chips to digest headings"
 - Modify: `README.md` (remove Coming soon; list study modes, semantic search, Graph, citations)
 - Modify: `desktop/README.md` item 13 (Generate enabled, grade buttons, Graph tab)
 - Modify: `PROJECT.md` Version 3 shipped vs remaining
-- Modify: `CHANGELOG.md` Unreleased (Wave 8 bullets). Do not rewrite the frozen 2.1.0 section except the one line that still says later releases will add flashcards if you find it under Unreleased, not under 2.1.0.
+- Modify: `CHANGELOG.md` Unreleased (Wave 8 bullets). Do not rewrite the frozen 0.2.1 section except the one line that still says later releases will add flashcards if you find it under Unreleased, not under 0.2.1.
 - Modify: `docs/superpowers/specs/2026-08-22-v3-study-artifacts-format.md` presentation table: grade buttons and heading scroll are required, not "later"
 
 **Interfaces:**
 - Consumes: Wave 8 spec copy
 - Produces: docs that a classmate can read without being told the app is still Coming soon
 
-- [ ] **Step 1: Edit README What's in 2.1.0 vs Unreleased**
+- [ ] **Step 1: Edit README What's in 0.2.1 vs Unreleased**
 
-Keep the 2.1.0 table as the tagged shell. After it, add a short **On `main` (unreleased)** section: flashcards, quiz, semantic search, Graph, figures, citation badges. State that grade buttons and heading scroll are Wave 8. Delete the sentence "Flashcards and Quiz tabs are placeholders (Coming soon)."
+Keep the 0.2.1 table as the tagged shell. After it, add a short **On `main` (unreleased)** section: flashcards, quiz, semantic search, Graph, figures, citation badges. State that grade buttons and heading scroll are Wave 8. Delete the sentence "Flashcards and Quiz tabs are placeholders (Coming soon)."
 
 - [ ] **Step 2: Edit desktop README checklist item 13**
 
@@ -459,7 +459,7 @@ Replace "empty state with a disabled Generate button" with: empty Generate when 
 
 - [ ] **Step 3: Edit PROJECT.md Version 3**
 
-Move the Wave 1–7 feature names into a **Shipped on `main` (package still 2.1.0)** list. **Required for `v3.0.0` remaining** is only Wave 8 plus recorded Mac E2E. Link the closeout spec and issue #42.
+Move the Wave 1–7 feature names into a **Shipped on `main` (package still 0.2.1)** list. **Required for `v0.3.0` remaining** is only Wave 8 plus recorded Mac E2E. Link the closeout spec and issue #42.
 
 - [ ] **Step 4: Edit the study artifacts format spec**
 
@@ -514,9 +514,9 @@ git commit -m "docs: extend Mac E2E checklist for the study loop"
 
 Do this in the last implementation PR, not in a docs-only PR.
 
-- [ ] **Step 1: Set every package version to `2.2.0`**
+- [ ] **Step 1: Set every package version to `0.2.2`**
 
-Same four files as the versioning rule. CHANGELOG: move Unreleased waves 1–8 under `## 2.2.0`. Git tag `v2.2.0` is a human release step after merge.
+Same four files as the versioning rule. CHANGELOG: move Unreleased waves 1–8 under `## 0.2.2`. Git tag `v0.2.2` is a human release step after merge.
 
 - [ ] **Step 2: Run the verification suite**
 
@@ -534,7 +534,7 @@ Expected: all pass.
 ```bash
 git add python/pyproject.toml python/src/arbor_worker/__init__.py \
   desktop/package.json desktop/src-tauri/Cargo.toml CHANGELOG.md
-git commit -m "chore: package Arbor 2.2.0"
+git commit -m "chore: package Arbor 0.2.2"
 ```
 
-Do not tag `v3.0.0` in this task. That tag waits for the Mac E2E record in `mac-e2e.md`.
+Do not tag `v0.3.0` in this task. That tag waits for the Mac E2E record in `mac-e2e.md`.

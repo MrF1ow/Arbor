@@ -2,13 +2,13 @@
 
 Date: 2026-08-22
 
-Status: shell shipped in **`v2.1.0`**. Flashcards, quiz, embeddings, graph, diagrams, and citations shipped in **`v2.2.0`**. Current release is **`v2.3.0`**. Not a `v3.0.0` release.
+Status: shell shipped in **`v0.2.1`**. Flashcards, quiz, embeddings, graph, diagrams, and citations shipped in **`v0.2.2`**. Current release is **`v0.2.3`**. Not a `v0.3.0` release.
 
 **Related:** Version 3 program [`../plans/2026-08-22-v3-program/overview.md`](../plans/2026-08-22-v3-program/overview.md). Study artifacts format (Waves 1–3) [`2026-08-22-v3-study-artifacts-format.md`](2026-08-22-v3-study-artifacts-format.md). Reference mockup [`../../mockups/v3-shell.html`](../../mockups/v3-shell.html).
 
 ## Problem
 
-2.0.0 is a working ingest tool. The window is 720×640. Everything lives in one column: folder picker, search, format guidance, model, auth badge, Update, review table, a black terminal log, then job history. A student downloading this from GitHub sees a debug panel, not a study app.
+0.2.0 is a working ingest tool. The window is 720×640. Everything lives in one column: folder picker, search, format guidance, model, auth badge, Update, review table, a black terminal log, then job history. A student downloading this from GitHub sees a debug panel, not a study app.
 
 Version 3 in PROJECT.md is flashcards, quizzes, embeddings, and a knowledge graph. Those features need a place to live. Stacking them on the current screen makes the weirdness worse. The shell has to come first.
 
@@ -60,7 +60,7 @@ Flashcards and Quiz are course modes, not top-level places. Opening Biology → 
 
 **Bottom inspector (collapsed by default).** Update, review table, live job log. Opens when the user clicks Update, when folder watch fires, or when a job is running. The black full-width terminal is not the home screen.
 
-**Search.** Icon in the course header opens search (popover or inline bar). Hits navigate to the course, switch to Notes mode, and scroll the matching digest. Same FTS backend as 2.0.0.
+**Search.** Icon in the course header opens search (popover or inline bar). Hits navigate to the course, switch to Notes mode, and scroll the matching digest. Same FTS backend as 0.2.0.
 
 **No permanent right sidebar.** Study modes take the full main pane. An optional collapsible context panel in Notes mode (outline, “make card from selection”) is a later refinement, not part of this layout.
 
@@ -101,7 +101,7 @@ Two levels:
 
 ### Sidebar places
 
-| Place | 2.0.0 equivalent | Later |
+| Place | 0.2.0 equivalent | Later |
 |-------|------------------|--------|
 | Library → course | none (no browser) | selects course; main header shows mode tabs |
 | Jobs | Recent runs table | same, as a place |
@@ -122,7 +122,7 @@ Future modes (Concepts, knowledge graph) extend this tab row or replace a tab �
 
 ## Settings in the app
 
-2.0.0 still requires editing `.arbor/settings.json` by hand. Version 3 Settings place writes that file:
+0.2.0 still requires editing `.arbor/settings.json` by hand. Version 3 Settings place writes that file:
 
 - Watch folder (on by default)
 - Auto-run after watch (off by default)
@@ -140,18 +140,18 @@ Models stay `.arbor/models.json` with the same dropdown, just moved into Setting
 
 ## Build order
 
-Steps 1–4 shipped in **`v2.1.0`**. Steps 5–7 shipped in **`v2.2.0`**. They were not separate tags `v2.3.0` through `v2.8.0`. See the [v3 program](../plans/2026-08-22-v3-program/overview.md).
+Steps 1–4 shipped in **`v0.2.1`**. Steps 5–7 shipped in **`v0.2.2`**. They were not separate tags `v0.2.3` through `v0.2.8`. See the [v3 program](../plans/2026-08-22-v3-program/overview.md).
 
-1. Window size, type, color, spacing. Same one-column content, less "terminal." Proves the look without navigation risk. **(v2.1.0)**
-2. Sidebar + course list from disk. Course header with Notes / Flashcards / Quiz tabs (Flashcards and Quiz empty for now). Main pane shows `course.md` preview in Notes mode. **(v2.1.0)**
-3. Inspector for Update / review / log / jobs. **(v2.1.0)**
-4. Settings place that writes `.arbor/settings.json`. **(v2.1.0)**
-5. Flashcards mode — wire tab to real deck UI and generation. **(shipped in v2.2.0)**
-6. Quiz mode — same pattern. **(shipped in v2.2.0)**
-7. Embeddings, concepts, knowledge graph, diagrams, citations — new modes or extensions on Notes, not layout changes. **(shipped in v2.2.0; `v3.0.0` waits for the Mac batch)**
+1. Window size, type, color, spacing. Same one-column content, less "terminal." Proves the look without navigation risk. **(v0.2.1)**
+2. Sidebar + course list from disk. Course header with Notes / Flashcards / Quiz tabs (Flashcards and Quiz empty for now). Main pane shows `course.md` preview in Notes mode. **(v0.2.1)**
+3. Inspector for Update / review / log / jobs. **(v0.2.1)**
+4. Settings place that writes `.arbor/settings.json`. **(v0.2.1)**
+5. Flashcards mode — wire tab to real deck UI and generation. **(shipped in v0.2.2)**
+6. Quiz mode — same pattern. **(shipped in v0.2.2)**
+7. Embeddings, concepts, knowledge graph, diagrams, citations — new modes or extensions on Notes, not layout changes. **(shipped in v0.2.2; `v0.3.0` waits for the Mac batch)**
 
 Each step should still run the Mac V2 E2E ingest path. If a shell change breaks Confirm or watch, it is not done.
 
 ## Success
 
-A classmate who has never seen the repo can download a 2.x build, pick a folder, and believe this is a notes app that happens to ingest lectures. They should not see a log until they start an Update. Study, memory, and graph are in `v2.2.0`. `v3.0.0` is the tag after a clean Mac batch of `v2.3.0`.
+A classmate who has never seen the repo can download a 2.x build, pick a folder, and believe this is a notes app that happens to ingest lectures. They should not see a log until they start an Update. Study, memory, and graph are in `v0.2.2`. `v0.3.0` is the tag after a clean Mac batch of `v0.2.3`.

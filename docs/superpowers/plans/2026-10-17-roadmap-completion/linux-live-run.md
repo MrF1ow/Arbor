@@ -1,6 +1,6 @@
 # Linux live run (replaces the Mac batch as the tag gate)
 
-One recorded run of the real Tauri app on this Linux machine per closing tag (`v3.0.0`, `v4.0.0`, `v5.0.0`). Record results in a dated section at the bottom of this file and tick the checklist `Live run` column.
+One recorded run of the real Tauri app on this Linux machine per closing tag (`v0.3.0`, `v0.4.0`, `v0.5.0`). Record results in a dated section at the bottom of this file and tick the checklist `Live run` column.
 
 ## Setup
 
@@ -13,7 +13,7 @@ cd desktop && npm install && npm run tauri dev
 - Fixtures: a small multi-page PDF, a PPTX, a DOCX, a scanned-image PDF (for OCR), and one long lecture (>25 pages, to hit chunking). Keep them under `python/tests/fixtures/live/` if license-clean, otherwise point to a local folder.
 - The agent drives the window with screenshots (`grim` on Wayland) and records the job history export; the user may run it by hand instead.
 
-## Version 3 script (`v3.0.0`)
+## Version 3 script (`v0.3.0`)
 
 | # | Box | Pass when |
 |---|-----|-----------|
@@ -33,7 +33,7 @@ cd desktop && npm install && npm run tauri dev
 | 14 | Packaged build | `npm run tauri build` on Linux produces an AppImage/deb that launches without the repo or `uv` (sidecar proof, Linux equivalent of the Finder box) |
 | 15 | Auth states | Grok signed out → badge shows not signed in and jobs refuse with the provider's message |
 
-## Version 4 script (`v4.0.0`)
+## Version 4 script (`v0.4.0`)
 
 From [v4-tutor.md](v4-tutor.md). Behavioral Medicine was not on this machine. The 2026-10-18 run used a fresh fixture course, Saltmarsh, built from three multi-page lecture PDFs ingested through the app with Grok `grok-4.7`.
 
@@ -47,7 +47,7 @@ From [v4-tutor.md](v4-tutor.md). Behavioral Medicine was not on this machine. Th
 | T6 | Study loop on the fresh course | Due today deck, weak topics (grade some cards wrong first), study plan, and make-card-from-selection |
 | T7 | Signed-out provider | Chat shows the auth state |
 
-## Version 5 script (`v5.0.0`)
+## Version 5 script (`v0.5.0`)
 
 From [v5-collaboration.md](v5-collaboration.md). One bare remote and two clones (machines A and B) of one shared library. A third personal root C is only for the SSH worker. One app process; switch the active root. Provider Grok `grok-4.7`.
 
@@ -62,7 +62,7 @@ From [v5-collaboration.md](v5-collaboration.md). One bare remote and two clones 
 
 ## Runs
 
-### 2026-10-17 — `release/v3.0.0` (package still `2.5.0` during the run)
+### 2026-10-17 — `release/v3.0.0` (package still `0.2.5` during the run)
 
 Private Xvfb `:97` (1600x1000), private D-Bus session, `CLAUDECODE=1`, Grok `grok-4.7`. No `hyprctl dispatch`. Screenshots with `magick import -display :97`. Knowledge root `/tmp/arbor-live/Knowledge` (pre-seeded; the folder picker never accepted Open). Real `~/.config/com.arbor.app/settings.json` was not edited.
 
@@ -81,14 +81,14 @@ Private Xvfb `:97` (1600x1000), private D-Bus session, `CLAUDECODE=1`, Grok `gro
 | 11 | Pass | Add class worked. Reserved name `study` showed the error (`/tmp/arbor-live/shots/19`). |
 | 12 | Pass | Job-end notifications on the private bus only (`/tmp/arbor-live/logs/notifications.log`). |
 | 13 | Pass | Scanned PDF job `job-18df78bb41e9f011`. Digest contains `OCRTOKEN`. `/tmp/arbor-live/shots/95-ocr.png`. The model’s preamble is still visible above the heading. |
-| 14 | Pass | `Arbor_2.5.0_amd64.AppImage` and `Arbor_2.5.0_amd64.deb`. Both contain `usr/bin/arbor-worker` beside `desktop`. Launched on `:97` with `PATH=/bin` (no repo, no `uv`). AppImage worker was `/tmp/appimage_extracted_…/usr/bin/arbor-worker`. Deb sidecar `--version` printed `2.5.0` and `check-auth --provider grok` returned authenticated. Shots `103-appimage.png`, `105-deb-settled.png`. `linuxdeploy` strip failed on RELR libraries; rebuild used `NO_STRIP=1`. The deb was not installed with dpkg. |
+| 14 | Pass | `Arbor_0.2.5_amd64.AppImage` and `Arbor_0.2.5_amd64.deb`. Both contain `usr/bin/arbor-worker` beside `desktop`. Launched on `:97` with `PATH=/bin` (no repo, no `uv`). AppImage worker was `/tmp/appimage_extracted_…/usr/bin/arbor-worker`. Deb sidecar `--version` printed `0.2.5` and `check-auth --provider grok` returned authenticated. Shots `103-appimage.png`, `105-deb-settled.png`. `linuxdeploy` strip failed on RELR libraries; rebuild used `NO_STRIP=1`. The deb was not installed with dpkg. |
 | 15 | Pass, after `ab65bac` | Badge “Grok · not signed in” (`96-signed-out.png`). Confirm logged `Grok is not authenticated: not logged in` and created no job (`102-scrolled.png`). |
 
 `ARBOR_PATH_PREFIX` does not win: the worker prepends `~/.local/bin` before `PATH`, and that directory holds the real `grok` symlink. The signed-out launch used a private mount namespace that bind-mounted a fake `grok` over those two symlinks. Outside the namespace the real symlinks were unchanged. The real Grok CLI was not logged out.
 
 Hyprland `arbor` client count was 0 after every launch in this run. The first dev launch in the previous segment briefly had a portal speak Hyprland protocols; no Arbor window was placed on the real session and no dispatch was sent.
 
-### 2026-10-18 — `release/v4.0.0` (package still `3.5.0` during the run)
+### 2026-10-18 — `release/v4.0.0` (package still `0.3.5` during the run)
 
 Private Xvfb `:97` (1600x1000), private D-Bus session, `CLAUDECODE=1`, Grok `grok-4.7`. No `hyprctl dispatch`. Screenshots with `magick import -display :97`. Knowledge root `/tmp/arbor-v4/Knowledge` (`git init`, empty until the app ingested sources). Course **Saltmarsh**. Behavioral Medicine was not available, so three multi-page lecture PDFs (tidal frame, fiddler crabs, wrack) were generated and ingested through the app. Real `~/.config/com.arbor.app/settings.json` stayed byte-identical (`87c2bcd705df9bebaa657bb89c3010e4cc90069b71f568af35a52d8883a2759b`). No product bug. No Composer fix.
 
@@ -108,7 +108,7 @@ Ingest used folder watch plus Confirm. The GTK Open File dialog on `:97` is moda
 
 Hyprland client count for Arbor was 0. Two exact-pid restarts (`pgrep -x desktop` only) cleared a stuck Open File dialog. Xvfb `:97` stayed up. No `hyprctl dispatch`.
 
-### 2026-10-18 — `release/v5.0.0` (package `4.5.0` during the run, then `5.0.0`)
+### 2026-10-18 — `release/v5.0.0` (package `0.4.5` during the run, then `0.5.0`)
 
 Private Xvfb `:97` (1600x1000) inside `dbus-run-session`. `WAYLAND_DISPLAY` and `HYPRLAND_INSTANCE_SIGNATURE` unset, `GDK_BACKEND=x11`, `CLAUDECODE=1`, Grok `grok-4.7`. Home, XDG, and `GIT_CONFIG_GLOBAL` under `/tmp/arbor-v5/`. Screenshots with `magick import -display :97`. No `hyprctl dispatch`. One app process. Switching the sidebar root switches the machine. Real `~/.config/com.arbor.app/settings.json` stayed `87c2bcd705df9bebaa657bb89c3010e4cc90069b71f568af35a52d8883a2759b`.
 
@@ -125,7 +125,7 @@ Setup: bare remote `/tmp/arbor-v5/remote.git`. Clone A `owner-a@arbor.test` (own
 
 ## Folder picker under Xvfb
 
-Issue #70, checked 2026-10-30 on a v5.26.2 debug build (`cd desktop && npm run tauri build -- --debug --no-bundle`) on private Xvfb displays with `dbus-run-session`, `GDK_BACKEND=x11`, `WAYLAND_DISPLAY` unset, and scratch `HOME` and XDG dirs. No window manager. The real `~/.config/com.arbor.app/settings.json` was not touched.
+Issue #70, checked 2026-10-30 on a v0.5.31 debug build (`cd desktop && npm run tauri build -- --debug --no-bundle`) on private Xvfb displays with `dbus-run-session`, `GDK_BACKEND=x11`, `WAYLAND_DISPLAY` unset, and scratch `HOME` and XDG dirs. No window manager. The real `~/.config/com.arbor.app/settings.json` was not touched.
 
 **Cause.** Every folder picker called the dialog without a start folder, so GTK 3.24 opened it on Recent. In `SELECT_FOLDER` mode on Recent, Open stays disabled, and a path typed after Ctrl+L never enables it. Return only activates that disabled button. That is the v3 and v5 "never accepts Open" result (C4's export picker too), and a person who presses Ctrl+L and Enter from Recent hits it as well. Window focus made no difference. A minimal rfd program with `set_directory` accepted a typed path, which is what pointed at the start folder.
 

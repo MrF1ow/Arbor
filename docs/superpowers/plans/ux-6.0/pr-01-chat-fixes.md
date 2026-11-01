@@ -1,6 +1,6 @@
 # PR 1: Chat fixes
 
-Branch `ux/01-chat-fixes`, stacked on `ux/00-plan` (based on `origin/main` at v5.18.0). See `README.md` in this folder for the overall UX pass. **The agent rules in `../ui-6.0/README.md` apply in full.** Two of them matter most here: no browser, and never launch the app window.
+Branch `ux/01-chat-fixes`, stacked on `ux/00-plan` (based on `origin/main` at v0.5.19). See `README.md` in this folder for the overall UX pass. **The agent rules in `../ui-6.0/README.md` apply in full.** Two of them matter most here: no browser, and never launch the app window.
 
 Worktree: `/home/flow/Projects/personal/Arbor/.worktrees/ux-stack` (desktop app in `desktop/`, worker in `python/`).
 

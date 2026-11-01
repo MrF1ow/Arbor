@@ -1,6 +1,6 @@
-# 6.0 UX pass (before the v6.0.0 tag)
+# 0.6 UX pass (before the v0.6.0 tag)
 
-This plan comes from the MacBook E2E feedback on v5.18.0. The goal is working UX; visual polish comes in a later round. Ship it as a stacked PR series in `.worktrees/ux-stack`, one branch per PR (`ux/NN-name`), each based on the one before. The workflow is the same as `ui-6.0/`: Claude plans, Composer 2.5 implements, Grok 4.7 does QA, Composer makes one fix round, then Claude audits, including a headless browser check on `npm run dev:mock`. Delegates never open a browser and never touch the real display.
+This plan comes from the MacBook E2E feedback on v0.5.19. The goal is working UX; visual polish comes in a later round. Ship it as a stacked PR series in `.worktrees/ux-stack`, one branch per PR (`ux/NN-name`), each based on the one before. The workflow is the same as `ui-6.0/`: Claude plans, Composer 2.5 implements, Grok 4.7 does QA, Composer makes one fix round, then Claude audits, including a headless browser check on `npm run dev:mock`. Delegates never open a browser and never touch the real display.
 
 T3 Code references are pinned to `pingdotgg/t3code@b9aaff46`.
 
@@ -24,7 +24,7 @@ T3 Code references are pinned to `pingdotgg/t3code@b9aaff46`.
 | 5 | `ux/05-study-resume` | Flashcards and quiz resume where you left off, plus Restart |
 | 6 | `ux/06-course-icons` | Icon picker for courses |
 | 7 | `ux/07-provider-usage` | Click a provider in the sidebar to see the usage you have left |
-| — | — | Tag v6.0.0 after a Linux live run. Dictation needs a manual Mac check. |
+| — | — | Tag v0.6.0 after a Linux live run. Dictation needs a manual Mac check. |
 
 ---
 
@@ -133,7 +133,7 @@ Grades and progress are saved to disk. The review position (card order, index, f
   - It holds the serialisable review object plus, for flashcards, `deckMode`.
 - **Restore:** on mount, if the saved identity matches the current one, restore it; otherwise start fresh. If the deck or quiz is regenerated, the identity changes and the saved session is dropped.
 - **Restart button:** in each view's header, behind a confirm. It clears the saved session and calls `createReview`/`sessionForMode`.
-- **Lessons from earlier work:** past localStorage restores lost data (5.1.0 audit). Write a unit test for the round trip and for an identity mismatch, and check the restore by switching tabs in the browser.
+- **Lessons from earlier work:** past localStorage restores lost data (0.5.2 audit). Write a unit test for the round trip and for an identity mismatch, and check the restore by switching tabs in the browser.
 
 ## PR 6: Course icons
 

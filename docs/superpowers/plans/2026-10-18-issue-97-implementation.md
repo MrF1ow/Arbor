@@ -3,7 +3,7 @@
 Analysis and decisions: [`2026-10-18-issue-97-performance.md`](2026-10-18-issue-97-performance.md). This file is the build order.
 
 - **Branch:** `perf/issue-97`. **Worktree:** `/home/flow/Projects/personal/Arbor/.worktrees/perf-issue-97`.
-- **Release:** **5.1.0**, a single PR for all four phases. This replaces the 5.1/5.2 split in the analysis.
+- **Release:** **0.5.2**, a single PR for all four phases. This replaces the 5.1/5.2 split in the analysis.
 - **Per phase:** Composer 2.5 implements. Grok 4.7 does QA (it reviews and runs the gates, and makes no edits). Composer 2.5 does one fix round. Claude audits. Then the next phase starts.
 
 ## Rules for every phase (implementers and QA)
@@ -239,8 +239,8 @@ Analysis and decisions: [`2026-10-18-issue-97-performance.md`](2026-10-18-issue-
   - Update the source-grep UI tests that break because of the changes above, **only where the old behavior was intentionally removed**. Keep their intent.
   - Add a grep test asserting that `main.ts` has no `invoke("list_providers"` / `invoke<…>("list_providers"`.
 
-### 4.4 Release 5.1.0
-- Bump every `5.0.1` package version to `5.1.0`:
+### 4.4 Release 0.5.2
+- Bump every `0.5.1` package version to `0.5.2`:
   - `python/pyproject.toml`
   - `python/src/arbor_worker/__init__.py`
   - `python/tests/test_cli.py` (if it pins the version)
@@ -248,7 +248,7 @@ Analysis and decisions: [`2026-10-18-issue-97-performance.md`](2026-10-18-issue-
   - `desktop/src-tauri/Cargo.toml` and `Cargo.lock` (the `desktop` package entry)
   - `desktop/src-tauri/tauri.conf.json`
   - `README.md`, `desktop/README.md`, `python/README.md`, and `PROJECT.md`, where they state the current version
-- `CHANGELOG.md`: a `## 5.1.0 — <date>` section in the existing style. Update the "Current package" header line. List the user-visible changes: no more beachball, faster loads, the sign-in cache, only the chosen provider is checked, instant flashcard and quiz advance, onedir worker. Reference #97.
+- `CHANGELOG.md`: a `## 0.5.2 — <date>` section in the existing style. Update the "Current package" header line. List the user-visible changes: no more beachball, faster loads, the sign-in cache, only the chosen provider is checked, instant flashcard and quiz advance, onedir worker. Reference #97.
 - Don't change historical plan docs.
 
 ### Phase 4 acceptance

@@ -2,7 +2,7 @@
 
 Tauri v2 shell for Arbor (package **0.5.36**). Drives the `arbor-worker` CLI (see `../python`).
 
-## 6.0 UI rebuild (in progress)
+## 0.6 UI rebuild (in progress)
 
 The new React entry is `index.html` → `src/main.tsx`. The previous vanilla UI remains at **`/legacy.html`** in dev for side-by-side comparison (it is not part of the production bundle).
 

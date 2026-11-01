@@ -1,12 +1,12 @@
 # Arbor Version 2: automation and discoverability
 
-> **Playbook:** poteto-mode orchestrate + multi-phase plan. Waves 2–4 in PR #26. Wave 1 merged in #25. Packaged as **`v2.0.0`** (tagged). Version 3 shell is **`v2.1.0`** (tagged) — see [v3 program](../../plans/2026-08-22-v3-program/overview.md). **`v3.0.0` reserved** for full Version 3.
+> **Playbook:** poteto-mode orchestrate + multi-phase plan. Waves 2–4 in PR #26. Wave 1 merged in #25. Packaged as **`v0.2.0`** (tagged). Version 3 shell is **`v0.2.1`** (tagged) — see [v3 program](../../plans/2026-08-22-v3-program/overview.md). **`v0.3.0` reserved** for full Version 3.
 
 **Predicate:** every Update is a tracked single-flight job with persisted history; the knowledge library is searchable via SQLite FTS; folder watching can enqueue updates; Word and OCR extend prepare; desktop notifications fire on job completion. No scheduler, no multi-provider, no course browser redesign in this program.
 
 ## Context
 
-1.0.0 shipped the Version 1 loop. Manual Update, Codex CLI only, markdown + git as source of truth. V2 adds automation and findability without a visual redesign pass.
+0.1.0 shipped the Version 1 loop. Manual Update, Codex CLI only, markdown + git as source of truth. V2 adds automation and findability without a visual redesign pass.
 
 ## Scope
 

@@ -10,9 +10,9 @@ Living tracker for **implemented / locally tested / live-run tested**. Capabilit
 - Check **Mac (optional)** only when a recorded MacBook run covered that row. One run covers many rows. Mac never blocks a tag. Do not live-test every PR.
 - **Blockers from Mac runs** at the bottom catch E2E findings from optional Mac proof. Fix locally. Retest on the next Linux live run. They do not start the next version.
 
-**Current era:** Version 5 closed at `v5.0.0`. Version 4’s Linux live run is recorded (2026-10-18). Version 5’s Linux live run is recorded the same day. A Mac run does not close a version.
+**Current era:** Version 5 closed at `v0.5.0`. Version 4’s Linux live run is recorded (2026-10-18). Version 5’s Linux live run is recorded the same day. A Mac run does not close a version.
 
-**Current package:** `5.26.6`. `v6.0.0` waits for UI plan row 16 (cutover). **`v5.1.0` is cut when this release lands** (not tagged in this commit). **`v5.0.1` is cut when that release lands** (not tagged in this commit). **`v5.0.0` is cut when that release lands** (not tagged in this commit). **`v4.5.0` is cut when that release lands** (not tagged in this commit). **`v4.4.0` is tagged.** **`v4.3.0` is not tagged yet.** **`v4.2.0`, `v4.1.0`, and `v4.0.0` are already tagged.** Version 3’s two Notes rows stay open: markdown tables, and bold/italic, because no live digest contained them. The 2026-09-20 Mac blockers were retested on the 2026-10-17 run.
+**Current package:** `0.5.36` (tag `v0.5.36`). Every release up to it is tagged. `v0.6.0` waits for UI plan row 16 (cutover). Tags stay below 1.0: Version N completes at `v0.N.0` (see `.cursor/rules/arbor-versioning.mdc` rule 8). Version 3’s two Notes rows stay open: markdown tables, and bold/italic, because no live digest contained them. The 2026-09-20 Mac blockers were retested on the 2026-10-17 run.
 
 | Marker | Meaning |
 |--------|---------|
@@ -26,11 +26,11 @@ Living tracker for **implemented / locally tested / live-run tested**. Capabilit
 
 | From | To | May continue when |
 |------|----|-------------------|
-| Version 1 | Version 2 | Version 1 implemented + locally tested. Mac proof for packaging may ride a later batch. **Passed** (`v2.0.0` tagged). |
-| Version 2 | Version 3 shell | Version 2 features implemented + locally tested. **Passed** (`v2.0.0` tagged; shell is `v2.1.0`). Leftover proof rides the Version 3 Linux live run. Mac proof is optional. |
-| Version 3 work | **`v3.0.0` tag** | Linux live run recorded 2026-10-17. Package `3.0.0` is tagged. Tables and emphasis were not in any live digest, so those two checklist rows stay open. Mac does not block the tag. |
-| Version 3 | Version 4 | **Passed.** Linux live run recorded 2026-10-18. Package `4.0.0`. Tag `v4.0.0` when this release lands. |
-| Version 4 | Version 5 | **Passed.** Linux live run recorded 2026-10-18. Package `5.0.0`. Tag `v5.0.0` when this release lands. |
+| Version 1 | Version 2 | Version 1 implemented + locally tested. Mac proof for packaging may ride a later batch. **Passed** (`v0.2.0` tagged). |
+| Version 2 | Version 3 shell | Version 2 features implemented + locally tested. **Passed** (`v0.2.0` tagged; shell is `v0.2.1`). Leftover proof rides the Version 3 Linux live run. Mac proof is optional. |
+| Version 3 work | **`v0.3.0` tag** | Linux live run recorded 2026-10-17. Package `0.3.0` is tagged. Tables and emphasis were not in any live digest, so those two checklist rows stay open. Mac does not block the tag. |
+| Version 3 | Version 4 | **Passed.** Linux live run recorded 2026-10-18. Package `0.4.0`. Tagged. |
+| Version 4 | Version 5 | **Passed.** Linux live run recorded 2026-10-18. Package `0.5.0`. Tagged. |
 
 Local commands (every change):
 
@@ -46,14 +46,14 @@ Linux live run script for the current era: [linux-live-run.md](superpowers/plans
 
 ## Version 1 — smallest useful app
 
-Shipped as part of `v2.0.0`. GitHub issues #3, #4, #19, #21.
+Shipped as part of `v0.2.0`. GitHub issues #3, #4, #19, #21.
 
 | Item | Issue | Implemented | Local/VM | Live run | Mac (optional) | Notes |
 |------|-------|-------------|----------|----------|----------------|-------|
 | Desktop app, Update, PDF/PPTX, course folders, dated digests, git commit | — | [x] | [x] | [x] | [x] | 2026-10-17 boxes 1 and 11. Clin Med 2 remains the Mac note. |
 | Digest prompt source rules + reject `\(`, `\[`, `\frac` on create/regenerate | [#3](https://github.com/MrF1ow/Arbor/issues/3) | [x] | [x] | [ ] | [x] | Live run reported no LaTeX |
 | `validate_digest` on **patch** splices | [#3](https://github.com/MrF1ow/Arbor/issues/3) follow-up | [x] | [x] | n/a | n/a | `_apply_patch` validates each provider splice. |
-| Codex GUI PATH, 10s timeout, single-flight auth | [#19](https://github.com/MrF1ow/Arbor/issues/19) | [x] | [x] | [ ] | [ ] | Homebrew paths added in 2.2.0; Finder proof is optional Mac proof; Linux live run is the gate |
+| Codex GUI PATH, 10s timeout, single-flight auth | [#19](https://github.com/MrF1ow/Arbor/issues/19) | [x] | [x] | [ ] | [ ] | Homebrew paths added in 0.2.2; Finder proof is optional Mac proof; Linux live run is the gate |
 | Manifest v2, fingerprints, page markers, dirty ranges, in-place patch | [#21](https://github.com/MrF1ow/Arbor/issues/21) | [x] | [x] | [ ] | [x] | Clin Med 2 |
 | Single-digest `course.md` index (not a full copy) | [#21](https://github.com/MrF1ow/Arbor/issues/21) | [x] | [x] | [x] | [ ] | 2026-10-17 box 3. The index link opened the digest. |
 | DMG + bundled `arbor-worker` sidecar | [#4](https://github.com/MrF1ow/Arbor/issues/4) | [x] | [x] CI builds DMG | [x] | [ ] | 2026-10-17 box 14: AppImage and deb launched on Xvfb without the repo or `uv`. Finder install remains optional. Signing is not required. |
@@ -62,7 +62,7 @@ Shipped as part of `v2.0.0`. GitHub issues #3, #4, #19, #21.
 
 ## Version 2 — automation
 
-Shipped `v2.0.0`. Do not add features here. Leftover proof rides the Version 3 Linux live run (issue #30). Mac proof is optional.
+Shipped `v0.2.0`. Do not add features here. Leftover proof rides the Version 3 Linux live run (issue #30). Mac proof is optional.
 
 | Item | Issue | Implemented | Local/VM | Live run | Mac (optional) | Notes |
 |------|-------|-------------|----------|----------|----------------|-------|
@@ -78,13 +78,13 @@ Shipped `v2.0.0`. Do not add features here. Leftover proof rides the Version 3 L
 
 ## Version 3 — study app (shipped)
 
-Package `3.0.0`, tagged `v3.0.0`. The 2026-10-17 Linux live run is recorded. Tables and emphasis stayed unchecked.
+Package `0.3.0`, tagged `v0.3.0`. The 2026-10-17 Linux live run is recorded. Tables and emphasis stayed unchecked.
 
 ### Shipped (do not re-do)
 
 | Item | Implemented | Local/VM | Live run | Mac (optional) |
 |------|-------------|----------|----------|----------------|
-| Desktop shell (sidebar, Notes preview, jobs, settings) `v2.1.0` | [x] | [x] | [x] | [ ] |
+| Desktop shell (sidebar, Notes preview, jobs, settings) `v0.2.1` | [x] | [x] | [x] | [ ] |
 | Study generate jobs, skill protocol, retries | [x] | [x] | [x] | [ ] |
 | Flashcards generate / flip / Again / Wrong / Mastered | [x] | [x] | [x] | [ ] |
 | Quiz generate / submit / session answers | [x] | [x] | [x] | [ ] |
@@ -113,13 +113,13 @@ Pass conditions are the Version 3 script table in [linux-live-run.md](superpower
 
 **Optional Mac proof (does not close Version 3):** 2026-09-20 partial run (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)). Failures are in the Blockers table below.
 
-The 2026-10-17 run is recorded. Package **`3.0.0`** is tagged. Tables and emphasis remain open on this checklist.
+The 2026-10-17 run is recorded. Package **`0.3.0`** is tagged. Tables and emphasis remain open on this checklist.
 
 ---
 
 ## Version 4 — tutor (shipped)
 
-Issue [#20](https://github.com/MrF1ow/Arbor/issues/20). Shipped as package `4.0.0`. The 2026-10-18 Linux live run is recorded. Behavioral Medicine was not available. The fixture course Saltmarsh stands in for that acceptance row. **`v4.0.0` is tagged.** Issue #20 stays open until the parent closes it.
+Issue [#20](https://github.com/MrF1ow/Arbor/issues/20). Shipped as package `0.4.0`. The 2026-10-18 Linux live run is recorded. Behavioral Medicine was not available. The fixture course Saltmarsh stands in for that acceptance row. **`v0.4.0` is tagged.** Issue #20 stays open until the parent closes it.
 
 | Item | Implemented | Local/VM | Live run | Mac (optional) |
 |------|-------------|----------|----------|----------------|
@@ -135,21 +135,21 @@ Issue [#20](https://github.com/MrF1ow/Arbor/issues/20). Shipped as package `4.0.
 
 Live-run notes: T1 covers the chat tab, retrieval, the covered answer, and the clickable page citation. T2 covers the unsupported banner. T3 covers Explain and Quiz. T4 covers history, New, and Clear. T5 covers read-only chat. T7 covers the signed-out badge. The cited-answer row used Saltmarsh (three lecture PDFs ingested with Grok `grok-4.7`), not Behavioral Medicine. The provider on the live run was Grok, which is the Linux live-run provider. Codex remains the unit-tested path.
 
-Also Version 4 (not extra GitHub issues): review scheduling, weak-topic detection, study plans, and make-card-from-selection passed on Saltmarsh as box T6. Extra AI providers shipped in `3.5.0` and were not re-smoked on this run. Grok signed-out is T7.
+Also Version 4 (not extra GitHub issues): review scheduling, weak-topic detection, study plans, and make-card-from-selection passed on Saltmarsh as box T6. Extra AI providers shipped in `0.3.5` and were not re-smoked on this run. Grok signed-out is T7.
 
 ---
 
-## Version 5 — collaboration (closed at `v5.0.0`)
+## Version 5 — collaboration (closed at `v0.5.0`)
 
-No current GitHub issue for the milestone. Cloud sync, shared libraries, marketplaces, permissions, remote workers. Version 4 is closed at `v4.0.0`. This package is `5.18.0`.
+No current GitHub issue for the milestone. Cloud sync, shared libraries, marketplaces, permissions, remote workers. Version 4 is closed at `v0.4.0`. This package is `0.5.36`.
 
 | Item | Implemented | Local/VM | Live run | Mac (optional) |
 |------|-------------|----------|----------|----------------|
-| Git remote sync (`v4.1.0`) | [x] | [x] | [x] | [ ] |
-| Shared libraries and team workspaces (`v4.2.0`) | [x] | [x] | [x] | [ ] |
-| Skill packages and marketplace (`v4.3.0`) | [x] | [x] | [ ] | [ ] |
-| Library roles and shared provider profiles (v4.4.0) | [x] | [x] | [x] | [ ] |
-| Remote workers over SSH (v4.5.0) | [x] | [x] | [x] | [ ] |
+| Git remote sync (`v0.4.1`) | [x] | [x] | [x] | [ ] |
+| Shared libraries and team workspaces (`v0.4.2`) | [x] | [x] | [x] | [ ] |
+| Skill packages and marketplace (`v0.4.3`) | [x] | [x] | [ ] | [ ] |
+| Library roles and shared provider profiles (v0.4.4) | [x] | [x] | [x] | [ ] |
+| Remote workers over SSH (v0.4.5) | [x] | [x] | [x] | [ ] |
 
 Git remote sync: boxes C1 and C2. Shared libraries and per-user progress: boxes C1 and C3. Skill packages: box C4 installed, confirmed, and uninstalled the local `anki-export` pin. The run did not write the TSV. The folder picker never accepted Open (issue #70), so that Live run box stays open. Role checks: box C5. The UI disabled write jobs and the worker refused. The git host's permissions remain the real control. Remote workers: box C6, private sshd on 127.0.0.1:22222, local commit after sync back. Host keys stayed in the Arbor-managed file. `~/.ssh` was unchanged.
 
@@ -161,10 +161,10 @@ Add a row when a Mac batch finds a failure. Status starts as implemented-no / lo
 
 | Date | Version | Finding | Implemented | Local/VM | Next live run |
 |------|---------|---------|-------------|----------|---------------|
-| 2026-09-20 | 3 / `2.2.0` | [#57](https://github.com/MrF1ow/Arbor/issues/57) Concepts job fails: `unknown concept edge` when the model uses node labels. Graph is blocked. | [x] | [x] | [x] |
-| 2026-09-20 | 3 / `2.2.0` | [#57](https://github.com/MrF1ow/Arbor/issues/57) Check citations marks honest flashcards Unverified (`**copperleaf**` vs `Copperleaf.`). | [x] | [x] | [x] |
-| 2026-09-20 | 3 / `2.2.0` | [#57](https://github.com/MrF1ow/Arbor/issues/57) Create Class rejects reserved names such as `study` with no visible error. | [x] | [x] | [x] |
-| 2026-09-20 | 3 / `2.2.0` | [#57](https://github.com/MrF1ow/Arbor/issues/57) Quiz shows per-question correctness only. No session score such as `4 / 6 correct`. Improvement, not a failure. | [x] | [x] | [x] |
+| 2026-09-20 | 3 / `0.2.2` | [#57](https://github.com/MrF1ow/Arbor/issues/57) Concepts job fails: `unknown concept edge` when the model uses node labels. Graph is blocked. | [x] | [x] | [x] |
+| 2026-09-20 | 3 / `0.2.2` | [#57](https://github.com/MrF1ow/Arbor/issues/57) Check citations marks honest flashcards Unverified (`**copperleaf**` vs `Copperleaf.`). | [x] | [x] | [x] |
+| 2026-09-20 | 3 / `0.2.2` | [#57](https://github.com/MrF1ow/Arbor/issues/57) Create Class rejects reserved names such as `study` with no visible error. | [x] | [x] | [x] |
+| 2026-09-20 | 3 / `0.2.2` | [#57](https://github.com/MrF1ow/Arbor/issues/57) Quiz shows per-question correctness only. No session score such as `4 / 6 correct`. Improvement, not a failure. | [x] | [x] | [x] |
 
 ---
 
