@@ -1,6 +1,6 @@
 # Arbor Desktop
 
-Tauri v2 shell for Arbor (package **5.26.6**). Drives the `arbor-worker` CLI (see `../python`).
+Tauri v2 shell for Arbor (package **0.5.36**). Drives the `arbor-worker` CLI (see `../python`).
 
 ## 6.0 UI rebuild (in progress)
 
@@ -14,7 +14,7 @@ npm run lint
 npm run build
 ```
 
-The UI is the Version 3 shell plus the Version 4 tutor. First delivery was **v2.1.0**. Package **2.2.0** adds the study loop. Package **2.3.0** is the Mac-batch fix release. Version 3 completed at **3.0.0** after the 2026-10-17 Linux live run. Package **3.1.0** adds the worker `chat` command without a Chat tab. Package **3.2.0** adds the Chat tab. Package **3.3.0** adds review scheduling and weak topics. Package **3.4.0** adds study plans, recommendations, and make-card-from-selection. Package **3.5.0** adds Ollama, LM Studio, OpenAI API, and Anthropic API with OS keyring storage for API keys. Version 4 closed after the 2026-10-18 Linux live run (prior package in CHANGELOG). Package **4.1.0** adds Settings → Sync (git remote sync). Package **4.2.0** adds shared libraries and team workspaces. Package **4.3.0** added Settings → Skills (skill packages and the in-repo marketplace). Package **4.4.0** adds library roles and a shared provider profile. Package **4.5.0** adds Settings → Workers (SSH remote workers; local commit). Package **5.0.0** closes Version 5 after the collaboration live run. Mac proof does not block the tag. Sidebar library, course workspace with Notes / Flashcards / Quiz / Graph / Chat tabs, in-app digest preview, and a collapsed bottom inspector for Update and job logs.
+The UI is the Version 3 shell plus the Version 4 tutor. First delivery was **v0.2.1**. Package **0.2.2** adds the study loop. Package **0.2.3** is the Mac-batch fix release. Version 3 completed at **0.3.0** after the 2026-10-17 Linux live run. Package **0.3.1** adds the worker `chat` command without a Chat tab. Package **0.3.2** adds the Chat tab. Package **0.3.3** adds review scheduling and weak topics. Package **0.3.4** adds study plans, recommendations, and make-card-from-selection. Package **0.3.5** adds Ollama, LM Studio, OpenAI API, and Anthropic API with OS keyring storage for API keys. Version 4 closed after the 2026-10-18 Linux live run (prior package in CHANGELOG). Package **0.4.1** adds Settings → Sync (git remote sync). Package **0.4.2** adds shared libraries and team workspaces. Package **0.4.3** added Settings → Skills (skill packages and the in-repo marketplace). Package **0.4.4** adds library roles and a shared provider profile. Package **0.4.5** adds Settings → Workers (SSH remote workers; local commit). Package **0.5.0** closes Version 5 after the collaboration live run. Mac proof does not block the tag. Sidebar library, course workspace with Notes / Flashcards / Quiz / Graph / Chat tabs, in-app digest preview, and a collapsed bottom inspector for Update and job logs.
 
 Design spec: [`docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md`](../docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md). Reference mockup: [`docs/mockups/v3-shell.html`](../docs/mockups/v3-shell.html).
 

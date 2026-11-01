@@ -2,127 +2,136 @@
 
 Package version for the worker, desktop, and Tauri app. See [Version numbering](PROJECT.md#version-numbering) in `PROJECT.md`.
 
-**Version 2** is complete at `v2.0.0` (tagged). **Version 3** is complete as package `3.0.0`. **Version 4** is complete as package `4.0.0`. **Version 5** is complete as package `5.0.0`. **Current package:** `5.26.6`. **Current tag:** `v5.26.6`. `v5.0.1` is cut when that release lands. `v5.0.0` is cut when that release lands. `v4.5.0` is cut when that release lands. `v4.4.0` is tagged. `v4.3.0` is not tagged yet. `v4.2.0` is tagged. `v4.1.0` and `v4.0.0` are tagged. `v3.0.0` through `v3.5.0` are already tagged. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) was retested on the 2026-10-17 Linux live run.
+**Version 2** is complete at `v0.2.0`. **Version 3** at `v0.3.0`. **Version 4** at `v0.4.0`. **Version 5** at `v0.5.0`. **Version 6** completes at `v0.6.0` (UI cutover). **Current package:** `0.5.36`. **Current tag:** `v0.5.36`. All releases listed here are tagged.
+
+**Numbering (since 2026-11-01):** tags stay below 1.0. Version N completes at `v0.N.0`, and every release on the way to the next Version bumps the patch (`v0.5.35`, `v0.5.36`, …). The UI cutover that completes Version 6 is `v0.6.0`. Before 2026-11-01 the tags ran `v1.0.0`–`v5.26.5`; each old major X became `0.X` with its releases numbered in order (`v2.1.0` → `v0.2.1`, `v5.26.5` → `v0.5.34`, and the untagged 5.26.6 → `v0.5.35`), and the early `0.1.0`/`0.2.0` became `0.0.1`/`0.0.2`. Older plans under `docs/` still use the old numbers.
 
 ## Unreleased
 
-Nothing pending above `5.26.6`.
+Nothing pending above `0.5.36`.
 
-## 5.26.6 — 2026-10-31
+## 0.5.36 — 2026-11-01
 
-Git tag `v5.26.6`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `5.26.6`. UI cutover stays `6.0.0`.
+Git tag `v0.5.36`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `0.5.36`.
+
+- Releases are renumbered below 1.0. Every tag from `v1.0.0` to `v5.26.5` is now `v0.1.0` to `v0.5.34` on the same commit, and each GitHub Release and its DMG file name were renamed to match. DMGs from before this release still report their old version inside the app. No code changes.
+- This is the first DMG with the 0.5.35 dictation fix. `v0.5.35` is tagged without a DMG.
+
+## 0.5.35 — 2026-10-31
+
+Git tag `v0.5.35`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `0.5.35`.
 
 - macOS dictation puts spoken words in the composer. The microphone is connected into the audio engine, muted so it isn't played back, and recognition results are applied on the main thread.
 - Automatic punctuation is off. On macOS that pass was coming back as an empty transcript.
 - If Dictation is turned off, or the language isn't downloaded, the message says so and can open Keyboard settings.
 
-## 5.26.5 — 2026-10-30
+## 0.5.34 — 2026-10-30
 
-Git tag `v5.26.5`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `5.26.5`. UI cutover stays `6.0.0`.
+Git tag `v0.5.34`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `0.5.34`.
 
 - Folder pickers (Knowledge folder, join library, and skill export) open in your home folder instead of GTK's Recent view. On Recent, Open stayed disabled on Linux, so a path typed with Ctrl+L and Enter was never accepted (issue #70).
 
-## 5.26.4 — 2026-10-30
+## 0.5.33 — 2026-10-30
 
-Git tag `v5.26.4`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `5.26.4`. UI cutover stays `6.0.0`.
+Git tag `v0.5.33`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `0.5.33`.
 
 - A provider failure now leads with its cause. A Codex 429 whose own retries ran out reads "Codex is rate limited (HTTP 429) and its own retries ran out. Wait and try again." instead of a page of plugin warnings. Quota and sign-in failures are labelled the same way.
 - Only the CLI's own error lines are classified, so course text echoed into stderr can't mislabel a failure. Tokens and API keys are redacted from the message.
 - A failed study skill now names itself in the Jobs row and the notification instead of "worker exited with code 1", locally and over SSH.
 - Failure events carry `kind` and `exit_code` for diagnosis. A failed diagram run leaves existing graph files untouched.
 
-## 5.26.3 — 2026-10-30
+## 0.5.32 — 2026-10-30
 
-Git tag `v5.26.3`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `5.26.3`. UI cutover stays `6.0.0`.
+Git tag `v0.5.32`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `0.5.32`.
 
 - Skill installs run git with hooks disabled, so a cloned package can't run a checkout hook.
 - A symlink at the Arbor data folder or its `skills` folder is refused on install and on uninstall, including one created while the folder is being made.
 - Marketplace index refs are validated before any git call. A ref that could be read as an option, or isn't a valid branch or tag name, is refused.
 - Settings › Skills shows "Skill run started." while a run is going and "Skill run finished." when it ends. Provider packages no longer show Run or Uninstall.
 
-## 5.26.2 — 2026-10-25
+## 0.5.31 — 2026-10-25
 
-Git tag `v5.26.2`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `5.26.2`. UI cutover stays `6.0.0`.
+Git tag `v0.5.31`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `0.5.31`.
 
 - macOS dictation keeps the speech recognizer alive for the session and no longer forces on-device recognition, which could return no words. A session that ends with nothing now says whether the microphone sent no audio or no speech was recognized.
 - Course mode icons (Notes, Flashcards, Quiz, Graph, Chat) line up with Add and Search.
 
-## 5.26.1 — 2026-10-23
+## 0.5.30 — 2026-10-23
 
-Git tag `v5.26.1`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `5.26.1`. UI cutover stays `6.0.0`.
+Git tag `v0.5.30`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `0.5.30`.
 
 - Fix dictated text disappearing when dictation is stopped (empty final transcript from macOS Speech).
 
-## 5.26.0 — 2026-10-23
+## 0.5.29 — 2026-10-23
 
-Git tag `v5.26.0`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `5.26.0`. UI cutover stays `6.0.0`.
+Git tag `v0.5.29`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `0.5.29`.
 
 - Replaces macOS system dictation, which did nothing in Arbor, with in-app speech recognition (`SFSpeechRecognizer` fed by `AVAudioEngine`, on-device when supported). Words appear in the composer as you speak. The first use asks for Speech Recognition and Microphone access.
 - While listening, the mic button becomes "Stop dictation", with a pulsing dot and a timer. The composer is read-only, Send and Enter are blocked, and Escape cancels and restores the draft. Dictation stops on its own after two minutes.
 - If access is denied, the error toast's "Open Settings" button opens the matching Privacy & Security pane. Linux and Windows still hide the mic button.
 
-## 5.25.2 — 2026-10-23
+## 0.5.28 — 2026-10-23
 
-Git tag `v5.25.2`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `5.25.2`. UI cutover stays `6.0.0`.
+Git tag `v0.5.28`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `0.5.28`.
 
 - Fixes Codex and Claude usage, which never loaded. The worker called the usage readers without a process launcher, so they raised `TypeError` and the popover always said "Could not read usage limits." They now fall back to `subprocess.Popen`.
 - Fixes the Codex usage probe timing out: it started a second stdout reader for `account/rateLimits/read` that raced the first and lost the reply. Both phases now share one reader, and the popover shows the app-server's error message (for example, when Codex isn't signed in).
 
-## 5.25.1 — 2026-10-23
+## 0.5.27 — 2026-10-23
 
-Git tag `v5.25.1`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `5.25.1`. UI cutover stays `6.0.0`.
+Git tag `v0.5.27`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `0.5.27`.
 
 - Fixes a flaky Rust test: the auth cache tests share one process-wide cache, and `invalidate_auth("grok")` in one test could drop another test's key mid-run. The cache tests now run one at a time. No app behaviour changes.
 
-## 5.25.0 — 2026-10-23
+## 0.5.26 — 2026-10-23
 
-Git tag `v5.25.0`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `5.25.0`. UI cutover stays `6.0.0`.
+Git tag `v0.5.26`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `0.5.26`.
 
 - Clicking the provider in the sidebar opens a usage popover: each window shows percent left, reset time, and a pace mark.
 - Usage comes from Claude CLI (`get_usage`), Codex (`account/rateLimits/read`), and Grok (xAI billing), modeled on T3 Code. Ollama, LM Studio, and API keys report that they have no limits.
 
-## 5.24.0 — 2026-10-23
+## 0.5.25 — 2026-10-23
 
-Git tag `v5.24.0`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `5.24.0`. UI cutover stays `6.0.0`.
+Git tag `v0.5.25`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `0.5.25`.
 
 - Courses get an icon (40 subject icons) and a color (8 tokens), picked from the course header or the sidebar row.
 - Icons are stored in `.arbor/courses.json`, written by the worker, and committed so they sync in shared libraries. Viewers cannot change them.
 
-## 5.23.0 — 2026-10-23
+## 0.5.24 — 2026-10-23
 
-Git tag `v5.23.0`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `5.23.0`. UI cutover stays `6.0.0`.
+Git tag `v0.5.24`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `0.5.24`.
 
 - Flashcards and quizzes resume where you left off after you switch tabs or restart the app.
 - Restart (Restart deck / Restart quiz) resets only your place; grades and quiz stats are kept.
 - Grading a card Again now really sends it to the back of the due queue.
 
-## 5.22.0 — 2026-10-23
+## 0.5.23 — 2026-10-23
 
-Git tag `v5.22.0`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `5.22.0`. UI cutover stays `6.0.0`.
+Git tag `v0.5.23`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `0.5.23`.
 
 - The Ask/Explain switch moves into the message box. Shift+Tab toggles it.
 - `/ask` and `/explain` at the start of a message switch the mode, with a suggestion list.
 - On macOS, a mic button starts system dictation into the chat box. `Info.plist` adds the microphone and speech recognition usage strings.
 
-## 5.21.0 — 2026-10-23
+## 0.5.22 — 2026-10-23
 
-Git tag `v5.21.0`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `5.21.0`. UI cutover stays `6.0.0`.
+Git tag `v0.5.22`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `0.5.22`.
 
 - Chats are stored threads per course, with a Chats panel: search, New chat, rename, delete, and delete all.
 - Existing chat history is split into threads at the old New chat points; the original file is kept as `<course>.jsonl.migrated`.
 - Each thread keeps its own draft and Ask/Explain mode. An answer keeps arriving in its own thread when you switch threads or tabs.
 
-## 5.20.0 — 2026-10-23
+## 0.5.21 — 2026-10-23
 
-Git tag `v5.20.0`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `5.20.0`. UI cutover stays `6.0.0`.
+Git tag `v0.5.21`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `0.5.21`.
 
 - Chat answers stream in as they are written. Claude CLI and Grok CLI stream through one `stream-json` parser; Ollama, LM Studio, OpenAI, and Anthropic APIs stream over HTTP. Codex stays non-streaming.
 - The `supported:` trailer line never shows in the live answer. Streaming errors keep API keys redacted.
 - The live answer renders markdown, paints at most once per frame, and shows an inline caret.
 
-## 5.19.0 — 2026-10-23
+## 0.5.20 — 2026-10-23
 
-Git tag `v5.19.0`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `5.19.0`. UI cutover stays `6.0.0`.
+Git tag `v0.5.20`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `0.5.20`.
 
 - Chat drops its Quiz mode (chat only; the Quiz tab is unchanged). Chat offers Ask and Explain.
 - Numbered lists in chat and notes count 1, 2, 3 across blank lines and keep their start number; indented continuation text becomes a paragraph inside the item.
@@ -130,183 +139,183 @@ Git tag `v5.19.0`. **Product:** step toward Version 6. Worker, desktop, and Taur
 - The chat stops auto-scrolling while you select text, and always scrolls to your own new message.
 - Plans for the 6.0 UX pass live in `docs/superpowers/plans/ux-6.0/`.
 
-## 5.18.0 — 2026-10-20
+## 0.5.19 — 2026-10-20
 
-Git tag `v5.18.0`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `5.18.0`. UI cutover stays `6.0.0`.
+Git tag `v0.5.19`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `0.5.19`.
 
 - Waits for saved settings before auth and model probes, so a missing settings load is not treated as Codex.
 
-## 5.17.0 — 2026-10-20
+## 0.5.18 — 2026-10-20
 
-Git tag `v5.17.0`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `5.17.0`. UI cutover stays `6.0.0`.
+Git tag `v0.5.18`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `0.5.18`.
 
 - Adds settings for library sharing, sync, skills, and workers.
 
-## 5.16.0 — 2026-10-20
+## 0.5.17 — 2026-10-20
 
-Git tag `v5.16.0`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `5.16.0`. UI cutover stays `6.0.0`.
+Git tag `v0.5.17`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `0.5.17`.
 
 - Adds the settings shell for general, provider and models, and shortcuts.
 
-## 5.15.0 — 2026-10-20
+## 0.5.16 — 2026-10-20
 
-Git tag `v5.15.0`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `5.15.0`. UI cutover stays `6.0.0`.
+Git tag `v0.5.16`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `0.5.16`.
 
 - Adds the jobs page, a live log tail, and job skill labels.
 
-## 5.14.0 — 2026-10-20
+## 0.5.15 — 2026-10-20
 
-Git tag `v5.14.0`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `5.14.0`. UI cutover stays `6.0.0`.
+Git tag `v0.5.15`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `0.5.15`.
 
 - Adds the search palette.
 
-## 5.13.0 — 2026-10-20
+## 0.5.14 — 2026-10-20
 
-Git tag `v5.13.0`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `5.13.0`. UI cutover stays `6.0.0`.
+Git tag `v0.5.14`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `0.5.14`.
 
 - Adds chat with streaming, citations, and explain-weakest.
 
-## 5.12.0 — 2026-10-20
+## 0.5.13 — 2026-10-20
 
-Git tag `v5.12.0`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `5.12.0`. UI cutover stays `6.0.0`.
+Git tag `v0.5.13`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `0.5.13`.
 
 - Adds the concept graph and a shared study-job launcher.
 
-## 5.11.0 — 2026-10-20
+## 0.5.12 — 2026-10-20
 
-Git tag `v5.11.0`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `5.11.0`. UI cutover stays `6.0.0`.
+Git tag `v0.5.12`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `0.5.12`.
 
 - Adds quiz and the shared study components.
 
-## 5.10.0 — 2026-10-20
+## 0.5.11 — 2026-10-20
 
-Git tag `v5.10.0`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `5.10.0`. UI cutover stays `6.0.0`.
+Git tag `v0.5.11`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `0.5.11`.
 
 - Adds flashcards, including grades that advance before the save finishes.
 
-## 5.9.0 — 2026-10-20
+## 0.5.10 — 2026-10-20
 
-Git tag `v5.9.0`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `5.9.0`. UI cutover stays `6.0.0`.
+Git tag `v0.5.10`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `0.5.10`.
 
 - Adds notes, the Overview landing page, the reading pane, and make-card.
 
-## 5.8.0 — 2026-10-20
+## 0.5.9 — 2026-10-20
 
-Git tag `v5.8.0`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `5.8.0`. UI cutover stays `6.0.0`.
+Git tag `v0.5.9`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `0.5.9`.
 
 - Adds welcome, first-run folder choice, and the file-review dialog.
 
-## 5.7.0 — 2026-10-20
+## 0.5.8 — 2026-10-20
 
-Git tag `v5.7.0`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `5.7.0`. UI cutover stays `6.0.0`.
+Git tag `v0.5.8`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `0.5.8`.
 
 - Adds the app shell: sidebar, course header, action bar, log drawer, and routes.
 
-## 5.6.0 — 2026-10-20
+## 0.5.7 — 2026-10-20
 
-Git tag `v5.6.0`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `5.6.0`. UI cutover stays `6.0.0`.
+Git tag `v0.5.7`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `0.5.7`.
 
 - Adds the desktop data layer: typed IPC, queries, events, and mock mode.
 
-## 5.5.0 — 2026-10-20
+## 0.5.6 — 2026-10-20
 
-Git tag `v5.5.0`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `5.5.0`. UI cutover stays `6.0.0`.
+Git tag `v0.5.6`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `0.5.6`.
 
 - Adds shared component primitives on Arbor Paper tokens.
 
-## 5.4.0 — 2026-10-20
+## 0.5.5 — 2026-10-20
 
-Git tag `v5.4.0`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `5.4.0`. UI cutover stays `6.0.0`.
+Git tag `v0.5.5`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `0.5.5`.
 
 - Adds Arbor Paper tokens, the theme, prose styles, and the style guard.
 
-## 5.3.0 — 2026-10-20
+## 0.5.4 — 2026-10-20
 
-Git tag `v5.3.0`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `5.3.0`. UI cutover stays `6.0.0`.
+Git tag `v0.5.4`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `0.5.4`.
 
 - Adds the React 19 toolchain (compiler, Tailwind v4, TanStack, vitest). The previous UI stays at legacy.html.
 
-## 5.2.0 — 2026-10-20
+## 0.5.3 — 2026-10-20
 
-Git tag `v5.2.0`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `5.2.0`. UI cutover stays `6.0.0`.
+Git tag `v0.5.3`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `0.5.3`.
 
 - Documents the 6.0 UI rebuild plan and the Arbor Paper design. App behavior is unchanged.
 
-## 5.1.0 — 2026-10-18
+## 0.5.2 — 2026-10-18
 
-Git tag `v5.1.0` when this release lands. **Product:** performance and responsiveness for the desktop study loop ([#97](https://github.com/MrF1ow/Arbor/issues/97)). Worker, desktop, and Tauri report `5.1.0`, including `arbor-worker --version`.
+Git tag `v0.5.2` when this release lands. **Product:** performance and responsiveness for the desktop study loop ([#97](https://github.com/MrF1ow/Arbor/issues/97)). Worker, desktop, and Tauri report `0.5.2`, including `arbor-worker --version`.
 
 - Worker commands no longer block the UI thread; short reads use a persistent `arbor-worker serve` process and the bundled worker ships as onedir for faster cold starts.
 - Sign-in status is cached for 60 seconds in the app (no background polling); only the provider you selected is checked, not every backend.
 - Flashcard and quiz answers advance immediately while grades save in the background with retry and a visible **unsaved · Retry** state if saving fails.
 - Course overview loads due cards, weak topics, and recommendations in one call.
 
-## 5.0.1 — 2026-10-18
+## 0.5.1 — 2026-10-18
 
-Git tag `v5.0.1` when this release lands. **Product:** macOS patch for the shipped Version 5 line. Worker, desktop, and Tauri report `5.0.1`, including `arbor-worker --version`.
+Git tag `v0.5.1` when this release lands. **Product:** macOS patch for the shipped Version 5 line. Worker, desktop, and Tauri report `0.5.1`, including `arbor-worker --version`.
 
 - Disable hardened runtime on ad-hoc macOS DMG builds so the PyInstaller `arbor-worker` sidecar can load its extracted Python framework ([#95](https://github.com/MrF1ow/Arbor/issues/95)).
 - CI smoke-tests the signed `.app` / DMG (`arbor-worker --version` and `list-providers`) before upload or release publish.
 - Broaden GUI-launched PATH discovery (login-shell capture on macOS plus shared home install dirs) so provider CLIs installed outside `/usr/bin` resolve.
 - Surface worker startup failures in Settings auth check as **Arbor worker unavailable** instead of a generic auth failure.
 
-## 5.0.0 — 2026-10-18
+## 0.5.0 — 2026-10-18
 
-Git tag `v5.0.0` when this release lands. **Product:** Version 5 (collaboration) is closed. Worker, desktop, and Tauri report `5.0.0`, including `arbor-worker --version`. The Linux live run is in `docs/superpowers/plans/2026-10-17-roadmap-completion/linux-live-run.md` (boxes C1–C6).
+Git tag `v0.5.0` when this release lands. **Product:** Version 5 (collaboration) is closed. Worker, desktop, and Tauri report `0.5.0`, including `arbor-worker --version`. The Linux live run is in `docs/superpowers/plans/2026-10-17-roadmap-completion/linux-live-run.md` (boxes C1–C6).
 
 - A head-changing sync always reindexes and embeds, including when `.arbor/vectors.sqlite` does not exist yet. Derived vector files stay gitignored. The first pull on another machine rebuilds semantic search instead of leaving it empty.
 - Live run: shared import and sync, a markdown conflict resolved in the dialog, and per-user flashcard progress that survives a round trip. Viewer role disables write controls and the worker refuses the write. A private sshd on localhost digested a PDF and the local tree committed the digest. `~/.ssh` was not modified.
 - The Anki marketplace skill installed, confirmed, and uninstalled from a local bare index. The folder picker still does not accept Open under Xvfb (issue #70), so the TSV was not written on this run. Issue #88 stays open. Both are carried in the roadmap after Version 5.
 
-## 4.5.0 — 2026-10-18
+## 0.4.5 — 2026-10-18
 
-Git tag `v4.5.0` when this release lands. **Product:** remote workers over SSH. Version 5 continues at `v4.6.0`. Worker, desktop, and Tauri report `4.5.0`, including `arbor-worker --version`.
+Git tag `v0.4.5` when this release lands. **Product:** remote workers over SSH. Version 5 continues at `v4.6.0`. Worker, desktop, and Tauri report `0.4.5`, including `arbor-worker --version`.
 
 - Course jobs use **Local** or **SSH** transport. Local runs `arbor-worker` on this machine as before. SSH rsyncs course sources up, runs the same worker remotely with `--no-commit`, streams NDJSON events over `ssh`, rsyncs digests and study artifacts back, then Arbor commits on the local Knowledge tree.
 - Settings → **Workers** lists saved SSH hosts (id, label, host, port, user, identity file, remote worker command, remote Knowledge root). **Test connection** runs `arbor-worker --version` on the host.
-- Each knowledge root picks **Local** (default) or one saved worker. Provider overrides and library roles from `4.4.0` stay independent of worker choice.
+- Each knowledge root picks **Local** (default) or one saved worker. Provider overrides and library roles from `0.4.4` stay independent of worker choice.
 - Host keys are stored in an Arbor-managed `known_hosts` file under app data (`StrictHostKeyChecking accept-new`). A changed key is refused with a clear error instead of updating silently.
 - Cancel on an SSH job uses `ssh -tt` so a hang-up reaches the remote session.
 
-## 4.4.0 — 2026-10-18
+## 0.4.4 — 2026-10-18
 
-Git tag `v4.4.0` is tagged. **Product:** library roles and shared provider profiles. Version 5 continues at `v4.5.0`. Worker, desktop, and Tauri report `4.4.0`, including `arbor-worker --version`.
+Git tag `v0.4.4` is tagged. **Product:** library roles and shared provider profiles. Version 5 continues at `v0.4.5`. Worker, desktop, and Tauri report `0.4.4`, including `arbor-worker --version`.
 
 - `.arbor/library.json` members are `{email, role}` with roles `owner`, `editor`, and `viewer`. A v4.2 string list still loads: `created_by` becomes owner and the other addresses become editor. The signed-in role is the effective git email, the same lookup as per-user progress.
 - Viewers cannot run write jobs (update, generate, study plan, make-card, skill runs that declare a write permission, and commits other than their own progress) or push on sync. Settings and the course actions disable those controls and show the reason. The worker refuses them as well. Viewers can still read, search, chat, and record their own progress. Owners edit members and roles in Settings → Library, which writes `library.json` and commits that file.
 - Arbor's role check is advisory. The git host's permissions are what actually enforce access. Arbor cannot stop someone who pushes with git directly.
 - A library may set `provider` to `{id, model}`. That is the recommended provider for the library. No API keys, tokens, or other credentials are written to `library.json`. When that root is active and the member has no local override, the provider picker selects it and shows "recommended by library". An override is stored in app settings for that root only.
 
-## 4.3.0 — 2026-10-18
+## 0.4.3 — 2026-10-18
 
-Git tag `v4.3.0` when this release lands. **Product:** skill packages and marketplace. Version 5 continues at `v4.4.0`. Worker, desktop, and Tauri report `4.3.0`, including `arbor-worker --version`.
+Git tag `v0.4.3` when this release lands. **Product:** skill packages and marketplace. Version 5 continues at `v0.4.4`. Worker, desktop, and Tauri report `0.4.3`, including `arbor-worker --version`.
 
-- A skill package is `arbor-skill.json` (`id`, `version`, `kind: "skill"`, `entry`, `inputs`, `outputs`, `permissions`) plus a pure-Python module. Permissions are the closed set `read_course`, `write_course_study`, `write_export_dir`, `provider`, `network`. Unknown keys or permissions are rejected. v4.3.0 packages are stdlib-only. Install does not import the package and does not run setup.py or pip.
+- A skill package is `arbor-skill.json` (`id`, `version`, `kind: "skill"`, `entry`, `inputs`, `outputs`, `permissions`) plus a pure-Python module. Permissions are the closed set `read_course`, `write_course_study`, `write_export_dir`, `provider`, `network`. Unknown keys or permissions are rejected. v0.4.3 packages are stdlib-only. Install does not import the package and does not run setup.py or pip.
 - Install takes a git URL and a full 40-hex commit (branch names are refused), with an optional `subdir`, into `$XDG_DATA_HOME/arbor/skills/<id>/<commit>/`. The id matches `^[a-z0-9][a-z0-9-]{0,63}$`. Path traversal and symlinks that leave the package directory are refused. The checked-out commit must equal the pin.
 - A skill runs only after the user confirms its declared permissions for that id and commit. A new commit needs a new confirmation. The worker starts a child process with a temp home and no API keys unless the grant includes `provider`. The skill receives `read_course_file`, `write_export`, and `write_study_file`. Those methods refuse paths outside the granted dirs. This is not an OS sandbox: `open()`, sockets, and the `network` permission are not blocked by the operating system. Uninstall removes the install directory and the desktop confirmation.
 - The marketplace is the static `marketplace/index.json` in this repo (`packages[]` with `kind` `skill` or `provider`). No separate marketplace repo. Settings → Skills stores an index source and ref, browses the index, shows permissions before install, installs, confirms, runs against the current course, and uninstalls. Provider rows are listed and are not installed. The index ref may be a branch. Each package `commit` is still a full SHA.
 - First-party package `anki-export` writes an Anki-importable TSV (`anki-export.tsv`) of the shared deck `study/flashcards.json`. There is no `.apkg`. Permissions are `read_course` and `write_export_dir`. The index pins commit `429d15dc5a6fde7c61559fc787a737cd0c94414d` (the commit that added the package). The index row’s `git` URL is `https://github.com/MrF1ow/Arbor.git`. Offline installs use a local bare repo whose index `git` field is a `file://` URL.
 
-## 4.2.0 — 2026-10-18
+## 0.4.2 — 2026-10-18
 
-Git tag: `v4.2.0` is tagged. **Product:** shared libraries and team workspaces. Version 5 continues at `v4.3.0`. Worker, desktop, and Tauri report `4.2.0`, including `arbor-worker --version`.
+Git tag: `v0.4.2` is tagged. **Product:** shared libraries and team workspaces. Version 5 continues at `v0.4.3`. Worker, desktop, and Tauri report `0.4.2`, including `arbor-worker --version`.
 
 - Sync hardening: a job commit includes only the paths that job wrote, so a file the user staged by hand stays staged. The fallback identity Arbor <arbor@localhost> applies to the committer even when only an author email is set. The conflict list marks a file resolved after Mine or Theirs. When origin and arbor have the same URL, Arbor syncs origin; when both exist and the URLs differ, Settings says Arbor syncs the arbor remote.
 - Team workspaces: app settings hold a list of Knowledge roots, each personal or shared, plus the active root, migrated from the old single knowledge_root. The sidebar groups courses by root and switching is one click. Watcher, search, jobs, and chat follow the active root.
 - Shared libraries: `.arbor/library.json` (name, members, created_by) is tracked in git. Create requires an arbor remote, writes that file, marks the root shared, and commits only that path. Join clones a git URL into an empty folder, adds the arbor remote, and marks it shared. Personal roots still rebase. A shared root, or a root with a valid library.json, merges on sync.
 - Per-user state: study progress is `.arbor/users/<git-email>/<course>/progress.json` and is committed. Chat history and the flashcard/quiz UI counts live under that user's chat/ and local/ directories and stay gitignored. The email is the effective user.email, or arbor@localhost. A legacy `<course>/study/progress.json` is copied into the new path and kept as progress.json.bak.
 
-## 4.1.0 — 2026-10-18
+## 0.4.1 — 2026-10-18
 
-Git tag: `v4.1.0` is tagged. **Product:** First Version 5 slice (git remote sync). Version 5 continues at `v4.2.0`. Worker, desktop, and Tauri report `4.1.0`, including `arbor-worker --version`.
+Git tag: `v0.4.1` is tagged. **Product:** First Version 5 slice (git remote sync). Version 5 continues at `v0.4.2`. Worker, desktop, and Tauri report `0.4.1`, including `arbor-worker --version`.
 
 - Knowledge commits use `Arbor <arbor@localhost>` when git has no `user.email`, and the UI says so ([#80](https://github.com/MrF1ow/Arbor/issues/80)).
 - Study plan, make-card, and study progress commit through the same helper ([#81](https://github.com/MrF1ow/Arbor/issues/81)).
 - Settings → Sync: an `arbor` git remote per Knowledge root, **Sync now**, and optional sync after each committed job. Sync fetches, rebases (merge when the root is marked shared), and pushes. Conflicts abort to a clean HEAD and are resolved per file as mine, theirs, or an edit. Markdown and other text only; binary conflicts are refused. Derived files (`_arbor_cache/`, `.arbor/*.db`, the vector DB, `.arbor/chat/`) are gitignored and a pull rebuilds the search index and embeddings when a vector DB already exists. Credentials stay in the user's git/ssh config. Arbor stores none. Git errors are shown with embedded URL passwords redacted.
 
-## 4.0.0 — 2026-10-18
+## 0.4.0 — 2026-10-18
 
-Git tag: `v4.0.0` when this release lands. **Product:** Version 4 shipped. Version 5 is in progress (next package `v4.1.0`). Worker, desktop, and Tauri report `4.0.0`, including `arbor-worker --version`.
+Git tag: `v0.4.0` when this release lands. **Product:** Version 4 shipped. Version 5 is in progress (next package `v0.4.1`). Worker, desktop, and Tauri report `0.4.0`, including `arbor-worker --version`.
 
 Linux live run recorded in [linux-live-run.md](docs/superpowers/plans/2026-10-17-roadmap-completion/linux-live-run.md). Boxes T1–T7 passed on a fresh fixture course, Saltmarsh, because Behavioral Medicine was not available. No product fix came out of the run.
 
@@ -318,9 +327,9 @@ Linux live run recorded in [linux-live-run.md](docs/superpowers/plans/2026-10-17
 - Due today, weak topics, the study plan, and make-card-from-selection work on a course ingested in the same run (T6).
 - A signed-out Grok provider shows **Grok · not signed in** on the Chat tab (T7).
 
-## 3.5.0 — 2026-10-18
+## 0.3.5 — 2026-10-18
 
-Git tag: `v3.5.0` is tagged. **Product:** Version 4 in progress (API and local providers), not `v4.0.0`. Worker, desktop, and Tauri report `3.5.0`, including `arbor-worker --version`.
+Git tag: `v0.3.5` is tagged. **Product:** Version 4 in progress (API and local providers), not `v0.4.0`. Worker, desktop, and Tauri report `0.3.5`, including `arbor-worker --version`.
 
 - Settings adds **Ollama**, **LM Studio**, **OpenAI API**, and **Anthropic API** as providers alongside the existing CLI options.
 - OpenAI and Anthropic API keys are entered in Settings, stored in the OS keyring, and passed to the worker only as environment variables at process spawn. Keys are never written to `.arbor`, `settings.json`, job history, or argv.
@@ -329,9 +338,9 @@ Git tag: `v3.5.0` is tagged. **Product:** Version 4 in progress (API and local p
 - Anthropic API is refused with a clear reason when Arbor runs inside a Claude Code session (`CLAUDECODE`).
 - The desktop app sets `ARBOR_ALLOW_REMOTE_API=1` for the worker only when OpenAI API or Anthropic API is selected and a key is saved in the keyring.
 
-## 3.4.0 — 2026-10-17
+## 0.3.4 — 2026-10-17
 
-Git tag: `v3.4.0` when this release lands. **Product:** Version 4 in progress (study plans, recommendations, and make-card-from-selection), not `v4.0.0`. Worker, desktop, and Tauri report `3.4.0`, including `arbor-worker --version`.
+Git tag: `v0.3.4` when this release lands. **Product:** Version 4 in progress (study plans, recommendations, and make-card-from-selection), not `v0.4.0`. Worker, desktop, and Tauri report `0.3.4`, including `arbor-worker --version`.
 
 - `arbor-worker study-plan` writes `<course>/study/plan.md` from weak topics, due counts, and an optional exam date. The course overview shows that plan and can generate or regenerate it.
 - The course overview lists deterministic recommendations: due cards, the weakest topic, and an unreviewed digest. Each one opens that view.
@@ -339,9 +348,9 @@ Git tag: `v3.4.0` when this release lands. **Product:** Version 4 in progress (s
 - Make card takes a text selection in a digest, edits the front and back, and appends the card to the deck with the digest, heading, and page. The new card is due.
 - Plan markdown and card text stay on the escaped render path. The content security policy is unchanged.
 
-## 3.3.0 — 2026-10-17
+## 0.3.3 — 2026-10-17
 
-Git tag: `v3.3.0` when this release lands. **Product:** Version 4 in progress (review scheduling and weak topics), not `v4.0.0`. Worker, desktop, and Tauri report `3.3.0`, including `arbor-worker --version`.
+Git tag: `v0.3.3` when this release lands. **Product:** Version 4 in progress (review scheduling and weak topics), not `v0.4.0`. Worker, desktop, and Tauri report `0.3.3`, including `arbor-worker --version`.
 
 - Flashcard and quiz progress move to `<course>/study/progress.json` (schema 1). Existing `.arbor/progress/<course>.flashcards.json` and `.quiz.json` files migrate once.
 - SM-2-lite: Mastered grows the interval by the stored ease (default 2.5, minimum 1 day). Wrong is due again in 10 minutes. Again stays in the session.
@@ -349,9 +358,9 @@ Git tag: `v3.3.0` when this release lands. **Product:** Version 4 in progress (r
 - The course overview lists the top 5 weak topics from concept and digest-heading wrong rates, and each one opens that heading in Notes.
 - Chat answers use the UI font, and the active Ask, Explain, or Quiz button is highlighted ([#75](https://github.com/MrF1ow/Arbor/issues/75)).
 
-## 3.2.0 — 2026-10-17
+## 0.3.2 — 2026-10-17
 
-Git tag: `v3.2.0` when this release lands. **Product:** Version 4 in progress (Chat tab), not `v4.0.0`. Worker, desktop, and Tauri report `3.2.0`, including `arbor-worker --version`.
+Git tag: `v0.3.2` when this release lands. **Product:** Version 4 in progress (Chat tab), not `v0.4.0`. Worker, desktop, and Tauri report `0.3.2`, including `arbor-worker --version`.
 
 - Chat tab on each course: Ask, Explain, and Quiz modes with streaming status (retrieving, answering, done).
 - Per-course history in `<root>/.arbor/chat/<course>.jsonl` with New chat session boundaries and Clear history.
@@ -359,9 +368,9 @@ Git tag: `v3.2.0` when this release lands. **Product:** Version 4 in progress (C
 - Answers render through the escaped markdown path (CSP unchanged).
 - **Generate study artifact** is the only write from chat (existing flashcard or quiz jobs).
 
-## 3.1.0 — 2026-10-17
+## 0.3.1 — 2026-10-17
 
-Git tag: `v3.1.0` when this release lands. **Product:** Version 4 in progress (chat worker), not `v4.0.0`. Worker, desktop, and Tauri report `3.1.0`, including `arbor-worker --version`.
+Git tag: `v0.3.1` when this release lands. **Product:** Version 4 in progress (chat worker), not `v0.4.0`. Worker, desktop, and Tauri report `0.3.1`, including `arbor-worker --version`.
 
 - `arbor-worker chat` answers from course digests (semantic search plus FTS), always includes `course.md`, and keeps a 12k character source budget.
 - Answers cite `[n]`. The worker maps those to digest path, heading id, page range, and source file. Unsupported questions set `supported` false.
@@ -369,9 +378,9 @@ Git tag: `v3.1.0` when this release lands. **Product:** Version 4 in progress (c
 - Digest output drops model preamble before the first heading ([#71](https://github.com/MrF1ow/Arbor/issues/71)).
 - Grok still uses the tool denylist, and a reported tool call fails the run ([#72](https://github.com/MrF1ow/Arbor/issues/72)).
 
-## 3.0.0 — 2026-10-17
+## 0.3.0 — 2026-10-17
 
-Git tag: `v3.0.0` is tagged. **Product:** Version 3 shipped. Version 4 is in progress (not started). Worker, desktop, and Tauri report `3.0.0`, including `arbor-worker --version`.
+Git tag: `v0.3.0` is tagged. **Product:** Version 3 shipped. Version 4 is in progress (not started). Worker, desktop, and Tauri report `0.3.0`, including `arbor-worker --version`.
 
 Linux live run recorded in [linux-live-run.md](docs/superpowers/plans/2026-10-17-roadmap-completion/linux-live-run.md). Boxes 1–3 and 5–15 passed. Box 4 is partial: no live digest contained a table or emphasis.
 
@@ -382,9 +391,9 @@ Linux live run recorded in [linux-live-run.md](docs/superpowers/plans/2026-10-17
 - A signed-out Confirm, Update, or study action logs the provider’s reason and does not start a job.
 - Packaged Linux AppImage and deb bundle `arbor-worker` and launch without the repo or `uv`.
 
-## 2.5.0 — 2026-10-17
+## 0.2.5 — 2026-10-17
 
-Git tag: `v2.5.0` when this release lands. **Product:** Version 3 in progress (CLI provider registry). Not `v3.0.0`. Worker, desktop, and Tauri report `2.5.0`, including `arbor-worker --version`.
+Git tag: `v0.2.5` when this release lands. **Product:** Version 3 in progress (CLI provider registry). Not `v0.3.0`. Worker, desktop, and Tauri report `0.2.5`, including `arbor-worker --version`.
 
 - Provider registry (`codex`, `claude`, `grok`, `fake`) with shared `CliProvider` interface and `list-providers`.
 - Claude Code CLI provider (`claude -p`, JSON `result`; disabled inside a Claude Code session when `CLAUDECODE=1`).
@@ -392,16 +401,16 @@ Git tag: `v2.5.0` when this release lands. **Product:** Version 3 in progress (C
 - Settings **Provider** select above **Model**; top-bar badge shows the selected provider label and auth state.
 - Per-provider model lists in `.arbor/models.json` (`providers` map).
 
-## 2.4.0 — 2026-10-17
+## 0.2.4 — 2026-10-17
 
-Git tag: `v2.4.0` when this release lands. **Product:** Version 3 in progress (tree mark and tag gate). Not `v3.0.0`. Worker, desktop, and Tauri report `2.4.0`, including `arbor-worker --version`.
+Git tag: `v0.2.4` when this release lands. **Product:** Version 3 in progress (tree mark and tag gate). Not `v0.3.0`. Worker, desktop, and Tauri report `0.2.4`, including `arbor-worker --version`.
 
 - Transparent tree mark in the sidebar, welcome screen, favicon, and window/taskbar icons, with a cream trunk on the dark theme.
 - The version gate is a recorded Linux live run in [linux-live-run.md](docs/superpowers/plans/2026-10-17-roadmap-completion/linux-live-run.md). Mac batches are optional and never block a tag.
 
-## 2.3.0 — 2026-10-17
+## 0.2.3 — 2026-10-17
 
-Git tag: `v2.3.0`. **Product:** Version 3 in progress (Mac-batch fixes). Not `v3.0.0`. Worker, desktop, and Tauri report `2.3.0`, including `arbor-worker --version`.
+Git tag: `v0.2.3`. **Product:** Version 3 in progress (Mac-batch fixes). Not `v0.3.0`. Worker, desktop, and Tauri report `0.2.3`, including `arbor-worker --version`.
 
 - Concepts validation resolves edge labels and slugs to assigned node ids. Ambiguous labels fail instead of selecting either node. This fixes the Graph blocker from issue [#57](https://github.com/MrF1ow/Arbor/issues/57).
 - Citation matching strips Markdown emphasis and punctuation before checking claims and headings, so formatted digest words match sentence-style study text ([#57](https://github.com/MrF1ow/Arbor/issues/57)).
@@ -414,11 +423,11 @@ Git tag: `v2.3.0`. **Product:** Version 3 in progress (Mac-batch fixes). Not `v3
 - Living [implementation checklist](docs/implementation-checklist.md) tracks implemented vs locally tested vs Mac-batch tested. Product versions do not start until the previous version’s Mac batch is recorded. GitHub issues #3, #4, #19, #21, #30, #42, and #20 are mapped into `PROJECT.md` versions with their original acceptance criteria. [Version 3 Notes leftovers](docs/superpowers/plans/2026-09-12-v3-notes-gate.md) (links, tables, reserved dirs, patch validation) are locally tested. The 2026-09-20 Mac batch (issue [#57](https://github.com/MrF1ow/Arbor/issues/57)) found Concepts edge-label rejection, citation false Unverified, silent reserved class names, and a missing quiz session score. It does not close Version 3.
 - Desktop file reads stay inside the selected Knowledge root. Digest and study text is escaped before it reaches the webview. The window sets a content security policy. CI runs the Python, Rust, and desktop tests. (#64)
 
-## 2.2.0 — 2026-08-26
+## 0.2.2 — 2026-08-26
 
-Package `2.2.0`. Git tag `v2.2.0` is for the operator after this lands. **Product:** Version 3 in progress (study loop). Not `v3.0.0`. That tag waits for a recorded Mac E2E run.
+Package `0.2.2`. Git tag `v0.2.2` is for the operator after this lands. **Product:** Version 3 in progress (study loop). Not `v0.3.0`. That tag waits for a recorded Mac E2E run.
 
-Waves 1 through 8 plus library UX. Do not backfill tags `v2.3.0` through `v2.8.0`.
+Waves 1 through 8 plus library UX. Do not backfill tags `v0.2.3` through `v2.8.0`.
 
 Library UX.
 
@@ -436,7 +445,7 @@ Closeout (Wave 8, issue #42).
 - Flashcard Again / Wrong / Mastered write `correct` / `wrong`. Flip and Next do not grade.
 - Quiz Previous/Next restore a submitted answer. Each question id is scored once per session.
 - Source chips scroll to the cited heading.
-- Living docs match the study loop. Do not backfill tags `v2.3.0` through `v2.8.0`.
+- Living docs match the study loop. Do not backfill tags `v0.2.3` through `v2.8.0`.
 
 Diagrams (Wave 6).
 
@@ -477,9 +486,9 @@ Study framework (Wave 1).
 - `.gitignore` gains `.arbor/progress/` and `.arbor/vectors.sqlite` on generate.
 - Desktop `start_study_job` reuses the job mutex with copy "A job is already running for {root}". Quiz generation remains disabled.
 
-## 2.1.0 — 2026-08-22
+## 0.2.1 — 2026-08-22
 
-Git tag: `v2.1.0`. **Product:** Version 3 in progress (shell only). Not `v3.0.0` — that tag is reserved for full Version 3 completion.
+Git tag: `v0.2.1`. **Product:** Version 3 in progress (shell only). Not `v0.3.0` — that tag is reserved for full Version 3 completion.
 
 Version 2 ingest, automation, and search are unchanged. This release replaces the single-column debug UI with a student-facing desktop shell.
 
@@ -495,9 +504,9 @@ Version 2 ingest, automation, and search are unchanged. This release replaces th
 
 Not in this release: flashcard or quiz generation, embeddings, semantic search, chat. **Not a Version 3 completion release.**
 
-## 2.0.0 — 2026-08-22
+## 0.2.0 — 2026-08-22
 
-Git tag: `v2.0.0`. Product milestone: [PROJECT.md](PROJECT.md) Version 2.
+Git tag: `v0.2.0`. Product milestone: [PROJECT.md](PROJECT.md) Version 2.
 
 Version 1 loop is unchanged: pick a Knowledge folder, review page ranges, Codex writes digests, git commits. This release adds automation and findability on that same screen.
 
@@ -513,9 +522,9 @@ Mac validation from source: full PDF ingest and commit, version-2 fingerprints, 
 
 Not in this release: notarized Mac builds, in-app chat, flashcards, a visual redesign. The UI is still the Version 1 single-column shell.
 
-## 1.0.0 — 2026-08-19
+## 0.1.0 — 2026-08-19
 
-Git tag: [`v1.0.0`](https://github.com/MrF1ow/Arbor/releases/tag/v1.0.0). Merge: [PR #24](https://github.com/MrF1ow/Arbor/pull/24).
+Git tag: [`v0.1.0`](https://github.com/MrF1ow/Arbor/releases/tag/v0.1.0). Merge: [PR #24](https://github.com/MrF1ow/Arbor/pull/24).
 
 - First downloadable macOS `.dmg`. GitHub Actions `macos-dmg` bundles `arbor-worker` as a Tauri sidecar via PyInstaller. Codex CLI stays a separate install. Signing and notarization stay off.
 - Treat leftover pages as pending after a partial ingest. Empty fingerprint slots keep the source in the plan with those ranges suggested.
@@ -525,9 +534,9 @@ Git tag: [`v1.0.0`](https://github.com/MrF1ow/Arbor/releases/tag/v1.0.0). Merge:
 
 Not in this release: notarized Mac builds, in-app chat (#20), PROJECT.md Version 2.
 
-## 0.2.0 — 2026-08-19
+## 0.0.2 — 2026-08-19
 
-Git tag: [`v0.2.0`](https://github.com/MrF1ow/Arbor/releases/tag/v0.2.0). Merge: [PR #22](https://github.com/MrF1ow/Arbor/pull/22).
+Git tag: [`v0.0.2`](https://github.com/MrF1ow/Arbor/releases/tag/v0.0.2). Merge: [PR #22](https://github.com/MrF1ow/Arbor/pull/22).
 
 - Confirm page ranges in the review panel (`151-300`, `40-55, 120-122`). Plan JSON is `{ selections: [{ path, ranges }] }`.
 - Persist per-page fingerprints in `arbor-course.json` (`version` 2 `sources`). Suggest dirty ranges on the next Update.
@@ -540,6 +549,6 @@ Git tag: [`v0.2.0`](https://github.com/MrF1ow/Arbor/releases/tag/v0.2.0). Merge:
 
 Not in this release: notarized Mac builds, in-app chat (#20), PROJECT.md Version 2.
 
-## 0.1.0
+## 0.0.1
 
 First public worker and desktop loop: course folders, dated digests, chunked large PDFs, Codex CLI only.
