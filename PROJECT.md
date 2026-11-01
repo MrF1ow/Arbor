@@ -347,7 +347,7 @@ tags
 
 This allows switching AI providers without modifying downstream code.
 
-**Shipped in 2.5.0:** Codex CLI, Claude Code CLI, and Grok CLI share one worker `CliProvider` interface (`codex`, `claude`, `grok` in the registry). API providers (OpenAI API, Anthropic API, Gemini, Ollama, LM Studio) are not shipped yet.
+**Shipped in 0.2.5:** Codex CLI, Claude Code CLI, and Grok CLI share one worker `CliProvider` interface (`codex`, `claude`, `grok` in the registry). API providers (OpenAI API, Anthropic API, Gemini, Ollama, LM Studio) are not shipped yet.
 
 ---
 
@@ -490,7 +490,7 @@ Each stage should be replaceable.
 
 # Version Roadmap
 
-Package releases (`0.1.0`, `0.2.0`, `1.0.0`, `2.0.0`, …) are in [`CHANGELOG.md`](CHANGELOG.md).
+Package releases (`0.0.1`, `0.0.2`, `0.1.0`, `0.2.0`, …) are in [`CHANGELOG.md`](CHANGELOG.md).
 
 **Done vs tested** lives in [`docs/implementation-checklist.md`](docs/implementation-checklist.md). That file is the gate: a product version closes when its rows are implemented, locally tested, and one Linux live run is recorded in [`linux-live-run.md`](docs/superpowers/plans/2026-10-17-roadmap-completion/linux-live-run.md). Mac batches are optional and never block a tag. The next product version does not start until that Linux live run is recorded. GitHub issues are mapped under each version below with their original acceptance criteria.
 
@@ -498,23 +498,25 @@ Package releases (`0.1.0`, `0.2.0`, `1.0.0`, `2.0.0`, …) are in [`CHANGELOG.md
 
 **Product milestones** (Version 1–5 below) are capability eras. **Git tags** track what is shipped.
 
+**Numbering (since 2026-11-01):** tags stay below 1.0. Version N completes at `v0.N.0`, and every release on the way to the next Version bumps the patch (`v0.5.35`, `v0.5.36`, …). The UI cutover that completes Version 6 is `v0.6.0`. Before 2026-11-01 the tags ran `v1.0.0`–`v5.26.5`; each old major X became `0.X` with its releases numbered in order (`v2.1.0` → `v0.2.1`, `v5.26.5` → `v0.5.34`, and the untagged 5.26.6 → `v0.5.35`), and the early `0.1.0`/`0.2.0` became `0.0.1`/`0.0.2`. Older plans under `docs/` still use the old numbers.
+
 | Tag | Product milestone | Meaning |
 |-----|-------------------|---------|
-| `v1.0.0` | Version 1 | Shipped |
-| `v2.0.0` | Version 2 | Shipped — automation on the v1 UI |
-| `v2.1.0`, `v2.2.0`, `v2.3.0`, `v2.4.0`, `v2.5.0` | Version 3 | Incremental releases. Shipped. |
-| `v3.0.0` | Version 3 | **Shipped** as package `3.0.0` on 2026-10-17. Linux live run recorded. Tagged. Two Notes constructs (tables, emphasis) were not in any live digest. |
-| `v3.1.0` … `v3.5.0` | Version 4 | Incremental tutor releases. Shipped and tagged. |
-| `v4.0.0` | Version 4 | **Shipped** as package `4.0.0` on 2026-10-18. Linux live run recorded. Tagged. |
-| `v4.1.0` | Version 5 (partial) | **Shipped** as package `4.1.0` on 2026-10-18. Git remote sync. Tagged. |
-| `v4.2.0` | Version 5 (partial) | **Shipped** as package `4.2.0` on 2026-10-18. Shared libraries and team workspaces. Tagged. |
-| `v4.3.0` | Version 5 (partial) | **Shipped** as package `4.3.0` on 2026-10-18. Skill packages and marketplace (the in-repo index). Tag when this release lands. |
-| `v4.4.0` | Version 5 (partial) | **Shipped** as package `4.4.0` on 2026-10-18. Library roles and shared provider profiles. Tagged. |
-| `v4.5.0` | Version 5 (partial) | **Shipped** as package `4.5.0` on 2026-10-18. Remote workers over SSH. Tag when this release lands. |
-| `v5.0.0` | Version 5 | **Shipped** as package `5.0.0` on 2026-10-18. Collaboration milestone complete. Linux live run recorded. Tag when this release lands. |
-| `v5.0.1` | Version 5 (patch) | **Shipped** as package `5.0.1` on 2026-10-18. macOS worker startup and CLI discovery ([#95](https://github.com/MrF1ow/Arbor/issues/95)). Tag when this release lands. |
+| `v0.1.0` | Version 1 | Shipped |
+| `v0.2.0` | Version 2 | Shipped — automation on the v1 UI |
+| `v0.2.1`, `v0.2.2`, `v0.2.3`, `v0.2.4`, `v0.2.5` | Version 3 | Incremental releases. Shipped. |
+| `v0.3.0` | Version 3 | **Shipped** as package `0.3.0` on 2026-10-17. Linux live run recorded. Tagged. Two Notes constructs (tables, emphasis) were not in any live digest. |
+| `v0.3.1` … `v0.3.5` | Version 4 | Incremental tutor releases. Shipped and tagged. |
+| `v0.4.0` | Version 4 | **Shipped** as package `0.4.0` on 2026-10-18. Linux live run recorded. Tagged. |
+| `v0.4.1` | Version 5 (partial) | **Shipped** as package `0.4.1` on 2026-10-18. Git remote sync. Tagged. |
+| `v0.4.2` | Version 5 (partial) | **Shipped** as package `0.4.2` on 2026-10-18. Shared libraries and team workspaces. Tagged. |
+| `v0.4.3` | Version 5 (partial) | **Shipped** as package `0.4.3` on 2026-10-18. Skill packages and marketplace (the in-repo index). Tag when this release lands. |
+| `v0.4.4` | Version 5 (partial) | **Shipped** as package `0.4.4` on 2026-10-18. Library roles and shared provider profiles. Tagged. |
+| `v0.4.5` | Version 5 (partial) | **Shipped** as package `0.4.5` on 2026-10-18. Remote workers over SSH. Tag when this release lands. |
+| `v0.5.0` | Version 5 | **Shipped** as package `0.5.0` on 2026-10-18. Collaboration milestone complete. Linux live run recorded. Tag when this release lands. |
+| `v0.5.1` | Version 5 (patch) | **Shipped** as package `0.5.1` on 2026-10-18. macOS worker startup and CLI discovery ([#95](https://github.com/MrF1ow/Arbor/issues/95)). Tag when this release lands. |
 
-Do not tag `v3.0.0` for the shell alone, a fix release, or partial delivery. The desktop shell shipped in **`v2.1.0`**. The study loop shipped in **`v2.2.0`**. Mac-batch fixes ship in **`v2.3.0`**. Version 4 shipped as `v3.1.0` through `v3.5.0`, then closed at **`v4.0.0`**. Version 5 shipped as `v4.1.0` through `v4.5.0`, then closed at **`v5.0.0`**.
+Do not tag `v0.3.0` for the shell alone, a fix release, or partial delivery. The desktop shell shipped in **`v0.2.1`**. The study loop shipped in **`v0.2.2`**. Mac-batch fixes ship in **`v0.2.3`**. Version 4 shipped as `v0.3.1` through `v0.3.5`, then closed at **`v0.4.0`**. Version 5 shipped as `v0.4.1` through `v0.4.5`, then closed at **`v0.5.0`**.
 
 Cursor rule: [`.cursor/rules/arbor-versioning.mdc`](.cursor/rules/arbor-versioning.mdc).
 
@@ -532,7 +534,7 @@ Goal:
 
 Create the smallest useful application.
 
-**Release:** 2.0.0 (`v2.0.0`). Shipped. Extended by 2.1.0+ (Version 3 shell work).
+**Release:** 0.2.0 (`v0.2.0`). Shipped. Extended by 0.2.1+ (Version 3 shell work).
 
 Features
 
@@ -614,7 +616,7 @@ Goal:
 
 Automation and discoverability.
 
-**Release:** 2.0.0 (`v2.0.0`). Shipped. Package **2.1.0** adds the Version 3 shell on top; Version 2 automation scope is unchanged.
+**Release:** 0.2.0 (`v0.2.0`). Shipped. Package **0.2.1** adds the Version 3 shell on top; Version 2 automation scope is unchanged.
 
 Shipped
 
@@ -640,7 +642,7 @@ Do not re-open Version 2 feature scope. Remaining Version 2 work is **proof**, n
 
 #### [#30](https://github.com/MrF1ow/Arbor/issues/30) — Mac E2E test: Version 2
 
-This issue is a MacBook checklist, not a feature list. Features it names already shipped in `v2.0.0`.
+This issue is a MacBook checklist, not a feature list. Features it names already shipped in `v0.2.0`.
 
 Original required boxes (from the issue):
 
@@ -655,7 +657,7 @@ Original required boxes (from the issue):
 
 Partial Mac evidence already exists in issue comments (Clin Med 2 ingest, v2 manifest, search, reindex, folder watch after PR #32). Still unrecorded on a Mac: notifications, Word ingest, optional OCR, optional auto-run, packaged DMG from Finder.
 
-**Delegate remaining boxes to the Version 3 Linux live run** in [`linux-live-run.md`](docs/superpowers/plans/2026-10-17-roadmap-completion/linux-live-run.md). Optional Mac proof lives in [`mac-e2e.md`](docs/superpowers/plans/2026-08-22-v3-program/mac-e2e.md). Do not run a separate Version 2-only Mac trip. Do not start Version 3’s `v3.0.0` tag until that Linux live run is recorded.
+**Delegate remaining boxes to the Version 3 Linux live run** in [`linux-live-run.md`](docs/superpowers/plans/2026-10-17-roadmap-completion/linux-live-run.md). Optional Mac proof lives in [`mac-e2e.md`](docs/superpowers/plans/2026-08-22-v3-program/mac-e2e.md). Do not run a separate Version 2-only Mac trip. Do not start Version 3’s `v0.3.0` tag until that Linux live run is recorded.
 
 ---
 
@@ -667,13 +669,13 @@ A study app a student would download, with local memory and a concept graph an A
 
 The shell is the storefront. Flashcards and quiz are the study loop. Embeddings, concepts, cross-document links, and a graph-lite view are the memory a later tutor (Version 4) will use instead of rereading every digest. Diagram analysis and citation checks ground that memory in the notes the student already has.
 
-**Status:** Shipped as package **3.0.0** (2026-10-17). The Linux live run is recorded on the [implementation checklist](docs/implementation-checklist.md) and in [`linux-live-run.md`](docs/superpowers/plans/2026-10-17-roadmap-completion/linux-live-run.md). The git tag is not cut in this commit. Tables and emphasis were not proven in a live digest. Do not renumber waves 1–8; they shipped in `2.2.0`. Later `2.x` tags, starting with `2.4.0`, are the slices in [`docs/superpowers/plans/2026-10-17-roadmap-completion/overview.md`](docs/superpowers/plans/2026-10-17-roadmap-completion/overview.md).
+**Status:** Shipped as package **0.3.0** (2026-10-17). The Linux live run is recorded on the [implementation checklist](docs/implementation-checklist.md) and in [`linux-live-run.md`](docs/superpowers/plans/2026-10-17-roadmap-completion/linux-live-run.md). The git tag is not cut in this commit. Tables and emphasis were not proven in a live digest. Do not renumber waves 1–8; they shipped in `0.2.2`. Later `2.x` tags, starting with `0.2.4`, are the slices in [`docs/superpowers/plans/2026-10-17-roadmap-completion/overview.md`](docs/superpowers/plans/2026-10-17-roadmap-completion/overview.md).
 
-**Shipped so far (`v2.1.0`):** desktop shell — [`docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md`](docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md).
+**Shipped so far (`v0.2.1`):** desktop shell — [`docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md`](docs/superpowers/specs/2026-08-22-v3-desktop-shell-design.md).
 
 Implementation program: [`docs/superpowers/plans/2026-08-22-v3-program/overview.md`](docs/superpowers/plans/2026-08-22-v3-program/overview.md). Study artifact format: [`docs/superpowers/specs/2026-08-22-v3-study-artifacts-format.md`](docs/superpowers/specs/2026-08-22-v3-study-artifacts-format.md). Knowledge layer: [`docs/superpowers/specs/2026-08-23-v3-knowledge-layer-design.md`](docs/superpowers/specs/2026-08-23-v3-knowledge-layer-design.md). Closeout: [`docs/superpowers/specs/2026-08-23-v3-closeout-design.md`](docs/superpowers/specs/2026-08-23-v3-closeout-design.md).
 
-Shipped in v2.1.0 (shell only)
+Shipped in v0.2.1 (shell only)
 
 * Professional desktop shell (sidebar, course mode tabs, digest preview, job inspector)
 * In-app settings (watch, auto-run, delete-after-digest, model)
@@ -681,7 +683,7 @@ Shipped in v2.1.0 (shell only)
 * Search overlay navigates to digest preview in Notes mode
 * Flashcards and Quiz tabs were empty at that tag
 
-Shipped in 2.2.0 (PRs #36–#41, #47, #50, #51)
+Shipped in 0.2.2 (PRs #36–#41, #47, #50, #51)
 
 * Study generate jobs, skill protocol, retries
 * Flashcards and quiz generate / refresh / review
@@ -694,15 +696,15 @@ Shipped in 2.2.0 (PRs #36–#41, #47, #50, #51)
 * Local citation checks and Unverified badges
 * Living docs match the app
 
-Required for `v3.0.0`
+Required for `v0.3.0`
 
 Implementation rows on the [implementation checklist](docs/implementation-checklist.md) are done and locally tested, including Notes links and tables, the reserved-directory policy, and digest patch validation. What remains is the Linux live run:
 
 * One clean Linux live run recorded in [`linux-live-run.md`](docs/superpowers/plans/2026-10-17-roadmap-completion/linux-live-run.md) and on that checklist — ingest, study loop, Notes, notifications, Word ingest, and a packaged Linux build
-* Then tag `v3.0.0`
+* Then tag `v0.3.0`
 * Mac proof is optional ([`mac-e2e.md`](docs/superpowers/plans/2026-08-22-v3-program/mac-e2e.md))
 
-GitHub issue [#42](https://github.com/MrF1ow/Arbor/issues/42) is **Notes UX**, not the Wave 8 closeout tracker. Wave 8 (grades, quiz session answers, heading scroll, living docs) already landed in package `2.2.0`. Do not file chat, Anki, extra providers, or a pretty graph canvas against #42.
+GitHub issue [#42](https://github.com/MrF1ow/Arbor/issues/42) is **Notes UX**, not the Wave 8 closeout tracker. Wave 8 (grades, quiz session answers, heading scroll, living docs) already landed in package `0.2.2`. Do not file chat, Anki, extra providers, or a pretty graph canvas against #42.
 
 ### GitHub issues in this version
 
@@ -727,7 +729,7 @@ Original acceptance criteria:
 - `_arbor_cache` never appears in Library navigation.
 - Focused tests for discovery, metadata, course creation, rendering, and scroll structure.
 
-**Already on `main` (package `2.3.0`):** in-app add-class form (`create_course`), overview labels, H1 titles, reserved-directory filtering, nested and ordered lists, emphasis, links, tables, heading ids, in-pane digest links, closing page-marker stripping, and Notes scroll CSS. Row status lives on the [implementation checklist](docs/implementation-checklist.md).
+**Already on `main` (package `0.2.3`):** in-app add-class form (`create_course`), overview labels, H1 titles, reserved-directory filtering, nested and ordered lists, emphasis, links, tables, heading ids, in-pane digest links, closing page-marker stripping, and Notes scroll CSS. Row status lives on the [implementation checklist](docs/implementation-checklist.md).
 
 **Linux live run (2026-10-17):** recorded. The long digest scrolled to the end, and a `course.md` link opened the digest. Tables and emphasis were not in any live digest, so those checklist rows stay open. Mac proof is optional. The 2026-09-12 plan is the record of how the local rows landed: [`docs/superpowers/plans/2026-09-12-v3-notes-gate.md`](docs/superpowers/plans/2026-09-12-v3-notes-gate.md).
 
@@ -739,7 +741,7 @@ Goal:
 
 Personal AI Tutor.
 
-**Status:** Shipped as package `4.0.0` on 2026-10-18. The Version 4 Linux live run is recorded. Tag `v4.0.0` when this release lands. Issue #20 is ready to close. The parent closes it.
+**Status:** Shipped as package `0.4.0` on 2026-10-18. The Version 4 Linux live run is recorded. Tag `v0.4.0` when this release lands. Issue #20 is ready to close. The parent closes it.
 
 New Features
 
@@ -756,7 +758,7 @@ New Features
 
 #### [#20](https://github.com/MrF1ow/Arbor/issues/20) — Knowledge-grounded Codex chat inside Arbor
 
-The Chat tab and chat worker shipped in `v3.1.0` and `v3.2.0`. The 2026-10-18 Linux live run covered the acceptance criteria below on the fixture course Saltmarsh, because Behavioral Medicine was not available. Flashcards, quiz, and graph remain Version 3. They are not a substitute for this issue.
+The Chat tab and chat worker shipped in `v0.3.1` and `v0.3.2`. The 2026-10-18 Linux live run covered the acceptance criteria below on the fixture course Saltmarsh, because Behavioral Medicine was not available. Flashcards, quiz, and graph remain Version 3. They are not a substitute for this issue.
 
 Original core behavior:
 
@@ -785,7 +787,7 @@ Original acceptance criteria:
 
 - A user selects Behavioral Medicine, asks a question grounded in its imported lecture, receives a concise answer with a digest/source citation, and can see when the selected course does not support an answer.
 
-Also deferred to Version 4 (from Version 3 specs, not extra GitHub issues): review scheduling / due dates, make-card-from-selection, multiple AI providers as a tutor companion. Anki export shipped in `v4.3.0` as the first-party skill package (TSV, not `.apkg`). The force-directed graph canvas stays out unless a later spec pulls it in.
+Also deferred to Version 4 (from Version 3 specs, not extra GitHub issues): review scheduling / due dates, make-card-from-selection, multiple AI providers as a tutor companion. Anki export shipped in `v0.4.3` as the first-party skill package (TSV, not `.apkg`). The force-directed graph canvas stays out unless a later spec pulls it in.
 
 ---
 
@@ -795,18 +797,18 @@ Goal:
 
 Collaboration.
 
-**Status:** Version 5 shipped as package `5.0.0` on 2026-10-18. Current package is `5.26.6`. Package `5.1.0` was performance and study-loop responsiveness (issue #97). Linux live run recorded (boxes C1–C6; the skill TSV run stays open, issue #70). Tag `v5.26.6`. Version 4 is closed at `v4.0.0`. Mac proof is optional.
+**Status:** Version 5 shipped as package `0.5.0` on 2026-10-18. Current package is `0.5.35`. Package `0.5.2` was performance and study-loop responsiveness (issue #97). Linux live run recorded (boxes C1–C6; the skill TSV run stays open, issue #70). Tag `v0.5.35`. Version 4 is closed at `v0.4.0`. Mac proof is optional.
 
 Features
 
-* Cloud sync — git remote sync; shipped in `v4.1.0`
-* Shared libraries — shipped in `v4.2.0`
-* Team workspaces — shipped in `v4.2.0`
-* Plugin marketplace — shipped in `v4.3.0` as the same in-repo index (`kind: provider`). Provider rows are listed and are not installed in this package.
-* Skill marketplace — shipped in `v4.3.0` as `marketplace/index.json` in this repo.
-* Shared AI providers — shipped in `v4.4.0`. Shared provider profile is `{id, model}` with no credentials in `library.json`.
-* Permissions — shipped in `v4.4.0`. Role enforcement inside Arbor is advisory; the git host's permissions are the real control.
-* Remote workers — shipped in `v4.5.0`. SSH hosts in Settings; each root defaults to Local or picks a saved host. Course sources are copied up, the worker runs remotely with `--no-commit`, digests and study files come back, and the git commit happens on the local tree. Host keys live in an Arbor-managed file under app data, not in `~/.ssh/known_hosts`.
+* Cloud sync — git remote sync; shipped in `v0.4.1`
+* Shared libraries — shipped in `v0.4.2`
+* Team workspaces — shipped in `v0.4.2`
+* Plugin marketplace — shipped in `v0.4.3` as the same in-repo index (`kind: provider`). Provider rows are listed and are not installed in this package.
+* Skill marketplace — shipped in `v0.4.3` as `marketplace/index.json` in this repo.
+* Shared AI providers — shipped in `v0.4.4`. Shared provider profile is `{id, model}` with no credentials in `library.json`.
+* Permissions — shipped in `v0.4.4`. Role enforcement inside Arbor is advisory; the git host's permissions are the real control.
+* Remote workers — shipped in `v0.4.5`. SSH hosts in Settings; each root defaults to Local or picks a saved host. Course sources are copied up, the worker runs remotely with `--no-commit`, digests and study files come back, and the git commit happens on the local tree. Host keys live in an Arbor-managed file under app data, not in `~/.ssh/known_hosts`.
 
 None of the currently open GitHub issues (#3, #4, #19, #20, #21, #30, #42) belong here. Signing/notarization is release operations whenever Apple secrets exist, not Version 5.
 
@@ -814,7 +816,7 @@ None of the currently open GitHub issues (#3, #4, #19, #20, #21, #30, #42) belon
 
 # Roadmap after Version 5
 
-Version 5 closed at `v5.0.0`. Nothing below is a scheduled package.
+Version 5 closed at `v0.5.0`. Nothing below is a scheduled package.
 
 ## Carried forward
 
@@ -834,11 +836,11 @@ Version 5 closed at `v5.0.0`. Nothing below is a scheduled package.
 * Zotero integration
 * Obsidian exporter
 * Notion exporter
-* Anki `.apkg` export. The TSV skill shipped in `v4.3.0`.
+* Anki `.apkg` export. The TSV skill shipped in `v0.4.3`.
 
 ## Open issues to carry
 
-* [#70](https://github.com/MrF1ow/Arbor/issues/70) — Folder picker never accepts Open under Xvfb/X11. The v5.0.0 live run reproduced it: Ctrl+L took a typed path, and Open, Cancel, and Escape left the dialog up. The Anki skill run never wrote its TSV.
+* [#70](https://github.com/MrF1ow/Arbor/issues/70) — Folder picker never accepts Open under Xvfb/X11. The v0.5.0 live run reproduced it: Ctrl+L took a typed path, and Open, Cancel, and Escape left the dialog up. The Anki skill run never wrote its TSV.
 * [#88](https://github.com/MrF1ow/Arbor/issues/88) — Skill marketplace hardening: set `hooksPath` to `/dev/null` on the skill clone, refuse symlinks under `$XDG_DATA_HOME/arbor`, sanitize the index ref, clear "Skill run started" when the run finishes, stop showing Confirm/Run on provider-kind rows, and consider `.apkg`.
 
 ---

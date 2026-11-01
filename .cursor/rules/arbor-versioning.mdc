@@ -5,81 +5,84 @@ alwaysApply: true
 
 # Arbor versioning
 
-**Product milestones** (Version 1, 2, 3 in `PROJECT.md`) describe eras of capability. **Package/git tags** (`v2.0.0`, `v2.1.0`, `v3.0.0`) track shipped releases.
+**Product milestones** (Version 1, 2, 3 in `PROJECT.md`) describe eras of capability. **Package/git tags** (`v0.2.0`, `v0.2.1`, `v0.3.0`) track shipped releases.
 
 ## Rules
 
-1. **`v2.0.0` = Version 2 complete** — automation and discoverability (jobs, FTS, watch, OCR, Word). The old single-column UI. Do not re-open v2 scope.
+1. **`v0.2.0` = Version 2 complete** — automation and discoverability (jobs, FTS, watch, OCR, Word). The old single-column UI. Do not re-open v2 scope.
 
-2. **Version 3 shipped as `v3.0.0`.** Work toward Version 3 shipped as **`v2.1.0`, `v2.2.0`, `v2.3.0`, `v2.4.0`, `v2.5.0`**. Package `v2.1.0` was the first step after Version 2.
+2. **Version 3 shipped as `v0.3.0`.** Work toward Version 3 shipped as **`v0.2.1`, `v0.2.2`, `v0.2.3`, `v0.2.4`, `v0.2.5`**. Package `v0.2.1` was the first step after Version 2.
 
-3. **`v3.0.0` is the Version 3 completion package** — the features listed under Version 3 in `PROJECT.md` (shell, flashcards, quiz, concepts, diagrams, citations, cross-document linking, knowledge graph, embeddings, semantic search) and the 2026-10-17 Linux live run on the [implementation checklist](docs/implementation-checklist.md). Mac proof does not block the tag. The git tag is cut when the release lands. Two Notes constructs (tables, emphasis) were not in any live digest.
+3. **`v0.3.0` is the Version 3 completion package** — the features listed under Version 3 in `PROJECT.md` (shell, flashcards, quiz, concepts, diagrams, citations, cross-document linking, knowledge graph, embeddings, semantic search) and the 2026-10-17 Linux live run on the [implementation checklist](docs/implementation-checklist.md). Mac proof does not block the tag. The git tag is cut when the release lands. Two Notes constructs (tables, emphasis) were not in any live digest.
 
-4. **Version 4 shipped as `v4.0.0`.** Work toward Version 4 shipped as **`v3.1.0`, `v3.2.0`, `v3.3.0`, `v3.4.0`, `v3.5.0`**. The 2026-10-18 Linux live run closed it. Issue #20 stays open until the parent closes it after `v4.0.0`. **Version 5 is in progress.** It ships as **`v4.1.0`, `v4.2.0`, …** until `v5.0.0`.
+4. **Version 4 shipped as `v0.4.0`.** Work toward Version 4 shipped as **`v0.3.1`, `v0.3.2`, `v0.3.3`, `v0.3.4`, `v0.3.5`**. The 2026-10-18 Linux live run closed it. Issue #20 stays open until the parent closes it after `v0.4.0`. **Version 5 is in progress.** It ships as **`v0.4.1`, `v0.4.2`, …** until `v0.5.0`.
 
 5. **CHANGELOG and package versions stay aligned** across worker, desktop, and Tauri (`python/src/arbor_worker/__init__.py`, `pyproject.toml`, `desktop/package.json`, `Cargo.toml`, `tauri.conf.json`). `arbor-worker --version` reads `__init__.py`.
 
-6. **Version gates** live in [`docs/implementation-checklist.md`](docs/implementation-checklist.md). Local/VM tests gate every merge. A Linux live run gates the product-version tags (`v3.0.0`, `v4.0.0`, …). Mac batches are optional and never block a tag. Do not live-test every small feature. Do not start the next product version until the current version’s Linux live run is recorded.
+6. **Version gates** live in [`docs/implementation-checklist.md`](docs/implementation-checklist.md). Local/VM tests gate every merge. A Linux live run gates the product-version tags (`v0.3.0`, `v0.4.0`, …). Mac batches are optional and never block a tag. Do not live-test every small feature. Do not start the next product version until the current version’s Linux live run is recorded.
 
-7. **Version 6 is in progress.** It ships as **`v5.2.0`, `v5.3.0`, …** until `v6.0.0`. `v6.0.0` is the UI cutover (plan row 16). Do not tag `v6.0.0` before that row lands.
+7. **Version 6 is in progress.** It ships as **`v0.5.3`, `v0.5.4`, …** until `v0.6.0`. `v0.6.0` is the UI cutover (plan row 16). Do not tag `v0.6.0` before that row lands.
 
-## Current state (2026-10-20)
+8. **Stay below 1.0.** Tags are `v0.MINOR.PATCH`. MINOR is the product version: Version N completes at `v0.N.0`. Every release on the way to the next Version bumps PATCH (`v0.5.36`, `v0.5.37`, …), features and fixes alike. Never tag `v1.0.0` or higher unless the owner asks for it. On 2026-11-01 every tag was renumbered: old major X became `0.X` with releases numbered in order (`v1.0.0` → `v0.1.0`, `v2.1.0` → `v0.2.1`, `v5.26.5` → `v0.5.34`, untagged 5.26.6 → `v0.5.35`; the old `v0.1.0`/`v0.2.0` pre-releases became `v0.0.1`/`v0.0.2`). Same commits. Older docs and plans under `docs/` may still use the old numbers.
+
+## Current state (2026-11-01)
 
 | Tag | Product | Notes |
 |-----|---------|-------|
-| `v2.0.0` | Version 2 | Shipped |
-| `v2.1.0` | Version 3 (partial) | Desktop shell |
-| `v2.2.0` | Version 3 study loop | Waves 1–8. Do not invent `v2.4.0`–`v2.8.0` for those wave PRs #36–#41. |
-| `v2.3.0` | Version 3 fixes | Mac-batch fixes from issue #57, Notes leftovers, path confinement and CSP. |
-| `v2.4.0` | Version 3 (partial) | Tree mark; Linux live-run gate. |
-| `v2.5.0` | Version 3 (partial) | CLI provider registry. |
-| `v3.0.0` | Version 3 | Shipped, tagged. Linux live run recorded 2026-10-17. |
-| `v3.1.0` | Version 4 in progress | Grounded chat worker. Tagged. |
-| `v3.2.0` | Version 4 in progress | Chat tab. Tagged. |
-| `v3.3.0` | Version 4 in progress | Review scheduling and weak topics. Tagged. |
-| `v3.4.0` | Version 4 in progress | Study plans, recommendations, and make-card-from-selection. Tagged. |
-| `v3.5.0` | Version 4 (partial) | API and local providers: Ollama, LM Studio, OpenAI API, Anthropic API. Tagged. |
-| `v4.0.0` | Version 4 | Shipped. Linux live run recorded 2026-10-18. Tagged. |
-| `v4.1.0` | Version 5 in progress | Git remote sync. Package `4.1.0`. Tagged. |
-| `v4.2.0` | Version 5 in progress | Shared libraries and team workspaces. Package `4.2.0`. Tagged (`6c31a30`). |
-| `v4.3.0` | Version 5 in progress | Skill packages and marketplace (in-repo index). Package `4.3.0`. Not tagged yet. |
-| `v4.4.0` | Version 5 in progress | Library roles and shared provider profiles. Package `4.4.0`. Tagged. |
-| `v4.5.0` | Version 5 (partial) | Remote workers over SSH. Package `4.5.0`. Not tagged yet. |
-| `v5.0.0` | Version 5 | Shipped. Linux live run recorded 2026-10-18. Package `5.0.0`. Not tagged yet. |
-| `v5.0.1` | Version 5 (patch) | macOS worker signing, PATH, auth UX ([#95](https://github.com/MrF1ow/Arbor/issues/95)). Package `5.0.1`. Not tagged yet. |
-| `v5.1.0` | Version 5 (perf) | Desktop responsiveness and study loop ([#97](https://github.com/MrF1ow/Arbor/issues/97)). Package `5.1.0`. Not tagged yet. |
-| `v5.2.0` | Version 6 in progress | 6.0 UI plan and Arbor Paper design. Package `5.2.0`. Tagged. UI cutover stays `6.0.0`. |
-| `v5.3.0` | Version 6 in progress | React toolchain for the 6.0 UI. Package `5.3.0`. Tagged. UI cutover stays `6.0.0`. |
-| `v5.4.0` | Version 6 in progress | Arbor Paper tokens, theme, and style guard. Package `5.4.0`. Tagged. UI cutover stays `6.0.0`. |
-| `v5.5.0` | Version 6 in progress | component primitives. Package `5.5.0`. Tagged. UI cutover stays `6.0.0`. |
-| `v5.6.0` | Version 6 in progress | desktop data layer. Package `5.6.0`. Tagged. UI cutover stays `6.0.0`. |
-| `v5.7.0` | Version 6 in progress | app shell. Package `5.7.0`. Tagged. UI cutover stays `6.0.0`. |
-| `v5.8.0` | Version 6 in progress | welcome and library. Package `5.8.0`. Tagged. UI cutover stays `6.0.0`. |
-| `v5.9.0` | Version 6 in progress | notes and Overview. Package `5.9.0`. Tagged. UI cutover stays `6.0.0`. |
-| `v5.10.0` | Version 6 in progress | flashcards. Package `5.10.0`. Tagged. UI cutover stays `6.0.0`. |
-| `v5.11.0` | Version 6 in progress | quiz. Package `5.11.0`. Tagged. UI cutover stays `6.0.0`. |
-| `v5.12.0` | Version 6 in progress | concept graph. Package `5.12.0`. Tagged. UI cutover stays `6.0.0`. |
-| `v5.13.0` | Version 6 in progress | chat. Package `5.13.0`. Tagged. UI cutover stays `6.0.0`. |
-| `v5.14.0` | Version 6 in progress | search palette. Package `5.14.0`. Tagged. UI cutover stays `6.0.0`. |
-| `v5.15.0` | Version 6 in progress | jobs page. Package `5.15.0`. Tagged. UI cutover stays `6.0.0`. |
-| `v5.16.0` | Version 6 in progress | settings core. Package `5.16.0`. Tagged. UI cutover stays `6.0.0`. |
-| `v5.17.0` | Version 6 in progress | settings sharing. Package `5.17.0`. Tagged. UI cutover stays `6.0.0`. |
-| `v5.18.0` | Version 6 in progress | wait for the real provider before auth probes. Package `5.18.0`. Tagged. UI cutover stays `6.0.0`. |
-| `v5.19.0` | Version 6 in progress | chat fixes: no chat quiz mode, list numbering, selection, scroll. Package `5.19.0`. Tagged. UI cutover stays `6.0.0`. |
-| `v5.20.0` | Version 6 in progress | stream chat answers. Package `5.20.0`. Tagged. UI cutover stays `6.0.0`. |
-| `v5.21.0` | Version 6 in progress | stored chat threads. Package `5.21.0`. Tagged. UI cutover stays `6.0.0`. |
-| `v5.22.0` | Version 6 in progress | composer mode chip, slash commands, macOS dictation. Package `5.22.0`. Tagged. UI cutover stays `6.0.0`. |
-| `v5.23.0` | Version 6 in progress | flashcards and quiz resume where you left off. Package `5.23.0`. Tagged. UI cutover stays `6.0.0`. |
-| `v5.24.0` | Version 6 in progress | course icons. Package `5.24.0`. Tagged. UI cutover stays `6.0.0`. |
-| `v5.25.0` | Version 6 in progress | provider usage popover. Package `5.25.0`. Tagged. UI cutover stays `6.0.0`. |
-| `v5.25.1` | Version 6 in progress | fix a flaky auth cache test. Package `5.25.1`. Tagged. UI cutover stays `6.0.0`. |
-| `v5.25.2` | Version 6 in progress | fix Codex and Claude usage. Package `5.25.2`. Tagged. UI cutover stays `6.0.0`. |
-| `v5.26.0` | Version 6 in progress | native macOS dictation. Package `5.26.0`. Tagged. UI cutover stays `6.0.0`. |
-| `v5.26.1` | Version 6 in progress | patch: dictated text no longer disappears on stop. Package `5.26.1`. Tagged. UI cutover stays `6.0.0`. |
-| `v5.26.2` | Version 6 in progress | patch: silent macOS dictation and course header icon alignment. Package `5.26.2`. Tagged. UI cutover stays `6.0.0`. |
-| `v5.26.3` | Version 6 in progress | patch: skill marketplace hardening (issue #88). Package `5.26.3`. Tagged. UI cutover stays `6.0.0`. |
-| `v5.26.4` | Version 6 in progress | patch: readable provider rate-limit and quota errors (issue #116). Package `5.26.4`. Tagged. UI cutover stays `6.0.0`. |
-| `v5.26.5` | Version 6 in progress | patch: folder pickers start in the home folder (issue #70). Package `5.26.5`. Not tagged yet. UI cutover stays `6.0.0`. |
-| `v5.26.6` | Version 6 in progress | patch: macOS dictation writes the transcript. Package `5.26.6`. Not tagged yet. UI cutover stays `6.0.0`. |
+| `v0.2.0` | Version 2 | Shipped |
+| `v0.2.1` | Version 3 (partial) | Desktop shell |
+| `v0.2.2` | Version 3 study loop | Waves 1–8. Do not invent `v0.2.4`–`v2.8.0` for those wave PRs #36–#41. |
+| `v0.2.3` | Version 3 fixes | Mac-batch fixes from issue #57, Notes leftovers, path confinement and CSP. |
+| `v0.2.4` | Version 3 (partial) | Tree mark; Linux live-run gate. |
+| `v0.2.5` | Version 3 (partial) | CLI provider registry. |
+| `v0.3.0` | Version 3 | Shipped, tagged. Linux live run recorded 2026-10-17. |
+| `v0.3.1` | Version 4 in progress | Grounded chat worker. Tagged. |
+| `v0.3.2` | Version 4 in progress | Chat tab. Tagged. |
+| `v0.3.3` | Version 4 in progress | Review scheduling and weak topics. Tagged. |
+| `v0.3.4` | Version 4 in progress | Study plans, recommendations, and make-card-from-selection. Tagged. |
+| `v0.3.5` | Version 4 (partial) | API and local providers: Ollama, LM Studio, OpenAI API, Anthropic API. Tagged. |
+| `v0.4.0` | Version 4 | Shipped. Linux live run recorded 2026-10-18. Tagged. |
+| `v0.4.1` | Version 5 in progress | Git remote sync. Package `0.4.1`. Tagged. |
+| `v0.4.2` | Version 5 in progress | Shared libraries and team workspaces. Package `0.4.2`. Tagged (`6c31a30`). |
+| `v0.4.3` | Version 5 in progress | Skill packages and marketplace (in-repo index). Package `0.4.3`. Not tagged yet. |
+| `v0.4.4` | Version 5 in progress | Library roles and shared provider profiles. Package `0.4.4`. Tagged. |
+| `v0.4.5` | Version 5 (partial) | Remote workers over SSH. Package `0.4.5`. Not tagged yet. |
+| `v0.5.0` | Version 5 | Shipped. Linux live run recorded 2026-10-18. Package `0.5.0`. Not tagged yet. |
+| `v0.5.1` | Version 5 (patch) | macOS worker signing, PATH, auth UX ([#95](https://github.com/MrF1ow/Arbor/issues/95)). Package `0.5.1`. Not tagged yet. |
+| `v0.5.2` | Version 5 (perf) | Desktop responsiveness and study loop ([#97](https://github.com/MrF1ow/Arbor/issues/97)). Package `0.5.2`. Not tagged yet. |
+| `v0.5.3` | Version 6 in progress | 6.0 UI plan and Arbor Paper design. Package `0.5.3`. Tagged. |
+| `v0.5.4` | Version 6 in progress | React toolchain for the 6.0 UI. Package `0.5.4`. Tagged. |
+| `v0.5.5` | Version 6 in progress | Arbor Paper tokens, theme, and style guard. Package `0.5.5`. Tagged. |
+| `v0.5.6` | Version 6 in progress | component primitives. Package `0.5.6`. Tagged. |
+| `v0.5.7` | Version 6 in progress | desktop data layer. Package `0.5.7`. Tagged. |
+| `v0.5.8` | Version 6 in progress | app shell. Package `0.5.8`. Tagged. |
+| `v0.5.9` | Version 6 in progress | welcome and library. Package `0.5.9`. Tagged. |
+| `v0.5.10` | Version 6 in progress | notes and Overview. Package `0.5.10`. Tagged. |
+| `v0.5.11` | Version 6 in progress | flashcards. Package `0.5.11`. Tagged. |
+| `v0.5.12` | Version 6 in progress | quiz. Package `0.5.12`. Tagged. |
+| `v0.5.13` | Version 6 in progress | concept graph. Package `0.5.13`. Tagged. |
+| `v0.5.14` | Version 6 in progress | chat. Package `0.5.14`. Tagged. |
+| `v0.5.15` | Version 6 in progress | search palette. Package `0.5.15`. Tagged. |
+| `v0.5.16` | Version 6 in progress | jobs page. Package `0.5.16`. Tagged. |
+| `v0.5.17` | Version 6 in progress | settings core. Package `0.5.17`. Tagged. |
+| `v0.5.18` | Version 6 in progress | settings sharing. Package `0.5.18`. Tagged. |
+| `v0.5.19` | Version 6 in progress | wait for the real provider before auth probes. Package `0.5.19`. Tagged. |
+| `v0.5.20` | Version 6 in progress | chat fixes: no chat quiz mode, list numbering, selection, scroll. Package `0.5.20`. Tagged. |
+| `v0.5.21` | Version 6 in progress | stream chat answers. Package `0.5.21`. Tagged. |
+| `v0.5.22` | Version 6 in progress | stored chat threads. Package `0.5.22`. Tagged. |
+| `v0.5.23` | Version 6 in progress | composer mode chip, slash commands, macOS dictation. Package `0.5.23`. Tagged. |
+| `v0.5.24` | Version 6 in progress | flashcards and quiz resume where you left off. Package `0.5.24`. Tagged. |
+| `v0.5.25` | Version 6 in progress | course icons. Package `0.5.25`. Tagged. |
+| `v0.5.26` | Version 6 in progress | provider usage popover. Package `0.5.26`. Tagged. |
+| `v0.5.27` | Version 6 in progress | fix a flaky auth cache test. Package `0.5.27`. Tagged. |
+| `v0.5.28` | Version 6 in progress | fix Codex and Claude usage. Package `0.5.28`. Tagged. |
+| `v0.5.29` | Version 6 in progress | native macOS dictation. Package `0.5.29`. Tagged. |
+| `v0.5.30` | Version 6 in progress | patch: dictated text no longer disappears on stop. Package `0.5.30`. Tagged. |
+| `v0.5.31` | Version 6 in progress | patch: silent macOS dictation and course header icon alignment. Package `0.5.31`. Tagged. |
+| `v0.5.32` | Version 6 in progress | patch: skill marketplace hardening (issue #88). Package `0.5.32`. Tagged. |
+| `v0.5.33` | Version 6 in progress | patch: readable provider rate-limit and quota errors (issue #116). Package `0.5.33`. Tagged. |
+| `v0.5.34` | Version 6 in progress | patch: folder pickers start in the home folder (issue #70). Package `0.5.34`. Tagged. |
+| `v0.5.35` | Version 6 in progress | patch: macOS dictation writes the transcript. Package `0.5.35`. Tagged (no DMG). |
+| `v0.5.36` | Version 6 in progress | renumber all releases below 1.0; first DMG with the dictation fix. Package `0.5.36`. Tagged. |
 
-Program: `docs/superpowers/plans/2026-08-22-v3-program/overview.md`. Gates: `docs/implementation-checklist.md`. Live runs: `docs/superpowers/plans/2026-10-17-roadmap-completion/linux-live-run.md`. `mac-e2e.md` is optional. Version 4 shipped at `v4.0.0`. Version 5 shipped at `v5.0.0`. This package is `5.26.6`.
+Program: `docs/superpowers/plans/2026-08-22-v3-program/overview.md`. Gates: `docs/implementation-checklist.md`. Live runs: `docs/superpowers/plans/2026-10-17-roadmap-completion/linux-live-run.md`. `mac-e2e.md` is optional. Version 4 shipped at `v0.4.0`. Version 5 shipped at `v0.5.0`. This package is `0.5.36`.

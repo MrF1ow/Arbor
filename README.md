@@ -4,15 +4,15 @@
 
 Local-first desktop app that turns course PDFs, PowerPoints, and Word files into structured study digests using CLI providers (Codex CLI, Claude Code, Grok CLI), local models (Ollama, LM Studio), or cloud APIs (OpenAI API, Anthropic API). Your Knowledge library is a normal git repo on disk. Sources and generated notes stay together in history.
 
-**Current release:** [5.26.6](CHANGELOG.md) (package `5.26.6`; tag `v5.26.6`). Version 5 (collaboration) is closed. `v4.5.0` is remote workers over SSH and is cut when that release lands. `v4.4.0` is tagged. The 2026-10-18 Linux live run (boxes C1–C6, and the earlier tutor boxes T1–T7) is recorded on the [implementation checklist](docs/implementation-checklist.md). Worker, desktop, and Tauri all report this number (`arbor-worker --version`). Arbor's viewer limits are advisory; the git host's permissions are the real control. Tables and emphasis were not in any Version 3 live digest. The skill TSV run is still open (issue #70).
+**Current release:** [0.5.36](CHANGELOG.md) (package `0.5.36`; tag `v0.5.36`). Releases stay below 1.0: Version N completes at `v0.N.0`, so the Version 6 UI cutover is `v0.6.0`. Version 5 (collaboration) is closed. The 2026-10-18 Linux live run (boxes C1–C6, and the earlier tutor boxes T1–T7) is recorded on the [implementation checklist](docs/implementation-checklist.md). Worker, desktop, and Tauri all report this number (`arbor-worker --version`). Arbor's viewer limits are advisory; the git host's permissions are the real control. Tables and emphasis were not in any Version 3 live digest. The skill TSV run is still open (issue #70).
 
-**Version 2** (`v2.0.0`) shipped automation on the old UI. **Version 3** shipped as `3.0.0`. `v2.1.0` added the desktop shell. `2.2.0` adds the study loop. `2.3.0` is the fix release after that. **`2.4.0`** is the brand and gate release (tree mark and Linux live-run tag gate). **`2.5.0`** adds Codex, Claude, and Grok CLI providers with a Settings picker. **Version 4** shipped as `v3.1.0` through `v3.5.0` and closed at the Version 4 completion tag (CHANGELOG). **Version 5** shipped as `v4.1.0` through `v4.5.0` and closed at `v5.0.0`. Mac runs are optional and do not block a tag. See [Version numbering](PROJECT.md#version-numbering).
+**Version 2** (`v0.2.0`) shipped automation on the old UI. **Version 3** shipped as `0.3.0`. `v0.2.1` added the desktop shell. `0.2.2` adds the study loop. `0.2.3` is the fix release after that. **`0.2.4`** is the brand and gate release (tree mark and Linux live-run tag gate). **`0.2.5`** adds Codex, Claude, and Grok CLI providers with a Settings picker. **Version 4** shipped as `v0.3.1` through `v0.3.5` and closed at the Version 4 completion tag (CHANGELOG). **Version 5** shipped as `v0.4.1` through `v0.4.5` and closed at `v0.5.0`. Mac runs are optional and do not block a tag. See [Version numbering](PROJECT.md#version-numbering).
 
-## What's in 2.5.0
+## What's in 0.2.5
 
 Provider registry with Codex CLI, Claude Code CLI, and Grok CLI behind one worker interface. Settings picks **Provider** above **Model**; the top bar shows the selected provider's auth state and docs link.
 
-Package **2.4.0** was the tree mark and Linux live-run gate release. Package **3.0.0** records that run.
+Package **0.2.4** was the tree mark and Linux live-run gate release. Package **0.3.0** records that run.
 
 For later milestones, see [`PROJECT.md`](PROJECT.md). The original V1 design (`lecture.md` per lecture) is historical: [`docs/superpowers/specs/2026-08-02-arbor-v1-design.md`](docs/superpowers/specs/2026-08-02-arbor-v1-design.md). Living layout is course folders, dated `digests/`, and `arbor-course.json`.
 
@@ -24,7 +24,7 @@ Install the [Codex CLI](https://developers.openai.com/codex/cli) yourself and lo
 
 Clone and run from source for Linux, or to develop.
 
-## What's in 2.1.0 (Version 3 shell)
+## What's in 0.2.1 (Version 3 shell)
 
 | Area | What you can do |
 |------|-----------------|
@@ -39,9 +39,9 @@ Clone and run from source for Linux, or to develop.
 | Settings | Watch, auto-run, delete-after-digest, and model in the app. |
 | Notify | macOS notification when a job finishes. |
 
-## What's in 2.2.0 (Version 3 study loop)
+## What's in 0.2.2 (Version 3 study loop)
 
-The 2.1.0 shell plus:
+The 0.2.1 shell plus:
 
 | Area | What you can do |
 |------|-----------------|
@@ -53,9 +53,9 @@ The 2.1.0 shell plus:
 | Source chips | Open Notes and scroll to the cited heading when that heading id exists. |
 | Library | Add a class and lecture files from the sidebar. Appearance lives in Settings. |
 
-## What's in 2.3.0
+## What's in 0.2.3
 
-The 2.2.0 study loop, plus the fixes from the 2026-09-20 Mac batch and tighter desktop file handling.
+The 0.2.2 study loop, plus the fixes from the 2026-09-20 Mac batch and tighter desktop file handling.
 
 | Area | What changed |
 |------|----------------|
@@ -67,7 +67,7 @@ The 2.2.0 study loop, plus the fixes from the 2026-09-20 Mac batch and tighter d
 | Desktop | File reads stay inside the Knowledge root. AI text is escaped. A content security policy is set. |
 | Notify | The default capability includes `notification:default`. |
 
-**`v3.0.0` is tagged.** Package **`3.1.0`** is the chat-worker release; **`3.2.0`** is the Chat tab; **`3.3.0`** is review scheduling and weak topics; **`3.4.0`** is study plans, recommendations, and make-card-from-selection; **`3.5.0`** is API and local providers. All of those are tagged. The Version 4 completion package closes the tutor after the 2026-10-18 Linux live run (CHANGELOG). Codex CLI is still a separate install. The gate list is the [implementation checklist](docs/implementation-checklist.md).
+**`v0.3.0` is tagged.** Package **`0.3.1`** is the chat-worker release; **`0.3.2`** is the Chat tab; **`0.3.3`** is review scheduling and weak topics; **`0.3.4`** is study plans, recommendations, and make-card-from-selection; **`0.3.5`** is API and local providers. All of those are tagged. The Version 4 completion package closes the tutor after the 2026-10-18 Linux live run (CHANGELOG). Codex CLI is still a separate install. The gate list is the [implementation checklist](docs/implementation-checklist.md).
 
 ---
 
@@ -322,7 +322,7 @@ cd src-tauri && cargo build
 ```
 Arbor/
 ├── README.md           # this file
-├── CHANGELOG.md        # package releases (2.0.0, …)
+├── CHANGELOG.md        # package releases (0.2.0, …)
 ├── PROJECT.md          # vision and Version 1–5 roadmap
 ├── scripts/            # sidecar bundle helper for the macOS DMG
 ├── python/             # arbor-worker CLI and pipeline
