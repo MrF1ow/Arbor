@@ -1,6 +1,6 @@
 # Version 3 Notes gate Implementation Plan
 
-> **Status (2026-10-17):** Landed. Links, tables, reserved names, and patch validation are on `main` in `v2.3.0` and locally tested. Do not execute these tasks. Mac proof is still open in [mac-e2e.md](2026-08-22-v3-program/mac-e2e.md). Versioning: [`.cursor/rules/arbor-versioning.mdc`](../../../.cursor/rules/arbor-versioning.mdc).
+> **Status (2026-10-17):** Landed. Links, tables, reserved names, and patch validation are on `main` in `v0.2.3` and locally tested. Do not execute these tasks. Mac proof is still open in [mac-e2e.md](2026-08-22-v3-program/mac-e2e.md). Versioning: [`.cursor/rules/arbor-versioning.mdc`](../../../.cursor/rules/arbor-versioning.mdc).
 
 > **For agentic workers:** This plan is a record. The checkboxes below were the original task list. Do not implement them again.
 
@@ -13,8 +13,8 @@
 ## Global Constraints
 
 - Do not implement Version 4 chat (issue #20). That era is blocked until the Version 3 Mac batch is recorded.
-- Do not tag `v3.0.0` from this plan. This plan only clears **local** gates. The Mac batch in `mac-e2e.md` is a human/MacBook step after merge.
-- Do not publish package `3.1.0` or `3.2.0`. Land on current package `2.2.0` Unreleased (or `2.3.0` only if `v2.2.0` is already tagged).
+- Do not tag `v0.3.0` from this plan. This plan only clears **local** gates. The Mac batch in `mac-e2e.md` is a human/MacBook step after merge.
+- Do not publish package `0.3.1` or `0.3.2`. Land on current package `0.2.2` Unreleased (or `0.2.3` only if `v0.2.2` is already tagged).
 - Do not execute digest HTML. Link hrefs must reject `javascript:` and `data:`.
 - Markdown remains the source of truth. Do not change digest filenames.
 - After each task, update the matching rows in `docs/implementation-checklist.md` Implemented / Local/VM columns.
@@ -370,4 +370,4 @@ git add docs/implementation-checklist.md CHANGELOG.md
 git commit -m "docs: mark Version 3 Notes leftovers locally tested"
 ```
 
-Do **not** start issue #20. Do **not** tag `v3.0.0`. Hand the Mac batch in `mac-e2e.md` to a MacBook when this branch is on `main`.
+Do **not** start issue #20. Do **not** tag `v0.3.0`. Hand the Mac batch in `mac-e2e.md` to a MacBook when this branch is on `main`.

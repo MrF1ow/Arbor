@@ -1,6 +1,6 @@
 # Issue #97: main-thread worker waits and repeated worker startup
 
-Status: **analysis done 2026-10-18, plan ready**. Target releases: **5.1.0** (phases 1–2), **5.2.0** (phases 3–4). Scope: `desktop/src-tauri`, `python/`, `scripts/`, small `desktop/src/main.ts` edits. It doesn't depend on the 6.0.0 UI rebuild (`2026-10-18-ui-architecture.md`). See §7 for how the two fit together.
+Status: **analysis done 2026-10-18, plan ready**. Target releases: **0.5.2** (phases 1–2), **0.5.3** (phases 3–4). Scope: `desktop/src-tauri`, `python/`, `scripts/`, small `desktop/src/main.ts` edits. It doesn't depend on the 0.6.0 UI rebuild (`2026-10-18-ui-architecture.md`). See §7 for how the two fit together.
 
 ---
 
@@ -74,7 +74,7 @@ The worker is packaged as onedir inside the app bundle.
 - `macos-dmg.yml`: build both a onefile and an onedir worker, run the bench on both, and upload the results as an artifact. **This is the macOS proof for Phase 2.** Continue only if onedir's macOS median is ≤ 1 s. Otherwise go straight to Phase 3 and keep onefile for jobs.
 - Rust: a `debug`-level log line per command with its duration (`ARBOR_PERF=1`), so latency can be read from the packaged app's log.
 
-### Phase 1: get the main thread free (fixes the beachball) → 5.1.0
+### Phase 1: get the main thread free (fixes the beachball) → 0.5.2
 
 Files: `desktop/src-tauri/src/commands.rs`, `worker.rs`, `lib.rs`, `Cargo.toml`.
 
@@ -89,7 +89,7 @@ Regression checks:
 - A Python test where two concurrent grades both persist.
 - Manual check on macOS: set `ARBOR_WORKER` to a `sleep 10` script, open Settings, then move and resize the window and switch tabs. There should be no beachball.
 
-### Phase 2: onedir packaging → 5.1.0 (if Phase 0 passes)
+### Phase 2: onedir packaging → 0.5.2 (if Phase 0 passes)
 
 Files: `scripts/bundle-worker.sh`, `desktop/src-tauri/tauri.bundle.json`, `worker.rs` (`packaged_sidecar`), `scripts/smoke-macos-bundle.sh`, `release-macos.yml`, `macos-dmg.yml`.
 
@@ -98,7 +98,7 @@ Files: `scripts/bundle-worker.sh`, `desktop/src-tauri/tauri.bundle.json`, `worke
 - Expect the DMG to grow from ~77 MB to ~173 MB uncompressed, which is less after DMG compression. To cut size, drop `--collect-all pymupdf` in favor of `--collect-binaries pymupdf` plus the data files we actually need. Measure the result.
 - Smoke script: assert the `--version` median is < 1 s (macOS) as a **performance gate**, not just a correctness gate.
 
-### Phase 3: persistent worker for short requests → 5.2.0
+### Phase 3: persistent worker for short requests → 0.5.3
 
 Python (`python/src/arbor_worker/serve.py`, new):
 - `arbor-worker serve` reads one JSON request per line from stdin: `{"id", "argv", "env"}`. It writes one response line `{"id", "exit", "stdout", "stderr"}`. It reuses `cli.main(argv)` with `contextlib.redirect_stdout/stderr` and catches `SystemExit`, so **no command code changes**. The measurements in §2 used exactly this mechanism.
@@ -120,7 +120,7 @@ Regression checks:
 - A Python test for `serve` round-trips and isolation: env vars don't leak between requests, and a `SystemExit` comes back as an exit code.
 - Bench target: warm `library-show` and `study-progress grade` under 50 ms end-to-end through Tauri on macOS.
 
-### Phase 4: do less work → 5.2.0
+### Phase 4: do less work → 0.5.3
 
 Files: `desktop/src/main.ts`, `python/src/arbor_worker/commands.py`, `cli.py`.
 
@@ -165,6 +165,6 @@ Run each 10 times and record median and p90. The cold run is the first run after
 - **Persistent-worker state leaks** (module-level caches, env). Mitigation: per-request env restore, an allow-list of read and small-write commands, the idle exit, and the `NO_SERVE` escape hatch.
 - **Stale caches in the UI.** Mitigation: invalidate on the existing `start_folder_watch` events, on root switch, and after any write command. TTL only for auth and provider status.
 
-## 7. Relation to the 6.0.0 UI rebuild
+## 7. Relation to the 0.6.0 UI rebuild
 
-Phases 1–3 sit entirely in Rust and Python. They carry over to the React UI unchanged, and they are what make react-query's caching actually fast. Phase 4's `main.ts` edits are deliberately small: TTL, `Promise.all`, model reuse, and the optimistic grade. In 6.0.0 they become react-query `staleTime` and `invalidateQueries` settings. Don't wait for 6.0.0 to fix this.
+Phases 1–3 sit entirely in Rust and Python. They carry over to the React UI unchanged, and they are what make react-query's caching actually fast. Phase 4's `main.ts` edits are deliberately small: TTL, `Promise.all`, model reuse, and the optimistic grade. In 0.6.0 they become react-query `staleTime` and `invalidateQueries` settings. Don't wait for 0.6.0 to fix this.

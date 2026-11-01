@@ -6,7 +6,7 @@
 
 ## Context
 
-0.2.0 on `main` is the Version 1 loop. A classmate still cannot download an app. Partial ingest of pages 3–4 stores the whole-file hash, so leftover pages look current. A two-digest rollup failure leaves digest files with no `arbor-course.json`. Confirm does not re-check auth.
+0.0.2 on `main` is the Version 1 loop. A classmate still cannot download an app. Partial ingest of pages 3–4 stores the whole-file hash, so leftover pages look current. A two-digest rollup failure leaves digest files with no `arbor-course.json`. Confirm does not re-check auth.
 
 This VM is Linux. It cannot produce a notarized `.dmg`. The packaging phase lands sidecar wiring plus a `macos-latest` workflow. The first downloadable file comes from that workflow, not from this agent.
 
@@ -64,4 +64,4 @@ DMG: GitHub Actions `macos-latest` artifact. Flag: no `control-ui` on this Linux
 - **how** over `planning.py`, `pipeline.py`, and `worker.rs` before edits
 - **prove-it-works:** pytest for coverage and synthesis; Rust unit test for sidecar argv
 - `/deslop` before commit. **unslop** README and CHANGELOG
-- Do not bump package version to 1.0.0 until a DMG artifact exists
+- Do not bump package version to 0.1.0 until a DMG artifact exists

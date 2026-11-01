@@ -1,6 +1,6 @@
-# Wave 5: Graph, concepts and cross-document links (`v2.6.0`)
+# Wave 5: Graph, concepts and cross-document links (`v0.2.6`)
 
-> **Status (2026-10-17):** Landed inside tag `v2.2.0`. There is no `v2.6.0`. Do not execute this plan. Current release is `v2.3.0`. The open gate is the Mac batch in [mac-e2e.md](mac-e2e.md).
+> **Status (2026-10-17):** Landed inside tag `v0.2.2`. There is no `v0.2.6`. Do not execute this plan. Current release is `v0.2.3`. The open gate is the Mac batch in [mac-e2e.md](mac-e2e.md).
 
 Parent: [overview.md](overview.md)
 

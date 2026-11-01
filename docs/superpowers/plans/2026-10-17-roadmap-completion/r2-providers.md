@@ -1,4 +1,4 @@
-# Release 2 — `v2.5.0`: provider registry, Claude CLI, Grok CLI
+# Release 2 — `v0.2.5`: provider registry, Claude CLI, Grok CLI
 
 Branch: `feat/cli-providers`. This is the prerequisite for every live run, because Codex cannot be run here.
 
@@ -51,4 +51,4 @@ Branch: `feat/cli-providers`. This is the prerequisite for every live run, becau
 
 With `npm run tauri dev`, select **Grok / grok-4.7**, add one small PDF to a scratch Knowledge folder (`/tmp/arbor-live/Knowledge`), Update, confirm a digest. Never select Claude in an agent session — the guard would refuse anyway. The user can verify Claude themselves from a normal terminal.
 
-Tag `v2.5.0`.
+Tag `v0.2.5`.

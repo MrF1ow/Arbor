@@ -1,6 +1,6 @@
 # Arbor Worker Implementation Plan
 
-> **Status (2026-08-19):** Historical. Living worker is **0.2.0**. Processed state is `arbor-course.json`, not `lecture.md` beside the source.
+> **Status (2026-08-19):** Historical. Living worker is **0.0.2**. Processed state is `arbor-course.json`, not `lecture.md` beside the source.
 >
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -119,7 +119,7 @@ Create `python/pyproject.toml`:
 ```toml
 [project]
 name = "arbor-worker"
-version = "0.1.0"
+version = "0.0.1"
 description = "Arbor knowledge worker: turns lecture sources into structured digests via the Codex CLI."
 requires-python = ">=3.11"
 dependencies = [
@@ -154,7 +154,7 @@ Create `python/src/arbor_worker/__init__.py`:
 ```python
 """Arbor knowledge worker package."""
 
-__version__ = "0.1.0"
+__version__ = "0.0.1"
 ```
 
 - [ ] **Step 3: Write the failing CLI test**
@@ -179,7 +179,7 @@ def run(argv):
 def test_version_flag():
     code, out, _ = run(["--version"])
     assert code == 0
-    assert "0.1.0" in out
+    assert "0.0.1" in out
 
 
 def test_subcommands_registered():

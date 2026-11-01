@@ -5,7 +5,7 @@ import { confirm as tauriConfirm, open as tauriOpen } from "@tauri-apps/plugin-d
 
 import { hasTauriInvoke, TAURI_UNAVAILABLE } from "~/domain/tauri";
 
-/** IPC commands the 6.0 UI may invoke (5.1.0 inventory; `list_providers` excluded). */
+/** IPC commands the 0.6 UI may invoke (0.5.2 inventory; `list_providers` excluded). */
 export type Command =
   | "append_card"
   | "append_chat_thread_lines"

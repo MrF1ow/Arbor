@@ -1,4 +1,4 @@
-# Release 1 — `v2.4.0`: brand mark + gate policy
+# Release 1 — `v0.2.4`: brand mark + gate policy
 
 Branch: `feat/brand-mark`.
 
@@ -41,4 +41,4 @@ If the raster mark looks soft at 16–32 px, ask Grok again for a simplified sma
 
 - `npm run tauri dev` on this machine shows the tree in the sidebar, window icon, and taskbar.
 - Light and dark themes both legible.
-- Local command set green. Tag `v2.4.0`.
+- Local command set green. Tag `v0.2.4`.

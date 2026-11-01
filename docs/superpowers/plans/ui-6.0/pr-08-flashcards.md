@@ -68,7 +68,7 @@ A centered column, `min(680px, 100%)`, with the reading pane scrolling as in PR 
   - no deck: an `EmptyState` with the legacy copy `No flashcards yet for {course}. Generate a deck from your digests.` and a primary **Generate** button. Use the course display name in place of the slug, but keep the sentence otherwise verbatim.
   - an empty session: "No cards due today." in due mode, "No cards in deck." in full mode, with the grade buttons hidden. In due mode, also offer a "Study full deck" link button.
 
-## 3. Keyboard (new in 6.0; scoped to this view)
+## 3. Keyboard (new in 0.6; scoped to this view)
 | Key | Action |
 |---|---|
 | `Space` | flip |

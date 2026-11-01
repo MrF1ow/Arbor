@@ -1,6 +1,6 @@
 # UI rebuild: React + Tailwind + Base UI, modeled on T3 Code
 
-Status: **decisions recorded 2026-10-18; design direction chosen (Arbor Paper); rebased on 5.1.0 and updated for the #97 performance work (2026-10-19)**. Target release: **6.0.0**. Scope: `desktop/` frontend only. The Rust side (`src-tauri`) and the Python worker don't change.
+Status: **decisions recorded 2026-10-18; design direction chosen (Arbor Paper); rebased on 0.5.2 and updated for the #97 performance work (2026-10-19)**. Target release: **0.6.0**. Scope: `desktop/` frontend only. The Rust side (`src-tauri`) and the Python worker don't change.
 
 Reference: [`pingdotgg/t3code`](https://github.com/pingdotgg/t3code) `apps/web` (MIT). We copy its **structure and conventions**, not its files. Components come from the shadcn CLI using the same Base UI style T3 Code uses. That way the code is ours, not a vendored fork.
 
@@ -8,7 +8,7 @@ Reference: [`pingdotgg/t3code`](https://github.com/pingdotgg/t3code) `apps/web` 
 
 ## 1. Why (summary of the investigation)
 
-The current frontend is vanilla TS: one 4,347-line `main.ts` (as of 5.1.0), a static 555-line `index.html`, and one 1,890-line `styles.css`.
+The current frontend is vanilla TS: one 4,347-line `main.ts` (as of 0.5.2), a static 555-line `index.html`, and one 1,890-line `styles.css`.
 
 - **No design system.** Only colors are tokens. There are 40 distinct paddings, 41 margins, 16 font sizes (including `11.5px`), and 8 radii. Equal-looking things are built from different numbers.
 - **Duplicated components.**
@@ -28,7 +28,7 @@ The current frontend is vanilla TS: one 4,347-line `main.ts` (as of 5.1.0), a st
   - `logLine()` (74 call sites) calls `openInspector()`, so the log opens itself on any activity and never stays closed.
   - The footer mixes the course actions with the log, so the log can't be hidden on its own.
 - **No components in code.** There are 71 manual `.hidden =` toggles and 61 module-level `let` state variables in `main.ts`.
-- **16 of 25 desktop test files regex-match the text of `main.ts` / `index.html`** (5.1.0 added `issue-97-phase4.test.mjs` in the same style). They break on any restructuring.
+- **16 of 25 desktop test files regex-match the text of `main.ts` / `index.html`** (0.5.2 added `issue-97-phase4.test.mjs` in the same style). They break on any restructuring.
 
 ## 2. Target stack
 
@@ -219,7 +219,7 @@ The absolute-positioned overlay becomes a **command palette** (`ui/command` in a
 ### 6.6 Course landing: always the Overview
 - Opening a course always lands on **Notes → Overview**, never on a digest. That covers app start (reopen the last course), clicking a course in the sidebar, and switching knowledge roots. The app remembers the last **course**, not the last digest.
 - Route: `#/course/:course/notes` (index route) is the Overview. `#/course/:course/notes/:digest` is a digest, reached only by the user picking it from the index, the course map, a link inside a note, or a search result.
-- Since 5.1.0 the Overview's study data comes from **one call**: `study_progress { action: "overview" }` returns `due` (due ids, count, deck count), `weak` (topics with digest and heading), and `recommend` (items). It becomes the `useCourseOverview(root, course)` query. Quiz accuracy still comes from `read_quiz_progress`, and the exam date from the study plan. Top to bottom:
+- Since 0.5.2 the Overview's study data comes from **one call**: `study_progress { action: "overview" }` returns `due` (due ids, count, deck count), `weak` (topics with digest and heading), and `recommend` (items). It becomes the `useCourseOverview(root, course)` query. Quiz accuracy still comes from `read_quiz_progress`, and the exam date from the study plan. Top to bottom:
   1. Title and summary from `course.md`.
   2. A stat strip: cards due (flashcard deck plus due ids), quiz accuracy (`read_quiz_progress`), and days to the exam (study plan exam date). A tile is omitted when its data doesn't exist.
   3. Next actions: "Review N due cards", which goes to Flashcards, and "Explain weakest topic".
@@ -244,7 +244,7 @@ Flashcard and quiz keys (flip, grade, next) are scoped to their views.
 
 ## 7. Data and state
 
-- **`lib/ipc.ts`:** typed `invoke<T>(cmd, args)` built on the existing `tauri.ts` desktop-only guard. The UI calls 53 commands as of 5.1.0 (inventory in Appendix A). Since 5.1.0 every Rust command is async, short reads go to a persistent `arbor-worker serve` pool, and calls have deadlines. So `invoke` never blocks the window, and a timeout comes back as a rejected promise. `ipc.ts` keeps those error strings intact, because `isTransientStudyWriteError` matches on them.
+- **`lib/ipc.ts`:** typed `invoke<T>(cmd, args)` built on the existing `tauri.ts` desktop-only guard. The UI calls 53 commands as of 0.5.2 (inventory in Appendix A). Since 0.5.2 every Rust command is async, short reads go to a persistent `arbor-worker serve` pool, and calls have deadlines. So `invoke` never blocks the window, and a timeout comes back as a rejected promise. `ipc.ts` keeps those error strings intact, because `isTransientStudyWriteError` matches on them.
 - **Queries:** one hook per read command, e.g. `useCourses(root)`, `useDigests(root, course)`, `useMarkdown(path)`, `useSettings()`, `useJobs()`, `useLibrary(root)`, `useSyncState(root)`. Writes are `useMutation`s that invalidate the affected keys.
 - **Events (`lib/events.ts`):** subscribed once in the root provider.
   - `arbor://progress` → `jobStore.append`
@@ -256,10 +256,10 @@ Flashcard and quiz keys (flip, grade, next) are scoped to their views.
   - Ephemeral view state (current flashcard review, quiz review, selected concept) lives in feature-local `useState`/`useReducer`, using the existing pure `domain/` reducers (`flipReview`, `gradeFlashcard`, `submitChoice`, …).
 - This replaces the 61 module-level `let`s, so there's no global mutable state left.
 
-### 7.1 Carry over the 5.1.0 (#97) behavior
-Issue #97 shipped in 5.1.0 as hand-written caching in `main.ts`. Each piece maps onto the new data layer, and none of it may regress:
+### 7.1 Carry over the 0.5.2 (#97) behavior
+Issue #97 shipped in 0.5.2 as hand-written caching in `main.ts`. Each piece maps onto the new data layer, and none of it may regress:
 
-| 5.1.0 behavior (`main.ts`) | 6.0.0 equivalent |
+| 0.5.2 behavior (`main.ts`) | 0.6.0 equivalent |
 |---|---|
 | Auth result cached 60 s, concurrent checks coalesced (`refreshAuthRequestKey`, `runRefreshAuth`); refocus does nothing if checked < 60 s ago; no polling | `useAuth(provider, root)` query: `staleTime: 60_000`, `refetchOnWindowFocus: true` (it respects `staleTime`), no `refetchInterval`. react-query dedupes concurrent calls. |
 | Only the chosen provider is checked; the UI never calls `list_providers`; the picker is built from the static `PROVIDER_FALLBACK` list | `PROVIDER_FALLBACK` moves to `domain/provider.ts`. The Settings picker renders from it with no query. A test asserts `list_providers` is never invoked. |
@@ -277,7 +277,7 @@ Issue #97 shipped in 5.1.0 as hand-written caching in `main.ts`. Each piece maps
 - **Virtualize** the log, job history, and digest list once a course passes ~100 digests.
 - **Markdown:** keep `domain/markdown.ts` (it already escapes HTML). Render once per `(path, content hash)` through `useMemo`-free caching in the query `select`. Inject with `dangerouslySetInnerHTML` inside `.prose-arbor`. Chat streaming re-renders only the live bubble.
 - **Measure, don't guess:** record time-to-first-paint and time-to-interactive on Linux and macOS for the old and new UI before cutover. Cutover requires the new UI to be ≤ the old on both.
-- **5.1.0's targets are regression gates** (from the #97 plan, §5). Before cutover, re-run them on the new UI with `scripts/bench-worker.sh` and the `ARBOR_PERF=1` command log:
+- **0.5.2's targets are regression gates** (from the #97 plan, §5). Before cutover, re-run them on the new UI with `scripts/bench-worker.sh` and the `ARBOR_PERF=1` command log:
   - course or tab switch < 200 ms to content
   - flashcard grade or quiz answer → next item < 50 ms, even with the worker slow or down
   - window refocus within 60 s of the last check → 0 worker calls
@@ -286,8 +286,8 @@ Issue #97 shipped in 5.1.0 as hand-written caching in `main.ts`. Each piece maps
 
 ## 9. Testing and verification
 
-- **Keep** the 10 pure-logic test files as they are (moved with `domain/`): `markdown`, `flashcards`, `quiz`, `concepts`, `citations`, `chat`, `theme`, `search-hit`, `tauri`, `study-writes` (new in 5.1.0), plus the pure parts of `capabilities` and `workers-persist`.
-- **Replace** the 14 source-regex tests (`brand-mark`, `concepts-ui`, `flashcards-ui`, `quiz-ui`, `library-role`, `library-ui`, `library-ui-shared`, `provider-ui`, `skills-ui`, `sync-ui`, `workers-ui`, `workspace-ui`, `citations`, `chat` UI parts, and 5.1.0's `issue-97-phase4`) with **behavior tests**. `issue-97-phase4` becomes two: "grading advances the card before `study_progress` resolves" (with a never-resolving `mockIPC` handler) and "no flow ever invokes `list_providers`". Each one renders a feature with `mockIPC`, interacts through Testing Library, and asserts on what the user sees and which IPC commands fire. Each phase-5 PR ports the tests for its feature; the old file is deleted in the same PR.
+- **Keep** the 10 pure-logic test files as they are (moved with `domain/`): `markdown`, `flashcards`, `quiz`, `concepts`, `citations`, `chat`, `theme`, `search-hit`, `tauri`, `study-writes` (new in 0.5.2), plus the pure parts of `capabilities` and `workers-persist`.
+- **Replace** the 14 source-regex tests (`brand-mark`, `concepts-ui`, `flashcards-ui`, `quiz-ui`, `library-role`, `library-ui`, `library-ui-shared`, `provider-ui`, `skills-ui`, `sync-ui`, `workers-ui`, `workspace-ui`, `citations`, `chat` UI parts, and 0.5.2's `issue-97-phase4`) with **behavior tests**. `issue-97-phase4` becomes two: "grading advances the card before `study_progress` resolves" (with a never-resolving `mockIPC` handler) and "no flow ever invokes `list_providers`". Each one renders a feature with `mockIPC`, interacts through Testing Library, and asserts on what the user sees and which IPC commands fire. Each phase-5 PR ports the tests for its feature; the old file is deleted in the same PR.
 - **Mock IPC dev mode:** `npm run dev:mock` runs the app in a plain browser with `mockIPC` and fixture data (`src/test/fixtures`). It's for design iteration and screenshots without Tauri or the worker.
 - **Screenshot matrix (Playwright, headless):** every route plus `/dev/ui`, at 3 widths (700, 1100, 1600), in light and dark, against `dev:mock`. The images are attached to each PR for review, not used as pixel-diff gates, at least to begin with.
 - **Never on the user's display.** All visual checks run headless or on an isolated display (`Xvfb`/nested). Live Tauri smoke tests follow the existing isolation rule.
@@ -307,7 +307,7 @@ Issue #97 shipped in 5.1.0 as hand-written caching in `main.ts`. Each piece maps
 
 ## 11. Delivery plan
 
-All work goes to an integration branch, **`feat/ui-react`**, cut from `main` (5.0.1). Each step below is one PR into it: Composer implements, Claude reviews and merges. The integration branch merges to `main` only at cutover, so shipping releases keep the old UI until the new one reaches parity.
+All work goes to an integration branch, **`feat/ui-react`**, cut from `main` (0.5.1). Each step below is one PR into it: Composer implements, Claude reviews and merges. The integration branch merges to `main` only at cutover, so shipping releases keep the old UI until the new one reaches parity.
 
 | # | PR | Contents | Done when |
 |---|---|---|---|
@@ -327,7 +327,7 @@ All work goes to an integration branch, **`feat/ui-react`**, cut from `main` (5.
 | 13 | **Jobs** | history list (virtualized), per-job log view, status | |
 | 14 | **Settings** | sectioned route: General/Appearance, Provider & models (keys, base URLs, overrides, recommendations), Library & sharing (create/join, members, provider), Sync (remote, shared, conflicts dialog), Skills (index, install/run/uninstall, permission confirm), Workers (SSH list/form/test, per-root worker), Shortcuts | replaces `provider-ui`, `library-role`, `sync-ui`, `skills-ui`, `workers-ui` tests |
 | 15 | **Perf + polish** | bundle budget tuned, compiler coverage, virtualization, reduced motion, a11y pass (focus order, labels, contrast check on both palettes) | perf numbers ≤ legacy (§8) |
-| 16 | **Cutover** | delete `legacy.html`, `main.ts`, `styles.css`, remaining regex tests; update README/PROJECT.md; CHANGELOG; release **6.0.0**; `tauri.conf.json` `minWidth` 640, `bundle.macOS.minimumSystemVersion` `13.3` | parity checklist (Appendix B) signed off on a live Linux + macOS run |
+| 16 | **Cutover** | delete `legacy.html`, `main.ts`, `styles.css`, remaining regex tests; update README/PROJECT.md; CHANGELOG; release **0.6.0**; `tauri.conf.json` `minWidth` 640, `bundle.macOS.minimumSystemVersion` `13.3` | parity checklist (Appendix B) signed off on a live Linux + macOS run |
 
 PRs 6–14 depend on 5 but not on each other. Run them in parallel, one Composer task each, after PR 5 merges.
 
@@ -345,12 +345,12 @@ PRs 6–14 depend on 5 but not on each other. Run them in parallel, one Composer
 
 ## 13. Decisions (recorded 2026-10-18)
 
-- **D1. Version:** ship the cutover as **6.0.0**.
+- **D1. Version:** ship the cutover as **0.6.0**.
 - **D2. Router:** TanStack Router, set up as in T3 Code: file-based routes, the Vite plugin with automatic code splitting, and hash history.
 - **D3. Look:** **Arbor Paper.** Paper's structure, the logo's olive and bark colors, and Tool neutral's lucide icons (§4).
 - **D8. Sidebar:** shown or fully hidden. No icon rail.
 - **D9. Course landing:** always the Overview. The user opens digests themselves (§6.6).
-- **D10. Open: per-digest scores on the course map.** The 5.1.0 overview payload has no per-digest accuracy. Either show "weak" / "new" flags only (no worker change), or add a per-digest score to `study_progress --action overview` in a worker PR before PR 7. *Recommend: flags only for 6.0.0; add scores later if wanted.*
+- **D10. Open: per-digest scores on the course map.** The 0.5.2 overview payload has no per-digest accuracy. Either show "weak" / "new" flags only (no worker change), or add a per-digest score to `study_progress --action overview` in a worker PR before PR 7. *Recommend: flags only for 0.6.0; add scores later if wanted.*
 - **D4. Window minimum width:** lower it from 900 to 640.
 - **D5. macOS minimum:** 13.3.
 - **D6. Log on failure:** a toast with "View log"; the drawer never opens itself.
@@ -358,14 +358,14 @@ PRs 6–14 depend on 5 but not on each other. Run them in parallel, one Composer
 
 ---
 
-## Appendix A: IPC inventory (from `main.ts`, as of 5.1.0)
+## Appendix A: IPC inventory (from `main.ts`, as of 0.5.2)
 Commands:
 
 `append_card` `append_chat_lines` `cancel_update` `check_auth` `clear_chat_history` `clear_provider_secret` `create_course` `create_shared_library` `get_job_events` `get_knowledge_settings` `get_settings` `import_sources` `init_arbor_db` `init_knowledge_repo` `library_set_members` `library_set_provider` `library_show` `list_courses` `list_digests` `list_jobs` `list_models` `plan_update` `provider_secret_status` `read_chat_history` `read_markdown` `read_quiz_progress` `read_study_json` `read_sync_conflict` `reindex_knowledge` `save_knowledge_settings` `save_settings` `set_provider_secret` `skill_index` `skill_install` `skill_run` `skill_uninstall` `start_chat` `start_embed_job` `start_folder_watch` `start_update` `study_artifact_stale` `study_plan` `study_progress` `sync_continue` `sync_now` `sync_resolve` `sync_set_remote` `sync_set_shared` `sync_show` `test_worker_connection`
 
 Events: `arbor://progress`, `arbor://job-finished`, `arbor://files-changed`.
 
-As of 5.1.0 the UI no longer calls `list_providers` (the Rust and CLI command still exists). `study_progress` gained `action: "overview"`.
+As of 0.5.2 the UI no longer calls `list_providers` (the Rust and CLI command still exists). `study_progress` gained `action: "overview"`.
 
 **Correction (2026-10-19, PR 4):** the list above came from a regex over `invoke("…")` calls and missed four commands the legacy UI calls through other paths: `start_study_job` (flashcard/quiz/concept/diagram/citation jobs), `join_library`, `search_knowledge`, and `search_semantic`. The authoritative list is `generate_handler!` in `desktop/src-tauri/src/lib.rs` intersected with the commands `src/legacy/main.ts` uses.
 

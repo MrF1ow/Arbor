@@ -45,7 +45,7 @@ Findings from a Mac batch are appended to the checklist as blockers for the **cu
 ## What is not a gate
 
 - Signing and notarization (nice to have on issue #4).
-- Optional OCR and optional auto-run (prove if present; do not block `v3.0.0` if Tesseract is absent).
+- Optional OCR and optional auto-run (prove if present; do not block `v0.3.0` if Tesseract is absent).
 - Closing stale GitHub tickets. The checklist can mark work done while GitHub is still open; an operator should close the stale tickets.
 
 ## Next phase

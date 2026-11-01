@@ -24,7 +24,7 @@ Unknown manifest keys or permission names are rejected.
 
 ## Package layout and inspection
 
-Packages in v4.3.0 are pure Python and use the standard library only. Arbor does not run `setup.py` or `pip install` for them.
+Packages in v0.4.3 are pure Python and use the standard library only. Arbor does not run `setup.py` or `pip install` for them.
 
 Before a package is trusted, Arbor inspects the directory tree: paths must stay inside the package root, directory symlinks are forbidden, and file symlinks must not point outside the package. Inspection reads files and parses JSON; it does not import, execute, or install package code. Execution happens only at run time, after the user confirms the declared permissions for that package id and commit.
 
@@ -44,7 +44,7 @@ Installed packages live under:
 
 After a successful install, **`arbor-install.json`** in that directory records installer metadata (id, commit, git URL, subdir). It is not part of the package manifest; inspection allows extra files.
 
-Install clones offline, verifies the checked-out commit matches the pin, runs the same tree inspection as above (path confinement, no escaping symlinks), and **refuses any absolute symlink** under the package (absolute links would point outside the install directory after copy). It copies files without following symlinks, recreates safe relative symlinks inside the destination, and does **not** import package code, run `pip`, or execute `setup.py`. v4.3.0 packages are pure Python and stdlib-only.
+Install clones offline, verifies the checked-out commit matches the pin, runs the same tree inspection as above (path confinement, no escaping symlinks), and **refuses any absolute symlink** under the package (absolute links would point outside the install directory after copy). It copies files without following symlinks, recreates safe relative symlinks inside the destination, and does **not** import package code, run `pip`, or execute `setup.py`. v0.4.3 packages are pure Python and stdlib-only.
 
 Reinstalling the same id and pin replaces that directory atomically. Different pins for one id coexist as sibling directories under `skills/<id>/`.
 
@@ -56,7 +56,7 @@ The worker passes a **context object** at run time that enforces declared permis
 
 The marketplace index is a JSON file listing **skill** and **provider** packages. Each row includes a **git** URL, a pinned full **commit** SHA (40 lowercase hex characters; branch names are rejected in the index), optional **subdir**, and declared **permissions**. Provider rows are metadata only in this release; Arbor does not install or run them from the index.
 
-The default index path in the Arbor repository is **`marketplace/index.json`**. There is no separate marketplace repository in v4.3.0. When loading an index from git, the **ref** argument may be a branch, tag, or commit; package pins inside the JSON remain full SHAs. Fetching an index reads and parses JSON only — Arbor does not import or execute files from a cloned index repository.
+The default index path in the Arbor repository is **`marketplace/index.json`**. There is no separate marketplace repository in v0.4.3. When loading an index from git, the **ref** argument may be a branch, tag, or commit; package pins inside the JSON remain full SHAs. Fetching an index reads and parses JSON only — Arbor does not import or execute files from a cloned index repository.
 
 The worker command **`arbor-worker skill-index --source PATH [--ref REF]`** prints the parsed index as JSON. When the desktop setting for the index source is empty, it will use **`find_default_index`** starting from the app checkout to locate **`marketplace/index.json`**.
 

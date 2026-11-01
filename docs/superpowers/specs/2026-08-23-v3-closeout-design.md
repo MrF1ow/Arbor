@@ -2,19 +2,19 @@
 
 Date: 2026-08-23
 
-Status: implemented in `v2.2.0` (grades, quiz session, heading scroll, living docs). Notes leftovers and the Mac-batch fixes are in `v2.3.0`. `v3.0.0` still waits for a clean Mac batch. Do not re-implement this spec. Program: [`../plans/2026-08-22-v3-program/overview.md`](../plans/2026-08-22-v3-program/overview.md). Plan: [`../plans/2026-08-22-v3-program/wave-8-closeout.md`](../plans/2026-08-22-v3-program/wave-8-closeout.md). Ledger: [`../../implementation-checklist.md`](../../implementation-checklist.md).
+Status: implemented in `v0.2.2` (grades, quiz session, heading scroll, living docs). Notes leftovers and the Mac-batch fixes are in `v0.2.3`. `v0.3.0` still waits for a clean Mac batch. Do not re-implement this spec. Program: [`../plans/2026-08-22-v3-program/overview.md`](../plans/2026-08-22-v3-program/overview.md). Plan: [`../plans/2026-08-22-v3-program/wave-8-closeout.md`](../plans/2026-08-22-v3-program/wave-8-closeout.md). Ledger: [`../../implementation-checklist.md`](../../implementation-checklist.md).
 
-Tracking issue for **Notes UX leftovers:** [#42](https://github.com/MrF1ow/Arbor/issues/42). Wave 8 study-loop work (grades, quiz session, heading scroll) already landed in package `2.2.0`. Status ledger: [`../../implementation-checklist.md`](../../implementation-checklist.md). Do not treat #42 as the Mac E2E tracker; record Mac batches in [`../plans/2026-08-22-v3-program/mac-e2e.md`](../plans/2026-08-22-v3-program/mac-e2e.md).
+Tracking issue for **Notes UX leftovers:** [#42](https://github.com/MrF1ow/Arbor/issues/42). Wave 8 study-loop work (grades, quiz session, heading scroll) already landed in package `0.2.2`. Status ledger: [`../../implementation-checklist.md`](../../implementation-checklist.md). Do not treat #42 as the Mac E2E tracker; record Mac batches in [`../plans/2026-08-22-v3-program/mac-e2e.md`](../plans/2026-08-22-v3-program/mac-e2e.md).
 
 ## How this spec was written
 
-Waves 1 through 7 are on `main` (PRs #36 through #41). Package version is still `2.1.0`. The Cursor GitHub App can read pull requests and cannot read issue bodies, so the text of #42 was not available to the planning agent. The remainder below is the Version 3 work that living specs already require and that those PRs left unfinished. If #42 names extra items, add them as Wave 8 PRs. Do not use that as a door to chat, Anki, a pretty canvas, or extra AI providers.
+Waves 1 through 7 are on `main` (PRs #36 through #41). Package version is still `0.2.1`. The Cursor GitHub App can read pull requests and cannot read issue bodies, so the text of #42 was not available to the planning agent. The remainder below is the Version 3 work that living specs already require and that those PRs left unfinished. If #42 names extra items, add them as Wave 8 PRs. Do not use that as a door to chat, Anki, a pretty canvas, or extra AI providers.
 
 ## Problem
 
 This was the gap on 2026-08-23. Grades, session answers, heading scroll, and the living-doc pass have since landed.
 
-A student can generate flashcards, take a quiz, search by meaning, and walk a concept graph. The study loop is still incomplete, the docs still describe the 2.1.0 shell, and `v3.0.0` would be a lie if tagged today.
+A student can generate flashcards, take a quiz, search by meaning, and walk a concept graph. The study loop is still incomplete, the docs still describe the 0.2.1 shell, and `v0.3.0` would be a lie if tagged today.
 
 The flashcard format spec already stores `correct` and `wrong`. The deck only increments `seen` on flip. Quiz Submit scores, then Previous/Next clears `submitted`, so answering the same question again counts twice. Source chips open the digest file and ignore the heading. README and PROJECT.md still say Flashcards and Quiz are Coming soon.
 
@@ -22,9 +22,9 @@ That is not a downloadable study app. It is a feature dump with yesterday's stor
 
 ## Approaches
 
-**A. One closeout wave, then tag.** Finish the study loop, heading scroll, living docs, and the Mac checklist as Wave 8. One package `2.2.0` covers waves 1 through 8. `v3.0.0` waits until that wave and the Mac run are done. Do not backfill `v2.2.0` through `v2.8.0` for PRs that already merged untagged.
+**A. One closeout wave, then tag.** Finish the study loop, heading scroll, living docs, and the Mac checklist as Wave 8. One package `0.2.2` covers waves 1 through 8. `v0.3.0` waits until that wave and the Mac run are done. Do not backfill `v0.2.2` through `v0.2.8` for PRs that already merged untagged.
 
-**B. Tag `v3.0.0` now.** PROJECT.md's required feature names all have worker and UI code. Rejected. The milestone text is "a study app a student would download." Grade buttons, honest docs, and a recorded Mac run are part of that, not polish after the tag.
+**B. Tag `v0.3.0` now.** PROJECT.md's required feature names all have worker and UI code. Rejected. The milestone text is "a study app a student would download." Grade buttons, honest docs, and a recorded Mac run are part of that, not polish after the tag.
 
 **C. Split docs, grading, and E2E into separate program waves.** Too much ceremony for leftover work that shares one desktop surface.
 
@@ -58,7 +58,7 @@ The on-disk progress file still accumulates across sessions. Opening the course 
 
 ### 4. Living docs
 
-README, `desktop/README.md`, PROJECT.md Version 3, CHANGELOG 2.1.0 notes that still say Coming soon, and the program overview must match `main`. Waves 1 through 7 are shipped code. They are not "no worker code yet."
+README, `desktop/README.md`, PROJECT.md Version 3, CHANGELOG 0.2.1 notes that still say Coming soon, and the program overview must match `main`. Waves 1 through 7 are shipped code. They are not "no worker code yet."
 
 ### 5. Mac E2E
 
@@ -66,17 +66,17 @@ Extend [`mac-e2e.md`](../plans/2026-08-22-v3-program/mac-e2e.md) with Generate /
 
 ## Versioning
 
-Do not publish `3.1.0`. Do not invent seven historical tags for PRs #36 through #41.
+Do not publish `0.3.1`. Do not invent seven historical tags for PRs #36 through #41.
 
 | Tag | When |
 |-----|------|
-| `v2.1.0` | Shell. Already tagged. |
-| `v2.2.0` | Waves 1 through 8 on `main` |
-| `v3.0.0` | After `v2.2.0` and a recorded Mac E2E run |
+| `v0.2.1` | Shell. Already tagged. |
+| `v0.2.2` | Waves 1 through 8 on `main` |
+| `v0.3.0` | After `v0.2.2` and a recorded Mac E2E run |
 
-Package versions stay `2.1.0` until the Wave 8 implementation PR that is meant to be tagged. This design PR does not bump them.
+Package versions stay `0.2.1` until the Wave 8 implementation PR that is meant to be tagged. This design PR does not bump them.
 
-**Current (2026-10-17):** that decision is finished. `v2.2.0` and `v2.3.0` are tagged. The package is `2.3.0`. After `v3.0.0`, Version 4 ships as `v3.1.0`, `v3.2.0`, and so on. The “stay on 2.1.0” and “do not publish 3.1.0” lines above are the decision as written on 2026-08-23.
+**Current (2026-10-17):** that decision is finished. `v0.2.2` and `v0.2.3` are tagged. The package is `0.2.3`. After `v0.3.0`, Version 4 ships as `v0.3.1`, `v0.3.2`, and so on. The “stay on 0.2.1” and “do not publish 0.3.1” lines above are the decision as written on 2026-08-23.
 
 ## Out of Version 3
 
@@ -96,4 +96,4 @@ If #42 lists one of those, it is a Version 4 (or later) issue, not a Wave 8 task
 
 ## Success
 
-A student grades a Biology deck, retakes a quiz question without inflating scores, clicks a heading chip and lands on that section, and the GitHub README describes the app they downloaded. After a Mac run is recorded, tag `v3.0.0`.
+A student grades a Biology deck, retakes a quiz question without inflating scores, clicks a heading chip and lands on that section, and the GitHub README describes the app they downloaded. After a Mac run is recorded, tag `v0.3.0`.

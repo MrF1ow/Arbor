@@ -4,7 +4,7 @@ Package version for the worker, desktop, and Tauri app. See [Version numbering](
 
 **Version 2** is complete at `v0.2.0`. **Version 3** at `v0.3.0`. **Version 4** at `v0.4.0`. **Version 5** at `v0.5.0`. **Version 6** completes at `v0.6.0` (UI cutover). **Current package:** `0.5.36`. **Current tag:** `v0.5.36`. All releases listed here are tagged.
 
-**Numbering (since 2026-11-01):** tags stay below 1.0. Version N completes at `v0.N.0`, and every release on the way to the next Version bumps the patch (`v0.5.35`, `v0.5.36`, …). The UI cutover that completes Version 6 is `v0.6.0`. Before 2026-11-01 the tags ran `v1.0.0`–`v5.26.5`; each old major X became `0.X` with its releases numbered in order (`v2.1.0` → `v0.2.1`, `v5.26.5` → `v0.5.34`, and the untagged 5.26.6 → `v0.5.35`), and the early `0.1.0`/`0.2.0` became `0.0.1`/`0.0.2`. Older plans under `docs/` still use the old numbers.
+**Numbering (since 2026-11-01):** tags stay below 1.0. Version N completes at `v0.N.0`, and every release on the way to the next Version bumps the patch (`v0.5.35`, `v0.5.36`, …). The UI cutover that completes Version 6 is `v0.6.0`. Before 2026-11-01 the tags ran `v1.0.0`–`v5.26.5`; each old major X became `0.X` with its releases numbered in order (`v2.1.0` → `v0.2.1`, `v5.26.5` → `v0.5.34`, and the untagged 5.26.6 → `v0.5.35`), and the early `0.1.0`/`0.2.0` became `0.0.1`/`0.0.2`. Plans and docs under `docs/` use the new numbers too; historical branch names such as `release/v3.0.0` keep their real names.
 
 ## Unreleased
 
@@ -137,7 +137,7 @@ Git tag `v0.5.20`. **Product:** step toward Version 6. Worker, desktop, and Taur
 - Numbered lists in chat and notes count 1, 2, 3 across blank lines and keep their start number; indented continuation text becomes a paragraph inside the item.
 - Selected text uses a visible olive highlight in light and dark.
 - The chat stops auto-scrolling while you select text, and always scrolls to your own new message.
-- Plans for the 6.0 UX pass live in `docs/superpowers/plans/ux-6.0/`.
+- Plans for the 0.6 UX pass live in `docs/superpowers/plans/ux-6.0/`.
 
 ## 0.5.19 — 2026-10-20
 
@@ -239,7 +239,7 @@ Git tag `v0.5.4`. **Product:** step toward Version 6. Worker, desktop, and Tauri
 
 Git tag `v0.5.3`. **Product:** step toward Version 6. Worker, desktop, and Tauri report `0.5.3`.
 
-- Documents the 6.0 UI rebuild plan and the Arbor Paper design. App behavior is unchanged.
+- Documents the 0.6 UI rebuild plan and the Arbor Paper design. App behavior is unchanged.
 
 ## 0.5.2 — 2026-10-18
 
@@ -269,7 +269,7 @@ Git tag `v0.5.0` when this release lands. **Product:** Version 5 (collaboration)
 
 ## 0.4.5 — 2026-10-18
 
-Git tag `v0.4.5` when this release lands. **Product:** remote workers over SSH. Version 5 continues at `v4.6.0`. Worker, desktop, and Tauri report `0.4.5`, including `arbor-worker --version`.
+Git tag `v0.4.5` when this release lands. **Product:** remote workers over SSH. Version 5 continues at `v0.4.6`. Worker, desktop, and Tauri report `0.4.5`, including `arbor-worker --version`.
 
 - Course jobs use **Local** or **SSH** transport. Local runs `arbor-worker` on this machine as before. SSH rsyncs course sources up, runs the same worker remotely with `--no-commit`, streams NDJSON events over `ssh`, rsyncs digests and study artifacts back, then Arbor commits on the local Knowledge tree.
 - Settings → **Workers** lists saved SSH hosts (id, label, host, port, user, identity file, remote worker command, remote Knowledge root). **Test connection** runs `arbor-worker --version` on the host.
@@ -427,7 +427,7 @@ Git tag: `v0.2.3`. **Product:** Version 3 in progress (Mac-batch fixes). Not `v0
 
 Package `0.2.2`. Git tag `v0.2.2` is for the operator after this lands. **Product:** Version 3 in progress (study loop). Not `v0.3.0`. That tag waits for a recorded Mac E2E run.
 
-Waves 1 through 8 plus library UX. Do not backfill tags `v0.2.3` through `v2.8.0`.
+Waves 1 through 8 plus library UX. Do not backfill tags `v0.2.3` through `v0.2.8`.
 
 Library UX.
 
@@ -445,7 +445,7 @@ Closeout (Wave 8, issue #42).
 - Flashcard Again / Wrong / Mastered write `correct` / `wrong`. Flip and Next do not grade.
 - Quiz Previous/Next restore a submitted answer. Each question id is scored once per session.
 - Source chips scroll to the cited heading.
-- Living docs match the study loop. Do not backfill tags `v0.2.3` through `v2.8.0`.
+- Living docs match the study loop. Do not backfill tags `v0.2.3` through `v0.2.8`.
 
 Diagrams (Wave 6).
 

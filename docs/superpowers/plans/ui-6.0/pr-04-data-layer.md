@@ -1,6 +1,6 @@
 # PR 4: Data layer (IPC, queries, events, stores, study writes, mock mode)
 
-Branch `ui/04-data-layer`, stacked on `ui/03-primitives`. Master plan §7 and **§7.1 (the 5.1.0 behavior must not regress)**, §9 (mock mode), §11 row 4, Appendix A. Read `README.md` in this folder first: **no browser, never launch the app window.**
+Branch `ui/04-data-layer`, stacked on `ui/03-primitives`. Master plan §7 and **§7.1 (the 0.5.2 behavior must not regress)**, §9 (mock mode), §11 row 4, Appendix A. Read `README.md` in this folder first: **no browser, never launch the app window.**
 
 The legacy implementation is the source of truth for behavior: `desktop/src/legacy/main.ts`. Port the logic; don't import from `src/legacy`.
 
@@ -12,7 +12,7 @@ Build every piece of non-visual plumbing the screens need, fully tested with `mo
 
 ## 1. `src/lib/ipc.ts`
 - `invoke<T>(cmd: Command, args?)` and `listen<T>(event, handler)` wrap `@tauri-apps/api`, guarded by `hasTauriInvoke` from `~/domain/tauri`. Outside Tauri, reject with `TAURI_UNAVAILABLE`.
-- `type Command` is a string-literal union of every command the UI calls (master plan Appendix A, 5.1.0 list, **excluding `list_providers`**). The type must make `invoke("list_providers")` a compile error. Add a `// @ts-expect-error` test.
+- `type Command` is a string-literal union of every command the UI calls (master plan Appendix A, 0.5.2 list, **excluding `list_providers`**). The type must make `invoke("list_providers")` a compile error. Add a `// @ts-expect-error` test.
 - **Preserve error strings exactly.** `isTransientStudyWriteError` and `authCheckWorkerFailureReason` match on them. Normalize to `Error` with the original message; don't wrap or prefix it.
 - Also port the legacy `open`/`confirm` dialog wrappers (`legacy/main.ts` ~lines 127–160) as `ipc.openDialog` / `ipc.confirmDialog`.
 

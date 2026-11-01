@@ -10,7 +10,7 @@ GitHub issue [#42](https://github.com/MrF1ow/Arbor/issues/42) is Notes UX, not t
 
 Prove the v2 ingest loop still works in the Version 3 shell, prove the study loop, and prove Notes leftovers (links, tables, scroll). A classmate can pick a folder, Update, Confirm, commit, search, watch-review, generate a deck, grade a card, take a quiz, click a `course.md` digest link, and open a heading chip.
 
-Do not run this after every small PR. Linux/VM tests gate merges. This batch gates **`v3.0.0`**.
+Do not run this after every small PR. Linux/VM tests gate merges. This batch gates **`v0.3.0`**.
 
 ## Checklist
 
@@ -55,16 +55,16 @@ Run on a Mac with Codex CLI authenticated. Use a throwaway Knowledge git repo an
 
 ## Record
 
-When done, fill this in **here** and on `docs/implementation-checklist.md`. The next run uses tag **`v2.3.0`**. A clean record of that build is what allows `v3.0.0`. Version 4 starts only after that tag, as `v3.1.0`, `v3.2.0`, and so on.
+When done, fill this in **here** and on `docs/implementation-checklist.md`. The next run uses tag **`v0.2.3`**. A clean record of that build is what allows `v0.3.0`. Version 4 starts only after that tag, as `v0.3.1`, `v0.3.2`, and so on.
 
 ### 2026-09-20 (partial, issue [#57](https://github.com/MrF1ow/Arbor/issues/57))
 
-This run does **not** close Version 3. Do not tag `v3.0.0` from it.
+This run does **not** close Version 3. Do not tag `v0.3.0` from it.
 
 - Date: 2026-09-20
 - macOS version: not recorded in #57
 - Apple Silicon / Intel: not recorded in #57
-- Arbor build: package `2.2.0` / `main` after #56 (`v2.2.0`)
+- Arbor build: package `0.2.2` / `main` after #56 (`v0.2.2`)
 - Failures (copied onto the checklist Blockers table):
   - Concepts: `unknown concept edge: Synthetic handout -> Arbor Mac end-to-end workflow`. Graph blocked.
   - Citations: honest flashcards Unverified (`**copperleaf**` vs `Copperleaf.`).

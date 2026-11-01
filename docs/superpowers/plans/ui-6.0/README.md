@@ -1,4 +1,4 @@
-# 6.0.0 UI rebuild: per-PR plans and agent rules
+# 0.6.0 UI rebuild: per-PR plans and agent rules
 
 The master plan is `docs/superpowers/plans/2026-10-18-ui-architecture.md`. Each PR in the stack has its own plan here (`pr-NN-*.md`). Workflow per PR:
 1. Claude writes the PR plan.

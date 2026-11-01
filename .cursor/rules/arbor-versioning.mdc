@@ -23,7 +23,7 @@ alwaysApply: true
 
 7. **Version 6 is in progress.** It ships as **`v0.5.3`, `v0.5.4`, …** until `v0.6.0`. `v0.6.0` is the UI cutover (plan row 16). Do not tag `v0.6.0` before that row lands.
 
-8. **Stay below 1.0.** Tags are `v0.MINOR.PATCH`. MINOR is the product version: Version N completes at `v0.N.0`. Every release on the way to the next Version bumps PATCH (`v0.5.36`, `v0.5.37`, …), features and fixes alike. Never tag `v1.0.0` or higher unless the owner asks for it. On 2026-11-01 every tag was renumbered: old major X became `0.X` with releases numbered in order (`v1.0.0` → `v0.1.0`, `v2.1.0` → `v0.2.1`, `v5.26.5` → `v0.5.34`, untagged 5.26.6 → `v0.5.35`; the old `v0.1.0`/`v0.2.0` pre-releases became `v0.0.1`/`v0.0.2`). Same commits. Older docs and plans under `docs/` may still use the old numbers.
+8. **Stay below 1.0.** Tags are `v0.MINOR.PATCH`. MINOR is the product version: Version N completes at `v0.N.0`. Every release on the way to the next Version bumps PATCH (`v0.5.36`, `v0.5.37`, …), features and fixes alike. Never tag `v1.0.0` or higher unless the owner asks for it. On 2026-11-01 every tag was renumbered: old major X became `0.X` with releases numbered in order (`v1.0.0` → `v0.1.0`, `v2.1.0` → `v0.2.1`, `v5.26.5` → `v0.5.34`, untagged 5.26.6 → `v0.5.35`; the old `v0.1.0`/`v0.2.0` pre-releases became `v0.0.1`/`v0.0.2`). Same commits. Plans and docs under `docs/` use the new numbers too; historical branch names such as `release/v3.0.0` keep their real names.
 
 ## Current state (2026-11-01)
 
@@ -31,7 +31,7 @@ alwaysApply: true
 |-----|---------|-------|
 | `v0.2.0` | Version 2 | Shipped |
 | `v0.2.1` | Version 3 (partial) | Desktop shell |
-| `v0.2.2` | Version 3 study loop | Waves 1–8. Do not invent `v0.2.4`–`v2.8.0` for those wave PRs #36–#41. |
+| `v0.2.2` | Version 3 study loop | Waves 1–8. Do not invent `v0.2.4`–`v0.2.8` for those wave PRs #36–#41. |
 | `v0.2.3` | Version 3 fixes | Mac-batch fixes from issue #57, Notes leftovers, path confinement and CSP. |
 | `v0.2.4` | Version 3 (partial) | Tree mark; Linux live-run gate. |
 | `v0.2.5` | Version 3 (partial) | CLI provider registry. |
@@ -50,8 +50,8 @@ alwaysApply: true
 | `v0.5.0` | Version 5 | Shipped. Linux live run recorded 2026-10-18. Package `0.5.0`. Not tagged yet. |
 | `v0.5.1` | Version 5 (patch) | macOS worker signing, PATH, auth UX ([#95](https://github.com/MrF1ow/Arbor/issues/95)). Package `0.5.1`. Not tagged yet. |
 | `v0.5.2` | Version 5 (perf) | Desktop responsiveness and study loop ([#97](https://github.com/MrF1ow/Arbor/issues/97)). Package `0.5.2`. Not tagged yet. |
-| `v0.5.3` | Version 6 in progress | 6.0 UI plan and Arbor Paper design. Package `0.5.3`. Tagged. |
-| `v0.5.4` | Version 6 in progress | React toolchain for the 6.0 UI. Package `0.5.4`. Tagged. |
+| `v0.5.3` | Version 6 in progress | 0.6 UI plan and Arbor Paper design. Package `0.5.3`. Tagged. |
+| `v0.5.4` | Version 6 in progress | React toolchain for the 0.6 UI. Package `0.5.4`. Tagged. |
 | `v0.5.5` | Version 6 in progress | Arbor Paper tokens, theme, and style guard. Package `0.5.5`. Tagged. |
 | `v0.5.6` | Version 6 in progress | component primitives. Package `0.5.6`. Tagged. |
 | `v0.5.7` | Version 6 in progress | desktop data layer. Package `0.5.7`. Tagged. |

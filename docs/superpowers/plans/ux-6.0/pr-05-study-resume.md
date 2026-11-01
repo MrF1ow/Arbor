@@ -68,7 +68,7 @@ save(key, value); clear(key)
 - A corrupt or unknown persisted value (e.g. missing fields) → ignored, with no crash. Validate in `restore*`.
 - **Tab-switch round trip in vitest:** render the flashcards route, advance 2 cards, navigate to Notes, navigate back → card 3 is shown. Do the same for the quiz.
 
-Remember the 5.1.0 lesson: a localStorage restore once lost data. Test that the persisted JSON actually round-trips through the `persist` storage, with a fresh store instance reading what the first one wrote.
+Remember the 0.5.2 lesson: a localStorage restore once lost data. Test that the persisted JSON actually round-trips through the `persist` storage, with a fresh store instance reading what the first one wrote.
 
 ## 5. Checks
 
