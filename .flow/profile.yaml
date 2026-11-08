@@ -1,0 +1,31 @@
+# Flow autonomy profile. Read by every flow skill; never asked per task.
+# profile: hands-off | standard | collaborative | local-only   gates: auto | ask | never
+# Corrections from the user are written here, with a history line saying when and why.
+profile: hands-off
+spec: auto                 # auto = write the spec and carry on; review = show it and wait
+max_leads: 5               # leads per conductor running at once
+gates:
+  commit: auto
+  push: auto
+  open_pr: auto
+  merge: auto
+  tag: auto                # Claude squash-merges and tags releases itself (user, 2026-10-17)
+delivery: pr            # pr | stack | local
+checks:
+  - "cd desktop && timeout 600 npm test"
+  - "cd desktop && timeout 600 npm run lint"
+  - "cd desktop && timeout 900 npm run build"
+  - "cd python && timeout 900 uv run pytest"
+  - "mkdir -p desktop/dist && timeout 1800 cargo test --manifest-path desktop/src-tauri/Cargo.toml"
+rules:                     # repo rules every delegate brief carries
+  - "Never run Claude through Arbor: live runs use the Grok CLI provider (grok-4.7 at ~/.grok/bin/grok). Codex is tested with fakes only."
+  - "Live runs never touch the user's screen: use a leased Xvfb display (flow-run lease <run> display), never the real one."
+  - "Teardown by exact process name (pgrep -x desktop, pgrep -x Xvfb) under timeout 20; never pkill -f or kill a process group that could include your own shell."
+  - "Desktop tests are mostly source greps: always run npm run build (tsc) and npm run lint too; tests passing proves little on their own."
+  - "Releases stay below 1.0: v0.N.x is Version N."
+  - "A PR that moves a marketplace index pin is merged with a merge commit, not squash, or the pinned commit becomes unreachable."
+  - "Mac batch runs don't gate tags; the Linux live run and the macos-dmg CI job do."
+
+history:
+  - "2026-11-08: inferred hands-off (personal repo with CI and an unprotected default branch)"
+  - "2026-11-08: checks from .github/workflows/test.yml; tag auto and rules migrated from Claude memories (delegation-chain, never-invoke-claude-via-arbor, live-runs-never-touch-screen, arbor-linux-gate, release-numbering-below-1-0)"
