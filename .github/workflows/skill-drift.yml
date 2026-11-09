@@ -1,0 +1,24 @@
+# Installed by flow's setup. Source: flow's templates/ci/skill-drift.yml, with <TESTING_SKILL> filled in.
+# Fails a PR that changes a path the testing skill watches without updating the skill. The check is
+# .github/flow/skill-drift.ts (copied from flow's templates/ci/skill-drift.ts); rerun setup to update both.
+name: skill drift
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # the diff needs the base branch's history
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+      - run: bun .github/flow/skill-drift.ts --skill .agents/skills/arbor-test/SKILL.md --base "origin/$BASE_REF"
+        env:
+          BASE_REF: ${{ github.base_ref }}
