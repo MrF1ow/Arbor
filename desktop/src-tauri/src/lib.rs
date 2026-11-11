@@ -13,6 +13,7 @@ mod settings;
 mod watch;
 mod transport;
 mod remote_job;
+mod reading_state;
 mod worker;
 mod worker_pool;
 
@@ -80,6 +81,8 @@ pub fn run() {
             commands::write_flashcard_progress,
             commands::read_quiz_progress,
             commands::write_quiz_progress,
+            reading_state::read_reading_state,
+            reading_state::write_reading_state,
             commands::study_progress,
             commands::study_plan,
             commands::append_card,
