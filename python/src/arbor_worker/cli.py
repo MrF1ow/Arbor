@@ -153,6 +153,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="Print due, weak topics, and recommendations in one JSON object.",
     )
 
+    sp_stats = sp_sub.add_parser("stats", help="Print quiz and card accuracy by week.")
+    sp_stats.add_argument("--now", default=None, help="UTC instant (ISO-8601).")
+
     plan = sub.add_parser("study-plan", help="Generate study/plan.md for a course.")
     plan.add_argument("--root", required=True, help="Path to the Knowledge git repo.")
     plan.add_argument("--course", required=True, help="Course directory name.")

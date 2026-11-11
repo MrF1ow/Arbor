@@ -731,7 +731,8 @@ def _commit_study_progress_if_dirty(
     message: str,
     emitter: EventEmitter,
 ) -> None:
-    from arbor_worker.study_progress import progress_path
+    from arbor_worker.machine import existing_machine_id
+    from arbor_worker.study_progress import history_file_path, progress_path
 
     progress_rel = progress_path(root, course).relative_to(root)
     legacy_rel = Path(course) / "study" / "progress.json"
@@ -740,6 +741,11 @@ def _commit_study_progress_if_dirty(
         rel_paths.append(progress_rel)
     if path_has_pending_changes(root, legacy_rel):
         rel_paths.append(legacy_rel)
+    mid = existing_machine_id(root)
+    if mid is not None:
+        history_rel = history_file_path(root, course, mid).relative_to(root)
+        if path_has_pending_changes(root, history_rel):
+            rel_paths.append(history_rel)
     if not rel_paths:
         return
     commit_and_note(root, rel_paths, message, emitter)
@@ -757,6 +763,7 @@ def cmd_study_progress(args) -> int:
         study_progress_grade,
         study_progress_quiz,
         study_progress_show,
+        study_progress_stats,
         study_progress_weak,
     )
 
@@ -800,6 +807,9 @@ def cmd_study_progress(args) -> int:
             return finish(study_progress_show(root, course))
         if action == "weak":
             return finish(study_progress_weak(root, course))
+        if action == "stats":
+            now = parse_utc_now(args.now) if getattr(args, "now", None) else None
+            return finish(study_progress_stats(root, course, now=now))
         if action == "due":
             now = parse_utc_now(args.now) if args.now else None
             return finish(study_progress_due(root, course, now=now))
@@ -854,6 +864,9 @@ def cmd_study_progress(args) -> int:
         if message.startswith("invalid course name:"):
             return 1
         return 2
+    except OSError as error:
+        print(f"study-progress failed: {error}", file=sys.stderr)
+        return 1
     except StudyProgressError as error:
         print(str(error), file=sys.stderr)
         return 1

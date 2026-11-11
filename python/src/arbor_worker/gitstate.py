@@ -85,18 +85,31 @@ def git_identity_args(root: Path, runner: _Runner = subprocess.run) -> list[str]
     return ["-c", "user.name=Arbor", "-c", "user.email=arbor@localhost"]
 
 
+def _is_safe_course_component(course: str) -> bool:
+    return bool(course) and course not in (".", "..") and "/" not in course and "\\" not in course
+
+
 def _is_viewer_own_progress_path(user_dir: str, rel_path: Path) -> bool:
     parts = rel_path.parts
-    if len(parts) != 5:
+    if len(parts) not in (5, 6):
         return False
     if parts[0] != ".arbor" or parts[1] != "users":
         return False
     if parts[2].casefold() != user_dir.casefold():
         return False
     course = parts[3]
-    if not course or course in (".", "..") or "/" in course or "\\" in course:
+    if not _is_safe_course_component(course):
         return False
-    return parts[4] == "progress.json"
+    if course.casefold() in {"local", "chat"}:
+        return False
+    if len(parts) == 5:
+        return parts[4] in {"progress.json", "plan_state.json"}
+    if parts[4] != "history":
+        return False
+    name = parts[5]
+    if name in (".", "..") or "/" in name or "\\" in name:
+        return False
+    return name.endswith(".jsonl")
 
 
 def commit_batch(

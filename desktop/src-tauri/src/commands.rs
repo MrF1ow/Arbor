@@ -939,6 +939,8 @@ pub(crate) fn is_reserved_course_name(name: &str) -> bool {
     lower == "_arbor_cache"
         || lower == "study"
         || lower == "digests"
+        || lower == "local"
+        || lower == "chat"
         || name.starts_with('.')
 }
 
@@ -1401,7 +1403,7 @@ pub fn build_study_progress_argv(
         course.to_string(),
     ];
     match action {
-        "due" | "weak" | "recommend" | "overview" => {
+        "due" | "weak" | "recommend" | "overview" | "stats" => {
             argv.push(action.to_string());
         }
         "grade" | "quiz" => {
@@ -2174,6 +2176,20 @@ mod tests {
                 .unwrap()[5],
             "overview"
         );
+        assert_eq!(
+            build_study_progress_argv("/root", "Bio", "stats", None, None, None, None, None).unwrap(),
+            vec![
+                "study-progress",
+                "--root",
+                "/root",
+                "--course",
+                "Bio",
+                "stats",
+            ]
+            .into_iter()
+            .map(str::to_string)
+            .collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -2659,7 +2675,17 @@ mod tests {
             "Class name cannot be empty"
         );
 
-        for reserved in ["study", "digests", "_arbor_cache", "_ARBOR_CACHE", ".private"] {
+        for reserved in [
+            "study",
+            "digests",
+            "_arbor_cache",
+            "_ARBOR_CACHE",
+            ".private",
+            "local",
+            "Local",
+            "chat",
+            "CHAT",
+        ] {
             let error = block_on_cmd(create_course(root_string.clone(), reserved.into())).unwrap_err();
             assert!(error.contains("reserved"), "{error}");
             assert!(error.contains(reserved), "{error}");

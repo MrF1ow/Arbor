@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Callable
 
 from arbor_worker.gitstate import git_user_dirname
+from arbor_worker.machine import PROGRESS_BAK_GIT_EXCLUDE
+from arbor_worker.sync import LOCAL_STATE_GIT_EXCLUDE
 
 # Valid `ARBOR_FAKE_MD` payloads for `generate --skill flashcards|quiz --provider fake`.
 FAKE_FLASHCARDS_JSON = json.dumps(
@@ -173,6 +175,33 @@ def build_ui_overhaul_root(tmp_path: Path) -> UiOverhaulRoot:
     _run_git(root, "add", ".")
     _run_git(root, "commit", "-q", "-m", "ui-overhaul fixture")
     return UiOverhaulRoot(root=root)
+
+
+def git_info_exclude_path(root: Path) -> Path:
+    proc = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "--git-path", "info/exclude"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    rel = (proc.stdout or "").strip()
+    path = Path(rel)
+    if not path.is_absolute():
+        path = root / path
+    return path
+
+
+def read_git_info_exclude_lines(root: Path) -> list[str]:
+    path = git_info_exclude_path(root)
+    if not path.is_file():
+        return []
+    return path.read_text(encoding="utf-8").splitlines()
+
+
+def assert_local_ignore_patterns_in_info_exclude(root: Path) -> None:
+    lines = read_git_info_exclude_lines(root)
+    assert LOCAL_STATE_GIT_EXCLUDE in lines
+    assert PROGRESS_BAK_GIT_EXCLUDE in lines
 
 
 def build_ui_overhaul_update_root(
