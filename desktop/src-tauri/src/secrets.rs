@@ -172,15 +172,31 @@ pub fn worker_env_for_provider_id(
         .lmstudio_base_url
         .as_deref()
         .filter(|s| !s.trim().is_empty());
+    let openai = settings
+        .openai_base_url
+        .as_deref()
+        .filter(|s| !s.trim().is_empty());
+    let anthropic = settings
+        .anthropic_base_url
+        .as_deref()
+        .filter(|s| !s.trim().is_empty());
     let mut pairs = Vec::new();
     match provider_id {
-        "openai_api" => push_key(store, "openai_api", "ARBOR_OPENAI_API_KEY", &mut pairs),
-        "anthropic_api" => push_key(store, "anthropic_api", "ARBOR_ANTHROPIC_API_KEY", &mut pairs),
+        "openai_api" => {
+            push_key(store, "openai_api", "ARBOR_OPENAI_API_KEY", &mut pairs);
+            push_base_url(openai, "ARBOR_OPENAI_BASE_URL", &mut pairs);
+        }
+        "anthropic_api" => {
+            push_key(store, "anthropic_api", "ARBOR_ANTHROPIC_API_KEY", &mut pairs);
+            push_base_url(anthropic, "ARBOR_ANTHROPIC_BASE_URL", &mut pairs);
+        }
         "ollama" => push_base_url(ollama, "ARBOR_OLLAMA_BASE_URL", &mut pairs),
         "lmstudio" => push_base_url(lmstudio, "ARBOR_LMSTUDIO_BASE_URL", &mut pairs),
         _ => {
             push_base_url(ollama, "ARBOR_OLLAMA_BASE_URL", &mut pairs);
             push_base_url(lmstudio, "ARBOR_LMSTUDIO_BASE_URL", &mut pairs);
+            push_base_url(openai, "ARBOR_OPENAI_BASE_URL", &mut pairs);
+            push_base_url(anthropic, "ARBOR_ANTHROPIC_BASE_URL", &mut pairs);
         }
     }
     if matches!(provider_id, "openai_api" | "anthropic_api") {
@@ -310,6 +326,8 @@ mod tests {
             appearance: Appearance::System,
             ollama_base_url: Some("http://127.0.0.1:11434".into()),
             lmstudio_base_url: Some("http://127.0.0.1:1234/v1".into()),
+            openai_base_url: None,
+            anthropic_base_url: None,
             skill_index_source: String::new(),
             skill_index_ref: String::new(),
             skill_grants: vec![],
@@ -415,5 +433,67 @@ mod tests {
         let err = set_provider_secret_logic(&store, "openai_api", "   ").unwrap_err();
         assert!(!err.is_empty());
         assert_eq!(store.get("openai_api").unwrap(), None);
+    }
+
+    #[test]
+    fn openai_api_base_url_maps_to_worker_env() {
+        let store = MemorySecretStore::new();
+        let settings = Settings {
+            openai_base_url: Some("https://proxy.example/v1".into()),
+            ..Settings::default()
+        };
+        let pairs = worker_env_for_provider_id("openai_api", &store, &settings);
+        let env = env_map(&pairs);
+        assert_eq!(
+            env.get("ARBOR_OPENAI_BASE_URL"),
+            Some(&"https://proxy.example/v1")
+        );
+    }
+
+    #[test]
+    fn anthropic_api_base_url_maps_to_worker_env() {
+        let store = MemorySecretStore::new();
+        let settings = Settings {
+            anthropic_base_url: Some("https://anthropic-proxy.example".into()),
+            ..Settings::default()
+        };
+        let pairs = worker_env_for_provider_id("anthropic_api", &store, &settings);
+        let env = env_map(&pairs);
+        assert_eq!(
+            env.get("ARBOR_ANTHROPIC_BASE_URL"),
+            Some(&"https://anthropic-proxy.example")
+        );
+    }
+
+    #[test]
+    fn unset_api_base_urls_add_no_worker_env_vars() {
+        let store = MemorySecretStore::new();
+        let settings = Settings::default();
+        for provider in ["openai_api", "anthropic_api", ""] {
+            let pairs = worker_env_for_provider_id(provider, &store, &settings);
+            let env = env_map(&pairs);
+            assert!(env.get("ARBOR_OPENAI_BASE_URL").is_none());
+            assert!(env.get("ARBOR_ANTHROPIC_BASE_URL").is_none());
+        }
+    }
+
+    #[test]
+    fn all_providers_branch_includes_api_base_urls() {
+        let store = MemorySecretStore::new();
+        let settings = Settings {
+            openai_base_url: Some("https://openai.example/v1".into()),
+            anthropic_base_url: Some("https://anthropic.example".into()),
+            ..Settings::default()
+        };
+        let pairs = worker_env_for_provider_id("", &store, &settings);
+        let env = env_map(&pairs);
+        assert_eq!(
+            env.get("ARBOR_OPENAI_BASE_URL"),
+            Some(&"https://openai.example/v1")
+        );
+        assert_eq!(
+            env.get("ARBOR_ANTHROPIC_BASE_URL"),
+            Some(&"https://anthropic.example")
+        );
     }
 }
