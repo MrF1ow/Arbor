@@ -26,6 +26,9 @@ class EventEmitter:
     def run_started(self, **f):
         return self.emit("run_started", **f)
 
+    def planned(self, **f):
+        return self.emit("planned", **f)
+
     def nothing_to_process(self, **f):
         return self.emit("nothing_to_process", **f)
 

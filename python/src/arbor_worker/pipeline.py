@@ -283,10 +283,14 @@ def run_update(
     skipped = len(plan.pending) - len(selected)
     cancelled = False
 
+    total_sources = len(selected)
+    emitter.planned(total=total_sources)
+
     by_course: dict[str, list[SelectedSource]] = {}
     for sel in selected:
         by_course.setdefault(sel.course, []).append(sel)
 
+    source_index = 0
     for course_rel, course_sels in by_course.items():
         if cancelled:
             break
@@ -301,10 +305,13 @@ def run_update(
                 cancelled = True
                 emitter.cancelled(after_sources=len(outcomes))
                 break
+            source_index += 1
             emitter.source_started(
                 course_dir=course_rel,
                 source=sel.path,
                 ranges=_range_pairs(sel.ranges),
+                index=source_index,
+                total=total_sources,
             )
             try:
                 digest_rels, successful_pages, source_hash = _digest_one_source(
