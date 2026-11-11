@@ -23,8 +23,28 @@ from arbor_worker.skills.citations import CitationsSkill
 from arbor_worker.skills.concepts import ConceptsSkill, merge_graphs
 from arbor_worker.skills.diagrams import DiagramsSkill, cached_page_images, merge_figures
 from arbor_worker.schemas.study.concepts import ConceptGraph
-from arbor_worker.skills.flashcards import FlashcardsSkill, digest_batches, merge_decks
-from arbor_worker.skills.quiz import QuizSkill, merge_packs
+from arbor_worker.schemas.study.flashcards import FlashcardDeck
+from arbor_worker.schemas.study.quiz import QuizPack
+from arbor_worker.skills.flashcards import (
+    FlashcardsSkill,
+    digest_batches,
+    filter_deck_by_digests,
+    load_study_origins,
+    merge_deck_by_id,
+    merge_decks,
+    merge_full_run_deck,
+    parse_generate_digests_csv,
+    study_artifact_lock,
+    write_study_artifact_json,
+    write_study_origins,
+)
+from arbor_worker.skills.quiz import (
+    QuizSkill,
+    filter_pack_by_digests,
+    merge_full_run_pack,
+    merge_pack_by_id,
+    merge_packs,
+)
 from arbor_worker.skills.manifest import (
     ManifestArtifact,
     load_manifest,
@@ -271,6 +291,30 @@ def cmd_commit_written(args) -> int:
     return 0
 
 
+def _file_bytes(path: Path) -> bytes | None:
+    if path.is_file():
+        return path.read_bytes()
+    return None
+
+
+def _remember_file_bytes(store: dict[Path, bytes | None], path: Path) -> None:
+    if path not in store:
+        store[path] = _file_bytes(path)
+
+
+def _commit_rels_with_byte_changes(
+    root: Path,
+    rels: list[Path],
+    before: dict[Path, bytes | None],
+) -> list[Path]:
+    changed: list[Path] = []
+    for rel in rels:
+        path = root / rel
+        if before.get(path) != _file_bytes(path):
+            changed.append(rel)
+    return changed
+
+
 def _emit_generate_commit_paths(
     emitter: EventEmitter, paths: list[Path]
 ) -> None:
@@ -311,7 +355,38 @@ def cmd_generate(args) -> int:
         )
         return 1
 
-    digest_paths = sorted((course_dir / "digests").glob("*.md"))
+    digests_raw = getattr(args, "digests", None)
+    full_limited = bool(getattr(args, "full", False))
+    if full_limited and not digests_raw:
+        emitter.skill_failed(
+            course=args.course,
+            skill=args.skill,
+            message="--full requires --digests",
+        )
+        return 1
+    if digests_raw and not isinstance(skill, (FlashcardsSkill, QuizSkill)):
+        emitter.skill_failed(
+            course=args.course,
+            skill=args.skill,
+            message="--digests is only supported for flashcards and quiz",
+        )
+        return 1
+
+    scoped = digests_raw is not None and not full_limited
+    digest_rels: list[str] | None = None
+    if digests_raw:
+        try:
+            digest_rels = parse_generate_digests_csv(root, args.course, digests_raw)
+        except ValueError as error:
+            emitter.skill_failed(
+                course=args.course,
+                skill=args.skill,
+                message=str(error),
+            )
+            return 1
+        digest_paths = sorted(course_dir / rel for rel in digest_rels)
+    else:
+        digest_paths = sorted((course_dir / "digests").glob("*.md"))
     if not digest_paths:
         emitter.skill_failed(
             course=args.course,
@@ -379,18 +454,19 @@ def cmd_generate(args) -> int:
         )
         return 1
 
-    current = manifest.artifacts.get(skill.name)
-    if (
-        not args.force
-        and current is not None
-        and current.content_sha256 == content_sha256
-    ):
-        emitter.skill_stale_skipped(
-            course=args.course,
-            skill=skill.name,
-            content_sha256=content_sha256,
-        )
-        return 0
+    if not scoped:
+        current = manifest.artifacts.get(skill.name)
+        if (
+            not args.force
+            and current is not None
+            and current.content_sha256 == content_sha256
+        ):
+            emitter.skill_stale_skipped(
+                course=args.course,
+                skill=skill.name,
+                content_sha256=content_sha256,
+            )
+            return 0
 
     if isinstance(skill, CitationsSkill):
         emitter.skill_started(course=args.course, skill=skill.name)
@@ -577,6 +653,82 @@ def cmd_generate(args) -> int:
         )
         return 1
 
+    added_ids: list[str] = []
+    origins_path = study_dir / "origins.json"
+    allowed_digest_set = set(digest_rels) if digest_rels is not None else None
+    write_before: dict[Path, bytes | None] = {}
+    try:
+        with study_artifact_lock(root, args.course):
+            if isinstance(skill, FlashcardsSkill):
+                origins = load_study_origins(origins_path)
+                if scoped:
+                    existing = None
+                    if artifact_path.is_file():
+                        existing = FlashcardDeck.model_validate_json(
+                            artifact_path.read_text()
+                        )
+                    fresh = filter_deck_by_digests(artifact, set(digest_rels or []))
+                    artifact, added_ids = merge_deck_by_id(existing, fresh)
+                    for item_id in added_ids:
+                        origins[item_id] = "scoped"
+                else:
+                    existing = None
+                    if artifact_path.is_file():
+                        existing = FlashcardDeck.model_validate_json(
+                            artifact_path.read_text()
+                        )
+                    artifact, origins, added_ids = merge_full_run_deck(
+                        artifact,
+                        existing,
+                        origins,
+                        course_dir,
+                        allowed_digest_set,
+                    )
+            elif isinstance(skill, QuizSkill):
+                origins = load_study_origins(origins_path)
+                if scoped:
+                    existing = None
+                    if artifact_path.is_file():
+                        existing = QuizPack.model_validate_json(
+                            artifact_path.read_text()
+                        )
+                    fresh = filter_pack_by_digests(artifact, set(digest_rels or []))
+                    artifact, added_ids = merge_pack_by_id(existing, fresh)
+                    for item_id in added_ids:
+                        origins[item_id] = "scoped"
+                else:
+                    existing = None
+                    if artifact_path.is_file():
+                        existing = QuizPack.model_validate_json(
+                            artifact_path.read_text()
+                        )
+                    artifact, origins, added_ids = merge_full_run_pack(
+                        artifact,
+                        existing,
+                        origins,
+                        course_dir,
+                        allowed_digest_set,
+                    )
+            study_dir.mkdir(parents=True, exist_ok=True)
+            if isinstance(skill, (FlashcardsSkill, QuizSkill)):
+                _remember_file_bytes(write_before, origins_path)
+                write_study_origins(origins_path, origins)
+                _remember_file_bytes(write_before, artifact_path)
+                artifact_text = (
+                    json.dumps(
+                        artifact.model_dump(mode="json", by_alias=True), indent=2
+                    )
+                    + "\n"
+                )
+                write_study_artifact_json(artifact_path, artifact_text)
+    except (ValueError, OSError, json.JSONDecodeError) as error:
+        emitter.skill_failed(
+            course=args.course,
+            skill=skill.name,
+            message=str(error),
+        )
+        return 1
+
     study_dir.mkdir(parents=True, exist_ok=True)
     written_rels: list[Path] = []
     if isinstance(skill, DiagramsSkill):
@@ -586,6 +738,7 @@ def cmd_generate(args) -> int:
             existing = ConceptGraph.model_validate_json(concepts_path.read_text())
         merged = merge_figures(existing, artifact)
         if merged is not None and merged is not existing:
+            _remember_file_bytes(write_before, concepts_path)
             concepts_path.write_text(
                 json.dumps(merged.model_dump(mode="json", by_alias=True), indent=2)
                 + "\n"
@@ -597,18 +750,32 @@ def cmd_generate(args) -> int:
             content_sha256=content_sha256,
             generated_at=datetime.now(timezone.utc),
         )
+    elif isinstance(skill, (FlashcardsSkill, QuizSkill)):
+        artifact_rel = artifact_path.relative_to(root)
+        written_rels.append(artifact_rel)
+        written_rels.append(origins_path.relative_to(root))
+        if not scoped:
+            manifest.artifacts[skill.name] = ManifestArtifact(
+                file=artifact_path.name,
+                content_sha256=content_sha256,
+                generated_at=datetime.now(timezone.utc),
+            )
     else:
+        _remember_file_bytes(write_before, artifact_path)
         artifact_path.write_text(
             json.dumps(artifact.model_dump(mode="json", by_alias=True), indent=2) + "\n"
         )
         artifact_rel = artifact_path.relative_to(root)
         written_rels.append(artifact_rel)
-        manifest.artifacts[skill.name] = ManifestArtifact(
-            file=artifact_path.name,
-            content_sha256=content_sha256,
-            generated_at=datetime.now(timezone.utc),
-        )
-    write_manifest(manifest_path, manifest)
+        if not scoped:
+            manifest.artifacts[skill.name] = ManifestArtifact(
+                file=artifact_path.name,
+                content_sha256=content_sha256,
+                generated_at=datetime.now(timezone.utc),
+            )
+    if not scoped:
+        _remember_file_bytes(write_before, manifest_path)
+        write_manifest(manifest_path, manifest)
     from arbor_worker.sync import derived_gitignore_extras
 
     ensure_gitignored(
@@ -617,39 +784,51 @@ def cmd_generate(args) -> int:
         derived_gitignore_extras(settings.cache_dir_name),
     )
 
-    manifest_rel = manifest_path.relative_to(root)
-    commit_rels = [manifest_rel, *written_rels]
-    if args.no_commit:
-        _emit_generate_commit_paths(emitter, commit_rels)
+    if scoped:
+        commit_rels = list(written_rels)
     else:
-        try:
-            commit = commit_and_note(
-                root,
-                commit_rels,
-                f"study: {args.course} {skill.name}",
-                emitter,
-            )
-        except GitStateError as error:
-            emitter.skill_failed(
-                course=args.course,
+        manifest_rel = manifest_path.relative_to(root)
+        commit_rels = [manifest_rel, *written_rels]
+    byte_changed_rels = _commit_rels_with_byte_changes(root, commit_rels, write_before)
+    if args.no_commit:
+        _emit_generate_commit_paths(emitter, byte_changed_rels)
+    else:
+        dirty_rels = [
+            rel for rel in commit_rels if path_has_pending_changes(root, rel)
+        ]
+        dirty_rels = [rel for rel in dirty_rels if rel in byte_changed_rels]
+        if dirty_rels:
+            try:
+                commit = commit_and_note(
+                    root,
+                    dirty_rels,
+                    f"study: {args.course} {skill.name}",
+                    emitter,
+                )
+            except GitStateError as error:
+                emitter.skill_failed(
+                    course=args.course,
+                    skill=skill.name,
+                    message=str(error),
+                )
+                return 1
+            emitter.committed(
+                commit=commit,
+                courses=[args.course],
                 skill=skill.name,
-                message=str(error),
             )
-            return 1
-        emitter.committed(
-            commit=commit,
-            courses=[args.course],
-            skill=skill.name,
-        )
-        from arbor_worker.sync import maybe_sync_after_commit
+            from arbor_worker.sync import maybe_sync_after_commit
 
-        maybe_sync_after_commit(root, emitter)
+            maybe_sync_after_commit(root, emitter)
 
-    emitter.skill_done(
-        course=args.course,
-        skill=skill.name,
-        file=str(artifact_rel),
-    )
+    skill_done_kwargs: dict = {
+        "course": args.course,
+        "skill": skill.name,
+        "file": str(artifact_rel),
+    }
+    if isinstance(skill, (FlashcardsSkill, QuizSkill)):
+        skill_done_kwargs["added_ids"] = added_ids
+    emitter.skill_done(**skill_done_kwargs)
     return 0
 
 
@@ -1054,13 +1233,23 @@ def cmd_append_card(args) -> int:
         print(str(error), file=sys.stderr)
         return 1
     deck_rel = Path(args.course) / "study" / "flashcards.json"
+    origins_rel = Path(args.course) / "study" / "origins.json"
     try:
-        _commit_study_file_if_dirty(
-            root,
-            deck_rel,
-            f"study: {args.course} flashcard",
-            emitter,
-        )
+        dirty_rels = [
+            rel
+            for rel in (deck_rel, origins_rel)
+            if path_has_pending_changes(root, rel)
+        ]
+        if dirty_rels:
+            commit_and_note(
+                root,
+                dirty_rels,
+                f"study: {args.course} flashcard",
+                emitter,
+            )
+            from arbor_worker.sync import maybe_sync_after_commit
+
+            maybe_sync_after_commit(root, emitter)
     except GitStateError as error:
         print(str(error), file=sys.stderr)
         return 1

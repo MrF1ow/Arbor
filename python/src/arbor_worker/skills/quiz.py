@@ -1,8 +1,15 @@
 from __future__ import annotations
 
 import hashlib
+from pathlib import Path
 
+from arbor_worker.schemas.study.digest import normalize_study_digest
 from arbor_worker.schemas.study.quiz import QuizPack, QuizQuestion
+from arbor_worker.skills.flashcards import (
+    KEEP_ORIGINS,
+    digest_allowed,
+    digest_file_exists,
+)
 
 
 def normalize_prompt(prompt: str) -> str:
@@ -12,6 +19,99 @@ def normalize_prompt(prompt: str) -> str:
 def question_id(question: QuizQuestion) -> str:
     value = f"{normalize_prompt(question.prompt)}\0{question.source.digest}".encode()
     return f"q_{hashlib.sha256(value).hexdigest()[:8]}"
+
+
+def filter_pack_by_digests(pack: QuizPack, allowed: set[str]) -> QuizPack:
+    allowed_norm = {normalize_study_digest(value) for value in allowed}
+    questions = [
+        question
+        for question in pack.questions
+        if digest_allowed(pack.course, question.source.digest, allowed_norm)
+    ]
+    if not questions:
+        raise ValueError("no quiz questions cite the selected digests")
+    return pack.model_copy(update={"questions": questions})
+
+
+def merge_pack_by_id(
+    existing: QuizPack | None, incoming: QuizPack
+) -> tuple[QuizPack, list[str]]:
+    if existing is None:
+        return incoming, [question.id for question in incoming.questions]
+    existing_ids = {question.id for question in existing.questions}
+    merged = list(existing.questions)
+    added: list[str] = []
+    for question in incoming.questions:
+        if question.id in existing_ids:
+            continue
+        merged.append(question)
+        existing_ids.add(question.id)
+        added.append(question.id)
+    if not merged:
+        raise ValueError("quiz would be empty")
+    return existing.model_copy(update={"questions": merged}), added
+
+
+def merge_full_run_pack(
+    fresh: QuizPack,
+    existing: QuizPack | None,
+    origins: dict[str, str],
+    course_dir: Path,
+    allowed_digests: set[str] | None = None,
+) -> tuple[QuizPack, dict[str, str], list[str]]:
+    allowed_norm = (
+        {normalize_study_digest(value) for value in allowed_digests}
+        if allowed_digests is not None
+        else None
+    )
+    course = course_dir.name
+    prior_ids = {question.id for question in existing.questions} if existing else set()
+    new_origins = dict(origins)
+    kept: list[QuizQuestion] = []
+    if existing:
+        for question in existing.questions:
+            origin = new_origins.get(question.id, "full")
+            if origin == "full":
+                new_origins.pop(question.id, None)
+                continue
+            if origin not in KEEP_ORIGINS:
+                new_origins.pop(question.id, None)
+                continue
+            if allowed_norm is not None and not digest_allowed(
+                course, question.source.digest, allowed_norm
+            ):
+                new_origins.pop(question.id, None)
+                continue
+            if not digest_file_exists(course_dir, course, question.source.digest):
+                new_origins.pop(question.id, None)
+                continue
+            kept.append(question)
+    kept_ids = {question.id for question in kept}
+    fresh_questions: list[QuizQuestion] = []
+    for question in fresh.questions:
+        if question.id in kept_ids:
+            continue
+        if allowed_norm is not None and not digest_allowed(
+            course, question.source.digest, allowed_norm
+        ):
+            continue
+        if not digest_file_exists(course_dir, course, question.source.digest):
+            continue
+        fresh_questions.append(question)
+        new_origins[question.id] = "full"
+    merged = kept + [
+        question for question in fresh_questions if question.id not in kept_ids
+    ]
+    if not merged:
+        raise ValueError("quiz would be empty")
+    final_ids = {question.id for question in merged}
+    for item_id in list(new_origins):
+        if not item_id.startswith("q_"):
+            continue
+        if item_id not in final_ids:
+            del new_origins[item_id]
+    added = [question.id for question in merged if question.id not in prior_ids]
+    return fresh.model_copy(update={"questions": merged}), new_origins, added
 
 
 def merge_packs(packs: list[QuizPack]) -> QuizPack:

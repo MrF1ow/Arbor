@@ -14,6 +14,38 @@ from arbor_worker.machine import PROGRESS_BAK_GIT_EXCLUDE
 from arbor_worker.sync import LOCAL_STATE_GIT_EXCLUDE
 
 # Valid `ARBOR_FAKE_MD` payloads for `generate --skill flashcards|quiz --provider fake`.
+FAKE_FLASHCARDS_INTRO_JSON = json.dumps(
+    {
+        "schema_version": 1,
+        "course": "Bio",
+        "cards": [
+            {
+                "front": "What is life?",
+                "back": "Biology studies living things.",
+                "tags": ["bio"],
+                "source": {"digest": "digests/intro.md", "heading": "Intro"},
+            },
+        ],
+    }
+)
+
+FAKE_QUIZ_INTRO_JSON = json.dumps(
+    {
+        "schema_version": 1,
+        "course": "Bio",
+        "questions": [
+            {
+                "type": "multiple_choice",
+                "prompt": "Welcome to biology?",
+                "choices": ["Yes", "No", "Maybe", "Later"],
+                "answer_index": 0,
+                "explanation": "Intro lecture.",
+                "source": {"digest": "digests/intro.md", "heading": "Intro"},
+            },
+        ],
+    }
+)
+
 FAKE_FLASHCARDS_JSON = json.dumps(
     {
         "schema_version": 1,
@@ -205,9 +237,37 @@ def build_ui_overhaul_root(tmp_path: Path) -> UiOverhaulRoot:
     apply_course_meta_fields(root, "Bio", {"exam_date": "2026-12-01"})
     apply_course_meta_fields(root, "Chem", {"exam_date": "2026-11-20"})
 
+    study_manifest = {
+        "version": 1,
+        "artifacts": {
+            "flashcards": {
+                "file": "flashcards.json",
+                "content_sha256": "placeholder",
+                "generated_at": "2026-10-01T12:00:00+00:00",
+            }
+        },
+    }
+    (bio_study / "manifest.json").write_text(json.dumps(study_manifest, indent=2) + "\n")
+
     _run_git(root, "add", ".")
     _run_git(root, "commit", "-q", "-m", "ui-overhaul fixture")
     return UiOverhaulRoot(root=root)
+
+
+def write_bio_study_manifest(root: Path, content_sha256: str) -> None:
+    """Refresh Bio study manifest flashcards hash after digest or deck changes."""
+    manifest_path = root / "Bio" / "study" / "manifest.json"
+    payload = {
+        "version": 1,
+        "artifacts": {
+            "flashcards": {
+                "file": "flashcards.json",
+                "content_sha256": content_sha256,
+                "generated_at": "2026-10-17T12:00:00+00:00",
+            }
+        },
+    }
+    manifest_path.write_text(json.dumps(payload, indent=2) + "\n")
 
 
 def git_info_exclude_path(root: Path) -> Path:

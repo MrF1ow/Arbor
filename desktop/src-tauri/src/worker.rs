@@ -698,6 +698,73 @@ pub fn normalize_study_model(model: Option<String>) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
+fn study_skill_accepts_digests(skill: &str) -> bool {
+    matches!(skill, "flashcards" | "quiz")
+}
+
+pub fn resolve_study_job_digests(
+    knowledge_root: &std::path::Path,
+    course: &str,
+    skill: &str,
+    digests: Option<Vec<String>>,
+    remote_full_when_empty: bool,
+) -> Result<(Option<Vec<String>>, bool), String> {
+    use crate::reading_state::validate_digest_path;
+    if !study_skill_accepts_digests(skill) {
+        return Ok((None, false));
+    }
+    let remote_full = remote_full_when_empty && study_skill_accepts_digests(skill);
+    let list = digests.filter(|forms| !forms.is_empty());
+    match list {
+        Some(list) => {
+            for form in &list {
+                validate_digest_path(form)?;
+                let prefix = format!("{course}/");
+                if !form.starts_with(&prefix) {
+                    return Err(format!("digest is not in course {course}: {form}"));
+                }
+            }
+            Ok((Some(list), false))
+        }
+        None => {
+            if remote_full {
+                let forms = course_digest_forms(knowledge_root, course)?;
+                Ok((Some(forms), true))
+            } else {
+                Ok((None, false))
+            }
+        }
+    }
+}
+
+pub fn course_digest_forms(root: &std::path::Path, course: &str) -> Result<Vec<String>, String> {
+    use crate::reading_state::validate_digest_path;
+    let digests_dir = root.join(course).join("digests");
+    if !digests_dir.is_dir() {
+        return Err(format!("course has no digests: {course}"));
+    }
+    let mut names = Vec::new();
+    for entry in std::fs::read_dir(&digests_dir).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let path = entry.path();
+        if path.extension().and_then(|s| s.to_str()) != Some("md") {
+            continue;
+        }
+        let Some(name) = path.file_name().and_then(|s| s.to_str()) else {
+            continue;
+        };
+        names.push(name.to_string());
+    }
+    names.sort();
+    let mut forms = Vec::new();
+    for name in names {
+        let form = format!("{course}/digests/{name}");
+        validate_digest_path(&form)?;
+        forms.push(form);
+    }
+    Ok(forms)
+}
+
 fn effective_provider_id(provider_id: &str) -> &str {
     if provider_id.is_empty() {
         "codex"
@@ -735,6 +802,8 @@ pub fn generate_sub_args(
     force: bool,
     model: Option<String>,
     provider_id: &str,
+    digests: Option<&[String]>,
+    remote_full: bool,
 ) -> Vec<String> {
     let mut sub_args = vec![
         "generate".to_string(),
@@ -747,6 +816,17 @@ pub fn generate_sub_args(
     ];
     if force {
         sub_args.push("--force".to_string());
+    }
+    if study_skill_accepts_digests(skill) {
+        if let Some(list) = digests {
+            if !list.is_empty() {
+                sub_args.push("--digests".to_string());
+                sub_args.push(list.join(","));
+            }
+        }
+        if remote_full {
+            sub_args.push("--full".to_string());
+        }
     }
     if let Some(model) = normalize_study_model(model) {
         sub_args.extend([
@@ -820,9 +900,20 @@ pub fn spawn_generate_stream(
     force: bool,
     model: Option<String>,
     provider_id: String,
+    digests: Option<Vec<String>>,
     job_id: String,
 ) {
-    let sub_args = generate_sub_args(&root, &course, &skill, force, model, &provider_id);
+    let digest_refs = digests.as_deref();
+    let sub_args = generate_sub_args(
+        &root,
+        &course,
+        &skill,
+        force,
+        model,
+        &provider_id,
+        digest_refs,
+        false,
+    );
     let label = crate::settings::provider_label(effective_provider_id(&provider_id));
     let settings = crate::settings::load(&app);
     let store = crate::secrets::OsSecretStore;
@@ -1443,7 +1534,16 @@ mod tests {
 
     #[test]
     fn generate_args_use_fake_without_a_model() {
-        let args = generate_sub_args("/knowledge", "Biology", "flashcards", false, None, "grok");
+        let args = generate_sub_args(
+            "/knowledge",
+            "Biology",
+            "flashcards",
+            false,
+            None,
+            "grok",
+            None,
+            false,
+        );
         assert!(args.ends_with(&["--provider".into(), "fake".into()]));
         assert!(!args.contains(&"--model".to_string()));
     }
@@ -1457,6 +1557,8 @@ mod tests {
             true,
             Some("gpt-5.6-sol".into()),
             "codex",
+            None,
+            false,
         );
         assert!(args.contains(&"--force".to_string()));
         assert!(args.ends_with(&[
@@ -1476,6 +1578,8 @@ mod tests {
             false,
             Some("  ".into()),
             "grok",
+            None,
+            false,
         );
         assert!(args.ends_with(&["--provider".into(), "fake".into()]));
     }
@@ -1489,6 +1593,8 @@ mod tests {
             false,
             Some("grok-4.7".into()),
             "grok",
+            None,
+            false,
         );
         assert!(args.ends_with(&[
             "--provider".into(),
@@ -1496,6 +1602,133 @@ mod tests {
             "--model".into(),
             "grok-4.7".into(),
         ]));
+    }
+
+    #[test]
+    fn resolve_study_job_digests_rejects_foreign_course_before_job() {
+        let err = resolve_study_job_digests(
+            Path::new("/knowledge"),
+            "Bio",
+            "flashcards",
+            Some(vec!["Chem/digests/a.md".to_string()]),
+            false,
+        )
+        .unwrap_err();
+        assert!(err.contains("Chem/digests/a.md"));
+    }
+
+    #[test]
+    fn resolve_study_job_digests_treats_empty_list_as_none() {
+        let (resolved, full) = resolve_study_job_digests(
+            Path::new("/knowledge"),
+            "Bio",
+            "flashcards",
+            Some(vec![]),
+            false,
+        )
+        .unwrap();
+        assert!(resolved.is_none());
+        assert!(!full);
+    }
+
+    #[test]
+    fn generate_args_include_scoped_digests_local() {
+        let digests = vec![
+            "Bio/digests/a.md".to_string(),
+            "Bio/digests/b.md".to_string(),
+        ];
+        let args = generate_sub_args(
+            "/knowledge",
+            "Bio",
+            "flashcards",
+            false,
+            None,
+            "grok",
+            Some(&digests),
+            false,
+        );
+        assert!(args.contains(&"--digests".to_string()));
+        assert!(args.contains(&"Bio/digests/a.md,Bio/digests/b.md".to_string()));
+        assert!(!args.contains(&"--full".to_string()));
+    }
+
+    #[test]
+    fn resolve_study_job_digests_ssh_concepts_skips_remote_full() {
+        let root = std::env::temp_dir().join(format!(
+            "arbor-resolve-concepts-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("Bio").join("digests")).unwrap();
+        std::fs::write(root.join("Bio").join("digests").join("a.md"), "# A\n").unwrap();
+        let (resolved, full) =
+            resolve_study_job_digests(&root, "Bio", "concepts", None, true).unwrap();
+        assert!(resolved.is_none());
+        assert!(!full);
+    }
+
+    #[test]
+    fn generate_sub_args_ssh_concepts_omits_digest_flags() {
+        let digests = vec!["Bio/digests/a.md".to_string()];
+        let args = generate_sub_args(
+            "/knowledge",
+            "Bio",
+            "concepts",
+            false,
+            None,
+            "grok",
+            Some(&digests),
+            true,
+        );
+        assert!(!args.contains(&"--digests".to_string()));
+        assert!(!args.contains(&"--full".to_string()));
+        assert_eq!(
+            args,
+            vec![
+                "generate".to_string(),
+                "--root".to_string(),
+                "/knowledge".to_string(),
+                "--course".to_string(),
+                "Bio".to_string(),
+                "--skill".to_string(),
+                "concepts".to_string(),
+                "--provider".to_string(),
+                "fake".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn generate_args_remote_full_includes_every_digest_and_full_flag() {
+        let root = std::env::temp_dir().join(format!(
+            "arbor-digest-forms-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root.join("Bio").join("digests")).unwrap();
+        let digests_dir = root.join("Bio").join("digests");
+        std::fs::write(digests_dir.join("a.md"), "# A\n").unwrap();
+        std::fs::write(digests_dir.join("b.md"), "# B\n").unwrap();
+        let forms = course_digest_forms(&root, "Bio").unwrap();
+        assert_eq!(
+            forms,
+            vec![
+                "Bio/digests/a.md".to_string(),
+                "Bio/digests/b.md".to_string(),
+            ]
+        );
+        let args = generate_sub_args(
+            "/knowledge",
+            "Bio",
+            "quiz",
+            true,
+            None,
+            "fake",
+            Some(&forms),
+            true,
+        );
+        assert!(args.contains(&"--full".to_string()));
+        assert!(args.contains(&"Bio/digests/a.md,Bio/digests/b.md".to_string()));
     }
 
     #[test]

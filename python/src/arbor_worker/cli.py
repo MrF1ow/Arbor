@@ -59,6 +59,16 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Write study files but defer git commit (emit commit_paths instead).",
     )
+    gen.add_argument(
+        "--digests",
+        default=None,
+        help="Comma-separated Course/digests/*.md paths for scoped generation.",
+    )
+    gen.add_argument(
+        "--full",
+        action="store_true",
+        help="With --digests, run a full regeneration limited to those lectures.",
+    )
 
     cw = sub.add_parser(
         "commit-written",

@@ -3260,6 +3260,7 @@ pub async fn start_study_job(
     force: Option<bool>,
     model: Option<String>,
     provider: Option<String>,
+    digests: Option<Vec<String>>,
 ) -> Result<String, String> {
     spawn_blocking_cmd(move || {
         let force = force.unwrap_or(false);
@@ -3282,13 +3283,22 @@ pub async fn start_study_job(
                     .unwrap_or_else(|| format!("{label} is not authenticated")));
             }
         }
+        let knowledge_root = Path::new(&root);
+        let remote_full_when_empty = matches!(&transport, WorkerTransport::Ssh { .. });
+        let (resolved_digests, remote_full) = worker::resolve_study_job_digests(
+            knowledge_root,
+            &course,
+            &skill,
+            digests.clone(),
+            remote_full_when_empty,
+        )?;
         let plan_json = serde_json::to_string(&serde_json::json!({
             "course": course,
             "skill": skill,
             "force": force,
+            "digests": resolved_digests,
         }))
         .map_err(|e| e.to_string())?;
-        let knowledge_root = Path::new(&root);
         let job_id = jobs::create_job(
             knowledge_root,
             JobTrigger::Study,
@@ -3329,6 +3339,7 @@ pub async fn start_study_job(
                     force,
                     model,
                     provider_id,
+                    resolved_digests.clone(),
                     job_id.clone(),
                 );
             }
@@ -3341,6 +3352,8 @@ pub async fn start_study_job(
                     force,
                     model.clone(),
                     &provider_id,
+                    resolved_digests.as_deref(),
+                    remote_full,
                 );
                 worker::spawn_remote_generate_stream(
                     app,
