@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import threading
 from pathlib import Path
@@ -8,10 +9,13 @@ from typing import Any
 
 from arbor_worker.gitstate import commit_batch, path_has_pending_changes
 from arbor_worker.library import LibraryError, assert_can_write
+from arbor_worker.study_plan import _validate_exam_date
 
 COURSES_REL = Path(".arbor/courses.json")
 
 _COURSE_META_LOCK = threading.Lock()
+
+_DIGEST_KEY_RE = re.compile(r"^digests/[a-zA-Z0-9][a-zA-Z0-9._-]*\.md$")
 
 
 class CourseMetaError(Exception):
@@ -28,6 +32,21 @@ def _validate_meta_token(value: str, label: str) -> None:
         raise CourseMetaError(f"Invalid {label}")
     if not all(c.isascii() and (c.islower() or c.isdigit() or c == "-") for c in value):
         raise CourseMetaError(f"Invalid {label}")
+
+
+def _validate_units_value(units: object) -> dict[str, str] | None:
+    if units is None:
+        return None
+    if not isinstance(units, dict):
+        raise CourseMetaError("Invalid units")
+    normalized: dict[str, str] = {}
+    for key, value in units.items():
+        if not isinstance(key, str) or not _DIGEST_KEY_RE.match(key):
+            raise CourseMetaError("Invalid units key")
+        if not isinstance(value, str) or not value.strip() or len(value) > 80:
+            raise CourseMetaError("Invalid units value")
+        normalized[key] = value.strip()
+    return normalized or None
 
 
 def _courses_path(root: Path) -> Path:
@@ -82,10 +101,6 @@ def _write_courses_atomic(path: Path, doc: dict[str, Any]) -> None:
     tmp.replace(path)
 
 
-def _entry_has_icon_or_color(entry: dict[str, Any]) -> bool:
-    return "icon" in entry or "color" in entry
-
-
 def _git(root: Path, args: list[str], runner=subprocess.run) -> subprocess.CompletedProcess:
     return runner(
         ["git", "-C", str(root), *args],
@@ -109,19 +124,52 @@ def read_course_meta_map(root: Path) -> dict[str, Any]:
     return _read_courses_map_from_disk(_courses_path(Path(root)))
 
 
-def set_course_meta(
+def read_course_exam_date(root: Path, course: str) -> str | None:
+    entry = read_course_meta_map(root).get(course)
+    if not isinstance(entry, dict):
+        return None
+    exam = entry.get("exam_date")
+    if not isinstance(exam, str) or not exam:
+        return None
+    try:
+        return _validate_exam_date(exam)
+    except ValueError:
+        return None
+
+
+def _merge_field_clear_or_set(
+    entry: dict[str, Any],
+    key: str,
+    raw: object,
+    *,
+    validate_token: bool = False,
+) -> None:
+    if raw is None or raw == "":
+        entry.pop(key, None)
+        return
+    if not isinstance(raw, str):
+        raise CourseMetaError(f"Invalid {key}")
+    if validate_token:
+        _validate_meta_token(raw, key)
+    elif key == "exam_date":
+        try:
+            raw = _validate_exam_date(raw)
+        except ValueError as error:
+            raise CourseMetaError(str(error)) from error
+        if raw is None:
+            entry.pop(key, None)
+            return
+    entry[key] = raw
+
+
+def apply_course_meta_fields(
     root: Path,
     course: str,
-    icon: str | None,
-    color: str | None,
+    fields: dict[str, Any],
     runner=subprocess.run,
 ) -> dict[str, Any]:
     root = Path(root)
     _validate_path_component(course, "course name")
-    if icon is not None:
-        _validate_meta_token(icon, "icon")
-    if color is not None:
-        _validate_meta_token(color, "color")
 
     assert_can_write(root, runner)
 
@@ -132,27 +180,53 @@ def set_course_meta(
         assert isinstance(courses, dict)
 
         entry: dict[str, Any] = {}
-        existing = courses.pop(course, None)
+        existing = courses.get(course)
         if isinstance(existing, dict):
             entry = dict(existing)
 
-        if icon is None:
-            entry.pop("icon", None)
-        else:
-            entry["icon"] = icon
-        if color is None:
-            entry.pop("color", None)
-        else:
-            entry["color"] = color
+        if "icon" in fields:
+            _merge_field_clear_or_set(entry, "icon", fields["icon"], validate_token=True)
+        if "color" in fields:
+            _merge_field_clear_or_set(entry, "color", fields["color"], validate_token=True)
+        if "exam_date" in fields:
+            _merge_field_clear_or_set(entry, "exam_date", fields["exam_date"])
+        if "units" in fields:
+            units = _validate_units_value(fields["units"])
+            if units is None:
+                entry.pop("units", None)
+            else:
+                entry["units"] = units
 
-        if _entry_has_icon_or_color(entry):
+        if entry:
             courses[course] = entry
+        else:
+            courses.pop(course, None)
 
         _write_courses_atomic(path, doc)
 
         if _is_git_work_tree(root, runner) and path_has_pending_changes(
             root, COURSES_REL, runner=runner
         ):
-            commit_batch(root, [COURSES_REL], "courses: update icon", runner=runner)
+            commit_batch(
+                root,
+                [COURSES_REL],
+                f"courses: update {course}",
+                runner=runner,
+            )
 
     return read_course_meta_map(root)
+
+
+def set_course_meta(
+    root: Path,
+    course: str,
+    icon: str | None,
+    color: str | None,
+    runner=subprocess.run,
+) -> dict[str, Any]:
+    return apply_course_meta_fields(
+        root,
+        course,
+        {"icon": icon, "color": color},
+        runner=runner,
+    )

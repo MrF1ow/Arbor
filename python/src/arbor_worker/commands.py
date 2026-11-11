@@ -907,14 +907,41 @@ def cmd_study_plan(args) -> int:
                 file=sys.stderr,
             )
         return code
+    from arbor_worker.course_meta import (
+        CourseMetaError,
+        apply_course_meta_fields,
+        read_course_exam_date,
+    )
+
     provider, model_id = resolved
+    course_dir = root / args.course
+    if not course_dir.is_dir():
+        print(f"course directory does not exist: {course_dir}", file=sys.stderr)
+        return 1
+    exam_date = args.exam_date
+    if exam_date is None:
+        exam_date = read_course_exam_date(root, args.course)
+    else:
+        from arbor_worker.study_plan import _validate_exam_date
+
+        # Validate before storing: "" would clear a stored date and then fail.
+        try:
+            _validate_exam_date(exam_date)
+        except ValueError as error:
+            print(str(error), file=sys.stderr)
+            return 1
+        try:
+            apply_course_meta_fields(root, args.course, {"exam_date": exam_date})
+        except (CourseMetaError, LibraryError) as error:
+            print(str(error), file=sys.stderr)
+            return 1
     try:
         result = generate_study_plan(
             root,
             args.course,
             provider,
             model_id,
-            exam_date=args.exam_date,
+            exam_date=exam_date,
         )
     except ValueError as error:
         print(str(error), file=sys.stderr)
@@ -1059,6 +1086,7 @@ def cmd_sync(args) -> int:
                     "shared": sync_mod._read_shared(root),
                     "sync_remote": sync_mod.sync_remote_name(root),
                     "remote_note": sync_mod.remote_note(root),
+                    "last_synced_at": sync_mod.read_last_synced_at(root),
                 }
             )
         )
@@ -1201,7 +1229,7 @@ def cmd_library_provider(args) -> int:
 
 
 def cmd_course_meta(args) -> int:
-    from arbor_worker.course_meta import CourseMetaError, set_course_meta
+    from arbor_worker.course_meta import CourseMetaError, apply_course_meta_fields
     from arbor_worker.library import LibraryError
 
     if args.course_meta_action != "set":
@@ -1216,16 +1244,27 @@ def cmd_course_meta(args) -> int:
     if not isinstance(fields, dict):
         print("Invalid --fields JSON", file=sys.stderr)
         return 1
-    icon = fields.get("icon")
-    color = fields.get("color")
-    if icon is not None and not isinstance(icon, str):
+    allowed = {"icon", "color", "exam_date", "units"}
+    unknown = [k for k in fields if k not in allowed]
+    if unknown:
+        print(f"Unknown field(s) in --fields: {', '.join(unknown)}", file=sys.stderr)
+        return 1
+    if "icon" in fields and fields["icon"] is not None and not isinstance(fields["icon"], str):
         print("Invalid icon in --fields", file=sys.stderr)
         return 1
-    if color is not None and not isinstance(color, str):
+    if "color" in fields and fields["color"] is not None and not isinstance(fields["color"], str):
         print("Invalid color in --fields", file=sys.stderr)
         return 1
+    if "exam_date" in fields and fields["exam_date"] is not None and not isinstance(
+        fields["exam_date"], str
+    ):
+        print("Invalid exam_date in --fields", file=sys.stderr)
+        return 1
+    if "units" in fields and fields["units"] is not None and not isinstance(fields["units"], dict):
+        print("Invalid units in --fields", file=sys.stderr)
+        return 1
     try:
-        courses = set_course_meta(root, args.course, icon, color)
+        courses = apply_course_meta_fields(root, args.course, fields)
     except (CourseMetaError, LibraryError) as error:
         print(str(error), file=sys.stderr)
         return 1

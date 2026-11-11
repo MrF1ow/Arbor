@@ -808,6 +808,115 @@ pub struct DigestInfo {
     pub title: String,
     pub date: String,
     pub path: String,
+    pub unit: Option<String>,
+    pub source_path: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+struct ArborCourseManifest {
+    records: Option<Vec<ArborDigestRecord>>,
+}
+
+#[derive(serde::Deserialize)]
+struct ArborDigestRecord {
+    source_path: Option<String>,
+    digest_file: Option<String>,
+}
+
+fn read_course_units_override(root: &Path, course: &str) -> HashMap<String, String> {
+    let path = root.join(".arbor").join("courses.json");
+    let Ok(text) = std::fs::read_to_string(&path) else {
+        return HashMap::new();
+    };
+    let Ok(doc) = serde_json::from_str::<serde_json::Value>(&text) else {
+        return HashMap::new();
+    };
+    let Some(courses) = doc.get("courses").and_then(|c| c.as_object()) else {
+        return HashMap::new();
+    };
+    let Some(entry) = courses.get(course).and_then(|e| e.as_object()) else {
+        return HashMap::new();
+    };
+    let Some(units) = entry.get("units").and_then(|u| u.as_object()) else {
+        return HashMap::new();
+    };
+    let mut out = HashMap::new();
+    for (key, value) in units {
+        if let Some(v) = value.as_str() {
+            if !v.is_empty() {
+                out.insert(key.clone(), v.to_string());
+            }
+        }
+    }
+    out
+}
+
+fn load_arbor_course_manifest(course_dir: &Path) -> Option<ArborCourseManifest> {
+    let path = course_dir.join("arbor-course.json");
+    let text = std::fs::read_to_string(&path).ok()?;
+    serde_json::from_str(&text).ok()
+}
+
+fn record_for_digest<'a>(
+    manifest: &'a ArborCourseManifest,
+    digest_rel: &str,
+) -> Option<&'a ArborDigestRecord> {
+    manifest.records.as_ref()?.iter().find(|rec| {
+        rec.digest_file
+            .as_deref()
+            .map(|df| df == digest_rel)
+            .unwrap_or(false)
+    })
+}
+
+fn unit_from_source_path(course: &str, source_path: &str) -> Option<String> {
+    let prefix = format!("{course}/");
+    let rest = source_path.strip_prefix(&prefix)?;
+    let mut parts = rest.split('/');
+    let first = parts.next()?;
+    if parts.next().is_some() {
+        Some(first.to_string())
+    } else {
+        None
+    }
+}
+
+fn digest_unit_and_source(
+    course: &str,
+    digest_rel: &str,
+    manifest: Option<&ArborCourseManifest>,
+    units_override: &HashMap<String, String>,
+) -> (Option<String>, Option<String>) {
+    if let Some(unit) = units_override.get(digest_rel) {
+        let source = manifest
+            .and_then(|m| record_for_digest(m, digest_rel))
+            .and_then(|r| r.source_path.clone());
+        return (Some(unit.clone()), source);
+    }
+    let Some(m) = manifest else {
+        return (None, None);
+    };
+    let Some(rec) = record_for_digest(m, digest_rel) else {
+        return (None, None);
+    };
+    let source_path = rec.source_path.clone();
+    let unit = source_path
+        .as_deref()
+        .and_then(|sp| unit_from_source_path(course, sp));
+    (unit, source_path)
+}
+
+fn validate_import_subfolder(subfolder: &str) -> Result<(), String> {
+    validate_path_component(subfolder, "subfolder")?;
+    if subfolder.starts_with('.') {
+        return Err("Invalid subfolder".into());
+    }
+    if is_reserved_course_name(subfolder) {
+        return Err(format!(
+            "\"{subfolder}\" is reserved. Choose a different folder name."
+        ));
+    }
+    Ok(())
 }
 
 fn markdown_title(text: &str) -> Option<String> {
@@ -938,17 +1047,24 @@ pub async fn import_sources(
     root: String,
     course: String,
     paths: Vec<String>,
+    subfolder: Option<String>,
 ) -> Result<Vec<String>, String> {
     spawn_blocking_cmd(move || {
         validate_path_component(&course, "course name")?;
-        let dest_dir = Path::new(&root).join(&course);
-        if !dest_dir.is_dir() {
+        let course_dir = Path::new(&root).join(&course);
+        if !course_dir.is_dir() {
             return Err(format!("Class not found: {course}"));
         }
-        let mut imported = Vec::new();
-        let mut used_names: HashSet<String> = HashSet::new();
-        for src in paths {
-            let src_path = Path::new(&src);
+        let subfolder_name = subfolder.as_deref();
+        if let Some(sub) = subfolder_name {
+            validate_import_subfolder(sub)?;
+        }
+        let mut dest_dir = course_dir;
+        if let Some(sub) = subfolder_name {
+            dest_dir = dest_dir.join(sub);
+        }
+        for src in &paths {
+            let src_path = Path::new(src);
             if !src_path.is_file() {
                 return Err(format!("File not found: {src}"));
             }
@@ -960,6 +1076,14 @@ pub async fn import_sources(
             if !SOURCE_EXTENSIONS.contains(&ext.as_str()) {
                 return Err(format!("Unsupported file type: {src}"));
             }
+        }
+        if subfolder_name.is_some() && !dest_dir.is_dir() {
+            std::fs::create_dir_all(&dest_dir).map_err(|e| e.to_string())?;
+        }
+        let mut imported = Vec::new();
+        let mut used_names: HashSet<String> = HashSet::new();
+        for src in paths {
+            let src_path = Path::new(&src);
             let file_name = src_path
                 .file_name()
                 .ok_or_else(|| format!("Invalid path: {src}"))?;
@@ -990,10 +1114,14 @@ pub async fn list_digests(root: String, course: String) -> Result<Vec<DigestInfo
         if course.contains('/') || course.contains('\\') || course.contains("..") {
             return Err("Invalid course name".into());
         }
-        let digests_dir = Path::new(&root).join(&course).join("digests");
+        let root_path = Path::new(&root);
+        let digests_dir = root_path.join(&course).join("digests");
         if !digests_dir.is_dir() {
             return Ok(vec![]);
         }
+        let manifest = load_arbor_course_manifest(&root_path.join(&course));
+        let units_override = read_course_units_override(root_path, &course);
+        let manifest_ref = manifest.as_ref();
         let mut digests = Vec::new();
         for entry in std::fs::read_dir(&digests_dir).map_err(|e| e.to_string())? {
             let entry = entry.map_err(|e| e.to_string())?;
@@ -1010,10 +1138,15 @@ pub async fn list_digests(root: String, course: String) -> Result<Vec<DigestInfo
                     .ok()
                     .and_then(|text| markdown_title(&text))
                     .unwrap_or_else(|| date.clone());
+                let digest_rel = format!("digests/{file_name}");
+                let (unit, source_path) =
+                    digest_unit_and_source(&course, &digest_rel, manifest_ref, &units_override);
                 digests.push(DigestInfo {
                     title,
                     date,
                     path: format!("{course}/digests/{file_name}"),
+                    unit,
+                    source_path,
                 });
             }
         }
@@ -2337,6 +2470,152 @@ mod tests {
         assert_eq!(listed[0].title, "Glycolysis net yield");
         assert_eq!(listed[0].date, "2026-08-12");
         assert_eq!(listed[0].path, "Biology/digests/2026-08-12.md");
+        assert!(listed[0].unit.is_none());
+        assert!(listed[0].source_path.is_none());
+    }
+
+    #[test]
+    fn list_digests_unit_from_manifest_paths() {
+        let root = temp_root("digest-unit");
+        let bio = root.join("Bio");
+        let digests = bio.join("digests");
+        fs::create_dir_all(&digests).unwrap();
+        fs::write(digests.join("intro.md"), b"# Intro\n").unwrap();
+        fs::write(digests.join("unit-2.md"), b"# Unit 2\n").unwrap();
+        let manifest = serde_json::json!({
+            "version": 2,
+            "records": [
+                {
+                    "source_path": "Bio/intro.pdf",
+                    "digest_file": "digests/intro.md",
+                },
+                {
+                    "source_path": "Bio/Unit 2/lec.pdf",
+                    "digest_file": "digests/unit-2.md",
+                }
+            ]
+        });
+        fs::write(
+            bio.join("arbor-course.json"),
+            serde_json::to_vec(&manifest).unwrap(),
+        )
+        .unwrap();
+
+        let listed =
+            block_on_cmd(list_digests(root.to_string_lossy().into_owned(), "Bio".into())).unwrap();
+        let by_path: HashMap<_, _> = listed
+            .iter()
+            .map(|d| (d.path.as_str(), d))
+            .collect();
+        let intro = by_path.get("Bio/digests/intro.md").unwrap();
+        assert_eq!(intro.unit, None);
+        assert_eq!(intro.source_path.as_deref(), Some("Bio/intro.pdf"));
+        let unit2 = by_path.get("Bio/digests/unit-2.md").unwrap();
+        assert_eq!(unit2.unit.as_deref(), Some("Unit 2"));
+        assert_eq!(unit2.source_path.as_deref(), Some("Bio/Unit 2/lec.pdf"));
+    }
+
+    #[test]
+    fn list_digests_units_override_wins() {
+        let root = temp_root("digest-override");
+        let arbor = root.join(".arbor");
+        fs::create_dir_all(&arbor).unwrap();
+        let courses = serde_json::json!({
+            "version": 1,
+            "courses": {
+                "Bio": {
+                    "units": {
+                        "digests/unit-2.md": "Custom"
+                    }
+                }
+            }
+        });
+        fs::write(arbor.join("courses.json"), serde_json::to_vec(&courses).unwrap()).unwrap();
+
+        let bio = root.join("Bio");
+        let digests = bio.join("digests");
+        fs::create_dir_all(&digests).unwrap();
+        fs::write(digests.join("unit-2.md"), b"# Unit 2\n").unwrap();
+        let manifest = serde_json::json!({
+            "version": 2,
+            "records": [{
+                "source_path": "Bio/Unit 2/lec.pdf",
+                "digest_file": "digests/unit-2.md",
+            }]
+        });
+        fs::write(
+            bio.join("arbor-course.json"),
+            serde_json::to_vec(&manifest).unwrap(),
+        )
+        .unwrap();
+
+        let listed =
+            block_on_cmd(list_digests(root.to_string_lossy().into_owned(), "Bio".into())).unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].unit.as_deref(), Some("Custom"));
+    }
+
+    #[test]
+    fn list_digests_missing_manifest_returns_nulls() {
+        let root = temp_root("digest-no-manifest");
+        let digests = root.join("Bio").join("digests");
+        fs::create_dir_all(&digests).unwrap();
+        fs::write(digests.join("solo.md"), b"# Solo\n").unwrap();
+        let listed =
+            block_on_cmd(list_digests(root.to_string_lossy().into_owned(), "Bio".into())).unwrap();
+        assert_eq!(listed.len(), 1);
+        assert!(listed[0].unit.is_none());
+        assert!(listed[0].source_path.is_none());
+    }
+
+    #[test]
+    fn import_sources_subfolder_rejects_missing_class_before_mkdir() {
+        let root = temp_root("import-no-class");
+        let src = root.join("inbox").join("lecture.pdf");
+        fs::create_dir_all(src.parent().unwrap()).unwrap();
+        fs::write(&src, b"%PDF").unwrap();
+        for bad_sub in ["Unit 2", "study"] {
+            let err = block_on_cmd(import_sources(
+                root.to_string_lossy().into_owned(),
+                "NoSuch".into(),
+                vec![src.to_string_lossy().into_owned()],
+                Some(bad_sub.into()),
+            ))
+            .unwrap_err();
+            assert!(err.contains("Class not found"), "{err}");
+            assert!(!root.join("NoSuch").exists());
+        }
+    }
+
+    #[test]
+    fn import_sources_subfolder_copies_and_validates() {
+        let root = temp_root("import-sub");
+        let course = root.join("Biology");
+        fs::create_dir_all(&course).unwrap();
+        let src = root.join("inbox").join("lecture.pdf");
+        fs::create_dir_all(src.parent().unwrap()).unwrap();
+        fs::write(&src, b"%PDF").unwrap();
+
+        let imported = block_on_cmd(import_sources(
+            root.to_string_lossy().into_owned(),
+            "Biology".into(),
+            vec![src.to_string_lossy().into_owned()],
+            Some("Unit 2".into()),
+        ))
+        .unwrap();
+        assert_eq!(imported, vec!["lecture.pdf"]);
+        assert!(course.join("Unit 2").join("lecture.pdf").is_file());
+
+        for bad in ["../x", "a/b", ".hidden", "study"] {
+            let err = block_on_cmd(import_sources(
+                root.to_string_lossy().into_owned(),
+                "Biology".into(),
+                vec![src.to_string_lossy().into_owned()],
+                Some(bad.into()),
+            ))
+            .unwrap_err();
+            assert!(!err.is_empty(), "expected error for {bad}");
+        }
     }
 
     #[test]
@@ -2401,6 +2680,7 @@ mod tests {
             root.to_string_lossy().into_owned(),
             "Biology".into(),
             vec![first.to_string_lossy().into_owned()],
+            None,
         ))
         .unwrap();
         assert_eq!(imported, vec!["lecture.pdf"]);
@@ -2411,6 +2691,7 @@ mod tests {
             root.to_string_lossy().into_owned(),
             "Biology".into(),
             vec![first.to_string_lossy().into_owned()],
+            None,
         ))
         .unwrap();
         assert_eq!(again, vec!["lecture.pdf"]);
@@ -2420,6 +2701,7 @@ mod tests {
             root.to_string_lossy().into_owned(),
             "Biology".into(),
             vec![src_dir.join("notes.txt").to_string_lossy().into_owned()],
+            None,
         ))
         .is_err());
     }
@@ -2440,6 +2722,7 @@ mod tests {
             root.to_string_lossy().into_owned(),
             "Clin Med 2".into(),
             vec![incoming.to_string_lossy().into_owned()],
+            None,
         ))
         .unwrap();
 
@@ -2463,6 +2746,7 @@ mod tests {
             root.to_string_lossy().into_owned(),
             "Clin Med 2".into(),
             vec![existing.to_string_lossy().into_owned()],
+            None,
         ))
         .unwrap();
 
@@ -2494,6 +2778,7 @@ mod tests {
             root.to_string_lossy().into_owned(),
             "Biology".into(),
             vec![existing.to_string_lossy().into_owned()],
+            None,
         ))
         .unwrap();
 
@@ -2521,6 +2806,7 @@ mod tests {
                 a.join("lecture.pdf").to_string_lossy().into_owned(),
                 b.join("lecture.pdf").to_string_lossy().into_owned(),
             ],
+            None,
         ))
         .unwrap();
 
@@ -2548,6 +2834,7 @@ mod tests {
                 a.join("Lecture.pdf").to_string_lossy().into_owned(),
                 b.join("lecture.pdf").to_string_lossy().into_owned(),
             ],
+            None,
         ))
         .unwrap();
 

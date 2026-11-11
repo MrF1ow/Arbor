@@ -244,7 +244,10 @@ def build_parser() -> argparse.ArgumentParser:
     cmeta_set.add_argument(
         "--fields",
         required=True,
-        help='JSON object with "icon" and "color" keys (null clears).',
+        help=(
+            'JSON object with optional "icon", "color", "exam_date", "units" '
+            '(icon/color/exam_date: null or "" clears; units: null or {} clears).'
+        ),
     )
 
     si = sub.add_parser("skill-install", help="Install a skill package from a pinned git commit.")
