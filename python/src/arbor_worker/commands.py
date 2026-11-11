@@ -1275,6 +1275,23 @@ def cmd_chat(_args) -> int:
         budget_chars = int(payload.get("budget_chars", 12_000))
         if mode not in {"ask", "explain"}:
             raise ValueError(f"invalid mode: {mode!r}")
+        digests_raw = payload.get("digests")
+        digests: list[str] | None = None
+        if digests_raw is not None:
+            if not isinstance(digests_raw, list):
+                raise ValueError("invalid digests")
+            if digests_raw:
+                if not all(isinstance(item, str) for item in digests_raw):
+                    raise ValueError("invalid digests")
+                from arbor_worker.chat import resolve_chat_digest_paths
+
+                digests = resolve_chat_digest_paths(root, course, digests_raw)
+        focus_raw = payload.get("focus")
+        focus = None
+        if focus_raw is not None:
+            from arbor_worker.chat import parse_chat_focus
+
+            focus = parse_chat_focus(root, course, focus_raw)
         provider = make_provider(provider_name, root)
         answer(
             root,
@@ -1285,6 +1302,8 @@ def cmd_chat(_args) -> int:
             provider,
             model,
             budget_chars=budget_chars,
+            digests=digests,
+            focus=focus,
             emitter=emitter,
         )
     except ProviderError as error:

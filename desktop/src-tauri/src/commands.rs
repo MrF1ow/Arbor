@@ -1779,6 +1779,24 @@ pub(crate) fn validate_chat_mode(mode: &str) -> Result<(), String> {
     }
 }
 
+#[derive(Clone, serde::Deserialize)]
+pub struct ChatFocusPayload {
+    pub digest: String,
+    pub heading: Option<String>,
+    pub text: String,
+}
+
+const CHAT_FOCUS_TEXT_REJECT_CHARS: usize = 100_000;
+
+pub(crate) fn validate_chat_focus_text(text: &str) -> Result<(), String> {
+    if text.chars().count() > CHAT_FOCUS_TEXT_REJECT_CHARS {
+        return Err(format!(
+            "focus text exceeds maximum size ({CHAT_FOCUS_TEXT_REJECT_CHARS} characters)"
+        ));
+    }
+    Ok(())
+}
+
 pub(crate) fn chat_worker_stdin_payload(
     root: &str,
     course: &str,
@@ -1787,8 +1805,10 @@ pub(crate) fn chat_worker_stdin_payload(
     provider: &str,
     model: &str,
     history: &[serde_json::Value],
+    digests: Option<&[String]>,
+    focus: Option<&ChatFocusPayload>,
 ) -> serde_json::Value {
-    serde_json::json!({
+    let mut payload = serde_json::json!({
         "root": root,
         "course": course,
         "question": question,
@@ -1796,7 +1816,22 @@ pub(crate) fn chat_worker_stdin_payload(
         "provider": provider,
         "model": model,
         "history": history,
-    })
+    });
+    if let Some(list) = digests.filter(|forms| !forms.is_empty()) {
+        payload["digests"] = serde_json::json!(list);
+    }
+    if let Some(focus_payload) = focus {
+        let text = focus_payload.text.trim();
+        let mut focus_obj = serde_json::json!({
+            "digest": focus_payload.digest,
+            "text": text,
+        });
+        if let Some(heading) = &focus_payload.heading {
+            focus_obj["heading"] = serde_json::json!(heading);
+        }
+        payload["focus"] = focus_obj;
+    }
+    payload
 }
 
 #[tauri::command]
@@ -1810,10 +1845,33 @@ pub async fn start_chat(
     provider: Option<String>,
     model: String,
     history: Vec<serde_json::Value>,
+    digests: Option<Vec<String>>,
+    focus: Option<ChatFocusPayload>,
 ) -> Result<(), String> {
     spawn_blocking_cmd_unit(move || {
+        use crate::reading_state::validate_digest_path;
         validate_chat_course(&course)?;
         validate_chat_mode(&mode)?;
+        if let Some(list) = digests.as_ref().filter(|forms| !forms.is_empty()) {
+            for form in list {
+                validate_digest_path(form)?;
+                let prefix = format!("{course}/");
+                if !form.starts_with(&prefix) {
+                    return Err(format!("digest is not in course {course}: {form}"));
+                }
+            }
+        }
+        if let Some(focus_payload) = &focus {
+            validate_digest_path(&focus_payload.digest)?;
+            let prefix = format!("{course}/");
+            if !focus_payload.digest.starts_with(&prefix) {
+                return Err(format!(
+                    "digest is not in course {course}: {}",
+                    focus_payload.digest
+                ));
+            }
+            validate_chat_focus_text(&focus_payload.text)?;
+        }
         if model.trim().is_empty() {
             return Err("Model is required".into());
         }
@@ -1859,6 +1917,8 @@ pub async fn start_chat(
             &provider_id,
             model.trim(),
             &history,
+            digests.as_deref(),
+            focus.as_ref(),
         );
         let stdin_body = serde_json::to_string(&payload).map_err(|e| e.to_string())?;
 
@@ -3025,6 +3085,8 @@ mod tests {
             "fake",
             "fake-model",
             &[serde_json::json!({"role": "user", "content": "Hi"})],
+            None,
+            None,
         );
         assert_eq!(payload["root"], "/knowledge");
         assert_eq!(payload["course"], "Biology");
@@ -3036,6 +3098,84 @@ mod tests {
         let text = payload.to_string();
         assert!(!text.contains("plan"));
         assert!(!text.contains(".arbor/chat"));
+    }
+
+    #[test]
+    fn chat_worker_stdin_scoped_includes_digests_and_focus() {
+        let payload = chat_worker_stdin_payload(
+            "/knowledge",
+            "Bio",
+            "What is ATP?",
+            "ask",
+            "fake",
+            "fake-model",
+            &[],
+            Some(&["Bio/digests/intro.md".to_string()]),
+            Some(&ChatFocusPayload {
+                digest: "Bio/digests/intro.md".to_string(),
+                heading: Some("Intro".to_string()),
+                text: "  passage text  ".to_string(),
+            }),
+        );
+        assert_eq!(payload["digests"], serde_json::json!(["Bio/digests/intro.md"]));
+        assert_eq!(payload["focus"]["digest"], "Bio/digests/intro.md");
+        assert_eq!(payload["focus"]["text"], "passage text");
+        assert_eq!(payload["focus"]["heading"], "Intro");
+    }
+
+    #[test]
+    fn chat_worker_stdin_unscoped_omits_scope_keys() {
+        let unscoped = chat_worker_stdin_payload(
+            "/knowledge",
+            "Biology",
+            "What is DNA?",
+            "ask",
+            "fake",
+            "fake-model",
+            &[],
+            None,
+            None,
+        );
+        assert!(unscoped.get("digests").is_none());
+        assert!(unscoped.get("focus").is_none());
+        let legacy = serde_json::json!({
+            "root": "/knowledge",
+            "course": "Biology",
+            "question": "What is DNA?",
+            "mode": "ask",
+            "provider": "fake",
+            "model": "fake-model",
+            "history": [],
+        });
+        assert_eq!(unscoped, legacy);
+    }
+
+    #[test]
+    fn chat_worker_stdin_focus_passes_text_over_4000_uncapped() {
+        let long = "a".repeat(5000);
+        let payload = chat_worker_stdin_payload(
+            "/knowledge",
+            "Bio",
+            "What is ATP?",
+            "ask",
+            "fake",
+            "fake-model",
+            &[],
+            None,
+            Some(&ChatFocusPayload {
+                digest: "Bio/digests/intro.md".to_string(),
+                heading: None,
+                text: long.clone(),
+            }),
+        );
+        assert_eq!(payload["focus"]["text"], long);
+    }
+
+    #[test]
+    fn validate_chat_focus_text_rejects_absurd_size() {
+        let huge = "x".repeat(100_001);
+        assert!(validate_chat_focus_text(&huge).is_err());
+        assert!(validate_chat_focus_text(&"x".repeat(100_000)).is_ok());
     }
 }
 
