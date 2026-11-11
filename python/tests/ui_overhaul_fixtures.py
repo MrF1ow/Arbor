@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+from arbor_worker.course_meta import apply_course_meta_fields
 from arbor_worker.gitstate import git_user_dirname
 from arbor_worker.machine import PROGRESS_BAK_GIT_EXCLUDE
 from arbor_worker.sync import LOCAL_STATE_GIT_EXCLUDE
@@ -155,6 +156,7 @@ def build_ui_overhaul_root(tmp_path: Path) -> UiOverhaulRoot:
                         "ease": 2.5,
                         "interval_days": 0,
                         "due_at": "2026-10-17T12:00:00Z",
+                        "source": {"digest": "digests/intro.md", "heading": "Intro"},
                     },
                     "fc_mastered": {
                         "seen": 3,
@@ -163,6 +165,7 @@ def build_ui_overhaul_root(tmp_path: Path) -> UiOverhaulRoot:
                         "ease": 2.5,
                         "interval_days": 21,
                         "due_at": "2026-11-07T12:00:00Z",
+                        "source": {"digest": "digests/unit-2.md", "heading": "Unit 2"},
                     },
                 },
                 "questions": {},
@@ -171,6 +174,36 @@ def build_ui_overhaul_root(tmp_path: Path) -> UiOverhaulRoot:
         )
         + "\n"
     )
+
+    bio_study = root / "Bio" / "study"
+    bio_study.mkdir(parents=True, exist_ok=True)
+    (bio_study / "flashcards.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "course": "Bio",
+                "cards": [
+                    {
+                        "id": "fc_due",
+                        "front": "Due card",
+                        "back": "Answer",
+                        "source": {"digest": "digests/intro.md", "heading": "Intro"},
+                    },
+                    {
+                        "id": "fc_mastered",
+                        "front": "Mastered card",
+                        "back": "Answer",
+                        "source": {"digest": "digests/unit-2.md", "heading": "Unit 2"},
+                    },
+                ],
+            },
+            indent=2,
+        )
+        + "\n"
+    )
+
+    apply_course_meta_fields(root, "Bio", {"exam_date": "2026-12-01"})
+    apply_course_meta_fields(root, "Chem", {"exam_date": "2026-11-20"})
 
     _run_git(root, "add", ".")
     _run_git(root, "commit", "-q", "-m", "ui-overhaul fixture")

@@ -1403,7 +1403,7 @@ pub fn build_study_progress_argv(
         course.to_string(),
     ];
     match action {
-        "due" | "weak" | "recommend" | "overview" | "stats" => {
+        "due" | "weak" | "recommend" | "overview" | "stats" | "digest-stats" => {
             argv.push(action.to_string());
         }
         "grade" | "quiz" => {
@@ -1537,6 +1537,36 @@ pub async fn study_plan(
             &model,
             exam_date.as_deref(),
         )?;
+        let refs = study_progress_argv_refs(&argv);
+        run_worker_json_app(&app, &refs)
+    })
+    .await
+}
+
+pub fn build_study_today_argv(root: &str, now: Option<&str>) -> Vec<String> {
+    let mut argv = vec![
+        "study-today".to_string(),
+        "--root".to_string(),
+        root.to_string(),
+    ];
+    if let Some(instant) = now {
+        let trimmed = instant.trim();
+        if !trimmed.is_empty() {
+            argv.push("--now".to_string());
+            argv.push(trimmed.to_string());
+        }
+    }
+    argv
+}
+
+#[tauri::command]
+pub async fn study_today(
+    app: tauri::AppHandle,
+    root: String,
+    now: Option<String>,
+) -> Result<serde_json::Value, String> {
+    spawn_blocking_cmd(move || {
+        let argv = build_study_today_argv(&root, now.as_deref());
         let refs = study_progress_argv_refs(&argv);
         run_worker_json_app(&app, &refs)
     })
@@ -2189,6 +2219,52 @@ mod tests {
             .into_iter()
             .map(str::to_string)
             .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            build_study_progress_argv(
+                "/root",
+                "Bio",
+                "digest-stats",
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap(),
+            vec![
+                "study-progress",
+                "--root",
+                "/root",
+                "--course",
+                "Bio",
+                "digest-stats",
+            ]
+            .into_iter()
+            .map(str::to_string)
+            .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn study_today_argv_builds() {
+        assert_eq!(
+            build_study_today_argv("/root", None),
+            vec![
+                "study-today".to_string(),
+                "--root".to_string(),
+                "/root".to_string(),
+            ]
+        );
+        assert_eq!(
+            build_study_today_argv("/root", Some("2026-11-10T12:00:00Z")),
+            vec![
+                "study-today".to_string(),
+                "--root".to_string(),
+                "/root".to_string(),
+                "--now".to_string(),
+                "2026-11-10T12:00:00Z".to_string(),
+            ]
         );
     }
 

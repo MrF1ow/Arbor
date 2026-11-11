@@ -21,6 +21,7 @@ DEFAULT_EASE = 2.5
 SCHEMA_VERSION = 1
 WRONG_RETRY_MINUTES = 10
 APPLIED_WRITE_IDS_MAX = 500
+MASTERED_INTERVAL_DAYS = 21
 
 
 class StudyProgressError(Exception):
@@ -822,8 +823,13 @@ def study_progress_quiz(
         return doc
 
 
-def _empty_stats_bucket() -> dict[str, dict[str, int]]:
+def empty_quiz_week_totals() -> dict[str, int]:
+    """Quiz accuracy accumulator for a single week (correct + total)."""
     return {"correct": 0, "total": 0}
+
+
+def _empty_stats_bucket() -> dict[str, dict[str, int]]:
+    return empty_quiz_week_totals()
 
 
 def _stats_shell() -> dict[str, Any]:
@@ -946,7 +952,12 @@ def _concept_matches(concept_sources: list[dict], digest: str, heading: str | No
     return False
 
 
-def study_progress_weak(root: Path, course: str) -> dict[str, Any]:
+def study_progress_weak(
+    root: Path,
+    course: str,
+    *,
+    limit: int | None = 5,
+) -> dict[str, Any]:
     validate_course_name(course)
     doc = _load_progress_document(root, course)
 
@@ -1095,7 +1106,141 @@ def study_progress_weak(root: Path, course: str) -> dict[str, Any]:
         )
 
     topics.sort(key=lambda t: (-t["wrong_rate"], -t["wrong"], t["label"]))
-    return {"topics": topics[:5]}
+    if limit is None:
+        return {"topics": topics}
+    return {"topics": topics[:limit]}
+
+
+def _empty_digest_stats_bucket() -> dict[str, Any]:
+    return {
+        "cards": 0,
+        "due": 0,
+        "mastered": 0,
+        "mastery": None,
+        "quiz_correct": 0,
+        "quiz_wrong": 0,
+    }
+
+
+def _digest_keys_from_files(root: Path, course: str) -> list[str]:
+    dig_dir = root / course / "digests"
+    if not dig_dir.is_dir():
+        return []
+    return sorted(f"digests/{path.name}" for path in dig_dir.glob("*.md"))
+
+
+def _card_is_mastered(entry: dict[str, Any]) -> bool:
+    interval = entry.get("interval_days", 0)
+    if isinstance(interval, bool):
+        return False
+    if not isinstance(interval, (int, float)):
+        return False
+    return float(interval) >= MASTERED_INTERVAL_DAYS
+
+
+def _question_digest_key(
+    entry: dict[str, Any],
+    quiz_art: dict[str, dict],
+    question_id: str,
+) -> str | None:
+    source = _entry_source(entry, quiz_art, question_id)
+    if source is None:
+        return None
+    return normalize_study_digest(str(source["digest"]))
+
+
+def _card_digest_key(
+    entry: dict[str, Any],
+    card_art: dict[str, dict],
+    card_id: str,
+) -> str | None:
+    source = _entry_source(entry, card_art, card_id)
+    if source is None:
+        return None
+    return normalize_study_digest(str(source["digest"]))
+
+
+def _finalize_digest_mastery(buckets: dict[str, dict[str, Any]]) -> None:
+    for bucket in buckets.values():
+        cards = bucket["cards"]
+        if cards == 0:
+            bucket["mastery"] = None
+        else:
+            bucket["mastery"] = bucket["mastered"] / cards
+
+
+def study_progress_digest_stats(
+    root: Path,
+    course: str,
+    *,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    validate_course_name(course)
+    clock = now or parse_utc_now(None)
+    doc = _load_progress_document(root, course)
+    card_art, quiz_art = _load_artifact_sources(root, course)
+    deck_ids = _load_deck_ids(root, course)
+    cards_progress = doc["cards"]
+    digests: dict[str, dict[str, Any]] = {
+        key: _empty_digest_stats_bucket() for key in _digest_keys_from_files(root, course)
+    }
+
+    def touch(key: str) -> dict[str, Any]:
+        if key not in digests:
+            digests[key] = _empty_digest_stats_bucket()
+        return digests[key]
+
+    for card_id in deck_ids:
+        source = card_art.get(card_id)
+        if source is None:
+            continue
+        dkey = normalize_study_digest(str(source["digest"]))
+        bucket = touch(dkey)
+        bucket["cards"] += 1
+        entry = cards_progress.get(card_id)
+        prog = entry if isinstance(entry, dict) else None
+        if prog is not None and _card_is_mastered(prog):
+            bucket["mastered"] += 1
+        if _card_is_due(prog, clock):
+            bucket["due"] += 1
+
+    for question_id, entry in doc["questions"].items():
+        if not isinstance(entry, dict):
+            continue
+        dkey = _question_digest_key(entry, quiz_art, question_id)
+        if dkey is None:
+            continue
+        bucket = touch(dkey)
+        correct = entry.get("correct", 0)
+        wrong = entry.get("wrong", 0)
+        if isinstance(correct, int) and correct > 0:
+            bucket["quiz_correct"] += correct
+        if isinstance(wrong, int) and wrong > 0:
+            bucket["quiz_wrong"] += wrong
+
+    _finalize_digest_mastery(digests)
+    return {"digests": digests}
+
+
+def study_progress_class_mastery(
+    root: Path,
+    course: str,
+    *,
+    now: datetime | None = None,
+) -> tuple[int, float | None]:
+    validate_course_name(course)
+    _ = now  # mastery uses stored intervals only
+    deck_ids = _load_deck_ids(root, course)
+    if not deck_ids:
+        return 0, None
+    doc = _load_progress_document(root, course)
+    cards = doc["cards"]
+    mastered = 0
+    for card_id in deck_ids:
+        entry = cards.get(card_id)
+        if isinstance(entry, dict) and _card_is_mastered(entry):
+            mastered += 1
+    return mastered, mastered / len(deck_ids)
 
 
 def emit_json_line(value: Any) -> None:

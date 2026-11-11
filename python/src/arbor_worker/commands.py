@@ -725,12 +725,29 @@ def _commit_study_file_if_dirty(
         maybe_sync_after_commit(root, emitter)
 
 
+def _restore_viewer_legacy_progress(root: Path, legacy_rel: Path) -> None:
+    """A viewer cannot commit the shared legacy file's removal: put it back.
+
+    Migration already copied it to the viewer's own progress.json, which then
+    wins, so restoring the tracked copy only keeps the working tree clean (a
+    dirty tracked deletion would block a later rebase pull).
+    """
+    import subprocess
+
+    subprocess.run(
+        ["git", "-C", str(root), "checkout", "--", str(legacy_rel)],
+        capture_output=True,
+        text=True,
+    )
+
+
 def _commit_study_progress_if_dirty(
     root: Path,
     course: str,
     message: str,
     emitter: EventEmitter,
 ) -> None:
+    from arbor_worker.library import current_role
     from arbor_worker.machine import existing_machine_id
     from arbor_worker.study_progress import history_file_path, progress_path
 
@@ -739,8 +756,12 @@ def _commit_study_progress_if_dirty(
     rel_paths: list[Path] = []
     if path_has_pending_changes(root, progress_rel):
         rel_paths.append(progress_rel)
+    role = current_role(root)
     if path_has_pending_changes(root, legacy_rel):
-        rel_paths.append(legacy_rel)
+        if role != "viewer":
+            rel_paths.append(legacy_rel)
+        else:
+            _restore_viewer_legacy_progress(root, legacy_rel)
     mid = existing_machine_id(root)
     if mid is not None:
         history_rel = history_file_path(root, course, mid).relative_to(root)
@@ -755,6 +776,7 @@ def _commit_study_progress_if_dirty(
 
 
 def cmd_study_progress(args) -> int:
+    from arbor_worker.library import LibraryError
     from arbor_worker.study_progress import (
         StudyProgressError,
         emit_json_line,
@@ -783,7 +805,7 @@ def cmd_study_progress(args) -> int:
                 f"study: {course} progress",
                 emitter,
             )
-        except GitStateError as error:
+        except (GitStateError, LibraryError) as error:
             print(str(error), file=sys.stderr)
             return 1
         emit_json_line(doc)
@@ -810,6 +832,11 @@ def cmd_study_progress(args) -> int:
         if action == "stats":
             now = parse_utc_now(args.now) if getattr(args, "now", None) else None
             return finish(study_progress_stats(root, course, now=now))
+        if action == "digest-stats":
+            from arbor_worker.study_progress import study_progress_digest_stats
+
+            now = parse_utc_now(args.now) if getattr(args, "now", None) else None
+            return finish(study_progress_digest_stats(root, course, now=now))
         if action == "due":
             now = parse_utc_now(args.now) if args.now else None
             return finish(study_progress_due(root, course, now=now))
@@ -872,6 +899,33 @@ def cmd_study_progress(args) -> int:
         return 1
     print(f"unknown study-progress action: {action}", file=sys.stderr)
     return 2
+
+
+def cmd_study_today(args) -> int:
+    from arbor_worker.library import LibraryError
+    from arbor_worker.study_progress import emit_json_line, parse_utc_now
+    from arbor_worker.today import list_knowledge_courses, study_today
+
+    root = Path(args.root)
+    now = parse_utc_now(args.now) if getattr(args, "now", None) else None
+    emitter = EventEmitter(sys.stderr)
+    try:
+        payload = study_today(root, now=now)
+    except OSError as error:
+        print(f"study-today failed: {error}", file=sys.stderr)
+        return 1
+    for course in list_knowledge_courses(root):
+        try:
+            _commit_study_progress_if_dirty(
+                root,
+                course,
+                f"study: {course} progress",
+                emitter,
+            )
+        except (GitStateError, LibraryError) as error:
+            print(f"warning: {error}", file=sys.stderr)
+    emit_json_line(payload)
+    return 0
 
 
 def cmd_study_plan(args) -> int:

@@ -84,6 +84,7 @@ pub fn run() {
             reading_state::read_reading_state,
             reading_state::write_reading_state,
             commands::study_progress,
+            commands::study_today,
             commands::study_plan,
             commands::append_card,
             commands::study_artifact_stale,

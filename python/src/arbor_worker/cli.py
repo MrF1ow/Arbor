@@ -156,6 +156,16 @@ def build_parser() -> argparse.ArgumentParser:
     sp_stats = sp_sub.add_parser("stats", help="Print quiz and card accuracy by week.")
     sp_stats.add_argument("--now", default=None, help="UTC instant (ISO-8601).")
 
+    sp_digest = sp_sub.add_parser(
+        "digest-stats",
+        help="Print per-lecture card and quiz aggregates.",
+    )
+    sp_digest.add_argument("--now", default=None, help="UTC instant (ISO-8601).")
+
+    today = sub.add_parser("study-today", help="Cross-class Today summary (JSON on stdout).")
+    today.add_argument("--root", required=True, help="Path to the Knowledge git repo.")
+    today.add_argument("--now", default=None, help="UTC instant (ISO-8601).")
+
     plan = sub.add_parser("study-plan", help="Generate study/plan.md for a course.")
     plan.add_argument("--root", required=True, help="Path to the Knowledge git repo.")
     plan.add_argument("--course", required=True, help="Course directory name.")
@@ -339,6 +349,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "study-progress":
         from arbor_worker.commands import cmd_study_progress
         return cmd_study_progress(args)
+    if args.command == "study-today":
+        from arbor_worker.commands import cmd_study_today
+        return cmd_study_today(args)
     if args.command == "study-plan":
         from arbor_worker.commands import cmd_study_plan
         return cmd_study_plan(args)
