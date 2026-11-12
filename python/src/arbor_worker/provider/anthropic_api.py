@@ -14,6 +14,8 @@ from arbor_worker.provider.base import (
     ProviderResult,
     ProviderStatus,
     image_media_type,
+    record_usage,
+    usage_tokens,
 )
 from arbor_worker.provider.http_transport import (
     error_excerpt,
@@ -153,8 +155,9 @@ class AnthropicApiProvider:
         if status >= 400:
             err_body = b"".join(line_iter)
             raise ProviderError(error_excerpt(status, err_body, key))
-        text = _iter_anthropic_sse(line_iter, on_delta, api_key=key)
-        return ProviderResult(markdown=text)
+        usage: dict[str, int] = {}
+        text = _iter_anthropic_sse(line_iter, on_delta, api_key=key, usage=usage)
+        return ProviderResult(markdown=text, **usage_tokens(usage))
 
     def stream(self, request: ProviderRequest, on_delta: DeltaFn) -> ProviderResult:
         return self._stream_http(request, on_delta)
@@ -203,11 +206,17 @@ class AnthropicApiProvider:
         joined = "".join(parts)
         if not joined:
             raise ProviderError("Anthropic API response did not include assistant text")
-        return ProviderResult(markdown=joined)
+        usage: dict[str, int] = {}
+        record_usage(usage, payload.get("usage"), "input_tokens", "output_tokens")
+        return ProviderResult(markdown=joined, **usage_tokens(usage))
 
 
 def _iter_anthropic_sse(
-    lines: Iterator[bytes], on_delta: DeltaFn, *, api_key: str | None = None
+    lines: Iterator[bytes],
+    on_delta: DeltaFn,
+    *,
+    api_key: str | None = None,
+    usage: dict[str, int] | None = None,
 ) -> str:
     event_type: str | None = None
     parts: list[str] = []
@@ -233,6 +242,15 @@ def _iter_anthropic_sse(
                 elif isinstance(data.get("message"), str):
                     message = data["message"]
             raise ProviderError(redact_secret(message, api_key))
+        if event_type == "message_start" and isinstance(data, dict):
+            message = data.get("message")
+            if isinstance(message, dict):
+                record_usage(usage, message.get("usage"), "input_tokens", "output_tokens")
+            continue
+        if event_type == "message_delta" and isinstance(data, dict):
+            # Cumulative counts: later values replace the message_start ones.
+            record_usage(usage, data.get("usage"), "input_tokens", "output_tokens")
+            continue
         if event_type != "content_block_delta" or not isinstance(data, dict):
             continue
         delta = data.get("delta")

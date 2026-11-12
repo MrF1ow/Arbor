@@ -16,6 +16,8 @@ from arbor_worker.provider.base import (
     ProviderResult,
     ProviderStatus,
     image_media_type,
+    record_usage,
+    usage_tokens,
 )
 from arbor_worker.provider.cli_stream import run_popen_stream
 from arbor_worker.provider.errors import cli_process_failure, message_failure
@@ -159,7 +161,9 @@ class ClaudeCliProvider:
         result = payload.get("result")
         if not isinstance(result, str) or not result.strip():
             raise ProviderError("claude returned empty result")
-        return ProviderResult(markdown=result)
+        usage: dict[str, int] = {}
+        record_usage(usage, payload.get("usage"), "input_tokens", "output_tokens")
+        return ProviderResult(markdown=result, **usage_tokens(usage))
 
     def stream(self, request: ProviderRequest, on_delta: DeltaFn) -> ProviderResult:
         if self._guard_active():
@@ -171,8 +175,10 @@ class ClaudeCliProvider:
         env["PATH"] = gui_path()
         stdin_text = self._stdin_payload(request)
 
+        usage: dict[str, int] = {}
+
         def parse_stdout(lines, delta_fn: DeltaFn) -> str:
-            return iter_stream_json(lines, delta_fn, label="claude")
+            return iter_stream_json(lines, delta_fn, label="claude", usage=usage)
 
         markdown = run_popen_stream(
             popen=self._popen,
@@ -184,4 +190,4 @@ class ClaudeCliProvider:
             parse_stdout=parse_stdout,
             label="claude",
         )
-        return ProviderResult(markdown=markdown)
+        return ProviderResult(markdown=markdown, **usage_tokens(usage))

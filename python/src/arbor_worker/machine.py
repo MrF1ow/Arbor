@@ -179,3 +179,31 @@ def machine_id(root: Path, runner=subprocess.run) -> str:
             return _create_machine_id_locked(path, root, runner)
         finally:
             fcntl.flock(lock_fh.fileno(), fcntl.LOCK_UN)
+
+
+PROVIDER_CALLS_FILE = "provider_calls.jsonl"
+
+
+def provider_calls_path(root: Path, runner=subprocess.run) -> Path:
+    """This machine's provider call log, next to machine.json (never committed)."""
+    return _machine_json_path(root, runner).with_name(PROVIDER_CALLS_FILE)
+
+
+def append_provider_call(root: Path, entry: dict, path: Path | None = None) -> None:
+    """Append one JSON line to the provider call log; raises on any I/O failure.
+
+    The first write makes sure `.arbor/users/*/local/` is in .git/info/exclude, so the
+    log never shows as untracked. A single O_APPEND write keeps concurrent workers'
+    lines whole.
+    """
+    if path is None:
+        path = provider_calls_path(root)
+    if not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        ensure_local_state_excluded(root)
+    line = json.dumps(entry, ensure_ascii=False) + "\n"
+    fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o644)
+    try:
+        os.write(fd, line.encode("utf-8"))
+    finally:
+        os.close(fd)

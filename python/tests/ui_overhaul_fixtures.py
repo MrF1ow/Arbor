@@ -315,3 +315,15 @@ def build_ui_overhaul_update_root(
     _run_git(root, "add", ".")
     _run_git(root, "commit", "-q", "-m", "pending sources")
     return UiOverhaulRoot(root=root)
+
+
+def provider_calls_path(root: Path) -> Path:
+    """This machine's provider call log for `root` (written by the registry wrapper)."""
+    return root / ".arbor" / "users" / git_user_dirname(root) / "local" / "provider_calls.jsonl"
+
+
+def read_provider_calls(root: Path) -> list[dict]:
+    path = provider_calls_path(root)
+    if not path.is_file():
+        return []
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]

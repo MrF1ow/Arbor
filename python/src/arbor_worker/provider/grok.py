@@ -17,6 +17,8 @@ from arbor_worker.provider.base import (
     ProviderResult,
     ProviderStatus,
     image_media_type,
+    usage_tokens,
+    record_usage,
 )
 from arbor_worker.provider.cli_stream import run_popen_stream
 from arbor_worker.provider.errors import cli_process_failure, message_failure
@@ -152,7 +154,13 @@ class GrokCliProvider:
         text = payload.get("text")
         if not isinstance(text, str) or not text.strip():
             raise ProviderError("grok returned empty text")
-        return ProviderResult(markdown=text)
+        usage: dict[str, int] = {}
+        record_usage(usage, payload.get("usage"), "input_tokens", "output_tokens")
+        return ProviderResult(
+            markdown=text,
+            input_tokens=usage.get("input_tokens"),
+            output_tokens=usage.get("output_tokens"),
+        )
 
     def run(self, request: ProviderRequest) -> ProviderResult:
         if resolve_cli_command("grok", self._which) is None:
@@ -254,8 +262,10 @@ class GrokCliProvider:
         try:
             argv = self.build_stream_argv(request, prompt_file=prompt_path)
 
+            usage: dict[str, int] = {}
+
             def parse_stdout(lines, delta_fn: DeltaFn) -> str:
-                return iter_stream_json(lines, delta_fn, label="grok")
+                return iter_stream_json(lines, delta_fn, label="grok", usage=usage)
 
             markdown = run_popen_stream(
                 popen=self._popen,
@@ -269,4 +279,4 @@ class GrokCliProvider:
             )
         finally:
             prompt_path.unlink(missing_ok=True)
-        return ProviderResult(markdown=markdown)
+        return ProviderResult(markdown=markdown, **usage_tokens(usage))

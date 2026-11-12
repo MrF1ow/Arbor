@@ -1,5 +1,6 @@
 mod auth_cache;
 mod usage_cache;
+mod usage_log;
 mod chat_threads;
 mod commands;
 mod course_meta;
@@ -45,6 +46,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::check_auth,
             commands::read_provider_usage,
+            usage_log::usage_summary,
             commands::list_models,
             commands::list_providers,
             commands::plan_update,

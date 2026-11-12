@@ -161,6 +161,7 @@ def _resolve_llm_provider(
     *,
     fake_markdown: str | None = None,
     emit_missing_model_error: bool = True,
+    source: str = "other",
 ):
     entry = PROVIDERS[provider_id]
     if provider_id != "fake" and not model_id:
@@ -182,6 +183,7 @@ def _resolve_llm_provider(
         provider_id,
         root,
         fake_markdown=fake_markdown,
+        source=source,
     )
     resolved_model = model_id or "fake-model"
     return (provider, resolved_model), None
@@ -230,7 +232,9 @@ def cmd_update(args) -> int:
         emitter.run_done(processed=0, failed=0, skipped=0)
         return 1
 
-    resolved, code = _resolve_llm_provider(args.provider, root, args.model, emitter)
+    resolved, code = _resolve_llm_provider(
+        args.provider, root, args.model, emitter, source="job"
+    )
     if code is not None:
         return code
     provider, _model_id = resolved
@@ -611,6 +615,7 @@ def cmd_generate(args) -> int:
             emitter,
             fake_markdown=fake_markdown,
             emit_missing_model_error=False,
+            source="job",
         )
     else:
         resolved, code = _resolve_llm_provider(
@@ -619,6 +624,7 @@ def cmd_generate(args) -> int:
             args.model,
             emitter,
             emit_missing_model_error=False,
+            source="job",
         )
     if code is not None:
         if code == 2:
@@ -1279,6 +1285,7 @@ def cmd_study_plan(args) -> int:
             emitter,
             fake_markdown=fake_markdown,
             emit_missing_model_error=False,
+            source="study_plan",
         )
     else:
         resolved, code = _resolve_llm_provider(
@@ -1287,6 +1294,7 @@ def cmd_study_plan(args) -> int:
             args.model,
             emitter,
             emit_missing_model_error=False,
+            source="study_plan",
         )
     if code is not None:
         if code == 2:
@@ -1434,7 +1442,7 @@ def cmd_chat(_args) -> int:
             from arbor_worker.chat import parse_chat_focus
 
             focus = parse_chat_focus(root, course, focus_raw)
-        provider = make_provider(provider_name, root)
+        provider = make_provider(provider_name, root, source="chat")
         answer(
             root,
             course,

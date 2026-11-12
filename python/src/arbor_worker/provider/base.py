@@ -55,6 +55,38 @@ class ProviderRequest:
 @dataclass(frozen=True)
 class ProviderResult:
     markdown: str
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+
+
+def token_count(value: object) -> int | None:
+    """A reported token count, or None when absent or not a plain non-negative int."""
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None
+    return value
+
+
+def usage_tokens(usage: dict[str, int] | None) -> dict[str, int | None]:
+    """ProviderResult token kwargs from a usage out-param (missing keys stay None)."""
+    usage = usage or {}
+    return {
+        "input_tokens": usage.get("input_tokens"),
+        "output_tokens": usage.get("output_tokens"),
+    }
+
+
+def record_usage(
+    usage: dict[str, int] | None, source: object, input_key: str, output_key: str
+) -> None:
+    """Copy reported counts from a provider usage object into the out-param."""
+    if usage is None or not isinstance(source, dict):
+        return
+    input_tokens = token_count(source.get(input_key))
+    output_tokens = token_count(source.get(output_key))
+    if input_tokens is not None:
+        usage["input_tokens"] = input_tokens
+    if output_tokens is not None:
+        usage["output_tokens"] = output_tokens
 
 
 def image_media_type(path: Path) -> str:
