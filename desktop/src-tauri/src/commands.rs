@@ -3391,6 +3391,73 @@ pub async fn start_update(
     .await
 }
 
+struct StudyJobPostBeginGuard {
+    knowledge_root: PathBuf,
+    job_id: String,
+    app: tauri::AppHandle,
+    from_text_temp: Option<PathBuf>,
+    active: bool,
+}
+
+impl StudyJobPostBeginGuard {
+    fn new(knowledge_root: PathBuf, job_id: String, app: tauri::AppHandle) -> Self {
+        Self {
+            knowledge_root,
+            job_id,
+            app,
+            from_text_temp: None,
+            active: true,
+        }
+    }
+
+    fn set_from_text_temp(&mut self, path: Option<PathBuf>) {
+        self.from_text_temp = path;
+    }
+
+    fn disarm(&mut self) {
+        self.active = false;
+    }
+
+    fn fail(&mut self, message: String) -> Result<String, String> {
+        if let Some(path) = self.from_text_temp.take() {
+            let _ = std::fs::remove_file(path);
+        }
+        let _ = jobs::finish_job(
+            &self.knowledge_root,
+            &self.job_id,
+            jobs::JobStatus::Failed,
+            -1,
+            Some(message.clone()),
+        );
+        if let Ok(mut guard) = self.app.state::<SharedCoordinator>().inner().lock() {
+            guard.finish(&self.job_id);
+        }
+        self.active = false;
+        Err(message)
+    }
+}
+
+impl Drop for StudyJobPostBeginGuard {
+    fn drop(&mut self) {
+        if !self.active {
+            return;
+        }
+        if let Some(path) = self.from_text_temp.take() {
+            let _ = std::fs::remove_file(path);
+        }
+        let _ = jobs::finish_job(
+            &self.knowledge_root,
+            &self.job_id,
+            jobs::JobStatus::Failed,
+            -1,
+            Some("study job aborted after begin".to_string()),
+        );
+        if let Ok(mut guard) = self.app.state::<SharedCoordinator>().inner().lock() {
+            guard.finish(&self.job_id);
+        }
+    }
+}
+
 #[tauri::command]
 pub async fn start_study_job(
     app: tauri::AppHandle,
@@ -3401,6 +3468,7 @@ pub async fn start_study_job(
     model: Option<String>,
     provider: Option<String>,
     digests: Option<Vec<String>>,
+    from_text: Option<String>,
 ) -> Result<String, String> {
     spawn_blocking_cmd(move || {
         let force = force.unwrap_or(false);
@@ -3424,7 +3492,10 @@ pub async fn start_study_job(
             }
         }
         let knowledge_root = Path::new(&root);
-        let remote_full_when_empty = matches!(&transport, WorkerTransport::Ssh { .. });
+        let from_text_body =
+            worker::resolve_study_from_text(&skill, &digests, from_text.as_deref())?;
+        let remote_full_when_empty = matches!(&transport, WorkerTransport::Ssh { .. })
+            && from_text_body.is_none();
         let (resolved_digests, remote_full) = worker::resolve_study_job_digests(
             knowledge_root,
             &course,
@@ -3464,6 +3535,28 @@ pub async fn start_study_job(
             }
         }
 
+        let mut post_begin = StudyJobPostBeginGuard::new(
+            knowledge_root.to_path_buf(),
+            job_id.clone(),
+            app.clone(),
+        );
+
+        let from_text_file = if let Some(text) = from_text_body {
+            let app_data = match app.path().app_data_dir() {
+                Ok(dir) => dir,
+                Err(e) => return post_begin.fail(e.to_string()),
+            };
+            match worker::write_from_text_temp(&app_data, &text) {
+                Ok(path) => {
+                    post_begin.set_from_text_temp(Some(path.clone()));
+                    Some(path)
+                }
+                Err(e) => return post_begin.fail(e),
+            }
+        } else {
+            None
+        };
+
         let cancel = worker::cancel_file_path();
         let _ = std::fs::remove_file(&cancel);
 
@@ -3480,11 +3573,18 @@ pub async fn start_study_job(
                     model,
                     provider_id,
                     resolved_digests.clone(),
+                    from_text_file.clone(),
                     job_id.clone(),
                 );
             }
             WorkerTransport::Ssh { .. } => {
-                let app_data = app.path().app_data_dir().map_err(|e| e.to_string())?;
+                let app_data = match app.path().app_data_dir() {
+                    Ok(dir) => dir,
+                    Err(e) => return post_begin.fail(e.to_string()),
+                };
+                let from_text_arg = from_text_file
+                    .as_ref()
+                    .map(|p| p.to_string_lossy().into_owned());
                 let remote_tokens = worker::generate_sub_args(
                     &root,
                     &course,
@@ -3494,6 +3594,7 @@ pub async fn start_study_job(
                     &provider_id,
                     resolved_digests.as_deref(),
                     remote_full,
+                    from_text_arg.as_deref(),
                 );
                 worker::spawn_remote_generate_stream(
                     app,
@@ -3506,9 +3607,11 @@ pub async fn start_study_job(
                     course,
                     skill,
                     remote_tokens,
+                    from_text_file,
                 );
             }
         }
+        post_begin.disarm();
         Ok(job_id)
     })
     .await

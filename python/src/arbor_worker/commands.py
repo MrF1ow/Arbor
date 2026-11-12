@@ -26,6 +26,7 @@ from arbor_worker.schemas.study.concepts import ConceptGraph
 from arbor_worker.schemas.study.flashcards import FlashcardDeck
 from arbor_worker.schemas.study.quiz import QuizPack
 from arbor_worker.skills.flashcards import (
+    FROM_TEXT_MAX_CHARS,
     FlashcardsSkill,
     digest_batches,
     filter_deck_by_digests,
@@ -357,6 +358,8 @@ def cmd_generate(args) -> int:
 
     digests_raw = getattr(args, "digests", None)
     full_limited = bool(getattr(args, "full", False))
+    from_text_path = getattr(args, "from_text_file", None)
+    from_text = from_text_path is not None
     if full_limited and not digests_raw:
         emitter.skill_failed(
             course=args.course,
@@ -364,6 +367,55 @@ def cmd_generate(args) -> int:
             message="--full requires --digests",
         )
         return 1
+    if from_text:
+        if not digests_raw:
+            emitter.skill_failed(
+                course=args.course,
+                skill=args.skill,
+                message="--from-text-file requires --digests",
+            )
+            return 1
+        if full_limited:
+            emitter.skill_failed(
+                course=args.course,
+                skill=args.skill,
+                message="--from-text-file cannot be used with --full",
+            )
+            return 1
+        if not isinstance(skill, (FlashcardsSkill, QuizSkill)):
+            emitter.skill_failed(
+                course=args.course,
+                skill=args.skill,
+                message="--from-text-file is only supported for flashcards and quiz",
+            )
+            return 1
+        try:
+            with open(from_text_path, encoding="utf-8") as handle:
+                source_text = handle.read(FROM_TEXT_MAX_CHARS + 1)
+        except (OSError, UnicodeError) as error:
+            emitter.skill_failed(
+                course=args.course,
+                skill=args.skill,
+                message=str(error),
+            )
+            return 1
+        if not source_text.strip():
+            emitter.skill_failed(
+                course=args.course,
+                skill=args.skill,
+                message="from-text file is empty",
+            )
+            return 1
+        if len(source_text) > FROM_TEXT_MAX_CHARS:
+            emitter.skill_failed(
+                course=args.course,
+                skill=args.skill,
+                message=(
+                    f"from-text exceeds {FROM_TEXT_MAX_CHARS} characters "
+                    f"({len(source_text)} given)"
+                ),
+            )
+            return 1
     if digests_raw and not isinstance(skill, (FlashcardsSkill, QuizSkill)):
         emitter.skill_failed(
             course=args.course,
@@ -397,27 +449,31 @@ def cmd_generate(args) -> int:
 
     source_hash = hashlib.sha256()
     digest_sections = []
-    try:
-        for digest_path in digest_paths:
-            source_bytes = digest_path.read_bytes()
-            source_hash.update(source_bytes)
-            digest_sections.append(
-                f"# digests/{digest_path.name}\n\n{source_bytes.decode('utf-8')}"
+    if from_text:
+        content_sha256 = hashlib.sha256(source_text.encode("utf-8")).hexdigest()
+        skill_inputs = [""]
+    else:
+        try:
+            for digest_path in digest_paths:
+                source_bytes = digest_path.read_bytes()
+                source_hash.update(source_bytes)
+                digest_sections.append(
+                    f"# digests/{digest_path.name}\n\n{source_bytes.decode('utf-8')}"
+                )
+        except (OSError, UnicodeError) as error:
+            emitter.skill_failed(
+                course=args.course,
+                skill=args.skill,
+                message=str(error),
             )
-    except (OSError, UnicodeError) as error:
-        emitter.skill_failed(
-            course=args.course,
-            skill=args.skill,
-            message=str(error),
+            return 1
+        content_sha256 = source_hash.hexdigest()
+        digest_text = "\n\n".join(digest_sections)
+        skill_inputs = (
+            digest_batches(digest_sections)
+            if isinstance(skill, (FlashcardsSkill, QuizSkill, ConceptsSkill))
+            else [digest_text]
         )
-        return 1
-    content_sha256 = source_hash.hexdigest()
-    digest_text = "\n\n".join(digest_sections)
-    skill_inputs = (
-        digest_batches(digest_sections)
-        if isinstance(skill, (FlashcardsSkill, QuizSkill, ConceptsSkill))
-        else [digest_text]
-    )
 
     study_dir = course_dir / "study"
     if isinstance(skill, CitationsSkill):
@@ -586,22 +642,30 @@ def cmd_generate(args) -> int:
         )
 
     try:
+        def build_generate_prompt(skill_input: str) -> str:
+            if from_text and isinstance(skill, (FlashcardsSkill, QuizSkill)):
+                assert digest_rels is not None
+                return skill.build_prompt_from_text(
+                    course=args.course,
+                    digest_rels=digest_rels,
+                    text=source_text,
+                )
+            if isinstance(skill, DiagramsSkill):
+                return skill.build_prompt(
+                    course=args.course,
+                    digest_text=skill_input,
+                    image_paths=image_paths,
+                )
+            return skill.build_prompt(
+                course=args.course,
+                digest_text=skill_input,
+            )
+
         artifacts = [
             run_skill(
                 provider,
                 ProviderRequest(
-                    prompt=(
-                        skill.build_prompt(
-                            course=args.course,
-                            digest_text=skill_input,
-                            image_paths=image_paths,
-                        )
-                        if isinstance(skill, DiagramsSkill)
-                        else skill.build_prompt(
-                            course=args.course,
-                            digest_text=skill_input,
-                        )
-                    ),
+                    prompt=build_generate_prompt(skill_input),
                     model_id=model_id,
                     cwd=root,
                     image_paths=image_paths,
@@ -669,8 +733,9 @@ def cmd_generate(args) -> int:
                         )
                     fresh = filter_deck_by_digests(artifact, set(digest_rels or []))
                     artifact, added_ids = merge_deck_by_id(existing, fresh)
+                    origin = "text" if from_text else "scoped"
                     for item_id in added_ids:
-                        origins[item_id] = "scoped"
+                        origins[item_id] = origin
                 else:
                     existing = None
                     if artifact_path.is_file():
@@ -694,8 +759,9 @@ def cmd_generate(args) -> int:
                         )
                     fresh = filter_pack_by_digests(artifact, set(digest_rels or []))
                     artifact, added_ids = merge_pack_by_id(existing, fresh)
+                    origin = "text" if from_text else "scoped"
                     for item_id in added_ids:
-                        origins[item_id] = "scoped"
+                        origins[item_id] = origin
                 else:
                     existing = None
                     if artifact_path.is_file():
@@ -798,11 +864,16 @@ def cmd_generate(args) -> int:
         ]
         dirty_rels = [rel for rel in dirty_rels if rel in byte_changed_rels]
         if dirty_rels:
+            commit_message = (
+                f"study: {args.course} {skill.name} from chat"
+                if from_text
+                else f"study: {args.course} {skill.name}"
+            )
             try:
                 commit = commit_and_note(
                     root,
                     dirty_rels,
-                    f"study: {args.course} {skill.name}",
+                    commit_message,
                     emitter,
                 )
             except GitStateError as error:

@@ -69,6 +69,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="With --digests, run a full regeneration limited to those lectures.",
     )
+    gen.add_argument(
+        "--from-text-file",
+        default=None,
+        dest="from_text_file",
+        help="Generate flashcards or quiz from chat text (requires --digests).",
+    )
 
     cw = sub.add_parser(
         "commit-written",

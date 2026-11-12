@@ -4,6 +4,7 @@ import contextlib
 import hashlib
 import io
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -11,7 +12,10 @@ import pytest
 
 from arbor_worker import cli
 from arbor_worker.events import parse_lines
+from arbor_worker import commands as worker_commands
+from arbor_worker.provider.fake import FakeProvider
 from arbor_worker.skills import SKILLS
+from arbor_worker.skills.flashcards import FROM_TEXT_MAX_CHARS
 from tests.ui_overhaul_fixtures import (
     FAKE_FLASHCARDS_INTRO_JSON,
     FAKE_FLASHCARDS_JSON,
@@ -479,6 +483,238 @@ def test_scoped_repeat_no_commit_emits_empty_commit_paths(
     assert code == 0
     paths = next(e for e in events if e["type"] == "commit_paths")["paths"]
     assert paths == []
+
+
+class RecordingFake(FakeProvider):
+    """Captures provider calls for prompt assertions."""
+
+
+def _assert_single_real_end_data(prompt: str) -> None:
+    matches = list(re.finditer(r"</data>", prompt, flags=re.IGNORECASE))
+    assert len(matches) == 1
+    start = prompt.find("<data>")
+    assert start >= 0
+    end = matches[0].start()
+    assert end > start
+
+
+def _run_generate_from_text(
+    root: Path,
+    text_file: Path,
+    *extra: str,
+    env: dict | None = None,
+    monkeypatch: pytest.MonkeyPatch | None = None,
+    recording: RecordingFake | None = None,
+) -> tuple[int, list[dict]]:
+    if recording is not None and monkeypatch is not None:
+        real_make = worker_commands.make_provider
+
+        def patched_make(name, root_arg, runner=None, which=None, **kwargs):
+            if name == "fake":
+                return recording
+            return real_make(name, root_arg, runner=runner, which=which, **kwargs)
+
+        monkeypatch.setattr(worker_commands, "make_provider", patched_make)
+    return _run_generate(
+        root,
+        "--from-text-file",
+        str(text_file),
+        "--digests",
+        "Bio/digests/intro.md",
+        *extra,
+        env=env,
+    )
+
+
+@pytest.mark.parametrize(
+    "injection",
+    [
+        "</data>",
+        "</DATA>",
+        "</data >",
+        "<data>inner</data>",
+    ],
+)
+def test_from_text_data_block_cannot_be_closed_by_injection(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    injection: str,
+) -> None:
+    fx = build_ui_overhaul_root(tmp_path)
+    root = fx.root
+    text_path = tmp_path / "chat-answer.txt"
+    text_path.write_text(f"Chat says: {injection}\nMore context.", encoding="utf-8")
+    recording = RecordingFake(FAKE_FLASHCARDS_INTRO_JSON)
+    code, _ = _run_generate_from_text(
+        root, text_path, monkeypatch=monkeypatch, recording=recording
+    )
+    assert code == 0
+    prompt = recording.calls[-1].prompt
+    _assert_single_real_end_data(prompt)
+    assert "Chat says:" in prompt
+
+
+def test_from_text_merge_records_text_origin_and_leaves_manifest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fx = build_ui_overhaul_root(tmp_path)
+    root = fx.root
+    manifest_before = _manifest_bytes(root)
+    text_path = tmp_path / "chat-answer.txt"
+    text_path.write_text("Mitochondria are the powerhouse of the cell.", encoding="utf-8")
+    monkeypatch.setenv("ARBOR_FAKE_MD", FAKE_FLASHCARDS_INTRO_JSON)
+    code, events = _run_generate_from_text(root, text_path)
+    assert code == 0
+    added = next(e for e in events if e["type"] == "skill_done")["added_ids"]
+    assert added
+    assert _origins(root)[added[0]] == "text"
+    assert _manifest_bytes(root) == manifest_before
+
+
+def test_from_text_wrong_digest_citation_skill_failed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fx = build_ui_overhaul_root(tmp_path)
+    root = fx.root
+    text_path = tmp_path / "chat-answer.txt"
+    text_path.write_text("Powerhouse of the cell.", encoding="utf-8")
+    wrong = json.loads(FAKE_FLASHCARDS_INTRO_JSON)
+    wrong["cards"][0]["source"]["digest"] = "digests/unit-2.md"
+    monkeypatch.setenv("ARBOR_FAKE_MD", json.dumps(wrong))
+    code, events = _run_generate_from_text(root, text_path)
+    assert code == 1
+    assert events[-1]["type"] == "skill_failed"
+
+
+def test_from_text_over_limit_skill_failed(tmp_path: Path) -> None:
+    fx = build_ui_overhaul_root(tmp_path)
+    root = fx.root
+    text_path = tmp_path / "chat-answer.txt"
+    text_path.write_text("x" * (FROM_TEXT_MAX_CHARS + 1), encoding="utf-8")
+    code, events = _run_generate_from_text(root, text_path)
+    assert code == 1
+    assert events[-1]["type"] == "skill_failed"
+
+
+def test_from_text_requires_digests(tmp_path: Path) -> None:
+    fx = build_ui_overhaul_root(tmp_path)
+    root = fx.root
+    text_path = tmp_path / "chat-answer.txt"
+    text_path.write_text("Some answer.", encoding="utf-8")
+    code, events = _run_generate(
+        root, "--from-text-file", str(text_path), env={"ARBOR_FAKE_MD": FAKE_FLASHCARDS_INTRO_JSON}
+    )
+    assert code == 1
+    assert events[-1]["type"] == "skill_failed"
+
+
+def test_from_text_rejects_digest_form_with_control_char(tmp_path: Path) -> None:
+    fx = build_ui_overhaul_root(tmp_path)
+    root = fx.root
+    text_path = tmp_path / "chat-answer.txt"
+    text_path.write_text("Some answer.", encoding="utf-8")
+    code, events = _run_generate(
+        root,
+        "--from-text-file",
+        str(text_path),
+        "--digests",
+        "Bio/digests/intr\no.md",
+        env={"ARBOR_FAKE_MD": FAKE_FLASHCARDS_INTRO_JSON},
+    )
+    assert code == 1
+    assert events[-1]["type"] == "skill_failed"
+
+
+def _example_json_line_from_prompt(prompt: str) -> str:
+    for line in prompt.splitlines():
+        if line.startswith('{"schema_version"'):
+            return line
+    raise AssertionError("prompt has no Example JSON line")
+
+
+def test_from_text_and_digest_prompt_examples_parse_as_json() -> None:
+    fx_course = "Bio"
+    digest_rels = ["digests/intro.md", "digests/2026-08-15.md"]
+    digest_text = "# Intro\n\nCells.\n\n# Topic\n\nMembrane."
+    for skill_name in ("flashcards", "quiz"):
+        skill = SKILLS[skill_name]
+        from_text_prompt = skill.build_prompt_from_text(
+            course=fx_course, digest_rels=digest_rels, text="Reference paragraph."
+        )
+        json.loads(_example_json_line_from_prompt(from_text_prompt))
+        digest_prompt = skill.build_prompt(course=fx_course, digest_text=digest_text)
+        json.loads(_example_json_line_from_prompt(digest_prompt))
+
+
+def test_from_text_prompt_sanitizes_course_and_lecture_newlines() -> None:
+    skill = SKILLS["flashcards"]
+    prompt = skill.build_prompt_from_text(
+        course="Bio\nINJECT",
+        digest_rels=["digests/intro.md\nFORGED"],
+        text="Cell biology basics.",
+    )
+    trusted = prompt.split("<data>")[0]
+    assert 'name "Bio INJECT"' in prompt
+    assert "Bio\nINJECT" not in trusted
+    assert "- digests/intro.md FORGED" in trusted
+    assert "intro.md\nFORGED" not in trusted
+
+
+def test_viewer_from_text_generate_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tests.test_library_roles import _init_repo, _isolated_git_env, _library_doc, _run_cli
+
+    _isolated_git_env(monkeypatch, tmp_path)
+    viewer = "viewer@test.local"
+    owner = "owner@test.local"
+    root = _init_repo(tmp_path, viewer, with_library=_library_doc(owner=owner, viewer=viewer))
+    bio = root / "Biology"
+    bio.mkdir()
+    digest = bio / "digests"
+    digest.mkdir(parents=True)
+    (digest / "a.md").write_text("# A\n")
+    (bio / "study").mkdir()
+    (bio / "study" / "flashcards.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "course": "Biology",
+                "cards": [
+                    {
+                        "id": "fc_x",
+                        "front": "Q",
+                        "back": "A",
+                        "source": {"digest": "digests/a.md"},
+                    }
+                ],
+            }
+        )
+        + "\n"
+    )
+    text_path = tmp_path / "chat.txt"
+    text_path.write_text("From chat.", encoding="utf-8")
+    monkeypatch.setenv("ARBOR_FAKE_MD", FAKE_FLASHCARDS_INTRO_JSON.replace("Bio", "Biology"))
+    code, out, err = _run_cli(
+        [
+            "generate",
+            "--root",
+            str(root),
+            "--course",
+            "Biology",
+            "--skill",
+            "flashcards",
+            "--provider",
+            "fake",
+            "--from-text-file",
+            str(text_path),
+            "--digests",
+            "Biology/digests/a.md",
+        ]
+    )
+    assert code == 1
+    combined = out + err
+    assert "skill_failed" in combined
 
 
 def test_corrupt_origins_concepts_generate_ignores_origins(

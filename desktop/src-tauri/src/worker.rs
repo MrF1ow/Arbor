@@ -692,6 +692,47 @@ pub fn plan_file_path() -> PathBuf {
     std::env::temp_dir().join("arbor-plan.json")
 }
 
+pub const FROM_TEXT_MAX_CHARS: usize = 20_000;
+
+#[cfg(feature = "desktop-runtime")]
+pub fn write_from_text_temp(app_data_dir: &std::path::Path, text: &str) -> Result<PathBuf, String> {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static FROM_TEXT_COUNTER: AtomicUsize = AtomicUsize::new(0);
+    let temp_dir = app_data_dir.join("temp");
+    std::fs::create_dir_all(&temp_dir).map_err(|e| e.to_string())?;
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_nanos();
+    let counter = FROM_TEXT_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let path = temp_dir.join(format!(
+        "arbor-from-text-{}-{}-{nanos}.txt",
+        std::process::id(),
+        counter
+    ));
+    #[cfg(unix)]
+    {
+        use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
+        let mut file = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(&path)
+            .map_err(|e| e.to_string())?;
+        if let Err(e) = file.write_all(text.as_bytes()) {
+            let _ = std::fs::remove_file(&path);
+            return Err(e.to_string());
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        std::fs::write(&path, text.as_bytes()).map_err(|e| e.to_string())?;
+    }
+    Ok(path)
+}
+
 pub fn normalize_study_model(model: Option<String>) -> Option<String> {
     model
         .map(|value| value.trim().to_string())
@@ -700,6 +741,34 @@ pub fn normalize_study_model(model: Option<String>) -> Option<String> {
 
 fn study_skill_accepts_digests(skill: &str) -> bool {
     matches!(skill, "flashcards" | "quiz")
+}
+
+pub fn resolve_study_from_text(
+    skill: &str,
+    digests: &Option<Vec<String>>,
+    from_text: Option<&str>,
+) -> Result<Option<String>, String> {
+    let Some(text) = from_text else {
+        return Ok(None);
+    };
+    if text.chars().all(char::is_whitespace) {
+        return Err("from-text is empty".to_string());
+    }
+    if !study_skill_accepts_digests(skill) {
+        return Err("from-text is only supported for flashcards and quiz".to_string());
+    }
+    let list = digests
+        .as_ref()
+        .filter(|forms| !forms.is_empty())
+        .ok_or_else(|| "from-text requires at least one digest".to_string())?;
+    let _ = list;
+    let char_count = text.chars().count();
+    if char_count > FROM_TEXT_MAX_CHARS {
+        return Err(format!(
+            "from-text exceeds {FROM_TEXT_MAX_CHARS} characters ({char_count} given)"
+        ));
+    }
+    Ok(Some(text.to_string()))
 }
 
 pub fn resolve_study_job_digests(
@@ -804,6 +873,7 @@ pub fn generate_sub_args(
     provider_id: &str,
     digests: Option<&[String]>,
     remote_full: bool,
+    from_text_file: Option<&str>,
 ) -> Vec<String> {
     let mut sub_args = vec![
         "generate".to_string(),
@@ -827,6 +897,10 @@ pub fn generate_sub_args(
         if remote_full {
             sub_args.push("--full".to_string());
         }
+    }
+    if let Some(path) = from_text_file {
+        sub_args.push("--from-text-file".to_string());
+        sub_args.push(path.to_string());
     }
     if let Some(model) = normalize_study_model(model) {
         sub_args.extend([
@@ -887,6 +961,7 @@ pub fn spawn_update_stream(
         label,
         Some(effective_provider_id(&provider_id).to_string()),
         env_pairs,
+        None,
     );
 }
 
@@ -901,9 +976,14 @@ pub fn spawn_generate_stream(
     model: Option<String>,
     provider_id: String,
     digests: Option<Vec<String>>,
+    from_text_file: Option<PathBuf>,
     job_id: String,
 ) {
     let digest_refs = digests.as_deref();
+    let from_text_ref = from_text_file
+        .as_ref()
+        .map(|p| p.to_string_lossy().into_owned());
+    let from_text_arg = from_text_ref.as_deref();
     let sub_args = generate_sub_args(
         &root,
         &course,
@@ -913,6 +993,7 @@ pub fn spawn_generate_stream(
         &provider_id,
         digest_refs,
         false,
+        from_text_arg,
     );
     let label = crate::settings::provider_label(effective_provider_id(&provider_id));
     let settings = crate::settings::load(&app);
@@ -932,6 +1013,7 @@ pub fn spawn_generate_stream(
         label,
         Some(effective_provider_id(&provider_id).to_string()),
         env_pairs,
+        from_text_file,
     );
 }
 
@@ -957,7 +1039,18 @@ pub fn spawn_embed_stream(
         "Provider".to_string(),
         None,
         env_pairs,
+        None,
     );
+}
+
+#[cfg(feature = "desktop-runtime")]
+struct RemoveOnDrop(PathBuf);
+
+#[cfg(feature = "desktop-runtime")]
+impl Drop for RemoveOnDrop {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
 }
 
 #[cfg(feature = "desktop-runtime")]
@@ -971,6 +1064,7 @@ fn spawn_worker_stream(
     provider_label: String,
     provider_id: Option<String>,
     env_pairs: Vec<(String, String)>,
+    cleanup_file: Option<PathBuf>,
 ) {
     use crate::jobs::{self, SharedCoordinator};
     use tauri::{Emitter, Manager};
@@ -993,6 +1087,9 @@ fn spawn_worker_stream(
                 }
             }
         };
+        let _cleanup = cleanup_file
+            .as_ref()
+            .map(|path| RemoveOnDrop(path.clone()));
         if let Some(err) = uv_project_missing_error(&argv) {
             let line = serde_json::json!({ "type": "error", "message": err }).to_string();
             let _ = jobs::append_event(&knowledge_root, &job_id, &line);
@@ -1233,6 +1330,7 @@ fn spawn_remote_job_stream(
     courses: Vec<String>,
     remote_tokens: Vec<String>,
     plan_path: Option<PathBuf>,
+    from_text_path: Option<PathBuf>,
     message: String,
     index: bool,
 ) {
@@ -1243,6 +1341,9 @@ fn spawn_remote_job_stream(
 
     let auth_cache_key = auth_cache::auth_cache_key(&transport, &provider_id);
     std::thread::spawn(move || {
+        let _from_text_cleanup = from_text_path
+            .as_ref()
+            .map(|path| RemoveOnDrop(path.clone()));
         let release = |app: &tauri::AppHandle, job_id: &str| {
             if let Some(state) = app.try_state::<SharedCoordinator>() {
                 if let Ok(mut guard) = state.lock() {
@@ -1285,6 +1386,7 @@ fn spawn_remote_job_stream(
             courses,
             remote_tokens,
             plan_file: plan_path,
+            from_text_file: from_text_path,
             message,
             index,
             cancel_after_first_line: false,
@@ -1382,6 +1484,7 @@ pub fn spawn_remote_update_stream(
         courses,
         remote_tokens,
         Some(plan_path),
+        None,
         message,
         true,
     );
@@ -1399,6 +1502,7 @@ pub fn spawn_remote_generate_stream(
     course: String,
     skill: String,
     remote_tokens: Vec<String>,
+    from_text_path: Option<PathBuf>,
 ) {
     let effective = effective_provider_id(&provider_id);
     let label = crate::settings::provider_label(effective);
@@ -1416,6 +1520,7 @@ pub fn spawn_remote_generate_stream(
         vec![course],
         remote_tokens,
         None,
+        from_text_path,
         message,
         false,
     );
@@ -1543,6 +1648,7 @@ mod tests {
             "grok",
             None,
             false,
+            None,
         );
         assert!(args.ends_with(&["--provider".into(), "fake".into()]));
         assert!(!args.contains(&"--model".to_string()));
@@ -1559,6 +1665,7 @@ mod tests {
             "codex",
             None,
             false,
+            None,
         );
         assert!(args.contains(&"--force".to_string()));
         assert!(args.ends_with(&[
@@ -1580,6 +1687,7 @@ mod tests {
             "grok",
             None,
             false,
+            None,
         );
         assert!(args.ends_with(&["--provider".into(), "fake".into()]));
     }
@@ -1595,6 +1703,7 @@ mod tests {
             "grok",
             None,
             false,
+            None,
         );
         assert!(args.ends_with(&[
             "--provider".into(),
@@ -1646,6 +1755,7 @@ mod tests {
             "grok",
             Some(&digests),
             false,
+            None,
         );
         assert!(args.contains(&"--digests".to_string()));
         assert!(args.contains(&"Bio/digests/a.md,Bio/digests/b.md".to_string()));
@@ -1679,6 +1789,7 @@ mod tests {
             "grok",
             Some(&digests),
             true,
+            None,
         );
         assert!(!args.contains(&"--digests".to_string()));
         assert!(!args.contains(&"--full".to_string()));
@@ -1726,9 +1837,111 @@ mod tests {
             "fake",
             Some(&forms),
             true,
+            None,
         );
         assert!(args.contains(&"--full".to_string()));
         assert!(args.contains(&"Bio/digests/a.md,Bio/digests/b.md".to_string()));
+    }
+
+    #[test]
+    fn generate_args_include_from_text_file_local() {
+        let digests = vec!["Bio/digests/a.md".to_string()];
+        let tmp = "/tmp/arbor-from-text-local.txt";
+        let args = generate_sub_args(
+            "/knowledge",
+            "Bio",
+            "flashcards",
+            false,
+            None,
+            "fake",
+            Some(&digests),
+            false,
+            Some(tmp),
+        );
+        assert!(args.contains(&"--from-text-file".to_string()));
+        assert!(args.contains(&tmp.to_string()));
+        assert!(!args.contains(&"--full".to_string()));
+    }
+
+    #[test]
+    fn resolve_study_from_text_rejects_blank_whitespace() {
+        for blank in ["", "   ", "\n\t"] {
+            let err = resolve_study_from_text(
+                "flashcards",
+                &Some(vec!["Bio/digests/a.md".to_string()]),
+                Some(blank),
+            )
+            .unwrap_err();
+            assert!(err.contains("empty"), "blank={blank:?} err={err}");
+        }
+        assert!(resolve_study_from_text("quiz", &None, None).unwrap().is_none());
+    }
+
+    #[test]
+    fn resolve_study_from_text_counts_untrimmed_length() {
+        let pad = " ".repeat(FROM_TEXT_MAX_CHARS);
+        let text = format!("{pad}x");
+        let err = resolve_study_from_text(
+            "flashcards",
+            &Some(vec!["Bio/digests/a.md".to_string()]),
+            Some(&text),
+        )
+        .unwrap_err();
+        assert!(err.contains("20000"));
+    }
+
+    #[test]
+    fn write_from_text_temp_uses_private_mode_and_unique_name() {
+        let dir = std::env::temp_dir().join(format!(
+            "arbor-from-text-test-{}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let path_a = write_from_text_temp(&dir, "alpha").expect("write a");
+        let path_b = write_from_text_temp(&dir, "beta").expect("write b");
+        assert_ne!(path_a, path_b);
+        let name = path_a
+            .file_name()
+            .and_then(|s| s.to_str())
+            .expect("file name");
+        assert!(name.starts_with("arbor-from-text-"));
+        assert!(name.contains(&format!("{}", std::process::id())));
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&path_a)
+                .expect("metadata")
+                .permissions()
+                .mode()
+                & 0o777;
+            assert_eq!(mode, 0o600);
+        }
+        let _ = std::fs::remove_file(path_a);
+        let _ = std::fs::remove_file(path_b);
+        let _ = std::fs::remove_dir(dir);
+    }
+
+    #[test]
+    fn resolve_study_from_text_rejects_empty_digests() {
+        let err = resolve_study_from_text(
+            "flashcards",
+            &Some(vec![]),
+            Some("answer text"),
+        )
+        .unwrap_err();
+        assert!(err.contains("digest"));
+    }
+
+    #[test]
+    fn resolve_study_from_text_rejects_long_text_before_job() {
+        let long = "x".repeat(FROM_TEXT_MAX_CHARS + 1);
+        let err = resolve_study_from_text(
+            "quiz",
+            &Some(vec!["Bio/digests/a.md".to_string()]),
+            Some(&long),
+        )
+        .unwrap_err();
+        assert!(err.contains("20000"));
     }
 
     #[test]
