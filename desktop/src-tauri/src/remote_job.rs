@@ -414,16 +414,25 @@ fn run_remote_job_inner(
 
     // A skill failure explains a nonzero exit, but never fails a clean one.
     let exit_error = worker_error.clone().or(skill_failure);
+    // `ssh -tt` merges the remote worker's stderr into stdout, so an argparse
+    // error from an older worker arrives as an output line, not on stderr.
+    let older_hint = outcome
+        .lines
+        .iter()
+        .find(|line| line.contains("unrecognized arguments"))
+        .cloned()
+        .unwrap_or_default();
     match run_result {
         Ok(0) => {}
         Ok(_code) if outcome.killed => {}
         Ok(code) => {
-            outcome.error = Some(resolve_run_error("", code, &exit_error, &req.endpoint.host));
+            outcome.error = Some(resolve_run_error(&older_hint, code, &exit_error, &req.endpoint.host));
             return (outcome, from_text_cleanup.clone());
         }
         Err(_stderr) if outcome.killed => {}
         Err(stderr) => {
-            outcome.error = Some(resolve_run_error(&stderr, 255, &exit_error, &req.endpoint.host));
+            let combined = format!("{stderr}\n{older_hint}");
+            outcome.error = Some(resolve_run_error(&combined, 255, &exit_error, &req.endpoint.host));
             return (outcome, from_text_cleanup.clone());
         }
     }
@@ -1128,6 +1137,44 @@ mod tests {
         assert!(!error.contains("--digests"));
         assert!(!outcome.committed);
         assert!(!commit_called);
+    }
+
+    #[test]
+    fn older_remote_worker_detected_on_stdout_under_tty() {
+        // `ssh -tt` merges the worker's stderr into stdout: the argparse error
+        // arrives as an output line and ssh's own stderr only says it closed.
+        let endpoint = test_endpoint();
+        let host = endpoint.host.clone();
+        let local_root = PathBuf::from("/tmp/Knowledge");
+        let mut ops = FakeOps::new(Err(format!("Connection to {host} closed.\n")));
+        ops.run_lines = vec![
+            "usage: arbor-worker [-h] [--version]".to_string(),
+            "arbor-worker: error: unrecognized arguments: --digests Bio/digests/a.md --full"
+                .to_string(),
+        ];
+        let outcome = run_remote_job(
+            &mut ops,
+            &sample_request(endpoint, local_root),
+            &mut |_, _, _| Ok(()),
+            None,
+        );
+        assert_eq!(
+            outcome.error.expect("error"),
+            format!(
+                "The Arbor worker on {host} is older than this app. Update it on the SSH worker and try again."
+            )
+        );
+
+        let mut ops = FakeOps::new(Ok(2));
+        ops.run_lines =
+            vec!["arbor-worker: error: unrecognized arguments: --full".to_string()];
+        let outcome = run_remote_job(
+            &mut ops,
+            &sample_request(test_endpoint(), PathBuf::from("/tmp/Knowledge")),
+            &mut |_, _, _| Ok(()),
+            None,
+        );
+        assert!(outcome.error.expect("error").contains("is older than this app"));
     }
 
     #[test]

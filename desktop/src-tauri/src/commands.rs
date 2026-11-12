@@ -1702,6 +1702,15 @@ pub fn build_append_card_argv(
     Ok(argv)
 }
 
+fn append_card_blocked(remote: bool, job_running: bool) -> Option<String> {
+    if remote && job_running {
+        return Some(
+            "A study job is running on the SSH worker. Make the card when it finishes.".into(),
+        );
+    }
+    None
+}
+
 #[tauri::command]
 pub async fn append_card(
     app: tauri::AppHandle,
@@ -1714,6 +1723,21 @@ pub async fn append_card(
     page: Option<String>,
 ) -> Result<serde_json::Value, String> {
     spawn_blocking_cmd(move || {
+        // A remote (SSH) study job copies the worker's deck back over the
+        // local one when it finishes, which would drop a card made meanwhile.
+        let remote = matches!(
+            settings::transport_for_root(&settings::load(&app), &root),
+            Ok(crate::transport::WorkerTransport::Ssh { .. })
+        );
+        let busy = app
+            .state::<SharedCoordinator>()
+            .inner()
+            .lock()
+            .map(|guard| guard.is_active_for(&root))
+            .unwrap_or(false);
+        if let Some(message) = append_card_blocked(remote, busy) {
+            return Err(message);
+        }
         let argv = build_append_card_argv(
             &root,
             &course,
@@ -2072,6 +2096,14 @@ pub async fn start_chat(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn append_card_blocked_only_during_a_remote_job() {
+        assert!(super::append_card_blocked(true, true).is_some());
+        assert!(super::append_card_blocked(true, false).is_none());
+        assert!(super::append_card_blocked(false, true).is_none());
+        assert!(super::append_card_blocked(false, false).is_none());
+    }
+
     fn block_on_cmd<T>(future: impl std::future::Future<Output = T>) -> T {
         tauri::async_runtime::block_on(future)
     }

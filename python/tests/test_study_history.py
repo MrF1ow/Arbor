@@ -626,3 +626,34 @@ def test_study_progress_show_unreadable_machine_json(tmp_path: Path) -> None:
         assert "study-progress failed" in err
     finally:
         path.chmod(0o600)
+
+
+def test_torn_history_append_does_not_swallow_the_next_answer(git_repo: Path) -> None:
+    from arbor_worker.study_progress import study_progress_stats
+
+    _course_dir(git_repo, "Biology")
+    _write_deck(git_repo, "Biology", "fc_torn")
+    study_progress_grade(git_repo, "Biology", "fc_torn", "mastered", now=CLOCK, write_id="w1")
+    path = history_file_path(git_repo, "Biology", machine_id(git_repo))
+    with open(path, "a", encoding="utf-8") as fh:
+        fh.write('{"ts":"2026-11-10T11:00:00Z","kind":"card","id":"fc_x","res')
+    study_progress_grade(git_repo, "Biology", "fc_torn", "wrong", now=CLOCK, write_id="w2")
+    stats = study_progress_stats(git_repo, "Biology", now=CLOCK)
+    assert stats["cards"]["this_week"]["total"] == 2
+    lines_before = path.read_text(encoding="utf-8").splitlines()
+    study_progress_grade(git_repo, "Biology", "fc_torn", "wrong", now=CLOCK, write_id="w2")
+    assert path.read_text(encoding="utf-8").splitlines() == lines_before
+
+
+def test_history_with_invalid_utf8_does_not_block_grades(git_repo: Path) -> None:
+    from arbor_worker.study_progress import study_progress_stats
+
+    _course_dir(git_repo, "Biology")
+    _write_deck(git_repo, "Biology", "fc_utf")
+    study_progress_grade(git_repo, "Biology", "fc_utf", "mastered", now=CLOCK, write_id="u1")
+    path = history_file_path(git_repo, "Biology", machine_id(git_repo))
+    with open(path, "ab") as fh:
+        fh.write(b'{"ts":"2026-11-10T11:00:00Z","heading":"Caf\xc3')
+    study_progress_grade(git_repo, "Biology", "fc_utf", "wrong", now=CLOCK, write_id="u2")
+    stats = study_progress_stats(git_repo, "Biology", now=CLOCK)
+    assert stats["cards"]["this_week"]["total"] == 2

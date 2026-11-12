@@ -98,6 +98,13 @@ impl JobCoordinator {
         Ok(())
     }
 
+    /// True while any job holds the slot for this knowledge root.
+    pub fn is_active_for(&self, knowledge_root: &str) -> bool {
+        self.active
+            .as_ref()
+            .is_some_and(|(_, root)| root == knowledge_root)
+    }
+
     pub fn finish(&mut self, job_id: &str) {
         if self
             .active
@@ -334,6 +341,17 @@ mod tests {
         let events = job_events(&root, &id).unwrap();
         assert_eq!(events.len(), 1);
         let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn coordinator_reports_active_root() {
+        let mut c = JobCoordinator::new();
+        assert!(!c.is_active_for("/k"));
+        c.try_begin("j1", "/k").unwrap();
+        assert!(c.is_active_for("/k"));
+        assert!(!c.is_active_for("/other"));
+        c.finish("j1");
+        assert!(!c.is_active_for("/k"));
     }
 
     #[test]

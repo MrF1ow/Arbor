@@ -61,7 +61,9 @@ def _history_write_ids_in_file(path: Path) -> set[str]:
     if not path.is_file():
         return set()
     ids: set[str] = set()
-    text = path.read_text(encoding="utf-8")
+    # History syncs from other machines; a torn multibyte tail must not stop
+    # every grade, so undecodable bytes become U+FFFD and that line is skipped.
+    text = path.read_text(encoding="utf-8", errors="replace")
     for line in text.splitlines():
         if not line.strip():
             continue
@@ -129,8 +131,15 @@ def _append_history_line(
         "write_id": write_id,
     }
     path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "a", encoding="utf-8") as fh:
-        fh.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
+    line = json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n"
+    with open(path, "a+b") as fh:
+        # A torn earlier append (no trailing newline) must not swallow this line.
+        fh.seek(0, os.SEEK_END)
+        if fh.tell() > 0:
+            fh.seek(-1, os.SEEK_END)
+            if fh.read(1) != b"\n":
+                line = "\n" + line
+        fh.write(line.encode("utf-8"))
 
 
 def legacy_v41_progress_path(root: Path, course: str) -> Path:
@@ -863,7 +872,7 @@ def study_progress_stats(
         return out
     for path in sorted(history_dir.glob("*.jsonl")):
         try:
-            text = path.read_text(encoding="utf-8")
+            text = path.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
         for line in text.splitlines():
