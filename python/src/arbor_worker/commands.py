@@ -1181,7 +1181,14 @@ def cmd_study_today(args) -> int:
     from arbor_worker.today import list_knowledge_courses, study_today
 
     root = Path(args.root)
-    now = parse_utc_now(args.now) if getattr(args, "now", None) else None
+    try:
+        now = parse_utc_now(args.now) if getattr(args, "now", None) else None
+    except ValueError:
+        print(
+            f"study-today failed: --now is not an ISO-8601 instant: {args.now!r}",
+            file=sys.stderr,
+        )
+        return 1
     emitter = EventEmitter(sys.stderr)
     try:
         payload = study_today(root, now=now)

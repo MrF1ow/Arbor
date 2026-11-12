@@ -4,6 +4,7 @@ import json
 import re
 import subprocess
 import threading
+import unicodedata
 from pathlib import Path
 from typing import Any
 
@@ -43,7 +44,12 @@ def _validate_units_value(units: object) -> dict[str, str] | None:
     for key, value in units.items():
         if not isinstance(key, str) or not _DIGEST_KEY_RE.match(key):
             raise CourseMetaError("Invalid units key")
-        if not isinstance(value, str) or not value.strip() or len(value) > 80:
+        if (
+            not isinstance(value, str)
+            or not value.strip()
+            or len(value) > 80
+            or any(unicodedata.category(char) == "Cc" for char in value)
+        ):
             raise CourseMetaError("Invalid units value")
         normalized[key] = value.strip()
     return normalized or None

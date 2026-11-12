@@ -4,6 +4,7 @@ import contextlib
 import io
 import json
 import subprocess
+import time
 from datetime import timedelta
 from pathlib import Path
 
@@ -25,6 +26,20 @@ from tests.ui_overhaul_fixtures import (
 )
 
 CLOCK = parse_utc_now("2026-11-10T12:00:00Z")
+
+
+def _set_tz(monkeypatch: pytest.MonkeyPatch, name: str) -> None:
+    monkeypatch.setenv("TZ", name)
+    time.tzset()
+
+
+@pytest.fixture(autouse=True)
+def _utc_machine_timezone(monkeypatch: pytest.MonkeyPatch):
+    """Day counts use the machine's local date: pin it so the tests are deterministic."""
+    _set_tz(monkeypatch, "UTC")
+    yield
+    monkeypatch.undo()
+    time.tzset()
 
 
 def _run_git(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -584,3 +599,44 @@ def test_study_today_tolerates_bad_class_and_invalid_folder_name(today_root: Pat
     bio_row = next((row for row in payload["courses"] if row["course"] == "Bio"), None)
     assert bio_row is not None
     assert "error" not in bio_row
+
+
+def _exam_root(tmp_path: Path) -> Path:
+    root = build_ui_overhaul_root(tmp_path).root
+    from arbor_worker.course_meta import apply_course_meta_fields
+
+    apply_course_meta_fields(root, "Bio", {"exam_date": "2026-12-01"})
+    return root
+
+
+@pytest.mark.parametrize(
+    ("now", "days"),
+    [
+        # 2026-11-30 19:00 in Los Angeles: the exam is tomorrow locally, though UTC is already 12-01.
+        ("2026-12-01T03:00:00Z", 1),
+        # 2026-12-01 19:00 in Los Angeles: the exam is today locally.
+        ("2026-12-02T03:00:00Z", 0),
+    ],
+)
+def test_study_today_counts_days_from_the_machine_local_date(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, now: str, days: int
+) -> None:
+    root = _exam_root(tmp_path)
+    _set_tz(monkeypatch, "America/Los_Angeles")
+    code, out, err = _run_cli(["study-today", "--root", str(root), "--now", now])
+    assert code == 0, err
+    payload = json.loads(out.strip())
+    bio = next(row for row in payload["courses"] if row["course"] == "Bio")
+    assert bio["days_to_exam"] == days
+    assert payload["next_exam"] is not None
+    assert payload["next_exam"]["days_to_exam"] == days
+
+
+def test_study_today_rejects_unparseable_now_cleanly(today_root: Path) -> None:
+    code, out, err = _run_cli(
+        ["study-today", "--root", str(today_root), "--now", "garbage"]
+    )
+    assert code == 1
+    assert out == ""
+    assert "Traceback" not in err
+    assert "--now" in err

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -48,15 +48,16 @@ def list_knowledge_courses(root: Path) -> list[str]:
     return courses
 
 
-def _utc_calendar_date(clock: datetime) -> date:
-    return clock.astimezone(timezone.utc).date()
+def _local_calendar_date(clock: datetime) -> date:
+    """The calendar date on this machine, as the app computes day counts."""
+    return clock.astimezone().date()
 
 
 def days_to_exam(clock: datetime, exam_date: str | None) -> int | None:
     if exam_date is None:
         return None
     exam = date.fromisoformat(exam_date)
-    return (exam - _utc_calendar_date(clock)).days
+    return (exam - _local_calendar_date(clock)).days
 
 
 def _digest_count(root: Path, course: str) -> int:
@@ -99,7 +100,7 @@ def _pick_next_exam(
     courses: list[str],
     clock: datetime,
 ) -> dict[str, Any] | None:
-    today = _utc_calendar_date(clock)
+    today = _local_calendar_date(clock)
     best: tuple[date, str, str] | None = None
     for course in courses:
         exam_date = read_course_exam_date(root, course)

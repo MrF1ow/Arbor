@@ -93,11 +93,11 @@ def merge_full_run_pack(
     for question in fresh.questions:
         if question.id in kept_ids:
             continue
-        if allowed_norm is not None and not digest_allowed(
-            course, question.source.digest, allowed_norm
+        if (
+            allowed_norm is not None
+            and not digest_allowed(course, question.source.digest, allowed_norm)
+            and digest_file_exists(course_dir, course, question.source.digest)
         ):
-            continue
-        if not digest_file_exists(course_dir, course, question.source.digest):
             continue
         fresh_questions.append(question)
         new_origins[question.id] = "full"

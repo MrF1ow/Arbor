@@ -96,8 +96,37 @@ def resolve_generate_digest_form(root: Path, course: str, form: str) -> str:
     return rel
 
 
+def _split_digest_entries(course: str, raw: str) -> list[str]:
+    """Split a comma-joined digest list where class and file names may hold commas.
+
+    An entry starts at a piece beginning with ``<course>/digests/`` and ends at a
+    piece ending in ``.md`` whose next piece starts a new entry (or at the end).
+    """
+    prefix = f"{course}/digests/"
+    pieces = raw.split(",")
+    entries: list[str] = []
+    current: list[str] = []
+    for index, piece in enumerate(pieces):
+        current.append(piece)
+        joined = ",".join(current)
+        if not joined.strip():
+            current = []
+            continue
+        remainder = ",".join(pieces[index + 1 :]).strip()
+        ends_here = joined.strip().endswith(".md") and (
+            not remainder or remainder.startswith(prefix)
+        )
+        if ends_here:
+            entries.append(joined.strip())
+            current = []
+    leftover = ",".join(current).strip()
+    if leftover:
+        entries.append(leftover)
+    return entries
+
+
 def parse_generate_digests_csv(root: Path, course: str, raw: str) -> list[str]:
-    forms = [part.strip() for part in raw.split(",") if part.strip()]
+    forms = _split_digest_entries(course, raw)
     if not forms:
         raise ValueError("--digests requires at least one digest path")
     return [resolve_generate_digest_form(root, course, form) for form in forms]
@@ -254,11 +283,11 @@ def merge_full_run_deck(
     for card in fresh.cards:
         if card.id in kept_ids:
             continue
-        if allowed_norm is not None and not digest_allowed(
-            course, card.source.digest, allowed_norm
+        if (
+            allowed_norm is not None
+            and not digest_allowed(course, card.source.digest, allowed_norm)
+            and digest_file_exists(course_dir, course, card.source.digest)
         ):
-            continue
-        if not digest_file_exists(course_dir, course, card.source.digest):
             continue
         fresh_cards.append(card)
         new_origins[card.id] = "full"

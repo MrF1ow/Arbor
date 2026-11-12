@@ -179,3 +179,11 @@ def test_units_round_trip(tmp_path: Path) -> None:
     entry = read_course_meta_map(root)["Bio"]
     assert entry["exam_date"] == "2026-11-01"
     assert "units" not in entry
+
+
+@pytest.mark.parametrize("bad", ["Unit\n2", "Unit\r2", "Unit\t2", "Unit\x002", "Unit\x1b[0m"])
+def test_units_value_rejects_control_characters(tmp_path: Path, bad: str) -> None:
+    root = tmp_path / "Knowledge"
+    root.mkdir()
+    with pytest.raises(CourseMetaError):
+        apply_course_meta_fields(root, "Bio", {"units": {"digests/unit-2.md": bad}})

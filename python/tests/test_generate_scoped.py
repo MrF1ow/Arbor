@@ -744,3 +744,137 @@ def test_corrupt_origins_concepts_generate_ignores_origins(
     code, events = _run_generate_skill(root, "concepts", "--force")
     assert code == 0
     assert events[-1]["type"] == "skill_done"
+
+
+# --- council round 1 regressions -------------------------------------------------
+
+
+def _cards_json(course: str, digests: list[str]) -> str:
+    return json.dumps(
+        {
+            "schema_version": 1,
+            "course": course,
+            "cards": [
+                {
+                    "front": f"Question {index}?",
+                    "back": "Answer.",
+                    "tags": [],
+                    "source": {"digest": digest, "heading": "Cells"},
+                }
+                for index, digest in enumerate(digests)
+            ],
+        }
+    )
+
+
+def test_plain_full_run_keeps_fresh_cards_with_unresolved_citations(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    root = build_ui_overhaul_root(tmp_path).root
+    monkeypatch.setenv(
+        "ARBOR_FAKE_MD", _cards_json("Bio", ["digests/2026-11-01", "Cells"])
+    )
+    code, events = _run_generate(root)
+    assert code == 0, events[-1]
+    assert events[-1]["type"] == "skill_done"
+    deck = json.loads((root / "Bio" / "study" / "flashcards.json").read_text())
+    assert len(deck["cards"]) == 2
+
+
+def test_plain_full_quiz_keeps_fresh_questions_with_unresolved_citations(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    root = build_ui_overhaul_root(tmp_path).root
+    quiz = json.loads(FAKE_QUIZ_INTRO_JSON)
+    quiz["questions"][0]["source"]["digest"] = "Cells"
+    monkeypatch.setenv("ARBOR_FAKE_MD", json.dumps(quiz))
+    code, events = _run_generate_skill(root, "quiz")
+    assert code == 0, events[-1]
+    pack = json.loads((root / "Bio" / "study" / "quiz.json").read_text())
+    assert len(pack["questions"]) == 1
+
+
+def test_remote_full_with_digests_drops_fresh_outside_list_keeps_unresolved(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    root = build_ui_overhaul_root(tmp_path).root
+    monkeypatch.setenv(
+        "ARBOR_FAKE_MD",
+        _cards_json("Bio", ["digests/intro.md", "digests/unit-2.md", "Cells"]),
+    )
+    code, events = _run_generate(
+        root, "--digests", "Bio/digests/intro.md", "--full"
+    )
+    assert code == 0, events[-1]
+    deck = json.loads((root / "Bio" / "study" / "flashcards.json").read_text())
+    digests = sorted(card["source"]["digest"] for card in deck["cards"])
+    assert digests == ["digests/Cells", "digests/intro.md"]
+
+
+def _comma_root(tmp_path: Path, course: str, digest_names: list[str]) -> Path:
+    from tests.ui_overhaul_fixtures import _init_knowledge_git
+
+    root = tmp_path / "Knowledge"
+    _init_knowledge_git(root)
+    digests = root / course / "digests"
+    digests.mkdir(parents=True)
+    for name in digest_names:
+        (digests / name).write_text("# Lecture\n\nBody.\n")
+    return root
+
+
+def _generate_course(root: Path, course: str, *extra: str) -> tuple[int, list[dict]]:
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        code = cli.main(
+            [
+                "generate",
+                "--root",
+                str(root),
+                "--course",
+                course,
+                "--skill",
+                "flashcards",
+                "--provider",
+                "fake",
+                "--no-commit",
+                *extra,
+            ]
+        )
+    return code, parse_lines(out.getvalue())
+
+
+def test_digests_list_supports_commas_in_class_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    root = _comma_root(tmp_path, "Bio, Intro", ["a.md", "b.md"])
+    monkeypatch.setenv("ARBOR_FAKE_MD", _cards_json("Bio, Intro", ["digests/a.md"]))
+    listed = "Bio, Intro/digests/a.md,Bio, Intro/digests/b.md"
+    code, events = _generate_course(root, "Bio, Intro", "--digests", listed, "--full")
+    assert code == 0, events[-1]
+    assert events[-1]["type"] == "skill_done"
+    code, events = _generate_course(
+        root, "Bio, Intro", "--digests", "Bio, Intro/digests/a.md"
+    )
+    assert code == 0, events[-1]
+
+
+def test_digests_list_supports_commas_in_digest_names(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    root = _comma_root(tmp_path, "Bio", ["a,b.md", "c.md"])
+    monkeypatch.setenv("ARBOR_FAKE_MD", _cards_json("Bio", ["digests/a,b.md"]))
+    listed = "Bio/digests/a,b.md,Bio/digests/c.md"
+    code, events = _generate_course(root, "Bio", "--digests", listed, "--full")
+    assert code == 0, events[-1]
+    deck = json.loads((root / "Bio" / "study" / "flashcards.json").read_text())
+    assert [card["source"]["digest"] for card in deck["cards"]] == ["digests/a,b.md"]
+
+
+def test_digests_list_still_rejects_missing_entry_with_commas(tmp_path: Path):
+    root = _comma_root(tmp_path, "Bio, Intro", ["a.md"])
+    code, events = _generate_course(
+        root, "Bio, Intro", "--digests", "Bio, Intro/digests/nope.md"
+    )
+    assert code == 1
+    assert events[-1]["type"] == "skill_failed"

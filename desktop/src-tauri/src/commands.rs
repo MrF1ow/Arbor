@@ -934,18 +934,25 @@ fn markdown_title(text: &str) -> Option<String> {
     None
 }
 
-pub(crate) fn is_reserved_course_name(name: &str) -> bool {
+/// Folders Arbor owns inside a knowledge root. Listing and watching skip only these,
+/// so a class folder that predates the newer reserved names stays visible.
+pub(crate) fn is_internal_folder_name(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
     lower == "_arbor_cache"
         || lower == "study"
         || lower == "digests"
-        || lower == "local"
-        || lower == "chat"
         || name.starts_with('.')
 }
 
+/// Names new classes and import subfolders may not take: the internal folders plus the
+/// Local and Chat scopes. Existing folders with these names are still listed and watched.
+pub(crate) fn is_reserved_course_name(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    is_internal_folder_name(name) || lower == "local" || lower == "chat"
+}
+
 fn is_course_dir_name(name: &str) -> bool {
-    !name.is_empty() && !is_reserved_course_name(name)
+    !name.is_empty() && !is_internal_folder_name(name)
 }
 
 fn date_from_stem(stem: &str) -> String {
@@ -2907,6 +2914,23 @@ mod tests {
 
         let listed = block_on_cmd(list_courses(root.to_string_lossy().into_owned())).unwrap();
         assert_eq!(listed, vec!["Biology", "Organic Chem"]);
+    }
+
+    #[test]
+    fn list_courses_still_lists_existing_chat_and_local_folders() {
+        let root = temp_root("list-courses-chat-local");
+        fs::create_dir(root.join("Biology")).unwrap();
+        fs::create_dir(root.join("Chat")).unwrap();
+        fs::create_dir(root.join("Local")).unwrap();
+
+        let listed = block_on_cmd(list_courses(root.to_string_lossy().into_owned())).unwrap();
+        assert_eq!(listed, vec!["Biology", "Chat", "Local"]);
+
+        let root_string = root.to_string_lossy().into_owned();
+        for name in ["Chat", "chat", "Local", "local"] {
+            let err = block_on_cmd(create_course(root_string.clone(), name.into())).unwrap_err();
+            assert!(err.contains("reserved"), "{name}: {err}");
+        }
     }
 
     #[test]
