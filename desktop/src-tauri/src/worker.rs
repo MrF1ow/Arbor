@@ -1316,6 +1316,71 @@ fn run_local_commit_written(
     }
 }
 
+/// What a remote job runs; built by pure constructors so tests can check it.
+#[derive(Debug, Clone)]
+pub(crate) struct RemoteJobSpec {
+    courses: Vec<String>,
+    remote_tokens: Vec<String>,
+    plan_file: Option<PathBuf>,
+    from_text_file: Option<PathBuf>,
+    message: String,
+    /// Run `commit-written --index` locally once the remote files are synced down.
+    index: bool,
+}
+
+#[cfg_attr(not(feature = "desktop-runtime"), allow(dead_code))]
+impl RemoteJobSpec {
+    pub(crate) fn update(
+        courses: Vec<String>,
+        remote_tokens: Vec<String>,
+        plan_file: PathBuf,
+        message: String,
+    ) -> Self {
+        Self {
+            courses,
+            remote_tokens,
+            plan_file: Some(plan_file),
+            from_text_file: None,
+            message,
+            index: true,
+        }
+    }
+
+    pub(crate) fn generate(
+        course: &str,
+        skill: &str,
+        remote_tokens: Vec<String>,
+        from_text_file: Option<PathBuf>,
+    ) -> Self {
+        Self {
+            courses: vec![course.to_string()],
+            remote_tokens,
+            plan_file: None,
+            from_text_file,
+            message: format!("study: {course} {skill}"),
+            index: true,
+        }
+    }
+
+    pub(crate) fn into_request(
+        self,
+        endpoint: ValidatedSsh,
+        local_root: PathBuf,
+    ) -> crate::remote_job::RemoteJobRequest {
+        crate::remote_job::RemoteJobRequest {
+            endpoint,
+            local_root,
+            courses: self.courses,
+            remote_tokens: self.remote_tokens,
+            plan_file: self.plan_file,
+            from_text_file: self.from_text_file,
+            message: self.message,
+            index: self.index,
+            cancel_after_first_line: false,
+        }
+    }
+}
+
 #[cfg(feature = "desktop-runtime")]
 fn spawn_remote_job_stream(
     app: tauri::AppHandle,
@@ -1327,21 +1392,17 @@ fn spawn_remote_job_stream(
     provider_id: String,
     _provider_label: String,
     transport: WorkerTransport,
-    courses: Vec<String>,
-    remote_tokens: Vec<String>,
-    plan_path: Option<PathBuf>,
-    from_text_path: Option<PathBuf>,
-    message: String,
-    index: bool,
+    spec: RemoteJobSpec,
 ) {
     use crate::auth_cache;
     use crate::jobs::{self, JobStatus, SharedCoordinator};
-    use crate::remote_job::{run_remote_job, RemoteJobRequest, SystemRemoteOps};
+    use crate::remote_job::{run_remote_job, SystemRemoteOps};
     use tauri::{Emitter, Manager};
 
     let auth_cache_key = auth_cache::auth_cache_key(&transport, &provider_id);
     std::thread::spawn(move || {
-        let _from_text_cleanup = from_text_path
+        let _from_text_cleanup = spec
+            .from_text_file
             .as_ref()
             .map(|path| RemoveOnDrop(path.clone()));
         let release = |app: &tauri::AppHandle, job_id: &str| {
@@ -1380,17 +1441,7 @@ fn spawn_remote_job_stream(
                 return;
             }
         };
-        let req = RemoteJobRequest {
-            endpoint,
-            local_root: knowledge_root.clone(),
-            courses,
-            remote_tokens,
-            plan_file: plan_path,
-            from_text_file: from_text_path,
-            message,
-            index,
-            cancel_after_first_line: false,
-        };
+        let req = spec.into_request(endpoint, knowledge_root.clone());
         let app_commit = app.clone();
         let app_dir_commit = app_dir.clone();
         let job_id_commit = job_id.clone();
@@ -1481,12 +1532,7 @@ pub fn spawn_remote_update_stream(
         effective.to_string(),
         label,
         transport,
-        courses,
-        remote_tokens,
-        Some(plan_path),
-        None,
-        message,
-        true,
+        RemoteJobSpec::update(courses, remote_tokens, plan_path, message),
     );
 }
 
@@ -1506,7 +1552,6 @@ pub fn spawn_remote_generate_stream(
 ) {
     let effective = effective_provider_id(&provider_id);
     let label = crate::settings::provider_label(effective);
-    let message = format!("study: {course} {skill}");
     spawn_remote_job_stream(
         app,
         app_dir,
@@ -1517,12 +1562,7 @@ pub fn spawn_remote_generate_stream(
         effective.to_string(),
         label,
         transport,
-        vec![course],
-        remote_tokens,
-        None,
-        from_text_path,
-        message,
-        false,
+        RemoteJobSpec::generate(&course, &skill, remote_tokens, from_text_path),
     );
 }
 
@@ -1635,6 +1675,46 @@ mod tests {
                 "check-auth"
             ]
         );
+    }
+
+    fn sample_ssh() -> ValidatedSsh {
+        ValidatedSsh {
+            host: "h".to_string(),
+            port: 22,
+            user: None,
+            identity_file: None,
+            worker_tokens: vec!["arbor-worker".to_string()],
+            remote_root: "/r".to_string(),
+        }
+    }
+
+    #[test]
+    fn remote_generate_request_indexes_on_commit() {
+        let req = RemoteJobSpec::generate(
+            "Bio",
+            "flashcards",
+            vec!["generate".to_string()],
+            Some(PathBuf::from("/tmp/from-text.md")),
+        )
+        .into_request(sample_ssh(), PathBuf::from("/local/knowledge"));
+        assert!(req.index);
+        assert_eq!(req.courses, vec!["Bio".to_string()]);
+        assert_eq!(req.message, "study: Bio flashcards");
+        assert_eq!(req.from_text_file, Some(PathBuf::from("/tmp/from-text.md")));
+        assert!(req.plan_file.is_none());
+    }
+
+    #[test]
+    fn remote_update_request_still_indexes_on_commit() {
+        let req = RemoteJobSpec::update(
+            vec!["Bio".to_string()],
+            vec!["update".to_string()],
+            PathBuf::from("/tmp/plan.json"),
+            "digest: Bio".to_string(),
+        )
+        .into_request(sample_ssh(), PathBuf::from("/local/knowledge"));
+        assert!(req.index);
+        assert_eq!(req.plan_file, Some(PathBuf::from("/tmp/plan.json")));
     }
 
     #[test]

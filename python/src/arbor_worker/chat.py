@@ -11,7 +11,7 @@ from arbor_worker.embed import search_chunks
 from arbor_worker.embedder.base import Embedder
 from arbor_worker.embedder.hashed import HashedNgramEmbedder
 from arbor_worker.events import EventEmitter
-from arbor_worker.indexer import db_path
+from arbor_worker.indexer import DIGEST_KINDS, db_path
 from arbor_worker.page_markers import parse_page_markers
 from arbor_worker.provider.base import CliProvider, DeltaFn, ProviderRequest, supports_stream
 
@@ -269,6 +269,11 @@ def _fts_query(query: str) -> str | None:
     return " ".join(f'"{term.replace(chr(34), "")}"' for term in terms)
 
 
+def _fts_match_expr(fts_query: str) -> str:
+    # The column filter binds to one phrase only; parenthesise so every term obeys it.
+    return f"{{title body}} : ({fts_query})"
+
+
 def _fts_search(
     root: Path,
     course: str,
@@ -285,7 +290,9 @@ def _fts_search(
         return []
     uri = Path(db).resolve().as_uri() + "?mode=ro"
     path_filter = ""
-    params: list[object] = [fts_query, course]
+    match_expr = _fts_match_expr(fts_query)
+    kind_placeholders = ",".join("?" for _ in DIGEST_KINDS)
+    params: list[object] = [match_expr, course, *DIGEST_KINDS]
     if digest_paths:
         placeholders = ",".join("?" for _ in digest_paths)
         path_filter = f" AND path IN ({placeholders})"
@@ -296,7 +303,8 @@ def _fts_search(
             f"""
             SELECT path, title
             FROM search_index
-            WHERE search_index MATCH ? AND course = ?{path_filter}
+            WHERE search_index MATCH ? AND course = ?
+              AND kind IN ({kind_placeholders}){path_filter}
             ORDER BY rank
             LIMIT ?
             """,

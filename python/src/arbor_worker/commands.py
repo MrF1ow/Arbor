@@ -899,6 +899,18 @@ def cmd_generate(args) -> int:
     }
     if isinstance(skill, (FlashcardsSkill, QuizSkill)):
         skill_done_kwargs["added_ids"] = added_ids
+    if skill.name in {"flashcards", "quiz", "concepts"}:
+        try:
+            from arbor_worker.indexer import index_courses
+
+            index_courses(root, [args.course])
+        except Exception as error:
+            emitter.warning(
+                code="index_failed",
+                course=args.course,
+                skill=skill.name,
+                message=str(error),
+            )
     emitter.skill_done(**skill_done_kwargs)
     return 0
 
