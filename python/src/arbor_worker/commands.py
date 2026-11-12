@@ -326,6 +326,50 @@ def _emit_generate_commit_paths(
     emitter.emit("commit_paths", paths=[p.as_posix() for p in paths])
 
 
+def _load_origins_for_run(
+    emitter: EventEmitter, course: str, origins_path: Path, *, strict: bool
+) -> dict[str, str]:
+    """Scoped and from-text runs must merge, so unreadable origins stop them.
+
+    A full run replaces the deck anyway: unreadable origins count as empty
+    (every item is a full-run item) and the run says so.
+    """
+    try:
+        return load_study_origins(origins_path)
+    except (ValueError, OSError) as error:
+        if strict:
+            raise
+        emitter.warning(
+            code="study_file_unreadable",
+            course=course,
+            message=(
+                f"study/origins.json is unreadable ({error}); "
+                "treating every item as a full-run item and rewriting it"
+            ),
+        )
+        return {}
+
+
+def _load_existing_for_full_run(
+    emitter: EventEmitter, course: str, artifact_path: Path, model: type
+):
+    """Read the current deck or pack for a full run; unreadable counts as none."""
+    if not artifact_path.is_file():
+        return None
+    try:
+        return model.model_validate_json(artifact_path.read_text(encoding="utf-8"))
+    except (ValueError, OSError) as error:
+        emitter.warning(
+            code="study_file_unreadable",
+            course=course,
+            message=(
+                f"study/{artifact_path.name} is unreadable ({error}); "
+                "writing a fresh one"
+            ),
+        )
+        return None
+
+
 def cmd_generate(args) -> int:
     from arbor_worker.library import LibraryError, assert_can_write
 
@@ -730,7 +774,9 @@ def cmd_generate(args) -> int:
     try:
         with study_artifact_lock(root, args.course):
             if isinstance(skill, FlashcardsSkill):
-                origins = load_study_origins(origins_path)
+                origins = _load_origins_for_run(
+                    emitter, args.course, origins_path, strict=scoped
+                )
                 if scoped:
                     existing = None
                     if artifact_path.is_file():
@@ -743,11 +789,9 @@ def cmd_generate(args) -> int:
                     for item_id in added_ids:
                         origins[item_id] = origin
                 else:
-                    existing = None
-                    if artifact_path.is_file():
-                        existing = FlashcardDeck.model_validate_json(
-                            artifact_path.read_text()
-                        )
+                    existing = _load_existing_for_full_run(
+                        emitter, args.course, artifact_path, FlashcardDeck
+                    )
                     artifact, origins, added_ids = merge_full_run_deck(
                         artifact,
                         existing,
@@ -756,7 +800,9 @@ def cmd_generate(args) -> int:
                         allowed_digest_set,
                     )
             elif isinstance(skill, QuizSkill):
-                origins = load_study_origins(origins_path)
+                origins = _load_origins_for_run(
+                    emitter, args.course, origins_path, strict=scoped
+                )
                 if scoped:
                     existing = None
                     if artifact_path.is_file():
@@ -769,11 +815,9 @@ def cmd_generate(args) -> int:
                     for item_id in added_ids:
                         origins[item_id] = origin
                 else:
-                    existing = None
-                    if artifact_path.is_file():
-                        existing = QuizPack.model_validate_json(
-                            artifact_path.read_text()
-                        )
+                    existing = _load_existing_for_full_run(
+                        emitter, args.course, artifact_path, QuizPack
+                    )
                     artifact, origins, added_ids = merge_full_run_pack(
                         artifact,
                         existing,
@@ -1386,7 +1430,7 @@ def cmd_append_card(args) -> int:
             heading=args.heading,
             page=args.page,
         )
-    except ValueError as error:
+    except (ValueError, OSError) as error:
         print(str(error), file=sys.stderr)
         return 1
     deck_rel = Path(args.course) / "study" / "flashcards.json"

@@ -162,6 +162,8 @@ def load_study_origins(path: Path) -> dict[str, str]:
     if not path.is_file():
         return {}
     payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("invalid study/origins.json")
     if payload.get("version") != STUDY_ORIGINS_VERSION:
         raise ValueError("unsupported study/origins.json version")
     items = payload.get("items")

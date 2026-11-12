@@ -1146,7 +1146,7 @@ def _question_digest_key(
     source = _entry_source(entry, quiz_art, question_id)
     if source is None:
         return None
-    return normalize_study_digest(str(source["digest"]))
+    return digest_key(str(source["digest"]))
 
 
 def _card_digest_key(
@@ -1157,7 +1157,7 @@ def _card_digest_key(
     source = _entry_source(entry, card_art, card_id)
     if source is None:
         return None
-    return normalize_study_digest(str(source["digest"]))
+    return digest_key(str(source["digest"]))
 
 
 def _finalize_digest_mastery(buckets: dict[str, dict[str, Any]]) -> None:
@@ -1194,7 +1194,7 @@ def study_progress_digest_stats(
         source = card_art.get(card_id)
         if source is None:
             continue
-        dkey = normalize_study_digest(str(source["digest"]))
+        dkey = digest_key(str(source["digest"]))
         bucket = touch(dkey)
         bucket["cards"] += 1
         entry = cards_progress.get(card_id)

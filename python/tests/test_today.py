@@ -232,6 +232,29 @@ def test_digest_stats_mastered_threshold_and_empty_lecture(today_root: Path) -> 
     assert chem["digests/periodic.md"]["mastery"] is None
 
 
+def test_digest_stats_counts_class_prefixed_citations_under_canonical_key(
+    today_root: Path,
+) -> None:
+    deck_path = today_root / "Bio" / "study" / "flashcards.json"
+    deck = json.loads(deck_path.read_text())
+    for card in deck["cards"]:
+        if card["source"]["digest"] == "digests/intro.md":
+            card["source"]["digest"] = "Bio/digests/intro.md"
+    deck_path.write_text(json.dumps(deck))
+    quiz_path = today_root / "Bio" / "study" / "quiz.json"
+    quiz = json.loads(quiz_path.read_text())
+    for question in quiz["questions"]:
+        if question["source"]["digest"] == "digests/intro.md":
+            question["source"]["digest"] = "Bio/digests/intro.md"
+    quiz_path.write_text(json.dumps(quiz))
+    baseline_keys = {"digests/intro.md", "digests/unit-2.md"}
+
+    digests = study_progress_digest_stats(today_root, "Bio", now=CLOCK)["digests"]
+
+    assert set(digests) == baseline_keys
+    assert digests["digests/intro.md"]["cards"] >= 1
+
+
 def test_study_today_weak_topics_include_course(today_root: Path) -> None:
     _, out, _ = _run_cli(
         [

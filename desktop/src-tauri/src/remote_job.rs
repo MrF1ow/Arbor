@@ -247,10 +247,29 @@ fn is_infrastructure_ssh_error(mapped: &str) -> bool {
         || mapped.contains("could not connect to the remote host")
 }
 
-fn resolve_run_error(stderr: &str, exit_code: i32, worker_error: &Option<String>) -> String {
+/// A remote worker from before the app's flags prints an argparse error for
+/// them. Say the worker is old instead of echoing the argv.
+fn older_worker_error(stderr: &str, host: &str) -> Option<String> {
+    if stderr.contains("unrecognized arguments") {
+        return Some(format!(
+            "The Arbor worker on {host} is older than this app. Update it on the SSH worker and try again."
+        ));
+    }
+    None
+}
+
+fn resolve_run_error(
+    stderr: &str,
+    exit_code: i32,
+    worker_error: &Option<String>,
+    host: &str,
+) -> String {
     let mapped = map_ssh_error(stderr, exit_code);
     if is_infrastructure_ssh_error(&mapped) {
         return mapped;
+    }
+    if let Some(older) = older_worker_error(stderr, host) {
+        return older;
     }
     if let Some(err) = worker_error {
         return err.clone();
@@ -399,12 +418,12 @@ fn run_remote_job_inner(
         Ok(0) => {}
         Ok(_code) if outcome.killed => {}
         Ok(code) => {
-            outcome.error = Some(resolve_run_error("", code, &exit_error));
+            outcome.error = Some(resolve_run_error("", code, &exit_error, &req.endpoint.host));
             return (outcome, from_text_cleanup.clone());
         }
         Err(_stderr) if outcome.killed => {}
         Err(stderr) => {
-            outcome.error = Some(resolve_run_error(&stderr, 255, &exit_error));
+            outcome.error = Some(resolve_run_error(&stderr, 255, &exit_error, &req.endpoint.host));
             return (outcome, from_text_cleanup.clone());
         }
     }
@@ -1078,6 +1097,44 @@ mod tests {
             assert!(!outcome.committed);
             assert!(!commit_called);
         }
+    }
+
+    #[test]
+    fn older_remote_worker_reports_update_message_without_argv() {
+        let endpoint = test_endpoint();
+        let host = endpoint.host.clone();
+        let local_root = PathBuf::from("/tmp/Knowledge");
+        let mut ops = FakeOps::new(Err(
+            "usage: arbor-worker generate [-h]\narbor-worker: error: unrecognized arguments: --digests Bio/digests/a.md --full\n"
+                .to_string(),
+        ));
+        let mut commit_called = false;
+        let outcome = run_remote_job(
+            &mut ops,
+            &sample_request(endpoint, local_root),
+            &mut |_, _, _| {
+                commit_called = true;
+                Ok(())
+            },
+            None,
+        );
+        let error = outcome.error.expect("error");
+        assert_eq!(
+            error,
+            format!(
+                "The Arbor worker on {host} is older than this app. Update it on the SSH worker and try again."
+            )
+        );
+        assert!(!error.contains("--digests"));
+        assert!(!outcome.committed);
+        assert!(!commit_called);
+    }
+
+    #[test]
+    fn older_worker_detection_ignores_other_stderr() {
+        assert_eq!(older_worker_error("Permission denied (publickey).", "h"), None);
+        assert_eq!(older_worker_error("", "h"), None);
+        assert!(older_worker_error("error: unrecognized arguments: --full", "h").is_some());
     }
 
     #[test]

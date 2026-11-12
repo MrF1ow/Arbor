@@ -878,3 +878,144 @@ def test_digests_list_still_rejects_missing_entry_with_commas(tmp_path: Path):
     )
     assert code == 1
     assert events[-1]["type"] == "skill_failed"
+
+
+# --- council round 2: unreadable study files ------------------------------------
+
+_BAD_FILES = {
+    "conflict": "<<<<<<< HEAD\ngarbage\n=======\nother\n>>>>>>> branch\n",
+    "truncated": '{"schema_version": 1, "course": "Bio", "cards": [{"front":',
+    "not_json": "{not json\n",
+    "list_payload": "[1, 2, 3]\n",
+}
+
+
+def _study_path(root: Path, name: str) -> Path:
+    path = root / "Bio" / "study" / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _warning_events(events: list[dict], needle: str) -> list[dict]:
+    return [
+        event
+        for event in events
+        if event["type"] == "warning" and needle in str(event.get("message", ""))
+    ]
+
+
+@pytest.mark.parametrize("kind", sorted(_BAD_FILES))
+@pytest.mark.parametrize("extra", [(), ("--digests", "Bio/digests/intro.md", "--full")])
+def test_full_flashcards_run_repairs_unreadable_deck(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str, extra: tuple
+):
+    root = build_ui_overhaul_root(tmp_path).root
+    _study_path(root, "flashcards.json").write_text(_BAD_FILES[kind])
+    monkeypatch.setenv("ARBOR_FAKE_MD", FAKE_FLASHCARDS_INTRO_JSON)
+    code, events = _run_generate(root, "--force", *extra)
+    assert code == 0, events[-1]
+    assert events[-1]["type"] == "skill_done"
+    assert _warning_events(events, "flashcards.json")
+    deck = json.loads((root / "Bio" / "study" / "flashcards.json").read_text())
+    assert deck["cards"]
+
+
+@pytest.mark.parametrize("kind", sorted(_BAD_FILES))
+@pytest.mark.parametrize("extra", [(), ("--digests", "Bio/digests/intro.md", "--full")])
+def test_full_quiz_run_repairs_unreadable_pack(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str, extra: tuple
+):
+    root = build_ui_overhaul_root(tmp_path).root
+    _study_path(root, "quiz.json").write_text(_BAD_FILES[kind])
+    monkeypatch.setenv("ARBOR_FAKE_MD", FAKE_QUIZ_INTRO_JSON)
+    code, events = _run_generate_skill(root, "quiz", "--force", *extra)
+    assert code == 0, events[-1]
+    assert events[-1]["type"] == "skill_done"
+    assert _warning_events(events, "quiz.json")
+    pack = json.loads((root / "Bio" / "study" / "quiz.json").read_text())
+    assert pack["questions"]
+
+
+@pytest.mark.parametrize("kind", sorted(_BAD_FILES))
+@pytest.mark.parametrize("skill", ["flashcards", "quiz"])
+def test_full_run_repairs_unreadable_origins(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str, skill: str
+):
+    root = build_ui_overhaul_root(tmp_path).root
+    _study_path(root, "origins.json").write_text(_BAD_FILES[kind])
+    monkeypatch.setenv(
+        "ARBOR_FAKE_MD",
+        FAKE_FLASHCARDS_INTRO_JSON if skill == "flashcards" else FAKE_QUIZ_INTRO_JSON,
+    )
+    code, events = _run_generate_skill(root, skill, "--force")
+    assert code == 0, events[-1]
+    assert events[-1]["type"] == "skill_done"
+    assert _warning_events(events, "origins.json")
+    items = json.loads((root / "Bio" / "study" / "origins.json").read_text())["items"]
+    assert isinstance(items, dict)
+    assert "manual" not in items.values()
+
+
+@pytest.mark.parametrize("kind", sorted(_BAD_FILES))
+def test_scoped_run_with_unreadable_deck_is_clean_skill_failed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str
+):
+    root = build_ui_overhaul_root(tmp_path).root
+    path = _study_path(root, "flashcards.json")
+    path.write_text(_BAD_FILES[kind])
+    monkeypatch.setenv("ARBOR_FAKE_MD", FAKE_FLASHCARDS_INTRO_JSON)
+    code, events = _run_generate(root, "--digests", "Bio/digests/intro.md")
+    assert code == 1
+    assert events[-1]["type"] == "skill_failed"
+    assert path.read_text() == _BAD_FILES[kind]
+
+
+@pytest.mark.parametrize("kind", sorted(_BAD_FILES))
+def test_scoped_quiz_with_unreadable_pack_is_clean_skill_failed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str
+):
+    root = build_ui_overhaul_root(tmp_path).root
+    path = _study_path(root, "quiz.json")
+    path.write_text(_BAD_FILES[kind])
+    monkeypatch.setenv("ARBOR_FAKE_MD", FAKE_QUIZ_INTRO_JSON)
+    code, events = _run_generate_skill(
+        root, "quiz", "--digests", "Bio/digests/intro.md"
+    )
+    assert code == 1
+    assert events[-1]["type"] == "skill_failed"
+    assert path.read_text() == _BAD_FILES[kind]
+
+
+@pytest.mark.parametrize("kind", sorted(_BAD_FILES))
+def test_scoped_run_with_unreadable_origins_is_clean_skill_failed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str
+):
+    root = build_ui_overhaul_root(tmp_path).root
+    _study_path(root, "origins.json").write_text(_BAD_FILES[kind])
+    monkeypatch.setenv("ARBOR_FAKE_MD", FAKE_FLASHCARDS_INTRO_JSON)
+    code, events = _run_generate(root, "--digests", "Bio/digests/intro.md")
+    assert code == 1
+    assert events[-1]["type"] == "skill_failed"
+
+
+@pytest.mark.parametrize("kind", sorted(_BAD_FILES))
+def test_append_card_with_unreadable_study_files_errors_cleanly(
+    git_repo: Path, kind: str
+):
+    course = git_repo / "Biology"
+    (course / "digests").mkdir(parents=True)
+    (course / "digests" / "a.md").write_text("# A\n")
+    study = course / "study"
+    study.mkdir()
+    (study / "origins.json").write_text(_BAD_FILES[kind])
+    out, err = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        code = cli.main(
+            [
+                "append-card", "--root", str(git_repo), "--course", "Biology",
+                "--front", "Q?", "--back", "A", "--digest", "digests/a.md",
+            ]
+        )
+    assert code == 1
+    assert "Traceback" not in err.getvalue()
+    assert (study / "origins.json").read_text() == _BAD_FILES[kind]

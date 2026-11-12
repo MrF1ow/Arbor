@@ -33,6 +33,9 @@ export function formatWorkerEvent(ev: WorkerEvent, providerLabel = "Provider"): 
       line = "Nothing to process — everything is up to date.";
       status = "done";
       break;
+    case "planned":
+      line = `Planned ${(ev as WorkerEvent & { total?: number }).total ?? 0} source(s)`;
+      break;
     case "course_started":
       line = `\n■ ${ev.course_dir ?? ""} (${ev.sources ?? 0} source(s))`;
       step = ev.course_dir ?? null;
