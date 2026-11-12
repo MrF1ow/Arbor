@@ -6,11 +6,19 @@ from pathlib import Path
 
 from collections.abc import Iterator
 
-from arbor_worker.provider.base import DeltaFn, ProviderError, ProviderRequest, image_media_type
+from arbor_worker.provider.base import (
+    DeltaFn,
+    ProviderError,
+    ProviderRequest,
+    image_media_type,
+    record_usage,
+)
 from arbor_worker.provider.http_transport import redact_secret
 
 
-def build_chat_completions_body(request: ProviderRequest, *, stream: bool = False) -> dict:
+def build_chat_completions_body(
+    request: ProviderRequest, *, stream: bool = False, include_usage: bool = False
+) -> dict:
     messages: list[dict] = []
     if request.system is not None:
         messages.append({"role": "system", "content": request.system})
@@ -30,11 +38,14 @@ def build_chat_completions_body(request: ProviderRequest, *, stream: bool = Fals
         messages.append({"role": "user", "content": content})
     else:
         messages.append({"role": "user", "content": request.prompt})
-    return {
+    body: dict = {
         "model": request.model_id,
         "messages": messages,
         "stream": stream,
     }
+    if stream and include_usage:
+        body["stream_options"] = {"include_usage": True}
+    return body
 
 
 def _sse_error_message(payload: dict, secret: str | None) -> str | None:
@@ -48,7 +59,11 @@ def _sse_error_message(payload: dict, secret: str | None) -> str | None:
 
 
 def iter_chat_completions_sse(
-    lines: Iterator[bytes], on_delta: DeltaFn, *, secret: str | None = None
+    lines: Iterator[bytes],
+    on_delta: DeltaFn,
+    *,
+    secret: str | None = None,
+    usage: dict[str, int] | None = None,
 ) -> str:
     parts: list[str] = []
     for raw in lines:
@@ -68,6 +83,7 @@ def iter_chat_completions_sse(
         err_msg = _sse_error_message(payload, secret)
         if err_msg is not None:
             raise ProviderError(err_msg)
+        record_usage(usage, payload.get("usage"), "prompt_tokens", "completion_tokens")
         choices = payload.get("choices")
         if not isinstance(choices, list) or not choices:
             continue
@@ -110,5 +126,14 @@ def parse_chat_completions_content(payload: dict, provider_label: str) -> str:
     raise ProviderError(f"{provider_label} response did not include assistant text")
 
 
-def chat_completions_json_body(request: ProviderRequest, *, stream: bool = False) -> bytes:
-    return json.dumps(build_chat_completions_body(request, stream=stream)).encode("utf-8")
+def parse_chat_completions_usage(payload: dict) -> dict[str, int]:
+    usage: dict[str, int] = {}
+    record_usage(usage, payload.get("usage"), "prompt_tokens", "completion_tokens")
+    return usage
+
+
+def chat_completions_json_body(
+    request: ProviderRequest, *, stream: bool = False, include_usage: bool = False
+) -> bytes:
+    body = build_chat_completions_body(request, stream=stream, include_usage=include_usage)
+    return json.dumps(body).encode("utf-8")

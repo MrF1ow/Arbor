@@ -23,8 +23,29 @@ from arbor_worker.skills.citations import CitationsSkill
 from arbor_worker.skills.concepts import ConceptsSkill, merge_graphs
 from arbor_worker.skills.diagrams import DiagramsSkill, cached_page_images, merge_figures
 from arbor_worker.schemas.study.concepts import ConceptGraph
-from arbor_worker.skills.flashcards import FlashcardsSkill, digest_batches, merge_decks
-from arbor_worker.skills.quiz import QuizSkill, merge_packs
+from arbor_worker.schemas.study.flashcards import FlashcardDeck
+from arbor_worker.schemas.study.quiz import QuizPack
+from arbor_worker.skills.flashcards import (
+    FROM_TEXT_MAX_CHARS,
+    FlashcardsSkill,
+    digest_batches,
+    filter_deck_by_digests,
+    load_study_origins,
+    merge_deck_by_id,
+    merge_decks,
+    merge_full_run_deck,
+    parse_generate_digests_csv,
+    study_artifact_lock,
+    write_study_artifact_json,
+    write_study_origins,
+)
+from arbor_worker.skills.quiz import (
+    QuizSkill,
+    filter_pack_by_digests,
+    merge_full_run_pack,
+    merge_pack_by_id,
+    merge_packs,
+)
 from arbor_worker.skills.manifest import (
     ManifestArtifact,
     load_manifest,
@@ -140,6 +161,7 @@ def _resolve_llm_provider(
     *,
     fake_markdown: str | None = None,
     emit_missing_model_error: bool = True,
+    source: str = "other",
 ):
     entry = PROVIDERS[provider_id]
     if provider_id != "fake" and not model_id:
@@ -161,6 +183,7 @@ def _resolve_llm_provider(
         provider_id,
         root,
         fake_markdown=fake_markdown,
+        source=source,
     )
     resolved_model = model_id or "fake-model"
     return (provider, resolved_model), None
@@ -209,7 +232,9 @@ def cmd_update(args) -> int:
         emitter.run_done(processed=0, failed=0, skipped=0)
         return 1
 
-    resolved, code = _resolve_llm_provider(args.provider, root, args.model, emitter)
+    resolved, code = _resolve_llm_provider(
+        args.provider, root, args.model, emitter, source="job"
+    )
     if code is not None:
         return code
     provider, _model_id = resolved
@@ -271,10 +296,78 @@ def cmd_commit_written(args) -> int:
     return 0
 
 
+def _file_bytes(path: Path) -> bytes | None:
+    if path.is_file():
+        return path.read_bytes()
+    return None
+
+
+def _remember_file_bytes(store: dict[Path, bytes | None], path: Path) -> None:
+    if path not in store:
+        store[path] = _file_bytes(path)
+
+
+def _commit_rels_with_byte_changes(
+    root: Path,
+    rels: list[Path],
+    before: dict[Path, bytes | None],
+) -> list[Path]:
+    changed: list[Path] = []
+    for rel in rels:
+        path = root / rel
+        if before.get(path) != _file_bytes(path):
+            changed.append(rel)
+    return changed
+
+
 def _emit_generate_commit_paths(
     emitter: EventEmitter, paths: list[Path]
 ) -> None:
     emitter.emit("commit_paths", paths=[p.as_posix() for p in paths])
+
+
+def _load_origins_for_run(
+    emitter: EventEmitter, course: str, origins_path: Path, *, strict: bool
+) -> dict[str, str]:
+    """Scoped and from-text runs must merge, so unreadable origins stop them.
+
+    A full run replaces the deck anyway: unreadable origins count as empty
+    (every item is a full-run item) and the run says so.
+    """
+    try:
+        return load_study_origins(origins_path)
+    except (ValueError, OSError) as error:
+        if strict:
+            raise
+        emitter.warning(
+            code="study_file_unreadable",
+            course=course,
+            message=(
+                f"study/origins.json is unreadable ({error}); "
+                "treating every item as a full-run item and rewriting it"
+            ),
+        )
+        return {}
+
+
+def _load_existing_for_full_run(
+    emitter: EventEmitter, course: str, artifact_path: Path, model: type
+):
+    """Read the current deck or pack for a full run; unreadable counts as none."""
+    if not artifact_path.is_file():
+        return None
+    try:
+        return model.model_validate_json(artifact_path.read_text(encoding="utf-8"))
+    except (ValueError, OSError) as error:
+        emitter.warning(
+            code="study_file_unreadable",
+            course=course,
+            message=(
+                f"study/{artifact_path.name} is unreadable ({error}); "
+                "writing a fresh one"
+            ),
+        )
+        return None
 
 
 def cmd_generate(args) -> int:
@@ -311,7 +404,89 @@ def cmd_generate(args) -> int:
         )
         return 1
 
-    digest_paths = sorted((course_dir / "digests").glob("*.md"))
+    digests_raw = getattr(args, "digests", None)
+    full_limited = bool(getattr(args, "full", False))
+    from_text_path = getattr(args, "from_text_file", None)
+    from_text = from_text_path is not None
+    if full_limited and not digests_raw:
+        emitter.skill_failed(
+            course=args.course,
+            skill=args.skill,
+            message="--full requires --digests",
+        )
+        return 1
+    if from_text:
+        if not digests_raw:
+            emitter.skill_failed(
+                course=args.course,
+                skill=args.skill,
+                message="--from-text-file requires --digests",
+            )
+            return 1
+        if full_limited:
+            emitter.skill_failed(
+                course=args.course,
+                skill=args.skill,
+                message="--from-text-file cannot be used with --full",
+            )
+            return 1
+        if not isinstance(skill, (FlashcardsSkill, QuizSkill)):
+            emitter.skill_failed(
+                course=args.course,
+                skill=args.skill,
+                message="--from-text-file is only supported for flashcards and quiz",
+            )
+            return 1
+        try:
+            with open(from_text_path, encoding="utf-8") as handle:
+                source_text = handle.read(FROM_TEXT_MAX_CHARS + 1)
+        except (OSError, UnicodeError) as error:
+            emitter.skill_failed(
+                course=args.course,
+                skill=args.skill,
+                message=str(error),
+            )
+            return 1
+        if not source_text.strip():
+            emitter.skill_failed(
+                course=args.course,
+                skill=args.skill,
+                message="from-text file is empty",
+            )
+            return 1
+        if len(source_text) > FROM_TEXT_MAX_CHARS:
+            emitter.skill_failed(
+                course=args.course,
+                skill=args.skill,
+                message=(
+                    f"from-text exceeds {FROM_TEXT_MAX_CHARS} characters "
+                    f"({len(source_text)} given)"
+                ),
+            )
+            return 1
+    if digests_raw and not isinstance(skill, (FlashcardsSkill, QuizSkill)):
+        emitter.skill_failed(
+            course=args.course,
+            skill=args.skill,
+            message="--digests is only supported for flashcards and quiz",
+        )
+        return 1
+
+    scoped = digests_raw is not None and not full_limited
+    digest_rels: list[str] | None = None
+    if digests_raw:
+        try:
+            digest_rels = parse_generate_digests_csv(root, args.course, digests_raw)
+        except ValueError as error:
+            emitter.skill_failed(
+                course=args.course,
+                skill=args.skill,
+                message=str(error),
+            )
+            return 1
+        digest_paths = sorted(course_dir / rel for rel in digest_rels)
+    else:
+        digest_paths = sorted((course_dir / "digests").glob("*.md"))
     if not digest_paths:
         emitter.skill_failed(
             course=args.course,
@@ -322,27 +497,31 @@ def cmd_generate(args) -> int:
 
     source_hash = hashlib.sha256()
     digest_sections = []
-    try:
-        for digest_path in digest_paths:
-            source_bytes = digest_path.read_bytes()
-            source_hash.update(source_bytes)
-            digest_sections.append(
-                f"# digests/{digest_path.name}\n\n{source_bytes.decode('utf-8')}"
+    if from_text:
+        content_sha256 = hashlib.sha256(source_text.encode("utf-8")).hexdigest()
+        skill_inputs = [""]
+    else:
+        try:
+            for digest_path in digest_paths:
+                source_bytes = digest_path.read_bytes()
+                source_hash.update(source_bytes)
+                digest_sections.append(
+                    f"# digests/{digest_path.name}\n\n{source_bytes.decode('utf-8')}"
+                )
+        except (OSError, UnicodeError) as error:
+            emitter.skill_failed(
+                course=args.course,
+                skill=args.skill,
+                message=str(error),
             )
-    except (OSError, UnicodeError) as error:
-        emitter.skill_failed(
-            course=args.course,
-            skill=args.skill,
-            message=str(error),
+            return 1
+        content_sha256 = source_hash.hexdigest()
+        digest_text = "\n\n".join(digest_sections)
+        skill_inputs = (
+            digest_batches(digest_sections)
+            if isinstance(skill, (FlashcardsSkill, QuizSkill, ConceptsSkill))
+            else [digest_text]
         )
-        return 1
-    content_sha256 = source_hash.hexdigest()
-    digest_text = "\n\n".join(digest_sections)
-    skill_inputs = (
-        digest_batches(digest_sections)
-        if isinstance(skill, (FlashcardsSkill, QuizSkill, ConceptsSkill))
-        else [digest_text]
-    )
 
     study_dir = course_dir / "study"
     if isinstance(skill, CitationsSkill):
@@ -379,18 +558,19 @@ def cmd_generate(args) -> int:
         )
         return 1
 
-    current = manifest.artifacts.get(skill.name)
-    if (
-        not args.force
-        and current is not None
-        and current.content_sha256 == content_sha256
-    ):
-        emitter.skill_stale_skipped(
-            course=args.course,
-            skill=skill.name,
-            content_sha256=content_sha256,
-        )
-        return 0
+    if not scoped:
+        current = manifest.artifacts.get(skill.name)
+        if (
+            not args.force
+            and current is not None
+            and current.content_sha256 == content_sha256
+        ):
+            emitter.skill_stale_skipped(
+                course=args.course,
+                skill=skill.name,
+                content_sha256=content_sha256,
+            )
+            return 0
 
     if isinstance(skill, CitationsSkill):
         emitter.skill_started(course=args.course, skill=skill.name)
@@ -479,6 +659,7 @@ def cmd_generate(args) -> int:
             emitter,
             fake_markdown=fake_markdown,
             emit_missing_model_error=False,
+            source="job",
         )
     else:
         resolved, code = _resolve_llm_provider(
@@ -487,6 +668,7 @@ def cmd_generate(args) -> int:
             args.model,
             emitter,
             emit_missing_model_error=False,
+            source="job",
         )
     if code is not None:
         if code == 2:
@@ -510,22 +692,30 @@ def cmd_generate(args) -> int:
         )
 
     try:
+        def build_generate_prompt(skill_input: str) -> str:
+            if from_text and isinstance(skill, (FlashcardsSkill, QuizSkill)):
+                assert digest_rels is not None
+                return skill.build_prompt_from_text(
+                    course=args.course,
+                    digest_rels=digest_rels,
+                    text=source_text,
+                )
+            if isinstance(skill, DiagramsSkill):
+                return skill.build_prompt(
+                    course=args.course,
+                    digest_text=skill_input,
+                    image_paths=image_paths,
+                )
+            return skill.build_prompt(
+                course=args.course,
+                digest_text=skill_input,
+            )
+
         artifacts = [
             run_skill(
                 provider,
                 ProviderRequest(
-                    prompt=(
-                        skill.build_prompt(
-                            course=args.course,
-                            digest_text=skill_input,
-                            image_paths=image_paths,
-                        )
-                        if isinstance(skill, DiagramsSkill)
-                        else skill.build_prompt(
-                            course=args.course,
-                            digest_text=skill_input,
-                        )
-                    ),
+                    prompt=build_generate_prompt(skill_input),
                     model_id=model_id,
                     cwd=root,
                     image_paths=image_paths,
@@ -577,6 +767,84 @@ def cmd_generate(args) -> int:
         )
         return 1
 
+    added_ids: list[str] = []
+    origins_path = study_dir / "origins.json"
+    allowed_digest_set = set(digest_rels) if digest_rels is not None else None
+    write_before: dict[Path, bytes | None] = {}
+    try:
+        with study_artifact_lock(root, args.course):
+            if isinstance(skill, FlashcardsSkill):
+                origins = _load_origins_for_run(
+                    emitter, args.course, origins_path, strict=scoped
+                )
+                if scoped:
+                    existing = None
+                    if artifact_path.is_file():
+                        existing = FlashcardDeck.model_validate_json(
+                            artifact_path.read_text()
+                        )
+                    fresh = filter_deck_by_digests(artifact, set(digest_rels or []))
+                    artifact, added_ids = merge_deck_by_id(existing, fresh)
+                    origin = "text" if from_text else "scoped"
+                    for item_id in added_ids:
+                        origins[item_id] = origin
+                else:
+                    existing = _load_existing_for_full_run(
+                        emitter, args.course, artifact_path, FlashcardDeck
+                    )
+                    artifact, origins, added_ids = merge_full_run_deck(
+                        artifact,
+                        existing,
+                        origins,
+                        course_dir,
+                        allowed_digest_set,
+                    )
+            elif isinstance(skill, QuizSkill):
+                origins = _load_origins_for_run(
+                    emitter, args.course, origins_path, strict=scoped
+                )
+                if scoped:
+                    existing = None
+                    if artifact_path.is_file():
+                        existing = QuizPack.model_validate_json(
+                            artifact_path.read_text()
+                        )
+                    fresh = filter_pack_by_digests(artifact, set(digest_rels or []))
+                    artifact, added_ids = merge_pack_by_id(existing, fresh)
+                    origin = "text" if from_text else "scoped"
+                    for item_id in added_ids:
+                        origins[item_id] = origin
+                else:
+                    existing = _load_existing_for_full_run(
+                        emitter, args.course, artifact_path, QuizPack
+                    )
+                    artifact, origins, added_ids = merge_full_run_pack(
+                        artifact,
+                        existing,
+                        origins,
+                        course_dir,
+                        allowed_digest_set,
+                    )
+            study_dir.mkdir(parents=True, exist_ok=True)
+            if isinstance(skill, (FlashcardsSkill, QuizSkill)):
+                _remember_file_bytes(write_before, origins_path)
+                write_study_origins(origins_path, origins)
+                _remember_file_bytes(write_before, artifact_path)
+                artifact_text = (
+                    json.dumps(
+                        artifact.model_dump(mode="json", by_alias=True), indent=2
+                    )
+                    + "\n"
+                )
+                write_study_artifact_json(artifact_path, artifact_text)
+    except (ValueError, OSError, json.JSONDecodeError) as error:
+        emitter.skill_failed(
+            course=args.course,
+            skill=skill.name,
+            message=str(error),
+        )
+        return 1
+
     study_dir.mkdir(parents=True, exist_ok=True)
     written_rels: list[Path] = []
     if isinstance(skill, DiagramsSkill):
@@ -586,6 +854,7 @@ def cmd_generate(args) -> int:
             existing = ConceptGraph.model_validate_json(concepts_path.read_text())
         merged = merge_figures(existing, artifact)
         if merged is not None and merged is not existing:
+            _remember_file_bytes(write_before, concepts_path)
             concepts_path.write_text(
                 json.dumps(merged.model_dump(mode="json", by_alias=True), indent=2)
                 + "\n"
@@ -597,18 +866,32 @@ def cmd_generate(args) -> int:
             content_sha256=content_sha256,
             generated_at=datetime.now(timezone.utc),
         )
+    elif isinstance(skill, (FlashcardsSkill, QuizSkill)):
+        artifact_rel = artifact_path.relative_to(root)
+        written_rels.append(artifact_rel)
+        written_rels.append(origins_path.relative_to(root))
+        if not scoped:
+            manifest.artifacts[skill.name] = ManifestArtifact(
+                file=artifact_path.name,
+                content_sha256=content_sha256,
+                generated_at=datetime.now(timezone.utc),
+            )
     else:
+        _remember_file_bytes(write_before, artifact_path)
         artifact_path.write_text(
             json.dumps(artifact.model_dump(mode="json", by_alias=True), indent=2) + "\n"
         )
         artifact_rel = artifact_path.relative_to(root)
         written_rels.append(artifact_rel)
-        manifest.artifacts[skill.name] = ManifestArtifact(
-            file=artifact_path.name,
-            content_sha256=content_sha256,
-            generated_at=datetime.now(timezone.utc),
-        )
-    write_manifest(manifest_path, manifest)
+        if not scoped:
+            manifest.artifacts[skill.name] = ManifestArtifact(
+                file=artifact_path.name,
+                content_sha256=content_sha256,
+                generated_at=datetime.now(timezone.utc),
+            )
+    if not scoped:
+        _remember_file_bytes(write_before, manifest_path)
+        write_manifest(manifest_path, manifest)
     from arbor_worker.sync import derived_gitignore_extras
 
     ensure_gitignored(
@@ -617,39 +900,68 @@ def cmd_generate(args) -> int:
         derived_gitignore_extras(settings.cache_dir_name),
     )
 
-    manifest_rel = manifest_path.relative_to(root)
-    commit_rels = [manifest_rel, *written_rels]
-    if args.no_commit:
-        _emit_generate_commit_paths(emitter, commit_rels)
+    if scoped:
+        commit_rels = list(written_rels)
     else:
-        try:
-            commit = commit_and_note(
-                root,
-                commit_rels,
-                f"study: {args.course} {skill.name}",
-                emitter,
+        manifest_rel = manifest_path.relative_to(root)
+        commit_rels = [manifest_rel, *written_rels]
+    byte_changed_rels = _commit_rels_with_byte_changes(root, commit_rels, write_before)
+    if args.no_commit:
+        _emit_generate_commit_paths(emitter, byte_changed_rels)
+    else:
+        dirty_rels = [
+            rel for rel in commit_rels if path_has_pending_changes(root, rel)
+        ]
+        dirty_rels = [rel for rel in dirty_rels if rel in byte_changed_rels]
+        if dirty_rels:
+            commit_message = (
+                f"study: {args.course} {skill.name} from chat"
+                if from_text
+                else f"study: {args.course} {skill.name}"
             )
-        except GitStateError as error:
-            emitter.skill_failed(
+            try:
+                commit = commit_and_note(
+                    root,
+                    dirty_rels,
+                    commit_message,
+                    emitter,
+                )
+            except GitStateError as error:
+                emitter.skill_failed(
+                    course=args.course,
+                    skill=skill.name,
+                    message=str(error),
+                )
+                return 1
+            emitter.committed(
+                commit=commit,
+                courses=[args.course],
+                skill=skill.name,
+            )
+            from arbor_worker.sync import maybe_sync_after_commit
+
+            maybe_sync_after_commit(root, emitter)
+
+    skill_done_kwargs: dict = {
+        "course": args.course,
+        "skill": skill.name,
+        "file": str(artifact_rel),
+    }
+    if isinstance(skill, (FlashcardsSkill, QuizSkill)):
+        skill_done_kwargs["added_ids"] = added_ids
+    if skill.name in {"flashcards", "quiz", "concepts"}:
+        try:
+            from arbor_worker.indexer import index_courses
+
+            index_courses(root, [args.course])
+        except Exception as error:
+            emitter.warning(
+                code="index_failed",
                 course=args.course,
                 skill=skill.name,
                 message=str(error),
             )
-            return 1
-        emitter.committed(
-            commit=commit,
-            courses=[args.course],
-            skill=skill.name,
-        )
-        from arbor_worker.sync import maybe_sync_after_commit
-
-        maybe_sync_after_commit(root, emitter)
-
-    emitter.skill_done(
-        course=args.course,
-        skill=skill.name,
-        file=str(artifact_rel),
-    )
+    emitter.skill_done(**skill_done_kwargs)
     return 0
 
 
@@ -725,21 +1037,54 @@ def _commit_study_file_if_dirty(
         maybe_sync_after_commit(root, emitter)
 
 
+def _restore_viewer_legacy_progress(root: Path, legacy_rel: Path) -> None:
+    """A viewer cannot commit the shared legacy file's removal: put it back.
+
+    Migration already copied it to the viewer's own progress.json, which then
+    wins, so restoring the tracked copy only keeps the working tree clean (a
+    dirty tracked deletion would block a later rebase pull).
+    """
+    import subprocess
+
+    subprocess.run(
+        ["git", "-C", str(root), "checkout", "--", str(legacy_rel)],
+        capture_output=True,
+        text=True,
+    )
+
+
 def _commit_study_progress_if_dirty(
     root: Path,
     course: str,
     message: str,
     emitter: EventEmitter,
 ) -> None:
-    from arbor_worker.study_progress import progress_path
+    from arbor_worker.library import current_role
+    from arbor_worker.machine import existing_machine_id
+    from arbor_worker.study_progress import history_file_path, progress_path
 
     progress_rel = progress_path(root, course).relative_to(root)
     legacy_rel = Path(course) / "study" / "progress.json"
     rel_paths: list[Path] = []
     if path_has_pending_changes(root, progress_rel):
         rel_paths.append(progress_rel)
+    role = current_role(root)
     if path_has_pending_changes(root, legacy_rel):
-        rel_paths.append(legacy_rel)
+        if role != "viewer":
+            rel_paths.append(legacy_rel)
+        else:
+            _restore_viewer_legacy_progress(root, legacy_rel)
+    mid = existing_machine_id(root)
+    if mid is not None:
+        history_rel = history_file_path(root, course, mid).relative_to(root)
+        if path_has_pending_changes(root, history_rel):
+            rel_paths.append(history_rel)
+    if mid is not None:
+        from arbor_worker.study_plan import plan_state_file_path
+
+        plan_rel = plan_state_file_path(root, course, mid).relative_to(root)
+        if path_has_pending_changes(root, plan_rel):
+            rel_paths.append(plan_rel)
     if not rel_paths:
         return
     commit_and_note(root, rel_paths, message, emitter)
@@ -749,6 +1094,7 @@ def _commit_study_progress_if_dirty(
 
 
 def cmd_study_progress(args) -> int:
+    from arbor_worker.library import LibraryError
     from arbor_worker.study_progress import (
         StudyProgressError,
         emit_json_line,
@@ -757,6 +1103,7 @@ def cmd_study_progress(args) -> int:
         study_progress_grade,
         study_progress_quiz,
         study_progress_show,
+        study_progress_stats,
         study_progress_weak,
     )
 
@@ -776,7 +1123,7 @@ def cmd_study_progress(args) -> int:
                 f"study: {course} progress",
                 emitter,
             )
-        except GitStateError as error:
+        except (GitStateError, LibraryError) as error:
             print(str(error), file=sys.stderr)
             return 1
         emit_json_line(doc)
@@ -800,6 +1147,14 @@ def cmd_study_progress(args) -> int:
             return finish(study_progress_show(root, course))
         if action == "weak":
             return finish(study_progress_weak(root, course))
+        if action == "stats":
+            now = parse_utc_now(args.now) if getattr(args, "now", None) else None
+            return finish(study_progress_stats(root, course, now=now))
+        if action == "digest-stats":
+            from arbor_worker.study_progress import study_progress_digest_stats
+
+            now = parse_utc_now(args.now) if getattr(args, "now", None) else None
+            return finish(study_progress_digest_stats(root, course, now=now))
         if action == "due":
             now = parse_utc_now(args.now) if args.now else None
             return finish(study_progress_due(root, course, now=now))
@@ -854,6 +1209,9 @@ def cmd_study_progress(args) -> int:
         if message.startswith("invalid course name:"):
             return 1
         return 2
+    except OSError as error:
+        print(f"study-progress failed: {error}", file=sys.stderr)
+        return 1
     except StudyProgressError as error:
         print(str(error), file=sys.stderr)
         return 1
@@ -861,11 +1219,98 @@ def cmd_study_progress(args) -> int:
     return 2
 
 
+def cmd_study_today(args) -> int:
+    from arbor_worker.library import LibraryError
+    from arbor_worker.study_progress import emit_json_line, parse_utc_now
+    from arbor_worker.today import list_knowledge_courses, study_today
+
+    root = Path(args.root)
+    try:
+        now = parse_utc_now(args.now) if getattr(args, "now", None) else None
+    except ValueError:
+        print(
+            f"study-today failed: --now is not an ISO-8601 instant: {args.now!r}",
+            file=sys.stderr,
+        )
+        return 1
+    emitter = EventEmitter(sys.stderr)
+    try:
+        payload = study_today(root, now=now)
+    except OSError as error:
+        print(f"study-today failed: {error}", file=sys.stderr)
+        return 1
+    for course in list_knowledge_courses(root):
+        try:
+            _commit_study_progress_if_dirty(
+                root,
+                course,
+                f"study: {course} progress",
+                emitter,
+            )
+        except (GitStateError, LibraryError) as error:
+            print(f"warning: {error}", file=sys.stderr)
+    emit_json_line(payload)
+    return 0
+
+
+def _cmd_study_plan_tasks(args) -> int:
+    """`study-plan toggle` / `status`: per-user, so viewers may use them and no provider is resolved."""
+    from arbor_worker.library import LibraryError
+    from arbor_worker.study_plan import study_plan_status, study_plan_toggle
+    from arbor_worker.study_progress import emit_json_line, progress_lock, validate_course_name
+
+    root = Path(args.root)
+    generate_only = [
+        flag
+        for flag, value in (
+            ("--provider", args.provider),
+            ("--model", args.model),
+            ("--exam-date", args.exam_date),
+        )
+        if value is not None
+    ]
+    if generate_only:
+        print(
+            f"study-plan {args.plan_action} does not take {', '.join(generate_only)}",
+            file=sys.stderr,
+        )
+        return 1
+    try:
+        validate_course_name(args.course)
+        if args.plan_action == "status":
+            doc = study_plan_status(root, args.course)
+        else:
+            # One lock around read-merge-append and the commit, so parallel
+            # toggles neither lose an update nor fight over git's index.lock.
+            with progress_lock(root, args.course):
+                doc = study_plan_toggle(root, args.course, args.task, args.done == "true")
+                # The toggle is recorded; a failed commit (e.g. another job
+                # holds git's index.lock) only delays it, like a grade's.
+                try:
+                    _commit_study_progress_if_dirty(
+                        root,
+                        args.course,
+                        f"study: {args.course} plan progress",
+                        EventEmitter(sys.stderr),
+                    )
+                except (GitStateError, LibraryError) as error:
+                    print(f"warning: {error}", file=sys.stderr)
+    except (ValueError, GitStateError, LibraryError, OSError) as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    emit_json_line(doc)
+    return 0
+
+
 def cmd_study_plan(args) -> int:
     from arbor_worker.library import LibraryError, assert_can_write
     from arbor_worker.study_progress import emit_json_line
     from arbor_worker.study_plan import generate_study_plan
 
+    if getattr(args, "plan_action", None) is not None:
+        return _cmd_study_plan_tasks(args)
+    if args.provider is None:
+        args.provider = "codex"
     root = Path(args.root)
     try:
         assert_can_write(root)
@@ -891,6 +1336,7 @@ def cmd_study_plan(args) -> int:
             emitter,
             fake_markdown=fake_markdown,
             emit_missing_model_error=False,
+            source="study_plan",
         )
     else:
         resolved, code = _resolve_llm_provider(
@@ -899,6 +1345,7 @@ def cmd_study_plan(args) -> int:
             args.model,
             emitter,
             emit_missing_model_error=False,
+            source="study_plan",
         )
     if code is not None:
         if code == 2:
@@ -907,14 +1354,41 @@ def cmd_study_plan(args) -> int:
                 file=sys.stderr,
             )
         return code
+    from arbor_worker.course_meta import (
+        CourseMetaError,
+        apply_course_meta_fields,
+        read_course_exam_date,
+    )
+
     provider, model_id = resolved
+    course_dir = root / args.course
+    if not course_dir.is_dir():
+        print(f"course directory does not exist: {course_dir}", file=sys.stderr)
+        return 1
+    exam_date = args.exam_date
+    if exam_date is None:
+        exam_date = read_course_exam_date(root, args.course)
+    else:
+        from arbor_worker.study_plan import _validate_exam_date
+
+        # Validate before storing: "" would clear a stored date and then fail.
+        try:
+            _validate_exam_date(exam_date)
+        except ValueError as error:
+            print(str(error), file=sys.stderr)
+            return 1
+        try:
+            apply_course_meta_fields(root, args.course, {"exam_date": exam_date})
+        except (CourseMetaError, LibraryError) as error:
+            print(str(error), file=sys.stderr)
+            return 1
     try:
         result = generate_study_plan(
             root,
             args.course,
             provider,
             model_id,
-            exam_date=args.exam_date,
+            exam_date=exam_date,
         )
     except ValueError as error:
         print(str(error), file=sys.stderr)
@@ -956,17 +1430,27 @@ def cmd_append_card(args) -> int:
             heading=args.heading,
             page=args.page,
         )
-    except ValueError as error:
+    except (ValueError, OSError) as error:
         print(str(error), file=sys.stderr)
         return 1
     deck_rel = Path(args.course) / "study" / "flashcards.json"
+    origins_rel = Path(args.course) / "study" / "origins.json"
     try:
-        _commit_study_file_if_dirty(
-            root,
-            deck_rel,
-            f"study: {args.course} flashcard",
-            emitter,
-        )
+        dirty_rels = [
+            rel
+            for rel in (deck_rel, origins_rel)
+            if path_has_pending_changes(root, rel)
+        ]
+        if dirty_rels:
+            commit_and_note(
+                root,
+                dirty_rels,
+                f"study: {args.course} flashcard",
+                emitter,
+            )
+            from arbor_worker.sync import maybe_sync_after_commit
+
+            maybe_sync_after_commit(root, emitter)
     except GitStateError as error:
         print(str(error), file=sys.stderr)
         return 1
@@ -992,7 +1476,24 @@ def cmd_chat(_args) -> int:
         budget_chars = int(payload.get("budget_chars", 12_000))
         if mode not in {"ask", "explain"}:
             raise ValueError(f"invalid mode: {mode!r}")
-        provider = make_provider(provider_name, root)
+        digests_raw = payload.get("digests")
+        digests: list[str] | None = None
+        if digests_raw is not None:
+            if not isinstance(digests_raw, list):
+                raise ValueError("invalid digests")
+            if digests_raw:
+                if not all(isinstance(item, str) for item in digests_raw):
+                    raise ValueError("invalid digests")
+                from arbor_worker.chat import resolve_chat_digest_paths
+
+                digests = resolve_chat_digest_paths(root, course, digests_raw)
+        focus_raw = payload.get("focus")
+        focus = None
+        if focus_raw is not None:
+            from arbor_worker.chat import parse_chat_focus
+
+            focus = parse_chat_focus(root, course, focus_raw)
+        provider = make_provider(provider_name, root, source="chat")
         answer(
             root,
             course,
@@ -1002,6 +1503,8 @@ def cmd_chat(_args) -> int:
             provider,
             model,
             budget_chars=budget_chars,
+            digests=digests,
+            focus=focus,
             emitter=emitter,
         )
     except ProviderError as error:
@@ -1059,6 +1562,7 @@ def cmd_sync(args) -> int:
                     "shared": sync_mod._read_shared(root),
                     "sync_remote": sync_mod.sync_remote_name(root),
                     "remote_note": sync_mod.remote_note(root),
+                    "last_synced_at": sync_mod.read_last_synced_at(root),
                 }
             )
         )
@@ -1201,7 +1705,7 @@ def cmd_library_provider(args) -> int:
 
 
 def cmd_course_meta(args) -> int:
-    from arbor_worker.course_meta import CourseMetaError, set_course_meta
+    from arbor_worker.course_meta import CourseMetaError, apply_course_meta_fields
     from arbor_worker.library import LibraryError
 
     if args.course_meta_action != "set":
@@ -1216,16 +1720,27 @@ def cmd_course_meta(args) -> int:
     if not isinstance(fields, dict):
         print("Invalid --fields JSON", file=sys.stderr)
         return 1
-    icon = fields.get("icon")
-    color = fields.get("color")
-    if icon is not None and not isinstance(icon, str):
+    allowed = {"icon", "color", "exam_date", "units"}
+    unknown = [k for k in fields if k not in allowed]
+    if unknown:
+        print(f"Unknown field(s) in --fields: {', '.join(unknown)}", file=sys.stderr)
+        return 1
+    if "icon" in fields and fields["icon"] is not None and not isinstance(fields["icon"], str):
         print("Invalid icon in --fields", file=sys.stderr)
         return 1
-    if color is not None and not isinstance(color, str):
+    if "color" in fields and fields["color"] is not None and not isinstance(fields["color"], str):
         print("Invalid color in --fields", file=sys.stderr)
         return 1
+    if "exam_date" in fields and fields["exam_date"] is not None and not isinstance(
+        fields["exam_date"], str
+    ):
+        print("Invalid exam_date in --fields", file=sys.stderr)
+        return 1
+    if "units" in fields and fields["units"] is not None and not isinstance(fields["units"], dict):
+        print("Invalid units in --fields", file=sys.stderr)
+        return 1
     try:
-        courses = set_course_meta(root, args.course, icon, color)
+        courses = apply_course_meta_fields(root, args.course, fields)
     except (CourseMetaError, LibraryError) as error:
         print(str(error), file=sys.stderr)
         return 1

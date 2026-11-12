@@ -9,6 +9,7 @@ from arbor_worker.provider.base import (
     ProviderRequest,
     ProviderResult,
     ProviderStatus,
+    usage_tokens,
 )
 from arbor_worker.provider.http_transport import (
     error_excerpt,
@@ -22,6 +23,7 @@ from arbor_worker.provider.openai_compat import (
     chat_completions_json_body,
     iter_chat_completions_sse,
     parse_chat_completions_content,
+    parse_chat_completions_usage,
 )
 
 OPENAI_API_DOCS_URL = "https://platform.openai.com/docs/api-reference/chat"
@@ -86,7 +88,12 @@ class OpenAiApiProvider:
         if not key:
             raise ProviderError("key missing")
         url = f"{self._base}/chat/completions"
-        body_bytes = chat_completions_json_body(request, stream=True)
+        # Only api.openai.com is known to accept stream_options; a custom
+        # OpenAI-compatible base may reject unknown fields, so ask there only.
+        include_usage = self._base == strip_trailing_slash(DEFAULT_OPENAI_BASE)
+        body_bytes = chat_completions_json_body(
+            request, stream=True, include_usage=include_usage
+        )
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {key}",
@@ -110,8 +117,9 @@ class OpenAiApiProvider:
         if status >= 400:
             err_body = b"".join(line_iter)
             raise ProviderError(error_excerpt(status, err_body, key))
-        text = iter_chat_completions_sse(line_iter, on_delta, secret=key)
-        return ProviderResult(markdown=text)
+        usage: dict[str, int] = {}
+        text = iter_chat_completions_sse(line_iter, on_delta, secret=key, usage=usage)
+        return ProviderResult(markdown=text, **usage_tokens(usage))
 
     def run(self, request: ProviderRequest) -> ProviderResult:
         key = self._resolved_key()
@@ -143,4 +151,6 @@ class OpenAiApiProvider:
             raise ProviderError(error_excerpt(status, resp_body, key))
         payload = parse_json_body(resp_body, "OpenAI API returned malformed JSON")
         text = parse_chat_completions_content(payload, "OpenAI API")
-        return ProviderResult(markdown=text)
+        return ProviderResult(
+            markdown=text, **usage_tokens(parse_chat_completions_usage(payload))
+        )

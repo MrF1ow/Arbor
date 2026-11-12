@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from arbor_worker import cli
+from arbor_worker.course_meta import apply_course_meta_fields, read_course_meta_map
 from arbor_worker.provider.fake import FakeProvider
 from arbor_worker.study_plan import generate_study_plan
 from arbor_worker.study_progress import (
@@ -264,3 +265,114 @@ def test_study_plan_cli_json_stdout(git_repo: Path, monkeypatch, git):
     g = git(git_repo)
     assert g("log", "-1", "--format=%s").strip() == "study: Biology plan"
     assert g("ls-files", "Biology/study/plan.md").strip() == "Biology/study/plan.md"
+
+
+def test_study_plan_cli_uses_stored_exam_date(git_repo: Path, monkeypatch):
+    _course(git_repo)
+    apply_course_meta_fields(git_repo, "Biology", {"exam_date": "2026-12-15"})
+    monkeypatch.setenv("ARBOR_FAKE_MD", FAKE_PLAN)
+    code, _out, err = _run_cli(
+        [
+            "study-plan",
+            "--root",
+            str(git_repo),
+            "--course",
+            "Biology",
+            "--provider",
+            "fake",
+        ]
+    )
+    assert code == 0
+    assert err == ""
+    text = (git_repo / "Biology" / "study" / "plan.md").read_text(encoding="utf-8")
+    assert "Exam date: 2026-12-15" in text
+
+
+def test_study_plan_ignores_invalid_stored_exam_date(git_repo: Path, monkeypatch):
+    _course(git_repo)
+    courses_path = git_repo / ".arbor" / "courses.json"
+    courses_path.parent.mkdir(parents=True, exist_ok=True)
+    courses_path.write_text(
+        json.dumps({"courses": {"Biology": {"exam_date": "not-a-date"}}}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("ARBOR_FAKE_MD", FAKE_PLAN)
+    code, _out, err = _run_cli(
+        [
+            "study-plan",
+            "--root",
+            str(git_repo),
+            "--course",
+            "Biology",
+            "--provider",
+            "fake",
+        ]
+    )
+    assert code == 0
+    assert err == ""
+    text = (git_repo / "Biology" / "study" / "plan.md").read_text(encoding="utf-8")
+    assert "Exam date: not-a-date" not in text
+
+
+def test_study_plan_exam_date_rejects_missing_course(git_repo: Path, monkeypatch):
+    monkeypatch.setenv("ARBOR_FAKE_MD", FAKE_PLAN)
+    code, _out, err = _run_cli(
+        [
+            "study-plan",
+            "--root",
+            str(git_repo),
+            "--course",
+            "Nope",
+            "--provider",
+            "fake",
+            "--exam-date",
+            "2026-12-20",
+        ]
+    )
+    assert code == 1
+    assert "course directory does not exist" in err
+    assert "Nope" not in read_course_meta_map(git_repo)
+
+
+def test_study_plan_cli_stores_exam_date(git_repo: Path, monkeypatch):
+    _course(git_repo)
+    monkeypatch.setenv("ARBOR_FAKE_MD", FAKE_PLAN)
+    code, _out, err = _run_cli(
+        [
+            "study-plan",
+            "--root",
+            str(git_repo),
+            "--course",
+            "Biology",
+            "--provider",
+            "fake",
+            "--exam-date",
+            "2026-12-20",
+        ]
+    )
+    assert code == 0
+    assert err == ""
+    assert read_course_meta_map(git_repo)["Biology"]["exam_date"] == "2026-12-20"
+
+
+def test_study_plan_invalid_exam_date_keeps_stored_date(git_repo: Path, monkeypatch):
+    _course(git_repo)
+    apply_course_meta_fields(git_repo, "Biology", {"exam_date": "2026-12-15"})
+    monkeypatch.setenv("ARBOR_FAKE_MD", FAKE_PLAN)
+    for bad in ("", "not-a-date"):
+        code, _out, err = _run_cli(
+            [
+                "study-plan",
+                "--root",
+                str(git_repo),
+                "--course",
+                "Biology",
+                "--provider",
+                "fake",
+                "--exam-date",
+                bad,
+            ]
+        )
+        assert code == 1
+        assert "invalid exam date" in err
+        assert read_course_meta_map(git_repo)["Biology"]["exam_date"] == "2026-12-15"

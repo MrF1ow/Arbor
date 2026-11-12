@@ -106,7 +106,13 @@ def make_provider(
     which=None,
     *,
     fake_markdown: str | None = None,
+    source: str = "other",
 ):
+    """Build a provider that logs each call to this machine's provider_calls.jsonl.
+
+    `source` says what the call is for: `job`, `chat`, `study_plan` or `other`.
+    """
+    from arbor_worker.provider.usage_log import with_usage_log
     from arbor_worker.settings import load_models
 
     if name not in PROVIDERS:
@@ -119,11 +125,11 @@ def make_provider(
         markdown = fake_markdown
         if markdown is None:
             markdown = os.environ.get("ARBOR_FAKE_MD", DEFAULT_FAKE_MARKDOWN)
-        return FakeProvider(markdown=markdown, models=models)
+        return with_usage_log(FakeProvider(markdown=markdown, models=models), root, source)
     kwargs: dict = {"models": models}
     if name in _CLI_PROVIDERS:
         if runner is not None:
             kwargs["runner"] = runner
         if which is not None:
             kwargs["which"] = which
-    return entry.cls(**kwargs)
+    return with_usage_log(entry.cls(**kwargs), root, source)

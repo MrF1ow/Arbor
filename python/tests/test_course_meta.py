@@ -11,6 +11,7 @@ from arbor_worker.course_meta import (
     CourseMetaError,
     _normalize_full_document,
     _read_full_document,
+    apply_course_meta_fields,
     read_course_meta_map,
     set_course_meta,
 )
@@ -65,7 +66,7 @@ def test_git_root_commits_courses_json(tmp_path: Path, monkeypatch: pytest.Monke
     assert result["bio"]["icon"] == "leaf"
     assert _run_git(root, "status", "--porcelain").stdout.strip() == ""
     log = _run_git(root, "log", "-1", "--pretty=format:%s").stdout
-    assert log == "courses: update icon"
+    assert log == "courses: update bio"
     show = _run_git(root, "show", "--name-only", "--pretty=format:").stdout
     assert str(COURSES_REL) in show or ".arbor/courses.json" in show
 
@@ -144,3 +145,45 @@ def test_round_trip_and_clear(tmp_path: Path) -> None:
     assert read_course_meta_map(root)["bio"]["color"] == "moss"
     cleared = set_course_meta(root, "bio", None, None)
     assert "bio" not in cleared
+
+
+def test_exam_date_without_icon_or_color(tmp_path: Path) -> None:
+    root = tmp_path / "plain"
+    root.mkdir()
+    apply_course_meta_fields(root, "Bio", {"exam_date": "2026-11-15"})
+    data = json.loads((root / COURSES_REL).read_text(encoding="utf-8"))
+    assert data["courses"]["Bio"] == {"exam_date": "2026-11-15"}
+    assert read_course_meta_map(root)["Bio"]["exam_date"] == "2026-11-15"
+
+
+def test_clearing_icon_keeps_exam_date(tmp_path: Path) -> None:
+    root = tmp_path / "plain"
+    root.mkdir()
+    apply_course_meta_fields(
+        root, "Bio", {"icon": "leaf", "color": "moss", "exam_date": "2026-11-15"}
+    )
+    apply_course_meta_fields(root, "Bio", {"icon": None})
+    entry = read_course_meta_map(root)["Bio"]
+    assert "icon" not in entry
+    assert entry["exam_date"] == "2026-11-15"
+    assert entry["color"] == "moss"
+
+
+def test_units_round_trip(tmp_path: Path) -> None:
+    root = tmp_path / "plain"
+    root.mkdir()
+    units = {"digests/unit-2.md": "Unit 2"}
+    apply_course_meta_fields(root, "Bio", {"units": units})
+    assert read_course_meta_map(root)["Bio"]["units"] == units
+    apply_course_meta_fields(root, "Bio", {"exam_date": "2026-11-01", "units": None})
+    entry = read_course_meta_map(root)["Bio"]
+    assert entry["exam_date"] == "2026-11-01"
+    assert "units" not in entry
+
+
+@pytest.mark.parametrize("bad", ["Unit\n2", "Unit\r2", "Unit\t2", "Unit\x002", "Unit\x1b[0m"])
+def test_units_value_rejects_control_characters(tmp_path: Path, bad: str) -> None:
+    root = tmp_path / "Knowledge"
+    root.mkdir()
+    with pytest.raises(CourseMetaError):
+        apply_course_meta_fields(root, "Bio", {"units": {"digests/unit-2.md": bad}})

@@ -12,6 +12,8 @@ from arbor_worker.provider.base import (
     ProviderRequest,
     ProviderResult,
     ProviderStatus,
+    record_usage,
+    usage_tokens,
 )
 from arbor_worker.provider.http_transport import (
     error_excerpt,
@@ -136,8 +138,9 @@ class OllamaProvider:
         if status >= 400:
             err_body = b"".join(line_iter)
             raise ProviderError(error_excerpt(status, err_body, None))
-        text = _iter_ollama_ndjson(line_iter, on_delta)
-        return ProviderResult(markdown=text)
+        usage: dict[str, int] = {}
+        text = _iter_ollama_ndjson(line_iter, on_delta, usage=usage)
+        return ProviderResult(markdown=text, **usage_tokens(usage))
 
     def run(self, request: ProviderRequest) -> ProviderResult:
         url = f"{self._base}/api/chat"
@@ -168,10 +171,14 @@ class OllamaProvider:
         content = message.get("content")
         if not isinstance(content, str):
             raise ProviderError("Ollama response did not include assistant text")
-        return ProviderResult(markdown=content)
+        usage: dict[str, int] = {}
+        record_usage(usage, payload, "prompt_eval_count", "eval_count")
+        return ProviderResult(markdown=content, **usage_tokens(usage))
 
 
-def _iter_ollama_ndjson(lines: Iterator[bytes], on_delta: DeltaFn) -> str:
+def _iter_ollama_ndjson(
+    lines: Iterator[bytes], on_delta: DeltaFn, *, usage: dict[str, int] | None = None
+) -> str:
     parts: list[str] = []
     for raw in lines:
         line = raw.decode("utf-8", errors="replace").strip()
@@ -193,6 +200,7 @@ def _iter_ollama_ndjson(lines: Iterator[bytes], on_delta: DeltaFn) -> str:
                 on_delta(content)
                 parts.append(content)
         if payload.get("done"):
+            record_usage(usage, payload, "prompt_eval_count", "eval_count")
             break
     joined = "".join(parts)
     if not joined.strip():

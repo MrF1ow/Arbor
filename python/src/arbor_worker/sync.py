@@ -6,11 +6,12 @@ import json
 import re
 import subprocess
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
-from arbor_worker.gitstate import GitStateError, commit_and_note, git_identity_args
+from arbor_worker.gitstate import GitStateError, commit_and_note, git_identity_args, git_user_dirname
 from arbor_worker.events import EventEmitter
 
 if TYPE_CHECKING:
@@ -38,6 +39,8 @@ REMOTE_NAME = "arbor"
 ORIGIN_NAME = "origin"
 SYNC_CONFIG = ".arbor/sync.json"
 CONFLICT_SESSION = ".arbor/sync-conflict.json"
+USER_SYNC_STATE = "sync.json"
+LOCAL_STATE_GIT_EXCLUDE = ".arbor/users/*/local/"
 
 _CREDENTIAL_URL_MSG = (
     "Refusing a remote URL with an embedded password. Arbor does not store credentials."
@@ -479,6 +482,76 @@ def _refuse_viewer_push() -> None:
     raise GitSyncError(VIEWER_WRITE_DENIED)
 
 
+def ensure_local_state_excluded(root: Path, runner=subprocess.run) -> None:
+    """Append per-user local state to .git/info/exclude when missing (idempotent, best-effort)."""
+    try:
+        proc = _git(root, ["rev-parse", "--git-path", "info/exclude"], runner=runner)
+        if proc.returncode != 0:
+            return
+        rel = (proc.stdout or "").strip()
+        if not rel:
+            return
+        exclude_path = Path(rel)
+        if not exclude_path.is_absolute():
+            exclude_path = root / exclude_path
+        exclude_path.parent.mkdir(parents=True, exist_ok=True)
+        existing: list[str] = []
+        if exclude_path.is_file():
+            existing = exclude_path.read_text(encoding="utf-8").splitlines()
+        if LOCAL_STATE_GIT_EXCLUDE in existing:
+            return
+        with open(exclude_path, "a", encoding="utf-8") as fh:
+            if existing and existing[-1].strip():
+                fh.write("\n")
+            fh.write(LOCAL_STATE_GIT_EXCLUDE + "\n")
+    except OSError:
+        pass
+
+
+def _user_local_sync_path(root: Path, runner=subprocess.run) -> Path:
+    user_dir = git_user_dirname(root, runner)
+    return root / ".arbor" / "users" / user_dir / "local" / USER_SYNC_STATE
+
+
+def read_last_synced_at(root: Path, runner=subprocess.run) -> str | None:
+    path = _user_local_sync_path(root, runner)
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    value = data.get("last_synced_at")
+    if not isinstance(value, str) or not value:
+        return None
+    return value
+
+
+def write_last_synced_at(root: Path, runner=subprocess.run) -> str:
+    ts = (
+        datetime.now(timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
+    ensure_local_state_excluded(root, runner=runner)
+    path = _user_local_sync_path(root, runner)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"last_synced_at": ts}, indent=2) + "\n", encoding="utf-8")
+    return ts
+
+
+def _record_sync_success(root: Path, report: SyncReport, runner=subprocess.run) -> None:
+    if not report.ok:
+        return
+    try:
+        write_last_synced_at(root, runner=runner)
+    except OSError:
+        pass
+
+
 def sync_root(root: Path, runner=subprocess.run) -> SyncReport:
     root = Path(root)
     if remote_url(root, runner) is None:
@@ -506,20 +579,28 @@ def sync_root(root: Path, runner=subprocess.run) -> SyncReport:
         push = _git(root, ["push", "-u", sync_remote, "HEAD"], runner=runner)
         if push.returncode != 0:
             raise GitSyncError(redact_git_text((push.stderr or "").strip()))
-        return SyncReport(ok=True, action="pushed", commit=_short_head(root, runner))
+        report = SyncReport(ok=True, action="pushed", commit=_short_head(root, runner))
+        _record_sync_success(root, report, runner=runner)
+        return report
 
     behind = _rev_list_count(root, f"HEAD..{upstream_ref}", runner)
     ahead = _rev_list_count(root, f"{upstream_ref}..HEAD", runner)
 
     if behind == 0:
         if ahead == 0:
-            return SyncReport(ok=True, action="up_to_date", commit=_short_head(root, runner))
+            report = SyncReport(
+                ok=True, action="up_to_date", commit=_short_head(root, runner)
+            )
+            _record_sync_success(root, report, runner=runner)
+            return report
         if viewer:
             _refuse_viewer_push()
         push = _git(root, ["push", sync_remote, "HEAD"], runner=runner)
         if push.returncode != 0:
             raise GitSyncError(redact_git_text((push.stderr or "").strip()))
-        return SyncReport(ok=True, action="pushed", commit=_short_head(root, runner))
+        report = SyncReport(ok=True, action="pushed", commit=_short_head(root, runner))
+        _record_sync_success(root, report, runner=runner)
+        return report
 
     strategy = sync_pull_strategy(root, runner)
     try:
@@ -591,12 +672,14 @@ def sync_root(root: Path, runner=subprocess.run) -> SyncReport:
     if head_changed:
         _rebuild_after_sync(root)
 
-    return SyncReport(
+    report = SyncReport(
         ok=True,
         action="integrated",
         commit=_short_head(root, runner),
         head_changed=head_changed,
     )
+    _record_sync_success(root, report, runner=runner)
+    return report
 
 
 def resolve_conflict(
@@ -765,12 +848,14 @@ def continue_sync(root: Path, runner=subprocess.run) -> SyncReport:
         _rebuild_after_sync(root)
 
     _clear_conflict_session(root)
-    return SyncReport(
+    report = SyncReport(
         ok=True,
         action="integrated",
         commit=_short_head(root, runner),
         head_changed=head_changed,
     )
+    _record_sync_success(root, report, runner=runner)
+    return report
 
 
 def maybe_sync_after_commit(root: Path, emitter: EventEmitterType) -> None:

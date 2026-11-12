@@ -6,7 +6,12 @@ import re
 from pathlib import Path
 
 from arbor_worker.schemas.study.flashcards import CardSource, Flashcard, FlashcardDeck
-from arbor_worker.skills.flashcards import card_id
+from arbor_worker.skills.flashcards import (
+    card_id,
+    load_study_origins,
+    study_artifact_lock,
+    write_study_origins,
+)
 from arbor_worker.study_progress import validate_course_name
 
 _MAX_TEXT = 2000
@@ -124,19 +129,24 @@ def append_flashcard(
     card = card.model_copy(update={"id": new_id})
 
     deck_path = course_dir / "study" / "flashcards.json"
-    if deck_path.is_file():
-        try:
-            raw = json.loads(deck_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as error:
-            raise ValueError(f"invalid flashcards.json: {error}") from error
-        deck = FlashcardDeck.model_validate(raw)
-        if deck.course != course:
-            raise ValueError("course mismatch in flashcards.json")
-        if any(existing.id == new_id for existing in deck.cards):
-            raise ValueError("flashcard already exists")
-        deck = deck.model_copy(update={"cards": [*deck.cards, card]})
-    else:
-        deck = FlashcardDeck(schema_version=1, course=course, cards=[card])
+    origins_path = course_dir / "study" / "origins.json"
+    with study_artifact_lock(root, course):
+        origins = load_study_origins(origins_path)
+        if deck_path.is_file():
+            try:
+                raw = json.loads(deck_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as error:
+                raise ValueError(f"invalid flashcards.json: {error}") from error
+            deck = FlashcardDeck.model_validate(raw)
+            if deck.course != course:
+                raise ValueError("course mismatch in flashcards.json")
+            if any(existing.id == new_id for existing in deck.cards):
+                raise ValueError("flashcard already exists")
+            deck = deck.model_copy(update={"cards": [*deck.cards, card]})
+        else:
+            deck = FlashcardDeck(schema_version=1, course=course, cards=[card])
 
-    _write_atomic(deck_path, _deck_to_json(deck))
+        origins[new_id] = "manual"
+        _write_atomic(deck_path, _deck_to_json(deck))
+        write_study_origins(origins_path, origins)
     return _card_to_dict(card)

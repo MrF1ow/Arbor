@@ -1,5 +1,6 @@
 mod auth_cache;
 mod usage_cache;
+mod usage_log;
 mod chat_threads;
 mod commands;
 mod course_meta;
@@ -13,6 +14,7 @@ mod settings;
 mod watch;
 mod transport;
 mod remote_job;
+mod reading_state;
 mod worker;
 mod worker_pool;
 
@@ -44,6 +46,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::check_auth,
             commands::read_provider_usage,
+            usage_log::usage_summary,
             commands::list_models,
             commands::list_providers,
             commands::plan_update,
@@ -80,8 +83,13 @@ pub fn run() {
             commands::write_flashcard_progress,
             commands::read_quiz_progress,
             commands::write_quiz_progress,
+            reading_state::read_reading_state,
+            reading_state::write_reading_state,
             commands::study_progress,
+            commands::study_today,
             commands::study_plan,
+            commands::study_plan_toggle,
+            commands::study_plan_status,
             commands::append_card,
             commands::study_artifact_stale,
             chat_threads::list_chat_threads,

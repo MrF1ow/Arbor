@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterable
 
-from arbor_worker.provider.base import DeltaFn, ProviderError
+from arbor_worker.provider.base import DeltaFn, ProviderError, record_usage
 from arbor_worker.provider.errors import message_failure
 
 
@@ -33,7 +33,13 @@ def _tool_call_from_assistant(payload: dict, label: str) -> None:
             raise ProviderError(f"{label} reported a tool call ({name})")
 
 
-def iter_stream_json(lines: Iterable[str], on_delta: DeltaFn, *, label: str) -> str:
+def iter_stream_json(
+    lines: Iterable[str],
+    on_delta: DeltaFn,
+    *,
+    label: str,
+    usage: dict[str, int] | None = None,
+) -> str:
     delta_parts: list[str] = []
     result_text: str | None = None
 
@@ -82,6 +88,7 @@ def iter_stream_json(lines: Iterable[str], on_delta: DeltaFn, *, label: str) -> 
             if payload.get("is_error"):
                 msg = payload.get("result") or payload.get("message") or f"{label} error"
                 raise message_failure(label, str(msg).strip())
+            record_usage(usage, payload.get("usage"), "input_tokens", "output_tokens")
             raw_result = payload.get("result")
             if isinstance(raw_result, str):
                 result_text = raw_result

@@ -9,6 +9,7 @@ from arbor_worker.provider.base import (
     ProviderRequest,
     ProviderResult,
     ProviderStatus,
+    usage_tokens,
 )
 from arbor_worker.provider.http_transport import (
     error_excerpt,
@@ -23,6 +24,7 @@ from arbor_worker.provider.openai_compat import (
     chat_completions_json_body,
     iter_chat_completions_sse,
     parse_chat_completions_content,
+    parse_chat_completions_usage,
 )
 
 LMSTUDIO_DOCS_URL = "https://lmstudio.ai/docs/app/api"
@@ -144,8 +146,9 @@ class LmStudioProvider:
         if status >= 400:
             err_body = b"".join(line_iter)
             raise ProviderError(error_excerpt(status, err_body, self._api_key))
-        text = iter_chat_completions_sse(line_iter, on_delta, secret=self._api_key)
-        return ProviderResult(markdown=text)
+        usage: dict[str, int] = {}
+        text = iter_chat_completions_sse(line_iter, on_delta, secret=self._api_key, usage=usage)
+        return ProviderResult(markdown=text, **usage_tokens(usage))
 
     def run(self, request: ProviderRequest) -> ProviderResult:
         url = f"{self._base}/chat/completions"
@@ -178,4 +181,6 @@ class LmStudioProvider:
             raise ProviderError(error_excerpt(status, resp_body, self._api_key))
         payload = parse_json_body(resp_body, "LM Studio returned malformed JSON")
         text = parse_chat_completions_content(payload, "LM Studio")
-        return ProviderResult(markdown=text)
+        return ProviderResult(
+            markdown=text, **usage_tokens(parse_chat_completions_usage(payload))
+        )

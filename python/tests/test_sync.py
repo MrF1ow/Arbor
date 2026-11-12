@@ -18,6 +18,7 @@ from arbor_worker.sync import (
     _is_derived_tracked,
     continue_sync,
     migrate_derived_files,
+    read_last_synced_at,
     redact_git_text,
     remote_note,
     remote_url,
@@ -563,3 +564,125 @@ def test_sync_show(tmp_path: Path):
     data = json.loads(buf.getvalue().strip())
     assert data["remote"] == str(bare)
     assert data["shared"] is True
+    assert data["last_synced_at"] is None
+
+
+def test_last_synced_at_after_sync_and_continue(tmp_path: Path):
+    import contextlib
+
+    def _show_last_synced(root: Path) -> str | None:
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            code = cli.main(["sync", "--root", str(root), "--show"])
+        assert code == 0
+        return json.loads(buf.getvalue().strip()).get("last_synced_at")
+
+    bare, _a, b = _bare_and_clones(tmp_path)
+    assert _show_last_synced(b) is None
+    assert read_last_synced_at(b) is None
+
+    (b / "note.md").write_text("# Note\n")
+    _commit_all(b, "local note")
+    sync_root(b)
+    assert _run_git(b, "status", "--porcelain").stdout.strip() == ""
+    ts_after_sync = _show_last_synced(b)
+    assert ts_after_sync is not None
+    assert ts_after_sync.endswith("Z")
+
+    path = Path("Biology/digests/leaf.md")
+    for root in (_a, b):
+        (root / path).parent.mkdir(parents=True, exist_ok=True)
+        (root / path).write_text("line one\n")
+        _commit_all(root, "leaf")
+        migrate_derived_files(root)
+    sync_root(_a)
+    (_a / path).write_text("from A\n")
+    _commit_all(_a, "A edit")
+    sync_root(_a)
+    (b / path).write_text("from B\n")
+    _commit_all(b, "B edit")
+    report = sync_root(b)
+    assert not report.ok and report.action == "conflict"
+    resolve_conflict(b, path.as_posix(), "mine")
+    continue_sync(b)
+    assert _run_git(b, "status", "--porcelain").stdout.strip() == ""
+    ts_after_continue = _show_last_synced(b)
+    assert ts_after_continue is not None
+    assert ts_after_continue.endswith("Z")
+
+
+def test_sync_ok_when_local_sync_state_not_writable(tmp_path: Path):
+    bare = tmp_path / "remote.git"
+    subprocess.run(["git", "init", "--bare", "-q", str(bare)], check=True)
+    root = tmp_path / "solo"
+    subprocess.run(["git", "clone", "-q", str(bare), str(root)], check=True)
+    _run_git(root, "config", "user.email", "solo@test.local")
+    _run_git(root, "config", "user.name", "Solo")
+    set_remote(root, str(bare))
+    (root / "note.md").write_text("# Hello\n")
+    _commit_all(root, "add note")
+    users = root / ".arbor" / "users"
+    users.mkdir(parents=True)
+    users.chmod(0o555)
+    try:
+        report = sync_root(root)
+        assert report.ok and report.action == "pushed"
+        assert read_last_synced_at(root) is None
+    finally:
+        users.chmod(0o755)
+
+
+def test_viewer_sync_local_state_untracked_not_shown(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    import json as json_mod
+
+    from arbor_worker.library import LIBRARY_REL, migrate_library_file
+
+    bare = tmp_path / "remote.git"
+    subprocess.run(["git", "init", "--bare", "-q", str(bare)], check=True)
+    owner = tmp_path / "owner"
+    subprocess.run(["git", "clone", "-q", str(bare), str(owner)], check=True)
+    _run_git(owner, "config", "user.email", "owner@test.local")
+    _run_git(owner, "config", "user.name", "Owner")
+    doc = {
+        "name": "Lib",
+        "created_by": "owner@test.local",
+        "members": [
+            {"email": "owner@test.local", "role": "owner"},
+            {"email": "viewer@test.local", "role": "viewer"},
+        ],
+    }
+    (owner / ".arbor").mkdir(parents=True)
+    (owner / LIBRARY_REL).write_text(json_mod.dumps(doc, indent=2) + "\n", encoding="utf-8")
+    migrate_library_file(owner)
+    set_shared(owner, True)
+    set_remote(owner, str(bare))
+    _commit_all(owner, "init")
+    _run_git(owner, "push", "-u", "origin", "HEAD")
+    sync_root(owner)
+    owner_gi = owner / ".gitignore"
+    if owner_gi.is_file():
+        lines = [
+            ln
+            for ln in owner_gi.read_text(encoding="utf-8").splitlines()
+            if ln.strip() != ".arbor/users/*/local/"
+        ]
+        owner_gi.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
+        _run_git(owner, "add", ".gitignore")
+        _run_git(owner, "commit", "-m", "drop local sync from gitignore")
+        _run_git(owner, "push")
+
+    viewer = tmp_path / "viewer"
+    subprocess.run(["git", "clone", "-q", str(bare), str(viewer)], check=True)
+    _run_git(viewer, "config", "user.email", "viewer@test.local")
+    _run_git(viewer, "config", "user.name", "Viewer")
+    set_remote(viewer, str(bare))
+    gi = viewer / ".gitignore"
+
+    monkeypatch.setenv("GIT_AUTHOR_EMAIL", "viewer@test.local")
+    monkeypatch.setenv("GIT_COMMITTER_EMAIL", "viewer@test.local")
+    ignore_before_sync = gi.read_text(encoding="utf-8") if gi.is_file() else ""
+    report = sync_root(viewer)
+    assert report.ok and report.action == "up_to_date"
+    assert _run_git(viewer, "status", "--porcelain").stdout.strip() == ""
+    ignore_after_sync = gi.read_text(encoding="utf-8") if gi.is_file() else ""
+    assert ignore_after_sync == ignore_before_sync

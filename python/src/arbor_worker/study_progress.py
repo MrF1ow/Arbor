@@ -12,12 +12,16 @@ from typing import Any, Callable
 
 from arbor_worker.cache import ensure_gitignored
 from arbor_worker.gitstate import git_user_dirname
+from arbor_worker.machine import machine_id
 from arbor_worker.schemas.study.digest import normalize_study_digest
+
+_RESERVED_COURSE_NAMES = frozenset({"local", "chat"})
 
 DEFAULT_EASE = 2.5
 SCHEMA_VERSION = 1
 WRONG_RETRY_MINUTES = 10
 APPLIED_WRITE_IDS_MAX = 500
+MASTERED_INTERVAL_DAYS = 21
 
 
 class StudyProgressError(Exception):
@@ -27,6 +31,115 @@ class StudyProgressError(Exception):
 def validate_course_name(course: str) -> None:
     if not course or course in (".", "..") or "/" in course or "\\" in course:
         raise ValueError(f"invalid course name: {course!r}")
+    if course.casefold() in _RESERVED_COURSE_NAMES:
+        raise ValueError(
+            f'invalid course name: {course!r} is a reserved name. '
+            "Choose a different class name."
+        )
+
+
+def history_file_path(root: Path, course: str, mid: str) -> Path:
+    validate_course_name(course)
+    if not mid:
+        raise ValueError("machine id must be non-empty")
+    dirname = git_user_dirname(root)
+    return root / ".arbor" / "users" / dirname / course / "history" / f"{mid}.jsonl"
+
+
+def history_rel_path(root: Path, course: str) -> Path:
+    mid = machine_id(root)
+    return history_file_path(root, course, mid).relative_to(root)
+
+
+def _format_history_ts(clock: datetime) -> str:
+    return clock.astimezone(timezone.utc).replace(microsecond=0).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
+
+
+def _history_write_ids_in_file(path: Path) -> set[str]:
+    if not path.is_file():
+        return set()
+    ids: set[str] = set()
+    # History syncs from other machines; a torn multibyte tail must not stop
+    # every grade, so undecodable bytes become U+FFFD and that line is skipped.
+    text = path.read_text(encoding="utf-8", errors="replace")
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(row, dict):
+            continue
+        wid = row.get("write_id")
+        if isinstance(wid, str) and wid:
+            ids.add(wid)
+    return ids
+
+
+def _history_write_ids_for_course(root: Path, course: str) -> set[str]:
+    validate_course_name(course)
+    history_dir = (
+        root / ".arbor" / "users" / git_user_dirname(root) / course / "history"
+    )
+    if not history_dir.is_dir():
+        return set()
+    ids: set[str] = set()
+    for path in sorted(history_dir.glob("*.jsonl")):
+        ids |= _history_write_ids_in_file(path)
+    return ids
+
+
+def _source_fields(entry: dict[str, Any]) -> tuple[str | None, str | None]:
+    source = entry.get("source")
+    if not isinstance(source, dict):
+        return None, None
+    digest = source.get("digest")
+    digest_out = str(digest) if isinstance(digest, str) and digest.strip() else None
+    heading = source.get("heading")
+    if heading is not None and not isinstance(heading, str):
+        heading = None
+    heading_out = heading_key(heading)
+    return digest_out, heading_out
+
+
+def _append_history_line(
+    root: Path,
+    course: str,
+    *,
+    kind: str,
+    entry_id: str,
+    result: str,
+    entry: dict[str, Any],
+    clock: datetime,
+    write_id: str | None,
+) -> None:
+    mid = machine_id(root)
+    path = history_file_path(root, course, mid)
+    if write_id and write_id in _history_write_ids_for_course(root, course):
+        return
+    digest, heading = _source_fields(entry)
+    row = {
+        "ts": _format_history_ts(clock),
+        "kind": kind,
+        "id": entry_id,
+        "result": result,
+        "digest": digest,
+        "heading": heading,
+        "write_id": write_id,
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    line = json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n"
+    with open(path, "a+b") as fh:
+        # A torn earlier append (no trailing newline) must not swallow this line.
+        fh.seek(0, os.SEEK_END)
+        if fh.tell() > 0:
+            fh.seek(-1, os.SEEK_END)
+            if fh.read(1) != b"\n":
+                line = "\n" + line
+        fh.write(line.encode("utf-8"))
 
 
 def legacy_v41_progress_path(root: Path, course: str) -> Path:
@@ -584,7 +697,21 @@ def study_progress_grade(
         if write_id and write_id in _load_applied_write_ids(applied_path):
             # Already applied. The lock is held, so use the unlocked loader:
             # flock on a second fd in the same process would block forever.
-            return _ensure_document(root, course, write_migration=True)
+            doc = _ensure_document(root, course, write_migration=True)
+            clock = now or parse_utc_now(None)
+            entry = doc["cards"].get(card_id)
+            if entry is not None:
+                _append_history_line(
+                    root,
+                    course,
+                    kind="card",
+                    entry_id=card_id,
+                    result=result,
+                    entry=entry,
+                    clock=clock,
+                    write_id=write_id,
+                )
+            return doc
         clock = now or parse_utc_now(None)
         doc = _ensure_document(root, course, write_migration=True)
         cards = doc["cards"]
@@ -618,6 +745,16 @@ def study_progress_grade(
                     interval = 1.0
             entry["interval_days"] = interval
             entry["due_at"] = format_due_at(clock + timedelta(days=interval))
+        _append_history_line(
+            root,
+            course,
+            kind="card",
+            entry_id=card_id,
+            result=result,
+            entry=cards[card_id],
+            clock=clock,
+            write_id=write_id,
+        )
         path = progress_path(root, course)
         _write_atomic(path, _serialize_document(doc))
         if write_id:
@@ -641,13 +778,26 @@ def study_progress_quiz(
         raise ValueError("question id must be non-empty")
     if result not in {"correct", "wrong"}:
         raise ValueError(f"invalid quiz result: {result!r}")
-    _ = now  # reserved for API symmetry
+    clock = now or parse_utc_now(None)
     with progress_lock(root, course):
         applied_path = applied_writes_path(root, course)
         if write_id and write_id in _load_applied_write_ids(applied_path):
             # Already applied. The lock is held, so use the unlocked loader:
             # flock on a second fd in the same process would block forever.
-            return _ensure_document(root, course, write_migration=True)
+            doc = _ensure_document(root, course, write_migration=True)
+            entry = doc["questions"].get(question_id)
+            if entry is not None:
+                _append_history_line(
+                    root,
+                    course,
+                    kind="question",
+                    entry_id=question_id,
+                    result=result,
+                    entry=entry,
+                    clock=clock,
+                    write_id=write_id,
+                )
+            return doc
         doc = _ensure_document(root, course, write_migration=True)
         questions = doc["questions"]
         entry = questions.get(question_id)
@@ -665,11 +815,103 @@ def study_progress_quiz(
             entry["correct"] += 1
         else:
             entry["wrong"] += 1
+        _append_history_line(
+            root,
+            course,
+            kind="question",
+            entry_id=question_id,
+            result=result,
+            entry=questions[question_id],
+            clock=clock,
+            write_id=write_id,
+        )
         path = progress_path(root, course)
         _write_atomic(path, _serialize_document(doc))
         if write_id:
             _record_applied_write_id(applied_path, write_id)
         return doc
+
+
+def empty_quiz_week_totals() -> dict[str, int]:
+    """Quiz accuracy accumulator for a single week (correct + total)."""
+    return {"correct": 0, "total": 0}
+
+
+def _empty_stats_bucket() -> dict[str, dict[str, int]]:
+    return empty_quiz_week_totals()
+
+
+def _stats_shell() -> dict[str, Any]:
+    empty = _empty_stats_bucket()
+    return {
+        "quiz": {"this_week": dict(empty), "last_week": dict(empty)},
+        "cards": {"this_week": dict(empty), "last_week": dict(empty)},
+    }
+
+
+def _history_in_week(ts: datetime, start: datetime, end: datetime) -> bool:
+    return start < ts <= end
+
+
+def study_progress_stats(
+    root: Path,
+    course: str,
+    *,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    validate_course_name(course)
+    clock = now or parse_utc_now(None)
+    this_start = clock - timedelta(days=7)
+    last_start = clock - timedelta(days=14)
+    last_end = this_start
+    out = _stats_shell()
+    history_dir = (
+        root / ".arbor" / "users" / git_user_dirname(root) / course / "history"
+    )
+    if not history_dir.is_dir():
+        return out
+    for path in sorted(history_dir.glob("*.jsonl")):
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for line in text.splitlines():
+            if not line.strip():
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(row, dict):
+                continue
+            ts_raw = row.get("ts")
+            if not isinstance(ts_raw, str):
+                continue
+            try:
+                ts = parse_utc_now(ts_raw)
+            except ValueError:
+                continue
+            kind = row.get("kind")
+            result = row.get("result")
+            if not isinstance(kind, str) or not isinstance(result, str):
+                continue
+            if _history_in_week(ts, this_start, clock):
+                week_key = "this_week"
+            elif _history_in_week(ts, last_start, last_end):
+                week_key = "last_week"
+            else:
+                continue
+            if kind == "question":
+                bucket = out["quiz"][week_key]
+                bucket["total"] += 1
+                if result == "correct":
+                    bucket["correct"] += 1
+            elif kind == "card":
+                bucket = out["cards"][week_key]
+                bucket["total"] += 1
+                if result == "mastered":
+                    bucket["correct"] += 1
+    return out
 
 
 def study_progress_due(
@@ -719,7 +961,12 @@ def _concept_matches(concept_sources: list[dict], digest: str, heading: str | No
     return False
 
 
-def study_progress_weak(root: Path, course: str) -> dict[str, Any]:
+def study_progress_weak(
+    root: Path,
+    course: str,
+    *,
+    limit: int | None = 5,
+) -> dict[str, Any]:
     validate_course_name(course)
     doc = _load_progress_document(root, course)
 
@@ -868,7 +1115,141 @@ def study_progress_weak(root: Path, course: str) -> dict[str, Any]:
         )
 
     topics.sort(key=lambda t: (-t["wrong_rate"], -t["wrong"], t["label"]))
-    return {"topics": topics[:5]}
+    if limit is None:
+        return {"topics": topics}
+    return {"topics": topics[:limit]}
+
+
+def _empty_digest_stats_bucket() -> dict[str, Any]:
+    return {
+        "cards": 0,
+        "due": 0,
+        "mastered": 0,
+        "mastery": None,
+        "quiz_correct": 0,
+        "quiz_wrong": 0,
+    }
+
+
+def _digest_keys_from_files(root: Path, course: str) -> list[str]:
+    dig_dir = root / course / "digests"
+    if not dig_dir.is_dir():
+        return []
+    return sorted(f"digests/{path.name}" for path in dig_dir.glob("*.md"))
+
+
+def _card_is_mastered(entry: dict[str, Any]) -> bool:
+    interval = entry.get("interval_days", 0)
+    if isinstance(interval, bool):
+        return False
+    if not isinstance(interval, (int, float)):
+        return False
+    return float(interval) >= MASTERED_INTERVAL_DAYS
+
+
+def _question_digest_key(
+    entry: dict[str, Any],
+    quiz_art: dict[str, dict],
+    question_id: str,
+) -> str | None:
+    source = _entry_source(entry, quiz_art, question_id)
+    if source is None:
+        return None
+    return digest_key(str(source["digest"]))
+
+
+def _card_digest_key(
+    entry: dict[str, Any],
+    card_art: dict[str, dict],
+    card_id: str,
+) -> str | None:
+    source = _entry_source(entry, card_art, card_id)
+    if source is None:
+        return None
+    return digest_key(str(source["digest"]))
+
+
+def _finalize_digest_mastery(buckets: dict[str, dict[str, Any]]) -> None:
+    for bucket in buckets.values():
+        cards = bucket["cards"]
+        if cards == 0:
+            bucket["mastery"] = None
+        else:
+            bucket["mastery"] = bucket["mastered"] / cards
+
+
+def study_progress_digest_stats(
+    root: Path,
+    course: str,
+    *,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    validate_course_name(course)
+    clock = now or parse_utc_now(None)
+    doc = _load_progress_document(root, course)
+    card_art, quiz_art = _load_artifact_sources(root, course)
+    deck_ids = _load_deck_ids(root, course)
+    cards_progress = doc["cards"]
+    digests: dict[str, dict[str, Any]] = {
+        key: _empty_digest_stats_bucket() for key in _digest_keys_from_files(root, course)
+    }
+
+    def touch(key: str) -> dict[str, Any]:
+        if key not in digests:
+            digests[key] = _empty_digest_stats_bucket()
+        return digests[key]
+
+    for card_id in deck_ids:
+        source = card_art.get(card_id)
+        if source is None:
+            continue
+        dkey = digest_key(str(source["digest"]))
+        bucket = touch(dkey)
+        bucket["cards"] += 1
+        entry = cards_progress.get(card_id)
+        prog = entry if isinstance(entry, dict) else None
+        if prog is not None and _card_is_mastered(prog):
+            bucket["mastered"] += 1
+        if _card_is_due(prog, clock):
+            bucket["due"] += 1
+
+    for question_id, entry in doc["questions"].items():
+        if not isinstance(entry, dict):
+            continue
+        dkey = _question_digest_key(entry, quiz_art, question_id)
+        if dkey is None:
+            continue
+        bucket = touch(dkey)
+        correct = entry.get("correct", 0)
+        wrong = entry.get("wrong", 0)
+        if isinstance(correct, int) and correct > 0:
+            bucket["quiz_correct"] += correct
+        if isinstance(wrong, int) and wrong > 0:
+            bucket["quiz_wrong"] += wrong
+
+    _finalize_digest_mastery(digests)
+    return {"digests": digests}
+
+
+def study_progress_class_mastery(
+    root: Path,
+    course: str,
+    *,
+    now: datetime | None = None,
+) -> tuple[int, float | None]:
+    validate_course_name(course)
+    _ = now  # mastery uses stored intervals only
+    deck_ids = _load_deck_ids(root, course)
+    if not deck_ids:
+        return 0, None
+    doc = _load_progress_document(root, course)
+    cards = doc["cards"]
+    mastered = 0
+    for card_id in deck_ids:
+        entry = cards.get(card_id)
+        if isinstance(entry, dict) and _card_is_mastered(entry):
+            mastered += 1
+    return mastered, mastered / len(deck_ids)
 
 
 def emit_json_line(value: Any) -> None:

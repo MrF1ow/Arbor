@@ -1,6 +1,8 @@
 import dataclasses
 import io
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 from arbor_worker.alignment import PageRange
@@ -10,6 +12,7 @@ from arbor_worker.planning import build_plan
 from arbor_worker.provider.fake import FakeProvider
 from arbor_worker.settings import default_settings
 from prompt_marked_fake import PromptMarkedFake
+from ui_overhaul_fixtures import build_ui_overhaul_update_root, update_fake_digest_markdown
 
 GOOD_MD = (
     "# Lecture\n## Overview\nThis overview is definitely long enough to pass.\n"
@@ -399,3 +402,42 @@ def test_overlapping_update_patches_one_digest_with_owning_span_images(git_repo:
     digest_call = next(c for c in prov.calls if c.image_paths)
     assert "arbor-pages:1-4" in digest_call.prompt
     assert len(digest_call.image_paths) == 4
+
+
+def test_planned_event_before_sources_with_index_and_total(
+    tmp_path: Path, make_pdf, monkeypatch
+):
+    fixture = build_ui_overhaul_update_root(tmp_path, make_pdf)
+    monkeypatch.setenv("ARBOR_FAKE_MD", update_fake_digest_markdown(1, 1))
+
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "arbor_worker",
+            "update",
+            "--root",
+            str(fixture.root),
+            "--model",
+            "m",
+            "--provider",
+            "fake",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+    events = parse_lines(proc.stdout)
+
+    planned = next(e for e in events if e["type"] == "planned")
+    assert planned["total"] == 2
+    planned_idx = events.index(planned)
+    first_source_idx = next(i for i, e in enumerate(events) if e["type"] == "source_started")
+    assert planned_idx < first_source_idx
+
+    started = [e for e in events if e["type"] == "source_started"]
+    assert len(started) == 2
+    assert [e["index"] for e in started] == [1, 2]
+    assert started[0]["total"] == 2
+    assert started[1]["total"] == 2

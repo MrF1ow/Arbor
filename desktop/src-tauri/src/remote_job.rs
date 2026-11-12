@@ -12,6 +12,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
 const REMOTE_PLAN_FILENAME: &str = "arbor-remote-plan.json";
+const REMOTE_FROM_TEXT_FILENAME: &str = ".arbor-from-text.txt";
 
 pub trait RemoteOps {
     fn sync_up(&mut self, local_dir: &Path, remote_dir: &str) -> Result<(), String>;
@@ -36,6 +37,7 @@ pub struct RemoteJobRequest {
     pub courses: Vec<String>,
     pub remote_tokens: Vec<String>,
     pub plan_file: Option<PathBuf>,
+    pub from_text_file: Option<PathBuf>,
     pub message: String,
     pub index: bool,
     pub cancel_after_first_line: bool,
@@ -86,6 +88,7 @@ pub fn courses_from_selection_paths(paths: &[&str]) -> Result<Vec<String>, Strin
 pub fn prepare_remote_worker_tokens(
     remote_knowledge_root: &str,
     remote_plan_path: Option<&str>,
+    remote_from_text_path: Option<&str>,
     worker_tokens: &[String],
     request_tokens: &[String],
 ) -> Result<Vec<String>, String> {
@@ -141,6 +144,27 @@ pub fn prepare_remote_worker_tokens(
         if !found {
             tokens.push("--plan".to_string());
             tokens.push(plan_path.to_string());
+        }
+    }
+
+    if let Some(from_text_path) = remote_from_text_path {
+        let mut found = false;
+        i = 0;
+        while i < tokens.len() {
+            if tokens[i] == "--from-text-file" {
+                found = true;
+                if i + 1 < tokens.len() {
+                    tokens[i + 1] = from_text_path.to_string();
+                } else {
+                    tokens.push(from_text_path.to_string());
+                }
+                break;
+            }
+            i += 1;
+        }
+        if !found {
+            tokens.push("--from-text-file".to_string());
+            tokens.push(from_text_path.to_string());
         }
     }
 
@@ -223,10 +247,29 @@ fn is_infrastructure_ssh_error(mapped: &str) -> bool {
         || mapped.contains("could not connect to the remote host")
 }
 
-fn resolve_run_error(stderr: &str, exit_code: i32, worker_error: &Option<String>) -> String {
+/// A remote worker from before the app's flags prints an argparse error for
+/// them. Say the worker is old instead of echoing the argv.
+fn older_worker_error(stderr: &str, host: &str) -> Option<String> {
+    if stderr.contains("unrecognized arguments") {
+        return Some(format!(
+            "The Arbor worker on {host} is older than this app. Update it on the SSH worker and try again."
+        ));
+    }
+    None
+}
+
+fn resolve_run_error(
+    stderr: &str,
+    exit_code: i32,
+    worker_error: &Option<String>,
+    host: &str,
+) -> String {
     let mapped = map_ssh_error(stderr, exit_code);
     if is_infrastructure_ssh_error(&mapped) {
         return mapped;
+    }
+    if let Some(older) = older_worker_error(stderr, host) {
+        return older;
     }
     if let Some(err) = worker_error {
         return err.clone();
@@ -238,8 +281,22 @@ pub fn run_remote_job(
     ops: &mut dyn RemoteOps,
     req: &RemoteJobRequest,
     local_commit: &mut dyn FnMut(&[String], &str, bool) -> Result<(), String>,
-    mut on_line: Option<&mut dyn FnMut(&str)>,
+    on_line: Option<&mut dyn FnMut(&str)>,
 ) -> RemoteJobOutcome {
+    let (outcome, from_text_remote) =
+        run_remote_job_inner(ops, req, local_commit, on_line);
+    if let Some(remote_path) = from_text_remote {
+        remove_remote_from_text(ops, &remote_path);
+    }
+    outcome
+}
+
+fn run_remote_job_inner(
+    ops: &mut dyn RemoteOps,
+    req: &RemoteJobRequest,
+    local_commit: &mut dyn FnMut(&[String], &str, bool) -> Result<(), String>,
+    mut on_line: Option<&mut dyn FnMut(&str)>,
+) -> (RemoteJobOutcome, Option<String>) {
     let mut outcome = RemoteJobOutcome {
         lines: Vec::new(),
         commit_paths: Vec::new(),
@@ -252,7 +309,7 @@ pub fn run_remote_job(
         Ok(s) => s,
         Err(e) => {
             outcome.error = Some(e);
-            return outcome;
+            return (outcome, None);
         }
     };
     let root_id = root_id_for(&local_root_str);
@@ -260,7 +317,7 @@ pub fn run_remote_job(
         Ok(p) => p,
         Err(e) => {
             outcome.error = Some(e);
-            return outcome;
+            return (outcome, None);
         }
     };
 
@@ -269,13 +326,13 @@ pub fn run_remote_job(
             Ok(d) => d,
             Err(e) => {
                 outcome.error = Some(e);
-                return outcome;
+                return (outcome, None);
             }
         };
         let local_dir = req.local_root.join(course);
         if let Err(e) = ops.sync_up(&local_dir, &remote_dir) {
             outcome.error = Some(e);
-            return outcome;
+            return (outcome, None);
         }
     }
 
@@ -285,24 +342,40 @@ pub fn run_remote_job(
         None
     };
 
+    let remote_from_text_path = if req.from_text_file.is_some() {
+        Some(format!("{knowledge_root}/{REMOTE_FROM_TEXT_FILENAME}"))
+    } else {
+        None
+    };
+    let from_text_cleanup = remote_from_text_path.clone();
+
     if let Some(plan_local) = &req.plan_file {
         let remote_path = remote_plan_path.as_ref().expect("plan path");
         if let Err(e) = ops.put_file(plan_local, remote_path) {
             outcome.error = Some(e);
-            return outcome;
+            return (outcome, from_text_cleanup.clone());
+        }
+    }
+
+    if let Some(text_local) = &req.from_text_file {
+        let remote_path = remote_from_text_path.as_ref().expect("from-text path");
+        if let Err(e) = ops.put_file(text_local, remote_path) {
+            outcome.error = Some(e);
+            return (outcome, from_text_cleanup.clone());
         }
     }
 
     let remote_tokens = match prepare_remote_worker_tokens(
         &knowledge_root,
         remote_plan_path.as_deref(),
+        remote_from_text_path.as_deref(),
         &req.endpoint.worker_tokens,
         &req.remote_tokens,
     ) {
         Ok(t) => t,
         Err(e) => {
             outcome.error = Some(e);
-            return outcome;
+            return (outcome, from_text_cleanup.clone());
         }
     };
 
@@ -336,32 +409,41 @@ pub fn run_remote_job(
     if ops.cancelled() {
         outcome.killed = true;
         outcome.error = None;
-        return outcome;
+        return (outcome, from_text_cleanup.clone());
     }
 
     // A skill failure explains a nonzero exit, but never fails a clean one.
     let exit_error = worker_error.clone().or(skill_failure);
+    // `ssh -tt` merges the remote worker's stderr into stdout, so an argparse
+    // error from an older worker arrives as an output line, not on stderr.
+    let older_hint = outcome
+        .lines
+        .iter()
+        .find(|line| line.contains("unrecognized arguments"))
+        .cloned()
+        .unwrap_or_default();
     match run_result {
         Ok(0) => {}
         Ok(_code) if outcome.killed => {}
         Ok(code) => {
-            outcome.error = Some(resolve_run_error("", code, &exit_error));
-            return outcome;
+            outcome.error = Some(resolve_run_error(&older_hint, code, &exit_error, &req.endpoint.host));
+            return (outcome, from_text_cleanup.clone());
         }
         Err(_stderr) if outcome.killed => {}
         Err(stderr) => {
-            outcome.error = Some(resolve_run_error(&stderr, 255, &exit_error));
-            return outcome;
+            let combined = format!("{stderr}\n{older_hint}");
+            outcome.error = Some(resolve_run_error(&combined, 255, &exit_error, &req.endpoint.host));
+            return (outcome, from_text_cleanup.clone());
         }
     }
 
     if outcome.killed {
-        return outcome;
+        return (outcome, from_text_cleanup.clone());
     }
 
     if let Some(err) = worker_error {
         outcome.error = Some(err);
-        return outcome;
+        return (outcome, from_text_cleanup.clone());
     }
 
     for course in &req.courses {
@@ -369,7 +451,7 @@ pub fn run_remote_job(
             Ok(d) => d,
             Err(e) => {
                 outcome.error = Some(e);
-                return outcome;
+                return (outcome, from_text_cleanup.clone());
             }
         };
         let rels = paths_for_course(course, &outcome.commit_paths);
@@ -379,19 +461,25 @@ pub fn run_remote_job(
         let local_dir = req.local_root.join(course);
         if let Err(e) = ops.sync_down(&remote_dir, &local_dir, &rels) {
             outcome.error = Some(e);
-            return outcome;
+            return (outcome, from_text_cleanup.clone());
         }
     }
 
     if outcome.commit_paths.is_empty() {
-        return outcome;
+        return (outcome, from_text_cleanup.clone());
     }
 
     match local_commit(&outcome.commit_paths, &req.message, req.index) {
         Ok(()) => outcome.committed = true,
         Err(e) => outcome.error = Some(e),
     }
-    outcome
+
+    (outcome, from_text_cleanup)
+}
+
+fn remove_remote_from_text(ops: &mut dyn RemoteOps, remote_path: &str) {
+    let rm_tokens = vec!["rm".to_string(), "-f".to_string(), remote_path.to_string()];
+    let _ = ops.run(&rm_tokens, &mut |_| (), None);
 }
 
 type KillFn = Box<dyn FnMut() + Send>;
@@ -678,6 +766,7 @@ mod tests {
         run_tokens: Option<Vec<String>>,
         run_count: AtomicUsize,
         kill_count: AtomicUsize,
+        rm_from_text_count: AtomicUsize,
         run_lines: Vec<String>,
         run_result: Result<i32, String>,
         block_until_kill: bool,
@@ -692,6 +781,7 @@ mod tests {
                 run_tokens: None,
                 run_count: AtomicUsize::new(0),
                 kill_count: AtomicUsize::new(0),
+                rm_from_text_count: AtomicUsize::new(0),
                 run_lines: vec![
                     r#"{"type":"stage","name":"write"}"#.to_string(),
                     r#"{"type":"commit_paths","paths":["Biology/digests/2026-10-18-lecture.md","Biology/course.md","Biology/arbor-course.json"]}"#.to_string(),
@@ -723,6 +813,13 @@ mod tests {
             interrupt: Option<&AtomicBool>,
         ) -> Result<i32, String> {
             self.run_count.fetch_add(1, Ordering::SeqCst);
+            if remote_tokens.first().map(String::as_str) == Some("rm")
+                && remote_tokens
+                    .iter()
+                    .any(|token| token.contains(REMOTE_FROM_TEXT_FILENAME))
+            {
+                self.rm_from_text_count.fetch_add(1, Ordering::SeqCst);
+            }
             self.run_tokens = Some(remote_tokens.to_vec());
             if self.block_until_kill {
                 loop {
@@ -777,6 +874,7 @@ mod tests {
                 "/tmp/cancel".to_string(),
             ],
             plan_file: None,
+            from_text_file: None,
             message: "digest: Biology".to_string(),
             index: false,
             cancel_after_first_line: false,
@@ -877,12 +975,38 @@ mod tests {
     }
 
     #[test]
+    fn prepare_remote_worker_tokens_substitutes_from_text_path() {
+        let endpoint = test_endpoint();
+        let root_id = root_id_for("/tmp/Knowledge");
+        let knowledge = remote_knowledge_root(&endpoint.remote_root, &root_id).unwrap();
+        let remote_path = format!("{knowledge}/{REMOTE_FROM_TEXT_FILENAME}");
+        let tokens = prepare_remote_worker_tokens(
+            &knowledge,
+            None,
+            Some(&remote_path),
+            &endpoint.worker_tokens,
+            &[
+                "generate".to_string(),
+                "--from-text-file".to_string(),
+                "/local/tmp.txt".to_string(),
+            ],
+        )
+        .unwrap();
+        let idx = tokens
+            .iter()
+            .position(|t| t == "--from-text-file")
+            .expect("from-text-file flag");
+        assert_eq!(tokens.get(idx + 1).map(String::as_str), Some(remote_path.as_str()));
+    }
+
+    #[test]
     fn ssh_argv_uses_app_known_hosts() {
         let endpoint = test_endpoint();
         let root_id = root_id_for("/tmp/Knowledge");
         let knowledge = remote_knowledge_root(&endpoint.remote_root, &root_id).unwrap();
         let tokens = prepare_remote_worker_tokens(
             &knowledge,
+            None,
             None,
             &endpoint.worker_tokens,
             &["update".to_string(), "--model".to_string(), "m".to_string()],
@@ -985,6 +1109,82 @@ mod tests {
     }
 
     #[test]
+    fn older_remote_worker_reports_update_message_without_argv() {
+        let endpoint = test_endpoint();
+        let host = endpoint.host.clone();
+        let local_root = PathBuf::from("/tmp/Knowledge");
+        let mut ops = FakeOps::new(Err(
+            "usage: arbor-worker generate [-h]\narbor-worker: error: unrecognized arguments: --digests Bio/digests/a.md --full\n"
+                .to_string(),
+        ));
+        let mut commit_called = false;
+        let outcome = run_remote_job(
+            &mut ops,
+            &sample_request(endpoint, local_root),
+            &mut |_, _, _| {
+                commit_called = true;
+                Ok(())
+            },
+            None,
+        );
+        let error = outcome.error.expect("error");
+        assert_eq!(
+            error,
+            format!(
+                "The Arbor worker on {host} is older than this app. Update it on the SSH worker and try again."
+            )
+        );
+        assert!(!error.contains("--digests"));
+        assert!(!outcome.committed);
+        assert!(!commit_called);
+    }
+
+    #[test]
+    fn older_remote_worker_detected_on_stdout_under_tty() {
+        // `ssh -tt` merges the worker's stderr into stdout: the argparse error
+        // arrives as an output line and ssh's own stderr only says it closed.
+        let endpoint = test_endpoint();
+        let host = endpoint.host.clone();
+        let local_root = PathBuf::from("/tmp/Knowledge");
+        let mut ops = FakeOps::new(Err(format!("Connection to {host} closed.\n")));
+        ops.run_lines = vec![
+            "usage: arbor-worker [-h] [--version]".to_string(),
+            "arbor-worker: error: unrecognized arguments: --digests Bio/digests/a.md --full"
+                .to_string(),
+        ];
+        let outcome = run_remote_job(
+            &mut ops,
+            &sample_request(endpoint, local_root),
+            &mut |_, _, _| Ok(()),
+            None,
+        );
+        assert_eq!(
+            outcome.error.expect("error"),
+            format!(
+                "The Arbor worker on {host} is older than this app. Update it on the SSH worker and try again."
+            )
+        );
+
+        let mut ops = FakeOps::new(Ok(2));
+        ops.run_lines =
+            vec!["arbor-worker: error: unrecognized arguments: --full".to_string()];
+        let outcome = run_remote_job(
+            &mut ops,
+            &sample_request(test_endpoint(), PathBuf::from("/tmp/Knowledge")),
+            &mut |_, _, _| Ok(()),
+            None,
+        );
+        assert!(outcome.error.expect("error").contains("is older than this app"));
+    }
+
+    #[test]
+    fn older_worker_detection_ignores_other_stderr() {
+        assert_eq!(older_worker_error("Permission denied (publickey).", "h"), None);
+        assert_eq!(older_worker_error("", "h"), None);
+        assert!(older_worker_error("error: unrecognized arguments: --full", "h").is_some());
+    }
+
+    #[test]
     fn worker_ndjson_error_overrides_empty_ssh_stderr() {
         let endpoint = test_endpoint();
         let local_root = PathBuf::from("/tmp/Knowledge");
@@ -1032,6 +1232,81 @@ mod tests {
         assert!(courses_from_selection_paths(&["../etc/a.pdf"]).is_err());
         assert!(courses_from_selection_paths(&["Biology/../../etc/passwd"]).is_err());
         assert!(courses_from_selection_paths(&["orphan.pdf"]).is_err());
+    }
+
+    fn request_with_from_text(
+        endpoint: ValidatedSsh,
+        local_root: PathBuf,
+        from_text: PathBuf,
+    ) -> RemoteJobRequest {
+        let mut req = sample_request(endpoint, local_root);
+        req.from_text_file = Some(from_text);
+        req
+    }
+
+    fn assert_single_from_text_rm(ops: &FakeOps) {
+        assert_eq!(
+            ops.rm_from_text_count.load(Ordering::SeqCst),
+            1,
+            "expected exactly one remote from-text rm"
+        );
+    }
+
+    #[test]
+    fn from_text_remote_file_removed_on_success() {
+        let endpoint = test_endpoint();
+        let local_root = PathBuf::from("/tmp/Knowledge");
+        let from_text = PathBuf::from("/tmp/arbor-from-text-upload.txt");
+        let mut req = request_with_from_text(endpoint, local_root, from_text);
+        req.index = true;
+        let mut ops = FakeOps::new(Ok(0));
+        let outcome = run_remote_job(&mut ops, &req, &mut |_, _, _| Ok(()), None);
+        assert!(outcome.error.is_none());
+        assert!(outcome.committed);
+        assert_single_from_text_rm(&ops);
+    }
+
+    #[test]
+    fn from_text_remote_file_removed_on_cancel() {
+        let endpoint = test_endpoint();
+        let local_root = PathBuf::from("/tmp/Knowledge");
+        let from_text = PathBuf::from("/tmp/arbor-from-text-cancel.txt");
+        let req = {
+            let mut req = request_with_from_text(endpoint, local_root, from_text);
+            req.cancel_after_first_line = true;
+            req
+        };
+        let mut ops = FakeOps::new(Ok(255));
+        let outcome = run_remote_job(&mut ops, &req, &mut |_, _, _| Ok(()), None);
+        assert!(outcome.killed);
+        assert_single_from_text_rm(&ops);
+    }
+
+    #[test]
+    fn from_text_remote_file_removed_on_worker_error() {
+        let endpoint = test_endpoint();
+        let local_root = PathBuf::from("/tmp/Knowledge");
+        let from_text = PathBuf::from("/tmp/arbor-from-text-error.txt");
+        let req = request_with_from_text(endpoint, local_root, from_text);
+        let mut ops = FakeOps::new(Err(String::new()));
+        ops.run_lines = vec![r#"{"type":"error","message":"model refused"}"#.to_string()];
+        let outcome = run_remote_job(&mut ops, &req, &mut |_, _, _| Ok(()), None);
+        assert_eq!(outcome.error.as_deref(), Some("model refused"));
+        assert_single_from_text_rm(&ops);
+    }
+
+    #[test]
+    fn from_text_remote_file_removed_when_commit_paths_empty() {
+        let endpoint = test_endpoint();
+        let local_root = PathBuf::from("/tmp/Knowledge");
+        let from_text = PathBuf::from("/tmp/arbor-from-text-empty.txt");
+        let req = request_with_from_text(endpoint, local_root, from_text);
+        let mut ops = FakeOps::new(Ok(0));
+        ops.run_lines = vec![r#"{"type":"run_done","processed":0}"#.to_string()];
+        let outcome = run_remote_job(&mut ops, &req, &mut |_, _, _| Ok(()), None);
+        assert!(outcome.error.is_none());
+        assert!(!outcome.committed);
+        assert_single_from_text_rm(&ops);
     }
 
     #[test]

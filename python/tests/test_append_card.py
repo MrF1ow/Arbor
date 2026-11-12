@@ -36,6 +36,18 @@ def _run_cli(argv: list[str]) -> tuple[int, str, str]:
     return code, out.getvalue(), err.getvalue()
 
 
+def test_corrupt_origins_append_card_leaves_deck_unchanged(git_repo: Path):
+    _course(git_repo)
+    deck_path = _deck_path(git_repo)
+    deck_path.parent.mkdir(parents=True, exist_ok=True)
+    before = json.dumps({"schema_version": 1, "course": "Biology", "cards": []}) + "\n"
+    deck_path.write_text(before, encoding="utf-8")
+    (deck_path.parent / "origins.json").write_text("{not json\n", encoding="utf-8")
+    with pytest.raises(json.JSONDecodeError):
+        append_flashcard(git_repo, "Biology", "Q?", "A", "digests/a.md")
+    assert deck_path.read_text(encoding="utf-8") == before
+
+
 def test_append_to_existing_deck_preserves_cards(git_repo: Path):
     _course(git_repo)
     existing = {

@@ -135,7 +135,7 @@ fn should_watch(root: &Path, path: &Path) -> bool {
     if relative_path
         .iter()
         .filter_map(|component| component.to_str())
-        .any(crate::commands::is_reserved_course_name)
+        .any(crate::commands::is_internal_folder_name)
     {
         return false;
     }
@@ -159,5 +159,14 @@ mod tests {
         assert!(!should_watch(root, &root.join("study/foo.pdf")));
         assert!(should_watch(root, &root.join("Biology/lecture.pdf")));
         assert!(!should_watch(root, &root.join("Biology/digests/x.md")));
+    }
+
+    #[test]
+    fn should_watch_keeps_existing_chat_and_local_folders() {
+        let root = Path::new("/tmp/knowledge");
+
+        assert!(should_watch(root, &root.join("Bio/Chat/lec.pdf")));
+        assert!(should_watch(root, &root.join("Bio/Local/lec.pdf")));
+        assert!(should_watch(root, &root.join("Chat/lec.pdf")));
     }
 }

@@ -59,6 +59,22 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Write study files but defer git commit (emit commit_paths instead).",
     )
+    gen.add_argument(
+        "--digests",
+        default=None,
+        help="Comma-separated Course/digests/*.md paths for scoped generation.",
+    )
+    gen.add_argument(
+        "--full",
+        action="store_true",
+        help="With --digests, run a full regeneration limited to those lectures.",
+    )
+    gen.add_argument(
+        "--from-text-file",
+        default=None,
+        dest="from_text_file",
+        help="Generate flashcards or quiz from chat text (requires --digests).",
+    )
 
     cw = sub.add_parser(
         "commit-written",
@@ -153,12 +169,40 @@ def build_parser() -> argparse.ArgumentParser:
         help="Print due, weak topics, and recommendations in one JSON object.",
     )
 
+    sp_stats = sp_sub.add_parser("stats", help="Print quiz and card accuracy by week.")
+    sp_stats.add_argument("--now", default=None, help="UTC instant (ISO-8601).")
+
+    sp_digest = sp_sub.add_parser(
+        "digest-stats",
+        help="Print per-lecture card and quiz aggregates.",
+    )
+    sp_digest.add_argument("--now", default=None, help="UTC instant (ISO-8601).")
+
+    today = sub.add_parser("study-today", help="Cross-class Today summary (JSON on stdout).")
+    today.add_argument("--root", required=True, help="Path to the Knowledge git repo.")
+    today.add_argument("--now", default=None, help="UTC instant (ISO-8601).")
+
     plan = sub.add_parser("study-plan", help="Generate study/plan.md for a course.")
     plan.add_argument("--root", required=True, help="Path to the Knowledge git repo.")
     plan.add_argument("--course", required=True, help="Course directory name.")
-    plan.add_argument("--provider", default="codex", choices=provider_choices())
+    plan.add_argument(
+        "--provider",
+        default=None,
+        choices=provider_choices(),
+        help="Provider for generating a plan (default: codex). Not valid with toggle/status.",
+    )
     plan.add_argument("--model", default=None, help="Model id passed to the provider.")
     plan.add_argument("--exam-date", default=None, dest="exam_date", help="Exam date (YYYY-MM-DD).")
+    plan_sub = plan.add_subparsers(dest="plan_action", metavar="{toggle,status}")
+    plan_toggle = plan_sub.add_parser("toggle", help="Mark one plan task done or not done.")
+    plan_toggle.add_argument("--task", required=True, help="Task id from `status`.")
+    plan_toggle.add_argument(
+        "--done",
+        required=True,
+        choices=("true", "false"),
+        help="true to mark the task done, false to clear it.",
+    )
+    plan_sub.add_parser("status", help="Print the plan's tasks and how many are done.")
 
     ac = sub.add_parser("append-card", help="Append one flashcard to the course deck.")
     ac.add_argument("--root", required=True, help="Path to the Knowledge git repo.")
@@ -244,7 +288,10 @@ def build_parser() -> argparse.ArgumentParser:
     cmeta_set.add_argument(
         "--fields",
         required=True,
-        help='JSON object with "icon" and "color" keys (null clears).',
+        help=(
+            'JSON object with optional "icon", "color", "exam_date", "units" '
+            '(icon/color/exam_date: null or "" clears; units: null or {} clears).'
+        ),
     )
 
     si = sub.add_parser("skill-install", help="Install a skill package from a pinned git commit.")
@@ -333,6 +380,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "study-progress":
         from arbor_worker.commands import cmd_study_progress
         return cmd_study_progress(args)
+    if args.command == "study-today":
+        from arbor_worker.commands import cmd_study_today
+        return cmd_study_today(args)
     if args.command == "study-plan":
         from arbor_worker.commands import cmd_study_plan
         return cmd_study_plan(args)

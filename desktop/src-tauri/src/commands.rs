@@ -808,6 +808,115 @@ pub struct DigestInfo {
     pub title: String,
     pub date: String,
     pub path: String,
+    pub unit: Option<String>,
+    pub source_path: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+struct ArborCourseManifest {
+    records: Option<Vec<ArborDigestRecord>>,
+}
+
+#[derive(serde::Deserialize)]
+struct ArborDigestRecord {
+    source_path: Option<String>,
+    digest_file: Option<String>,
+}
+
+fn read_course_units_override(root: &Path, course: &str) -> HashMap<String, String> {
+    let path = root.join(".arbor").join("courses.json");
+    let Ok(text) = std::fs::read_to_string(&path) else {
+        return HashMap::new();
+    };
+    let Ok(doc) = serde_json::from_str::<serde_json::Value>(&text) else {
+        return HashMap::new();
+    };
+    let Some(courses) = doc.get("courses").and_then(|c| c.as_object()) else {
+        return HashMap::new();
+    };
+    let Some(entry) = courses.get(course).and_then(|e| e.as_object()) else {
+        return HashMap::new();
+    };
+    let Some(units) = entry.get("units").and_then(|u| u.as_object()) else {
+        return HashMap::new();
+    };
+    let mut out = HashMap::new();
+    for (key, value) in units {
+        if let Some(v) = value.as_str() {
+            if !v.is_empty() {
+                out.insert(key.clone(), v.to_string());
+            }
+        }
+    }
+    out
+}
+
+fn load_arbor_course_manifest(course_dir: &Path) -> Option<ArborCourseManifest> {
+    let path = course_dir.join("arbor-course.json");
+    let text = std::fs::read_to_string(&path).ok()?;
+    serde_json::from_str(&text).ok()
+}
+
+fn record_for_digest<'a>(
+    manifest: &'a ArborCourseManifest,
+    digest_rel: &str,
+) -> Option<&'a ArborDigestRecord> {
+    manifest.records.as_ref()?.iter().find(|rec| {
+        rec.digest_file
+            .as_deref()
+            .map(|df| df == digest_rel)
+            .unwrap_or(false)
+    })
+}
+
+fn unit_from_source_path(course: &str, source_path: &str) -> Option<String> {
+    let prefix = format!("{course}/");
+    let rest = source_path.strip_prefix(&prefix)?;
+    let mut parts = rest.split('/');
+    let first = parts.next()?;
+    if parts.next().is_some() {
+        Some(first.to_string())
+    } else {
+        None
+    }
+}
+
+fn digest_unit_and_source(
+    course: &str,
+    digest_rel: &str,
+    manifest: Option<&ArborCourseManifest>,
+    units_override: &HashMap<String, String>,
+) -> (Option<String>, Option<String>) {
+    if let Some(unit) = units_override.get(digest_rel) {
+        let source = manifest
+            .and_then(|m| record_for_digest(m, digest_rel))
+            .and_then(|r| r.source_path.clone());
+        return (Some(unit.clone()), source);
+    }
+    let Some(m) = manifest else {
+        return (None, None);
+    };
+    let Some(rec) = record_for_digest(m, digest_rel) else {
+        return (None, None);
+    };
+    let source_path = rec.source_path.clone();
+    let unit = source_path
+        .as_deref()
+        .and_then(|sp| unit_from_source_path(course, sp));
+    (unit, source_path)
+}
+
+fn validate_import_subfolder(subfolder: &str) -> Result<(), String> {
+    validate_path_component(subfolder, "subfolder")?;
+    if subfolder.starts_with('.') {
+        return Err("Invalid subfolder".into());
+    }
+    if is_reserved_course_name(subfolder) {
+        return Err(format!(
+            "\"{subfolder}\" is reserved. Choose a different folder name."
+        ));
+    }
+    Ok(())
 }
 
 fn markdown_title(text: &str) -> Option<String> {
@@ -825,7 +934,9 @@ fn markdown_title(text: &str) -> Option<String> {
     None
 }
 
-pub(crate) fn is_reserved_course_name(name: &str) -> bool {
+/// Folders Arbor owns inside a knowledge root. Listing and watching skip only these,
+/// so a class folder that predates the newer reserved names stays visible.
+pub(crate) fn is_internal_folder_name(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
     lower == "_arbor_cache"
         || lower == "study"
@@ -833,8 +944,15 @@ pub(crate) fn is_reserved_course_name(name: &str) -> bool {
         || name.starts_with('.')
 }
 
+/// Names new classes and import subfolders may not take: the internal folders plus the
+/// Local and Chat scopes. Existing folders with these names are still listed and watched.
+pub(crate) fn is_reserved_course_name(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    is_internal_folder_name(name) || lower == "local" || lower == "chat"
+}
+
 fn is_course_dir_name(name: &str) -> bool {
-    !name.is_empty() && !is_reserved_course_name(name)
+    !name.is_empty() && !is_internal_folder_name(name)
 }
 
 fn date_from_stem(stem: &str) -> String {
@@ -938,17 +1056,24 @@ pub async fn import_sources(
     root: String,
     course: String,
     paths: Vec<String>,
+    subfolder: Option<String>,
 ) -> Result<Vec<String>, String> {
     spawn_blocking_cmd(move || {
         validate_path_component(&course, "course name")?;
-        let dest_dir = Path::new(&root).join(&course);
-        if !dest_dir.is_dir() {
+        let course_dir = Path::new(&root).join(&course);
+        if !course_dir.is_dir() {
             return Err(format!("Class not found: {course}"));
         }
-        let mut imported = Vec::new();
-        let mut used_names: HashSet<String> = HashSet::new();
-        for src in paths {
-            let src_path = Path::new(&src);
+        let subfolder_name = subfolder.as_deref();
+        if let Some(sub) = subfolder_name {
+            validate_import_subfolder(sub)?;
+        }
+        let mut dest_dir = course_dir;
+        if let Some(sub) = subfolder_name {
+            dest_dir = dest_dir.join(sub);
+        }
+        for src in &paths {
+            let src_path = Path::new(src);
             if !src_path.is_file() {
                 return Err(format!("File not found: {src}"));
             }
@@ -960,6 +1085,14 @@ pub async fn import_sources(
             if !SOURCE_EXTENSIONS.contains(&ext.as_str()) {
                 return Err(format!("Unsupported file type: {src}"));
             }
+        }
+        if subfolder_name.is_some() && !dest_dir.is_dir() {
+            std::fs::create_dir_all(&dest_dir).map_err(|e| e.to_string())?;
+        }
+        let mut imported = Vec::new();
+        let mut used_names: HashSet<String> = HashSet::new();
+        for src in paths {
+            let src_path = Path::new(&src);
             let file_name = src_path
                 .file_name()
                 .ok_or_else(|| format!("Invalid path: {src}"))?;
@@ -990,10 +1123,14 @@ pub async fn list_digests(root: String, course: String) -> Result<Vec<DigestInfo
         if course.contains('/') || course.contains('\\') || course.contains("..") {
             return Err("Invalid course name".into());
         }
-        let digests_dir = Path::new(&root).join(&course).join("digests");
+        let root_path = Path::new(&root);
+        let digests_dir = root_path.join(&course).join("digests");
         if !digests_dir.is_dir() {
             return Ok(vec![]);
         }
+        let manifest = load_arbor_course_manifest(&root_path.join(&course));
+        let units_override = read_course_units_override(root_path, &course);
+        let manifest_ref = manifest.as_ref();
         let mut digests = Vec::new();
         for entry in std::fs::read_dir(&digests_dir).map_err(|e| e.to_string())? {
             let entry = entry.map_err(|e| e.to_string())?;
@@ -1010,10 +1147,15 @@ pub async fn list_digests(root: String, course: String) -> Result<Vec<DigestInfo
                     .ok()
                     .and_then(|text| markdown_title(&text))
                     .unwrap_or_else(|| date.clone());
+                let digest_rel = format!("digests/{file_name}");
+                let (unit, source_path) =
+                    digest_unit_and_source(&course, &digest_rel, manifest_ref, &units_override);
                 digests.push(DigestInfo {
                     title,
                     date,
                     path: format!("{course}/digests/{file_name}"),
+                    unit,
+                    source_path,
                 });
             }
         }
@@ -1268,7 +1410,7 @@ pub fn build_study_progress_argv(
         course.to_string(),
     ];
     match action {
-        "due" | "weak" | "recommend" | "overview" => {
+        "due" | "weak" | "recommend" | "overview" | "stats" | "digest-stats" => {
             argv.push(action.to_string());
         }
         "grade" | "quiz" => {
@@ -1408,6 +1550,110 @@ pub async fn study_plan(
     .await
 }
 
+fn validate_plan_course(course: &str) -> Result<(), String> {
+    validate_path_component(course, "course")?;
+    if is_reserved_course_name(course) {
+        return Err(format!("{course} is a reserved name and cannot be used as a class"));
+    }
+    Ok(())
+}
+
+pub fn build_study_plan_toggle_argv(
+    root: &str,
+    course: &str,
+    task: &str,
+    done: bool,
+) -> Result<Vec<String>, String> {
+    validate_plan_course(course)?;
+    if task.len() != 10 || !task.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) {
+        return Err("task must be a 10-character hex id".into());
+    }
+    Ok(vec![
+        "study-plan".to_string(),
+        "--root".to_string(),
+        root.to_string(),
+        "--course".to_string(),
+        course.to_string(),
+        "toggle".to_string(),
+        "--task".to_string(),
+        task.to_string(),
+        "--done".to_string(),
+        done.to_string(),
+    ])
+}
+
+pub fn build_study_plan_status_argv(root: &str, course: &str) -> Result<Vec<String>, String> {
+    validate_plan_course(course)?;
+    Ok(vec![
+        "study-plan".to_string(),
+        "--root".to_string(),
+        root.to_string(),
+        "--course".to_string(),
+        course.to_string(),
+        "status".to_string(),
+    ])
+}
+
+#[tauri::command]
+pub async fn study_plan_toggle(
+    app: tauri::AppHandle,
+    root: String,
+    course: String,
+    task: String,
+    done: bool,
+) -> Result<serde_json::Value, String> {
+    spawn_blocking_cmd(move || {
+        let argv = build_study_plan_toggle_argv(&root, &course, &task, done)?;
+        let refs = study_progress_argv_refs(&argv);
+        run_worker_json_app(&app, &refs)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn study_plan_status(
+    app: tauri::AppHandle,
+    root: String,
+    course: String,
+) -> Result<serde_json::Value, String> {
+    spawn_blocking_cmd(move || {
+        let argv = build_study_plan_status_argv(&root, &course)?;
+        let refs = study_progress_argv_refs(&argv);
+        run_worker_json_app(&app, &refs)
+    })
+    .await
+}
+
+pub fn build_study_today_argv(root: &str, now: Option<&str>) -> Vec<String> {
+    let mut argv = vec![
+        "study-today".to_string(),
+        "--root".to_string(),
+        root.to_string(),
+    ];
+    if let Some(instant) = now {
+        let trimmed = instant.trim();
+        if !trimmed.is_empty() {
+            argv.push("--now".to_string());
+            argv.push(trimmed.to_string());
+        }
+    }
+    argv
+}
+
+#[tauri::command]
+pub async fn study_today(
+    app: tauri::AppHandle,
+    root: String,
+    now: Option<String>,
+) -> Result<serde_json::Value, String> {
+    spawn_blocking_cmd(move || {
+        let argv = build_study_today_argv(&root, now.as_deref());
+        let refs = study_progress_argv_refs(&argv);
+        run_worker_json_app(&app, &refs)
+    })
+    .await
+}
+
 pub fn build_append_card_argv(
     root: &str,
     course: &str,
@@ -1456,6 +1702,15 @@ pub fn build_append_card_argv(
     Ok(argv)
 }
 
+fn append_card_blocked(remote: bool, job_running: bool) -> Option<String> {
+    if remote && job_running {
+        return Some(
+            "A study job is running on the SSH worker. Make the card when it finishes.".into(),
+        );
+    }
+    None
+}
+
 #[tauri::command]
 pub async fn append_card(
     app: tauri::AppHandle,
@@ -1468,6 +1723,21 @@ pub async fn append_card(
     page: Option<String>,
 ) -> Result<serde_json::Value, String> {
     spawn_blocking_cmd(move || {
+        // A remote (SSH) study job copies the worker's deck back over the
+        // local one when it finishes, which would drop a card made meanwhile.
+        let remote = matches!(
+            settings::transport_for_root(&settings::load(&app), &root),
+            Ok(crate::transport::WorkerTransport::Ssh { .. })
+        );
+        let busy = app
+            .state::<SharedCoordinator>()
+            .inner()
+            .lock()
+            .map(|guard| guard.is_active_for(&root))
+            .unwrap_or(false);
+        if let Some(message) = append_card_blocked(remote, busy) {
+            return Err(message);
+        }
         let argv = build_append_card_argv(
             &root,
             &course,
@@ -1614,6 +1884,24 @@ pub(crate) fn validate_chat_mode(mode: &str) -> Result<(), String> {
     }
 }
 
+#[derive(Clone, serde::Deserialize)]
+pub struct ChatFocusPayload {
+    pub digest: String,
+    pub heading: Option<String>,
+    pub text: String,
+}
+
+const CHAT_FOCUS_TEXT_REJECT_CHARS: usize = 100_000;
+
+pub(crate) fn validate_chat_focus_text(text: &str) -> Result<(), String> {
+    if text.chars().count() > CHAT_FOCUS_TEXT_REJECT_CHARS {
+        return Err(format!(
+            "focus text exceeds maximum size ({CHAT_FOCUS_TEXT_REJECT_CHARS} characters)"
+        ));
+    }
+    Ok(())
+}
+
 pub(crate) fn chat_worker_stdin_payload(
     root: &str,
     course: &str,
@@ -1622,8 +1910,10 @@ pub(crate) fn chat_worker_stdin_payload(
     provider: &str,
     model: &str,
     history: &[serde_json::Value],
+    digests: Option<&[String]>,
+    focus: Option<&ChatFocusPayload>,
 ) -> serde_json::Value {
-    serde_json::json!({
+    let mut payload = serde_json::json!({
         "root": root,
         "course": course,
         "question": question,
@@ -1631,7 +1921,22 @@ pub(crate) fn chat_worker_stdin_payload(
         "provider": provider,
         "model": model,
         "history": history,
-    })
+    });
+    if let Some(list) = digests.filter(|forms| !forms.is_empty()) {
+        payload["digests"] = serde_json::json!(list);
+    }
+    if let Some(focus_payload) = focus {
+        let text = focus_payload.text.trim();
+        let mut focus_obj = serde_json::json!({
+            "digest": focus_payload.digest,
+            "text": text,
+        });
+        if let Some(heading) = &focus_payload.heading {
+            focus_obj["heading"] = serde_json::json!(heading);
+        }
+        payload["focus"] = focus_obj;
+    }
+    payload
 }
 
 #[tauri::command]
@@ -1645,10 +1950,33 @@ pub async fn start_chat(
     provider: Option<String>,
     model: String,
     history: Vec<serde_json::Value>,
+    digests: Option<Vec<String>>,
+    focus: Option<ChatFocusPayload>,
 ) -> Result<(), String> {
     spawn_blocking_cmd_unit(move || {
+        use crate::reading_state::validate_digest_path;
         validate_chat_course(&course)?;
         validate_chat_mode(&mode)?;
+        if let Some(list) = digests.as_ref().filter(|forms| !forms.is_empty()) {
+            for form in list {
+                validate_digest_path(form)?;
+                let prefix = format!("{course}/");
+                if !form.starts_with(&prefix) {
+                    return Err(format!("digest is not in course {course}: {form}"));
+                }
+            }
+        }
+        if let Some(focus_payload) = &focus {
+            validate_digest_path(&focus_payload.digest)?;
+            let prefix = format!("{course}/");
+            if !focus_payload.digest.starts_with(&prefix) {
+                return Err(format!(
+                    "digest is not in course {course}: {}",
+                    focus_payload.digest
+                ));
+            }
+            validate_chat_focus_text(&focus_payload.text)?;
+        }
         if model.trim().is_empty() {
             return Err("Model is required".into());
         }
@@ -1694,6 +2022,8 @@ pub async fn start_chat(
             &provider_id,
             model.trim(),
             &history,
+            digests.as_deref(),
+            focus.as_ref(),
         );
         let stdin_body = serde_json::to_string(&payload).map_err(|e| e.to_string())?;
 
@@ -1766,6 +2096,14 @@ pub async fn start_chat(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn append_card_blocked_only_during_a_remote_job() {
+        assert!(super::append_card_blocked(true, true).is_some());
+        assert!(super::append_card_blocked(true, false).is_none());
+        assert!(super::append_card_blocked(false, true).is_none());
+        assert!(super::append_card_blocked(false, false).is_none());
+    }
+
     fn block_on_cmd<T>(future: impl std::future::Future<Output = T>) -> T {
         tauri::async_runtime::block_on(future)
     }
@@ -2041,6 +2379,66 @@ mod tests {
                 .unwrap()[5],
             "overview"
         );
+        assert_eq!(
+            build_study_progress_argv("/root", "Bio", "stats", None, None, None, None, None).unwrap(),
+            vec![
+                "study-progress",
+                "--root",
+                "/root",
+                "--course",
+                "Bio",
+                "stats",
+            ]
+            .into_iter()
+            .map(str::to_string)
+            .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            build_study_progress_argv(
+                "/root",
+                "Bio",
+                "digest-stats",
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap(),
+            vec![
+                "study-progress",
+                "--root",
+                "/root",
+                "--course",
+                "Bio",
+                "digest-stats",
+            ]
+            .into_iter()
+            .map(str::to_string)
+            .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn study_today_argv_builds() {
+        assert_eq!(
+            build_study_today_argv("/root", None),
+            vec![
+                "study-today".to_string(),
+                "--root".to_string(),
+                "/root".to_string(),
+            ]
+        );
+        assert_eq!(
+            build_study_today_argv("/root", Some("2026-11-10T12:00:00Z")),
+            vec![
+                "study-today".to_string(),
+                "--root".to_string(),
+                "/root".to_string(),
+                "--now".to_string(),
+                "2026-11-10T12:00:00Z".to_string(),
+            ]
+        );
     }
 
     #[test]
@@ -2071,6 +2469,52 @@ mod tests {
         );
         assert!(build_study_plan_argv("/r", "C", "codex", "  ", None).is_err());
         assert!(build_study_plan_argv("/r", "C", "codex", "m", Some("bad")).is_err());
+    }
+
+    #[test]
+    fn study_plan_toggle_argv_builds_and_validates() {
+        assert_eq!(
+            build_study_plan_toggle_argv("/root", "Bio", "0a1b2c3d4e", true).unwrap(),
+            vec![
+                "study-plan",
+                "--root",
+                "/root",
+                "--course",
+                "Bio",
+                "toggle",
+                "--task",
+                "0a1b2c3d4e",
+                "--done",
+                "true",
+            ]
+            .into_iter()
+            .map(str::to_string)
+            .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            build_study_plan_toggle_argv("/root", "Bio", "0a1b2c3d4e", false)
+                .unwrap()
+                .last()
+                .map(String::as_str),
+            Some("false")
+        );
+        assert!(build_study_plan_toggle_argv("/r", "Bio", "short", true).is_err());
+        assert!(build_study_plan_toggle_argv("/r", "Bio", "ZZZZZZZZZZ", true).is_err());
+        assert!(build_study_plan_toggle_argv("/r", "../x", "0a1b2c3d4e", true).is_err());
+        assert!(build_study_plan_toggle_argv("/r", "Local", "0a1b2c3d4e", true).is_err());
+    }
+
+    #[test]
+    fn study_plan_status_argv_builds_and_validates() {
+        assert_eq!(
+            build_study_plan_status_argv("/root", "Bio").unwrap(),
+            vec!["study-plan", "--root", "/root", "--course", "Bio", "status"]
+                .into_iter()
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        );
+        assert!(build_study_plan_status_argv("/r", "").is_err());
+        assert!(build_study_plan_status_argv("/r", "a/b").is_err());
     }
 
     #[test]
@@ -2337,6 +2781,152 @@ mod tests {
         assert_eq!(listed[0].title, "Glycolysis net yield");
         assert_eq!(listed[0].date, "2026-08-12");
         assert_eq!(listed[0].path, "Biology/digests/2026-08-12.md");
+        assert!(listed[0].unit.is_none());
+        assert!(listed[0].source_path.is_none());
+    }
+
+    #[test]
+    fn list_digests_unit_from_manifest_paths() {
+        let root = temp_root("digest-unit");
+        let bio = root.join("Bio");
+        let digests = bio.join("digests");
+        fs::create_dir_all(&digests).unwrap();
+        fs::write(digests.join("intro.md"), b"# Intro\n").unwrap();
+        fs::write(digests.join("unit-2.md"), b"# Unit 2\n").unwrap();
+        let manifest = serde_json::json!({
+            "version": 2,
+            "records": [
+                {
+                    "source_path": "Bio/intro.pdf",
+                    "digest_file": "digests/intro.md",
+                },
+                {
+                    "source_path": "Bio/Unit 2/lec.pdf",
+                    "digest_file": "digests/unit-2.md",
+                }
+            ]
+        });
+        fs::write(
+            bio.join("arbor-course.json"),
+            serde_json::to_vec(&manifest).unwrap(),
+        )
+        .unwrap();
+
+        let listed =
+            block_on_cmd(list_digests(root.to_string_lossy().into_owned(), "Bio".into())).unwrap();
+        let by_path: HashMap<_, _> = listed
+            .iter()
+            .map(|d| (d.path.as_str(), d))
+            .collect();
+        let intro = by_path.get("Bio/digests/intro.md").unwrap();
+        assert_eq!(intro.unit, None);
+        assert_eq!(intro.source_path.as_deref(), Some("Bio/intro.pdf"));
+        let unit2 = by_path.get("Bio/digests/unit-2.md").unwrap();
+        assert_eq!(unit2.unit.as_deref(), Some("Unit 2"));
+        assert_eq!(unit2.source_path.as_deref(), Some("Bio/Unit 2/lec.pdf"));
+    }
+
+    #[test]
+    fn list_digests_units_override_wins() {
+        let root = temp_root("digest-override");
+        let arbor = root.join(".arbor");
+        fs::create_dir_all(&arbor).unwrap();
+        let courses = serde_json::json!({
+            "version": 1,
+            "courses": {
+                "Bio": {
+                    "units": {
+                        "digests/unit-2.md": "Custom"
+                    }
+                }
+            }
+        });
+        fs::write(arbor.join("courses.json"), serde_json::to_vec(&courses).unwrap()).unwrap();
+
+        let bio = root.join("Bio");
+        let digests = bio.join("digests");
+        fs::create_dir_all(&digests).unwrap();
+        fs::write(digests.join("unit-2.md"), b"# Unit 2\n").unwrap();
+        let manifest = serde_json::json!({
+            "version": 2,
+            "records": [{
+                "source_path": "Bio/Unit 2/lec.pdf",
+                "digest_file": "digests/unit-2.md",
+            }]
+        });
+        fs::write(
+            bio.join("arbor-course.json"),
+            serde_json::to_vec(&manifest).unwrap(),
+        )
+        .unwrap();
+
+        let listed =
+            block_on_cmd(list_digests(root.to_string_lossy().into_owned(), "Bio".into())).unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].unit.as_deref(), Some("Custom"));
+    }
+
+    #[test]
+    fn list_digests_missing_manifest_returns_nulls() {
+        let root = temp_root("digest-no-manifest");
+        let digests = root.join("Bio").join("digests");
+        fs::create_dir_all(&digests).unwrap();
+        fs::write(digests.join("solo.md"), b"# Solo\n").unwrap();
+        let listed =
+            block_on_cmd(list_digests(root.to_string_lossy().into_owned(), "Bio".into())).unwrap();
+        assert_eq!(listed.len(), 1);
+        assert!(listed[0].unit.is_none());
+        assert!(listed[0].source_path.is_none());
+    }
+
+    #[test]
+    fn import_sources_subfolder_rejects_missing_class_before_mkdir() {
+        let root = temp_root("import-no-class");
+        let src = root.join("inbox").join("lecture.pdf");
+        fs::create_dir_all(src.parent().unwrap()).unwrap();
+        fs::write(&src, b"%PDF").unwrap();
+        for bad_sub in ["Unit 2", "study"] {
+            let err = block_on_cmd(import_sources(
+                root.to_string_lossy().into_owned(),
+                "NoSuch".into(),
+                vec![src.to_string_lossy().into_owned()],
+                Some(bad_sub.into()),
+            ))
+            .unwrap_err();
+            assert!(err.contains("Class not found"), "{err}");
+            assert!(!root.join("NoSuch").exists());
+        }
+    }
+
+    #[test]
+    fn import_sources_subfolder_copies_and_validates() {
+        let root = temp_root("import-sub");
+        let course = root.join("Biology");
+        fs::create_dir_all(&course).unwrap();
+        let src = root.join("inbox").join("lecture.pdf");
+        fs::create_dir_all(src.parent().unwrap()).unwrap();
+        fs::write(&src, b"%PDF").unwrap();
+
+        let imported = block_on_cmd(import_sources(
+            root.to_string_lossy().into_owned(),
+            "Biology".into(),
+            vec![src.to_string_lossy().into_owned()],
+            Some("Unit 2".into()),
+        ))
+        .unwrap();
+        assert_eq!(imported, vec!["lecture.pdf"]);
+        assert!(course.join("Unit 2").join("lecture.pdf").is_file());
+
+        for bad in ["../x", "a/b", ".hidden", "study"] {
+            let err = block_on_cmd(import_sources(
+                root.to_string_lossy().into_owned(),
+                "Biology".into(),
+                vec![src.to_string_lossy().into_owned()],
+                Some(bad.into()),
+            ))
+            .unwrap_err();
+            assert!(!err.is_empty(), "expected error for {bad}");
+        }
     }
 
     #[test]
@@ -2356,6 +2946,23 @@ mod tests {
 
         let listed = block_on_cmd(list_courses(root.to_string_lossy().into_owned())).unwrap();
         assert_eq!(listed, vec!["Biology", "Organic Chem"]);
+    }
+
+    #[test]
+    fn list_courses_still_lists_existing_chat_and_local_folders() {
+        let root = temp_root("list-courses-chat-local");
+        fs::create_dir(root.join("Biology")).unwrap();
+        fs::create_dir(root.join("Chat")).unwrap();
+        fs::create_dir(root.join("Local")).unwrap();
+
+        let listed = block_on_cmd(list_courses(root.to_string_lossy().into_owned())).unwrap();
+        assert_eq!(listed, vec!["Biology", "Chat", "Local"]);
+
+        let root_string = root.to_string_lossy().into_owned();
+        for name in ["Chat", "chat", "Local", "local"] {
+            let err = block_on_cmd(create_course(root_string.clone(), name.into())).unwrap_err();
+            assert!(err.contains("reserved"), "{name}: {err}");
+        }
     }
 
     #[test]
@@ -2380,7 +2987,17 @@ mod tests {
             "Class name cannot be empty"
         );
 
-        for reserved in ["study", "digests", "_arbor_cache", "_ARBOR_CACHE", ".private"] {
+        for reserved in [
+            "study",
+            "digests",
+            "_arbor_cache",
+            "_ARBOR_CACHE",
+            ".private",
+            "local",
+            "Local",
+            "chat",
+            "CHAT",
+        ] {
             let error = block_on_cmd(create_course(root_string.clone(), reserved.into())).unwrap_err();
             assert!(error.contains("reserved"), "{error}");
             assert!(error.contains(reserved), "{error}");
@@ -2401,6 +3018,7 @@ mod tests {
             root.to_string_lossy().into_owned(),
             "Biology".into(),
             vec![first.to_string_lossy().into_owned()],
+            None,
         ))
         .unwrap();
         assert_eq!(imported, vec!["lecture.pdf"]);
@@ -2411,6 +3029,7 @@ mod tests {
             root.to_string_lossy().into_owned(),
             "Biology".into(),
             vec![first.to_string_lossy().into_owned()],
+            None,
         ))
         .unwrap();
         assert_eq!(again, vec!["lecture.pdf"]);
@@ -2420,6 +3039,7 @@ mod tests {
             root.to_string_lossy().into_owned(),
             "Biology".into(),
             vec![src_dir.join("notes.txt").to_string_lossy().into_owned()],
+            None,
         ))
         .is_err());
     }
@@ -2440,6 +3060,7 @@ mod tests {
             root.to_string_lossy().into_owned(),
             "Clin Med 2".into(),
             vec![incoming.to_string_lossy().into_owned()],
+            None,
         ))
         .unwrap();
 
@@ -2463,6 +3084,7 @@ mod tests {
             root.to_string_lossy().into_owned(),
             "Clin Med 2".into(),
             vec![existing.to_string_lossy().into_owned()],
+            None,
         ))
         .unwrap();
 
@@ -2494,6 +3116,7 @@ mod tests {
             root.to_string_lossy().into_owned(),
             "Biology".into(),
             vec![existing.to_string_lossy().into_owned()],
+            None,
         ))
         .unwrap();
 
@@ -2521,6 +3144,7 @@ mod tests {
                 a.join("lecture.pdf").to_string_lossy().into_owned(),
                 b.join("lecture.pdf").to_string_lossy().into_owned(),
             ],
+            None,
         ))
         .unwrap();
 
@@ -2548,6 +3172,7 @@ mod tests {
                 a.join("Lecture.pdf").to_string_lossy().into_owned(),
                 b.join("lecture.pdf").to_string_lossy().into_owned(),
             ],
+            None,
         ))
         .unwrap();
 
@@ -2636,6 +3261,8 @@ mod tests {
             "fake",
             "fake-model",
             &[serde_json::json!({"role": "user", "content": "Hi"})],
+            None,
+            None,
         );
         assert_eq!(payload["root"], "/knowledge");
         assert_eq!(payload["course"], "Biology");
@@ -2647,6 +3274,84 @@ mod tests {
         let text = payload.to_string();
         assert!(!text.contains("plan"));
         assert!(!text.contains(".arbor/chat"));
+    }
+
+    #[test]
+    fn chat_worker_stdin_scoped_includes_digests_and_focus() {
+        let payload = chat_worker_stdin_payload(
+            "/knowledge",
+            "Bio",
+            "What is ATP?",
+            "ask",
+            "fake",
+            "fake-model",
+            &[],
+            Some(&["Bio/digests/intro.md".to_string()]),
+            Some(&ChatFocusPayload {
+                digest: "Bio/digests/intro.md".to_string(),
+                heading: Some("Intro".to_string()),
+                text: "  passage text  ".to_string(),
+            }),
+        );
+        assert_eq!(payload["digests"], serde_json::json!(["Bio/digests/intro.md"]));
+        assert_eq!(payload["focus"]["digest"], "Bio/digests/intro.md");
+        assert_eq!(payload["focus"]["text"], "passage text");
+        assert_eq!(payload["focus"]["heading"], "Intro");
+    }
+
+    #[test]
+    fn chat_worker_stdin_unscoped_omits_scope_keys() {
+        let unscoped = chat_worker_stdin_payload(
+            "/knowledge",
+            "Biology",
+            "What is DNA?",
+            "ask",
+            "fake",
+            "fake-model",
+            &[],
+            None,
+            None,
+        );
+        assert!(unscoped.get("digests").is_none());
+        assert!(unscoped.get("focus").is_none());
+        let legacy = serde_json::json!({
+            "root": "/knowledge",
+            "course": "Biology",
+            "question": "What is DNA?",
+            "mode": "ask",
+            "provider": "fake",
+            "model": "fake-model",
+            "history": [],
+        });
+        assert_eq!(unscoped, legacy);
+    }
+
+    #[test]
+    fn chat_worker_stdin_focus_passes_text_over_4000_uncapped() {
+        let long = "a".repeat(5000);
+        let payload = chat_worker_stdin_payload(
+            "/knowledge",
+            "Bio",
+            "What is ATP?",
+            "ask",
+            "fake",
+            "fake-model",
+            &[],
+            None,
+            Some(&ChatFocusPayload {
+                digest: "Bio/digests/intro.md".to_string(),
+                heading: None,
+                text: long.clone(),
+            }),
+        );
+        assert_eq!(payload["focus"]["text"], long);
+    }
+
+    #[test]
+    fn validate_chat_focus_text_rejects_absurd_size() {
+        let huge = "x".repeat(100_001);
+        assert!(validate_chat_focus_text(&huge).is_err());
+        assert!(validate_chat_focus_text(&"x".repeat(100_000)).is_ok());
     }
 }
 
@@ -2862,6 +3567,73 @@ pub async fn start_update(
     .await
 }
 
+struct StudyJobPostBeginGuard {
+    knowledge_root: PathBuf,
+    job_id: String,
+    app: tauri::AppHandle,
+    from_text_temp: Option<PathBuf>,
+    active: bool,
+}
+
+impl StudyJobPostBeginGuard {
+    fn new(knowledge_root: PathBuf, job_id: String, app: tauri::AppHandle) -> Self {
+        Self {
+            knowledge_root,
+            job_id,
+            app,
+            from_text_temp: None,
+            active: true,
+        }
+    }
+
+    fn set_from_text_temp(&mut self, path: Option<PathBuf>) {
+        self.from_text_temp = path;
+    }
+
+    fn disarm(&mut self) {
+        self.active = false;
+    }
+
+    fn fail(&mut self, message: String) -> Result<String, String> {
+        if let Some(path) = self.from_text_temp.take() {
+            let _ = std::fs::remove_file(path);
+        }
+        let _ = jobs::finish_job(
+            &self.knowledge_root,
+            &self.job_id,
+            jobs::JobStatus::Failed,
+            -1,
+            Some(message.clone()),
+        );
+        if let Ok(mut guard) = self.app.state::<SharedCoordinator>().inner().lock() {
+            guard.finish(&self.job_id);
+        }
+        self.active = false;
+        Err(message)
+    }
+}
+
+impl Drop for StudyJobPostBeginGuard {
+    fn drop(&mut self) {
+        if !self.active {
+            return;
+        }
+        if let Some(path) = self.from_text_temp.take() {
+            let _ = std::fs::remove_file(path);
+        }
+        let _ = jobs::finish_job(
+            &self.knowledge_root,
+            &self.job_id,
+            jobs::JobStatus::Failed,
+            -1,
+            Some("study job aborted after begin".to_string()),
+        );
+        if let Ok(mut guard) = self.app.state::<SharedCoordinator>().inner().lock() {
+            guard.finish(&self.job_id);
+        }
+    }
+}
+
 #[tauri::command]
 pub async fn start_study_job(
     app: tauri::AppHandle,
@@ -2871,6 +3643,8 @@ pub async fn start_study_job(
     force: Option<bool>,
     model: Option<String>,
     provider: Option<String>,
+    digests: Option<Vec<String>>,
+    from_text: Option<String>,
 ) -> Result<String, String> {
     spawn_blocking_cmd(move || {
         let force = force.unwrap_or(false);
@@ -2893,13 +3667,25 @@ pub async fn start_study_job(
                     .unwrap_or_else(|| format!("{label} is not authenticated")));
             }
         }
+        let knowledge_root = Path::new(&root);
+        let from_text_body =
+            worker::resolve_study_from_text(&skill, &digests, from_text.as_deref())?;
+        let remote_full_when_empty = matches!(&transport, WorkerTransport::Ssh { .. })
+            && from_text_body.is_none();
+        let (resolved_digests, remote_full) = worker::resolve_study_job_digests(
+            knowledge_root,
+            &course,
+            &skill,
+            digests.clone(),
+            remote_full_when_empty,
+        )?;
         let plan_json = serde_json::to_string(&serde_json::json!({
             "course": course,
             "skill": skill,
             "force": force,
+            "digests": resolved_digests,
         }))
         .map_err(|e| e.to_string())?;
-        let knowledge_root = Path::new(&root);
         let job_id = jobs::create_job(
             knowledge_root,
             JobTrigger::Study,
@@ -2925,6 +3711,28 @@ pub async fn start_study_job(
             }
         }
 
+        let mut post_begin = StudyJobPostBeginGuard::new(
+            knowledge_root.to_path_buf(),
+            job_id.clone(),
+            app.clone(),
+        );
+
+        let from_text_file = if let Some(text) = from_text_body {
+            let app_data = match app.path().app_data_dir() {
+                Ok(dir) => dir,
+                Err(e) => return post_begin.fail(e.to_string()),
+            };
+            match worker::write_from_text_temp(&app_data, &text) {
+                Ok(path) => {
+                    post_begin.set_from_text_temp(Some(path.clone()));
+                    Some(path)
+                }
+                Err(e) => return post_begin.fail(e),
+            }
+        } else {
+            None
+        };
+
         let cancel = worker::cancel_file_path();
         let _ = std::fs::remove_file(&cancel);
 
@@ -2940,11 +3748,19 @@ pub async fn start_study_job(
                     force,
                     model,
                     provider_id,
+                    resolved_digests.clone(),
+                    from_text_file.clone(),
                     job_id.clone(),
                 );
             }
             WorkerTransport::Ssh { .. } => {
-                let app_data = app.path().app_data_dir().map_err(|e| e.to_string())?;
+                let app_data = match app.path().app_data_dir() {
+                    Ok(dir) => dir,
+                    Err(e) => return post_begin.fail(e.to_string()),
+                };
+                let from_text_arg = from_text_file
+                    .as_ref()
+                    .map(|p| p.to_string_lossy().into_owned());
                 let remote_tokens = worker::generate_sub_args(
                     &root,
                     &course,
@@ -2952,6 +3768,9 @@ pub async fn start_study_job(
                     force,
                     model.clone(),
                     &provider_id,
+                    resolved_digests.as_deref(),
+                    remote_full,
+                    from_text_arg.as_deref(),
                 );
                 worker::spawn_remote_generate_stream(
                     app,
@@ -2964,9 +3783,11 @@ pub async fn start_study_job(
                     course,
                     skill,
                     remote_tokens,
+                    from_text_file,
                 );
             }
         }
+        post_begin.disarm();
         Ok(job_id)
     })
     .await

@@ -23,9 +23,15 @@ function searchDialog() {
 
 async function openSearchPalette(user: ReturnType<typeof userEvent.setup>) {
   await user.keyboard("{Control>}k{/Control}");
-  await waitFor(() => {
-    expect(within(searchDialog()).getByLabelText("Search digests")).toBeInTheDocument();
-  });
+  // The palette is a lazy chunk: the first open in this file waits on a cold
+  // import, which can take well over 5s when the whole suite runs in parallel.
+  // Ctrl+K toggles, so pressing again would close it; wait instead.
+  await waitFor(
+    () => {
+      expect(within(searchDialog()).getByLabelText("Search digests")).toBeInTheDocument();
+    },
+    { timeout: 12_000 },
+  );
 }
 
 describe("search palette", { timeout: 15000 }, () => {

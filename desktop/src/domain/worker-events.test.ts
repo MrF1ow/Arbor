@@ -6,6 +6,7 @@ import type { WorkerEvent } from "~/domain/types";
 const EVENT_CASES: WorkerEvent[] = [
   { type: "run_started", model_id: "m1" },
   { type: "nothing_to_process" },
+  { type: "planned", total: 3 } as WorkerEvent,
   { type: "course_started", course_dir: "cell-biology", sources: 2 },
   { type: "source_started", source: "a.pdf", ranges: [[1, 3]] },
   { type: "source_done", digest: "d1" },
@@ -47,6 +48,13 @@ describe("formatWorkerEvent", () => {
     });
     expect(formatted.line).toContain("digest: running");
     expect(formatted.step).toBe("digest");
+    expect(formatted.status).toBe("running");
+  });
+
+  it("formats the planned event as a readable line, not the raw type", () => {
+    const formatted = formatWorkerEvent({ type: "planned", total: 3 } as WorkerEvent);
+    expect(formatted.line).toBe("Planned 3 source(s)");
+    expect(formatted.step).toBeNull();
     expect(formatted.status).toBe("running");
   });
 

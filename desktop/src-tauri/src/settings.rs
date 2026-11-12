@@ -113,6 +113,10 @@ pub struct Settings {
     #[serde(default)]
     pub lmstudio_base_url: Option<String>,
     #[serde(default)]
+    pub openai_base_url: Option<String>,
+    #[serde(default)]
+    pub anthropic_base_url: Option<String>,
+    #[serde(default)]
     pub skill_index_source: String,
     #[serde(default)]
     pub skill_index_ref: String,
@@ -135,6 +139,8 @@ impl Default for Settings {
             appearance: Appearance::default(),
             ollama_base_url: None,
             lmstudio_base_url: None,
+            openai_base_url: None,
+            anthropic_base_url: None,
             skill_index_source: String::new(),
             skill_index_ref: String::new(),
             skill_grants: vec![],
@@ -379,6 +385,8 @@ mod tests {
             appearance: Appearance::Dark,
             ollama_base_url: None,
             lmstudio_base_url: None,
+            openai_base_url: None,
+            anthropic_base_url: None,
             skill_index_source: String::new(),
             skill_index_ref: String::new(),
             skill_grants: vec![],
@@ -407,6 +415,16 @@ mod tests {
         assert!(s.skill_grants.is_empty());
         assert!(s.provider_overrides.is_empty());
         assert!(s.workers.is_empty());
+        assert!(s.openai_base_url.is_none());
+        assert!(s.anthropic_base_url.is_none());
+    }
+
+    #[test]
+    fn legacy_settings_json_deserializes_without_api_base_urls() {
+        let s = from_json(r#"{"provider_id":"openai_api","model_id":"gpt-4"}"#);
+        assert_eq!(s.provider_id, "openai_api");
+        assert!(s.openai_base_url.is_none());
+        assert!(s.anthropic_base_url.is_none());
     }
 
     #[test]
