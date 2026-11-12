@@ -103,8 +103,8 @@ def _is_viewer_own_progress_path(user_dir: str, rel_path: Path) -> bool:
     if course.casefold() in {"local", "chat"}:
         return False
     if len(parts) == 5:
-        return parts[4] in {"progress.json", "plan_state.json"}
-    if parts[4] != "history":
+        return parts[4] == "progress.json"
+    if parts[4] not in {"history", "plan_state"}:
         return False
     name = parts[5]
     if name in (".", "..") or "/" in name or "\\" in name:

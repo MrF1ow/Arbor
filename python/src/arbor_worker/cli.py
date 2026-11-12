@@ -185,9 +185,24 @@ def build_parser() -> argparse.ArgumentParser:
     plan = sub.add_parser("study-plan", help="Generate study/plan.md for a course.")
     plan.add_argument("--root", required=True, help="Path to the Knowledge git repo.")
     plan.add_argument("--course", required=True, help="Course directory name.")
-    plan.add_argument("--provider", default="codex", choices=provider_choices())
+    plan.add_argument(
+        "--provider",
+        default=None,
+        choices=provider_choices(),
+        help="Provider for generating a plan (default: codex). Not valid with toggle/status.",
+    )
     plan.add_argument("--model", default=None, help="Model id passed to the provider.")
     plan.add_argument("--exam-date", default=None, dest="exam_date", help="Exam date (YYYY-MM-DD).")
+    plan_sub = plan.add_subparsers(dest="plan_action", metavar="{toggle,status}")
+    plan_toggle = plan_sub.add_parser("toggle", help="Mark one plan task done or not done.")
+    plan_toggle.add_argument("--task", required=True, help="Task id from `status`.")
+    plan_toggle.add_argument(
+        "--done",
+        required=True,
+        choices=("true", "false"),
+        help="true to mark the task done, false to clear it.",
+    )
+    plan_sub.add_parser("status", help="Print the plan's tasks and how many are done.")
 
     ac = sub.add_parser("append-card", help="Append one flashcard to the course deck.")
     ac.add_argument("--root", required=True, help="Path to the Knowledge git repo.")

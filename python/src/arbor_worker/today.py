@@ -6,6 +6,7 @@ from typing import Any
 
 from arbor_worker.course_meta import read_course_exam_date
 from arbor_worker.machine import PROGRESS_BAK_GIT_EXCLUDE, ensure_git_exclude_pattern
+from arbor_worker.study_plan import plan_markdown_path, study_plan_status
 from arbor_worker.study_progress import (
     StudyProgressError,
     empty_quiz_week_totals,
@@ -133,6 +134,17 @@ def _empty_course_row(course: str, *, exam_date: str | None = None) -> dict[str,
     }
 
 
+def _plan_progress(root: Path, course: str) -> dict[str, int] | None:
+    """`{done, total}` when the class has a readable plan.md, else None."""
+    try:
+        if not plan_markdown_path(root, course).is_file():
+            return None
+        status = study_plan_status(root, course)
+    except (OSError, ValueError):
+        return None  # an unreadable plan blanks this field only, never the row
+    return {"done": status["done"], "total": status["total"]}
+
+
 def _course_payload(root: Path, course: str, clock: datetime) -> dict[str, Any]:
     digest_count = _digest_count(root, course)
     try:
@@ -148,7 +160,7 @@ def _course_payload(root: Path, course: str, clock: datetime) -> dict[str, Any]:
             "mastery": mastery,
             "exam_date": exam_date,
             "days_to_exam": days_to_exam(clock, exam_date),
-            "plan": None,
+            "plan": _plan_progress(root, course),
         }
         return {
             "row": row,

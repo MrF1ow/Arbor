@@ -1543,6 +1543,80 @@ pub async fn study_plan(
     .await
 }
 
+fn validate_plan_course(course: &str) -> Result<(), String> {
+    validate_path_component(course, "course")?;
+    if is_reserved_course_name(course) {
+        return Err(format!("{course} is a reserved name and cannot be used as a class"));
+    }
+    Ok(())
+}
+
+pub fn build_study_plan_toggle_argv(
+    root: &str,
+    course: &str,
+    task: &str,
+    done: bool,
+) -> Result<Vec<String>, String> {
+    validate_plan_course(course)?;
+    if task.len() != 10 || !task.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) {
+        return Err("task must be a 10-character hex id".into());
+    }
+    Ok(vec![
+        "study-plan".to_string(),
+        "--root".to_string(),
+        root.to_string(),
+        "--course".to_string(),
+        course.to_string(),
+        "toggle".to_string(),
+        "--task".to_string(),
+        task.to_string(),
+        "--done".to_string(),
+        done.to_string(),
+    ])
+}
+
+pub fn build_study_plan_status_argv(root: &str, course: &str) -> Result<Vec<String>, String> {
+    validate_plan_course(course)?;
+    Ok(vec![
+        "study-plan".to_string(),
+        "--root".to_string(),
+        root.to_string(),
+        "--course".to_string(),
+        course.to_string(),
+        "status".to_string(),
+    ])
+}
+
+#[tauri::command]
+pub async fn study_plan_toggle(
+    app: tauri::AppHandle,
+    root: String,
+    course: String,
+    task: String,
+    done: bool,
+) -> Result<serde_json::Value, String> {
+    spawn_blocking_cmd(move || {
+        let argv = build_study_plan_toggle_argv(&root, &course, &task, done)?;
+        let refs = study_progress_argv_refs(&argv);
+        run_worker_json_app(&app, &refs)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn study_plan_status(
+    app: tauri::AppHandle,
+    root: String,
+    course: String,
+) -> Result<serde_json::Value, String> {
+    spawn_blocking_cmd(move || {
+        let argv = build_study_plan_status_argv(&root, &course)?;
+        let refs = study_progress_argv_refs(&argv);
+        run_worker_json_app(&app, &refs)
+    })
+    .await
+}
+
 pub fn build_study_today_argv(root: &str, now: Option<&str>) -> Vec<String> {
     let mut argv = vec![
         "study-today".to_string(),
@@ -2356,6 +2430,52 @@ mod tests {
         );
         assert!(build_study_plan_argv("/r", "C", "codex", "  ", None).is_err());
         assert!(build_study_plan_argv("/r", "C", "codex", "m", Some("bad")).is_err());
+    }
+
+    #[test]
+    fn study_plan_toggle_argv_builds_and_validates() {
+        assert_eq!(
+            build_study_plan_toggle_argv("/root", "Bio", "0a1b2c3d4e", true).unwrap(),
+            vec![
+                "study-plan",
+                "--root",
+                "/root",
+                "--course",
+                "Bio",
+                "toggle",
+                "--task",
+                "0a1b2c3d4e",
+                "--done",
+                "true",
+            ]
+            .into_iter()
+            .map(str::to_string)
+            .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            build_study_plan_toggle_argv("/root", "Bio", "0a1b2c3d4e", false)
+                .unwrap()
+                .last()
+                .map(String::as_str),
+            Some("false")
+        );
+        assert!(build_study_plan_toggle_argv("/r", "Bio", "short", true).is_err());
+        assert!(build_study_plan_toggle_argv("/r", "Bio", "ZZZZZZZZZZ", true).is_err());
+        assert!(build_study_plan_toggle_argv("/r", "../x", "0a1b2c3d4e", true).is_err());
+        assert!(build_study_plan_toggle_argv("/r", "Local", "0a1b2c3d4e", true).is_err());
+    }
+
+    #[test]
+    fn study_plan_status_argv_builds_and_validates() {
+        assert_eq!(
+            build_study_plan_status_argv("/root", "Bio").unwrap(),
+            vec!["study-plan", "--root", "/root", "--course", "Bio", "status"]
+                .into_iter()
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        );
+        assert!(build_study_plan_status_argv("/r", "").is_err());
+        assert!(build_study_plan_status_argv("/r", "a/b").is_err());
     }
 
     #[test]

@@ -86,6 +86,8 @@ pub fn run() {
             commands::study_progress,
             commands::study_today,
             commands::study_plan,
+            commands::study_plan_toggle,
+            commands::study_plan_status,
             commands::append_card,
             commands::study_artifact_stale,
             chat_threads::list_chat_threads,

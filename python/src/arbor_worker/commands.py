@@ -1029,6 +1029,12 @@ def _commit_study_progress_if_dirty(
         history_rel = history_file_path(root, course, mid).relative_to(root)
         if path_has_pending_changes(root, history_rel):
             rel_paths.append(history_rel)
+    if mid is not None:
+        from arbor_worker.study_plan import plan_state_file_path
+
+        plan_rel = plan_state_file_path(root, course, mid).relative_to(root)
+        if path_has_pending_changes(root, plan_rel):
+            rel_paths.append(plan_rel)
     if not rel_paths:
         return
     commit_and_note(root, rel_paths, message, emitter)
@@ -1190,11 +1196,64 @@ def cmd_study_today(args) -> int:
     return 0
 
 
+def _cmd_study_plan_tasks(args) -> int:
+    """`study-plan toggle` / `status`: per-user, so viewers may use them and no provider is resolved."""
+    from arbor_worker.library import LibraryError
+    from arbor_worker.study_plan import study_plan_status, study_plan_toggle
+    from arbor_worker.study_progress import emit_json_line, progress_lock, validate_course_name
+
+    root = Path(args.root)
+    generate_only = [
+        flag
+        for flag, value in (
+            ("--provider", args.provider),
+            ("--model", args.model),
+            ("--exam-date", args.exam_date),
+        )
+        if value is not None
+    ]
+    if generate_only:
+        print(
+            f"study-plan {args.plan_action} does not take {', '.join(generate_only)}",
+            file=sys.stderr,
+        )
+        return 1
+    try:
+        validate_course_name(args.course)
+        if args.plan_action == "status":
+            doc = study_plan_status(root, args.course)
+        else:
+            # One lock around read-merge-append and the commit, so parallel
+            # toggles neither lose an update nor fight over git's index.lock.
+            with progress_lock(root, args.course):
+                doc = study_plan_toggle(root, args.course, args.task, args.done == "true")
+                # The toggle is recorded; a failed commit (e.g. another job
+                # holds git's index.lock) only delays it, like a grade's.
+                try:
+                    _commit_study_progress_if_dirty(
+                        root,
+                        args.course,
+                        f"study: {args.course} plan progress",
+                        EventEmitter(sys.stderr),
+                    )
+                except (GitStateError, LibraryError) as error:
+                    print(f"warning: {error}", file=sys.stderr)
+    except (ValueError, GitStateError, LibraryError, OSError) as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    emit_json_line(doc)
+    return 0
+
+
 def cmd_study_plan(args) -> int:
     from arbor_worker.library import LibraryError, assert_can_write
     from arbor_worker.study_progress import emit_json_line
     from arbor_worker.study_plan import generate_study_plan
 
+    if getattr(args, "plan_action", None) is not None:
+        return _cmd_study_plan_tasks(args)
+    if args.provider is None:
+        args.provider = "codex"
     root = Path(args.root)
     try:
         assert_can_write(root)
