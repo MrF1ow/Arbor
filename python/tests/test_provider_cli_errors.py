@@ -8,7 +8,9 @@ from arbor_worker.provider.claude import ClaudeCliProvider
 from arbor_worker.provider.codex import CodexCliProvider
 from arbor_worker.provider.errors import (
     MAX_DETAIL_CHARS,
+    classify_kind,
     cli_process_failure,
+    summary_for,
     provider_failure_event_fields,
 )
 from arbor_worker.provider.grok import GrokCliProvider
@@ -203,3 +205,42 @@ def test_secrets_are_redacted_from_the_message():
     assert "sk-test-secret-token" not in message
     assert "xai-abcdefghijklmnop" not in message
     assert "[redacted]" in message
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "Error: --input-format=stream-json requires output-format=stream-json.",
+        "Error: When using --print, --output-format=stream-json requires --verbose",
+        "error: unknown option '--bogus-flag'",
+        "error: option '--output-format <format>' argument 'xml' is invalid. Allowed choices are text, json, stream-json.",
+    ],
+)
+def test_cli_argument_rejections_are_cli_usage(line: str):
+    assert classify_kind(line) == "cli_usage"
+    error = cli_process_failure("claude", 1, line + "\n")
+    assert error.kind == "cli_usage"
+    assert error.summary == summary_for("claude", "cli_usage")
+
+
+def test_cli_usage_summary():
+    assert summary_for("claude", "cli_usage") == (
+        "Claude rejected Arbor's command-line arguments. Update the claude CLI or Arbor."
+    )
+
+
+def test_rate_limit_line_still_wins_over_cli_usage():
+    assert classify_kind("ERROR: exceeded retry limit, last status: 429 Too Many Requests") == "rate_limited"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Error: the exam requires careful reading of the passage",
+        "Error: option pricing requires a risk-free rate",
+        "Error: unknown option values need review",
+        "error: unexpected argument '--nope' found",
+    ],
+)
+def test_prompt_like_text_is_not_cli_usage(text: str):
+    assert classify_kind(text) == "unknown"

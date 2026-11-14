@@ -1,0 +1,3 @@
+{"type": "system", "subtype": "init", "session_id": "sess-fixture", "tools": [], "model": "claude-sonnet-5-5"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "Not logged in \u00b7 Please run /login"}], "model": "<synthetic>"}, "session_id": "sess-fixture"}
+{"type": "result", "subtype": "success", "is_error": true, "result": "Not logged in \u00b7 Please run /login", "stop_reason": "stop_sequence", "usage": {"input_tokens": 0, "output_tokens": 0, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0}, "session_id": "sess-fixture", "terminal_reason": "api_error"}

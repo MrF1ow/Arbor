@@ -8,10 +8,11 @@ One recorded run of the real Tauri app on this Linux machine per closing tag (`v
 cd desktop && npm install && npm run tauri dev
 ```
 
-- Provider: **Grok CLI, `grok-4.7`**. Never Claude from an agent session; Codex is unavailable here.
+- Provider: **Claude Code provider** (the `claude` CLI, `claude-sonnet-5-5`, on the user's Claude plan). Under a scratch `HOME`, copy only `~/.claude/.credentials.json` into `<scratch HOME>/.claude/` (mode 600). Codex is tested with fakes only. The run records below are history from when Grok was the provider.
+- Claude runs need `CLAUDECODE` unset in the app's environment: the app refuses the Claude provider when `CLAUDECODE=1`. Launch with `env -u CLAUDECODE`, and when `claude` is the mise wrapper also set `MISE_TRUSTED_CONFIG_PATHS`. Run the pre-check from the arbor-test skill under that same env first.
 - Knowledge root: a scratch folder, e.g. `/tmp/arbor-live/Knowledge`, `git init`'d.
 - Fixtures: a small multi-page PDF, a PPTX, a DOCX, a scanned-image PDF (for OCR), and one long lecture (>25 pages, to hit chunking). Keep them under `python/tests/fixtures/live/` if license-clean, otherwise point to a local folder.
-- The agent drives the window with screenshots (`grim` on Wayland) and records the job history export; the user may run it by hand instead.
+- The agent drives the window with screenshots (`magick import -display :<n>` on a leased Xvfb display; never `grim` the real outputs) and records the job history export; the user may run it by hand instead.
 
 ## Version 3 script (`v0.3.0`)
 
@@ -31,7 +32,7 @@ cd desktop && npm install && npm run tauri dev
 | 12 | Notifications | Desktop notification on job end (Linux notification daemon) |
 | 13 | OCR | Scanned PDF yields text (Tesseract installed) |
 | 14 | Packaged build | `npm run tauri build` on Linux produces an AppImage/deb that launches without the repo or `uv` (sidecar proof, Linux equivalent of the Finder box) |
-| 15 | Auth states | Grok signed out → badge shows not signed in and jobs refuse with the provider's message |
+| 15 | Auth states | Claude signed out (a scratch `HOME` with no `.credentials.json`) → badge shows not signed in and jobs refuse with the provider's message ("Not logged in · Please run /login") |
 
 ## Version 4 script (`v0.4.0`)
 

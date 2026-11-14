@@ -22,7 +22,7 @@ uv run arbor-worker update --root /path/to/Knowledge --provider grok --model gro
 uv run arbor-worker generate --root /path/to/Knowledge --course Biology --skill fixture [--provider …] [--force]
 ```
 
-**Claude** — argv is `claude -p --output-format json …` with the prompt on stdin. `run()` raises `ProviderError("Claude provider disabled inside a Claude Code session")` when `CLAUDECODE=1`; `is_available()` is false for the same reason. Tests never spawn `claude`.
+**Claude** — argv is `claude -p --output-format json …` with the prompt on stdin; with page images it is `--output-format stream-json --verbose --input-format stream-json` and stdin carries one stream-json user line. `run()` raises `ProviderError("Claude provider disabled inside a Claude Code session")` when `CLAUDECODE=1`; `is_available()` is false for the same reason. Tests never spawn `claude`.
 
 **Grok** (CLI 1.0.62) — `-p` does not read stdin, so text prompts use `--prompt-file`. `--tools ""` is not passed (it does not clear the toolset). `--sandbox read-only` is not passed (bubblewrap fails in some environments). Success JSON exposes assistant text in the `text` field (`stopReason`, `sessionId`, `requestId`, `cwd`, usage fields). Auth: `grok models` exits 0 with stdout containing `logged in`. Flags passed: `--prompt-file`, `-m`, `--output-format json`, `--disable-web-search`, `--no-subagents`, `--no-plan`, `--max-turns 1`, `--permission-mode dontAsk`, `--cwd`, `--verbatim`, `--disallowed-tools` (shell, write, edit, task, web, read, agent, and MCP meta-tools such as `search_tool` and `use_tool`). Images use the same `--prompt-file` with ACP blocks `{type:text}` and `{type:image, mimeType, data}`.
 
