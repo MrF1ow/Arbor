@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { canUseDesktopIpc } from "~/domain/tauri";
+import { classPath } from "~/lib/class-path";
 import { openDialog } from "~/lib/ipc";
 import { useActivateKnowledgeRootMutation } from "~/lib/queries/active-root";
 import { fetchCourses } from "~/lib/queries/library";
@@ -37,7 +38,7 @@ export function useChooseKnowledgeFolder() {
         queryFn: () => fetchCourses(root),
       });
       if (courses[0]) {
-        void navigate({ to: "/course/$course/notes", params: { course: courses[0] } });
+        void navigate(classPath(courses[0], "overview"));
         return;
       }
       void navigate({ to: "/welcome", search: { addClass: true, root } });

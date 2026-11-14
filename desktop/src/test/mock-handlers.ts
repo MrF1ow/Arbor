@@ -24,6 +24,7 @@ import type {
   JobEventRow,
   JobSummary,
   LibraryShowResult,
+  PendingSource,
   SearchHit,
   SyncConflictSession,
   SyncShowResult,
@@ -628,6 +629,23 @@ function withMockJobScope(jobs: JobSummary[]): JobSummary[] {
   });
 }
 
+/** Mock mode shows "3 new files" in the library menu, as the design's frames do. */
+function mockPendingSources(): PendingSource[] {
+  return [
+    ["Cell Biology", "week-6-membrane-transport.pdf", 18],
+    ["Cell Biology", "week-7-signalling.pdf", 22],
+    ["Organic Chemistry", "chapter-9-substitution.pdf", 31],
+  ].map(([course, file, pages]) => ({
+    path: `${course}/${file}`,
+    course: String(course),
+    source_type: "pdf",
+    page_count: Number(pages),
+    suggested_ranges: [],
+    alignment_status: "clean_append" as const,
+    previously_digested: false,
+  }));
+}
+
 function mockJobSummariesList(): JobSummary[] {
   return withMockJobScope(mockJobSummariesListUnscoped());
 }
@@ -1207,8 +1225,9 @@ export function createMockHandler(
       case "study_plan":
         return null;
       case "cancel_update":
-      case "plan_update":
         return { pending: [] };
+      case "plan_update":
+        return { pending: isMockMode() ? mockPendingSources() : [] };
       case "start_update":
         return simulateUpdateJob(String(payload.root ?? FIXTURE_ROOT_FALL));
       case "start_embed_job":

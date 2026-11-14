@@ -246,7 +246,7 @@ describe("quiz PR9", { timeout: 20000 }, () => {
     await waitForQuizReady();
     await user.keyboard("{Control>}1{/Control}");
     await waitFor(() => {
-      expect(router.state.location.pathname).toContain("/notes");
+      expect(router.state.location.pathname).toContain("/overview");
     });
   });
 
@@ -751,7 +751,7 @@ describe("quiz PR9", { timeout: 20000 }, () => {
 
   it("resumes a submitted question after a Notes round trip", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/quiz", {
+    const { router } = await renderAppAtRoute("/course/cell-biology/quiz", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "quiz.json") {
           return smallQuiz;
@@ -767,11 +767,11 @@ describe("quiz PR9", { timeout: 20000 }, () => {
       expect(screen.getByText("Explanation one")).toBeInTheDocument();
     });
     expect(screen.getByText("1 / 2 correct")).toBeInTheDocument();
-    await user.click(screen.getByRole("link", { name: /Notes/i }));
+    await router.navigate({ to: "/course/$course/overview", params: { course: "cell-biology" } });
     await waitFor(() => {
       expect(screen.getByText("Course overview")).toBeInTheDocument();
     });
-    await user.click(screen.getByRole("link", { name: /Quiz/i }));
+    await router.navigate({ to: "/course/$course/quiz", params: { course: "cell-biology" } });
     await waitForQuizReady();
     expect(screen.getByText("Explanation one")).toBeInTheDocument();
     expect(screen.getByText("1 / 2 correct")).toBeInTheDocument();
@@ -888,7 +888,7 @@ describe("quiz PR9", { timeout: 20000 }, () => {
         },
       ],
     };
-    await renderAppAtRoute("/course/cell-biology/quiz", {
+    const { router } = await renderAppAtRoute("/course/cell-biology/quiz", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "quiz.json") {
           return quizThree;
@@ -903,11 +903,11 @@ describe("quiz PR9", { timeout: 20000 }, () => {
     await user.click(screen.getByRole("button", { name: /Next/i }));
     await user.click(screen.getByRole("button", { name: /Next/i }));
     expect(screen.getByText("Quiz prompt three")).toBeInTheDocument();
-    await user.click(screen.getByRole("link", { name: /Notes/i }));
+    await router.navigate({ to: "/course/$course/overview", params: { course: "cell-biology" } });
     await waitFor(() => {
       expect(screen.getByText("Course overview")).toBeInTheDocument();
     });
-    await user.click(screen.getByRole("link", { name: /Quiz/i }));
+    await router.navigate({ to: "/course/$course/quiz", params: { course: "cell-biology" } });
     await waitFor(() => {
       expect(screen.getByText("Quiz prompt three")).toBeInTheDocument();
     });

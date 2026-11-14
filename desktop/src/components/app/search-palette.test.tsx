@@ -9,7 +9,7 @@ import { clearMockIpcLog, getMockIpcCalls } from "~/test/mock-handlers";
 import { renderAppAtRoute } from "~/test/render";
 import { useUiStore } from "~/stores/ui-store";
 
-const searchButtonName = /Search \(Ctrl\+K\)/i;
+const searchButtonName = /Search notes, concepts, and cards in every class/i;
 
 async function waitForOverview() {
   await waitFor(() => {
@@ -96,7 +96,7 @@ describe("search palette", { timeout: 15000 }, () => {
     });
   });
 
-  it("opens from the header Search button", async () => {
+  it("opens from the top bar search field", async () => {
     const user = userEvent.setup();
     await renderAppAtRoute("/course/cell-biology/notes");
     await waitForOverview();
@@ -557,7 +557,7 @@ describe("search palette", { timeout: 15000 }, () => {
     });
     await user.click(screen.getByRole("button", { name: /Collab Notes/i }));
     await waitFor(() => {
-      expect(router.state.location.pathname).toContain("/course/collab-notes/notes");
+      expect(router.state.location.pathname).toContain("/course/collab-notes/overview");
     });
     queryClient.setQueryData(qk.settings(), {
       ...fixtureSettings,

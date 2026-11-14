@@ -11,6 +11,7 @@ import {
   resetMockHandlerTimers,
 } from "~/test/mock-handlers";
 import { useJobStore } from "~/stores/job-store";
+import { useUiStore } from "~/stores/ui-store";
 import { cleanupTestQueryClients } from "~/test/query-clients";
 import { renderAppAtRoute } from "~/test/render";
 
@@ -31,6 +32,7 @@ describe("jobs page", () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(FIXED_NOW);
+    useUiStore.setState({ sidebarOpen: true, sidebarTouched: true });
     useJobStore.setState({
       activeJobId: null,
       activeUpdateJobId: null,
@@ -61,6 +63,14 @@ describe("jobs page", () => {
     expect(column).toContainElement(screen.getByRole("heading", { name: "Jobs" }));
     expect(column).toContainElement(within(jobsView()).getByTestId("job-list-container"));
     expect(column).toContainElement(within(jobsView()).getByTestId("job-log-panel"));
+  });
+
+  it("shows one Toggle Sidebar button, the top bar's, when the sidebar is closed", async () => {
+    useUiStore.setState({ sidebarOpen: false, sidebarTouched: true });
+    await renderAppAtRoute("/jobs");
+    await waitForJobsReady();
+
+    expect(screen.getAllByRole("button", { name: "Toggle Sidebar" })).toHaveLength(1);
   });
 
   it("does not clip the stacked job list without an internal scroll area (happy-dom has no layout)", async () => {
@@ -277,7 +287,7 @@ describe("jobs page", () => {
   });
 });
 
-describe("action bar status pill", () => {
+describe("library status pill", () => {
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(FIXED_NOW);
@@ -289,6 +299,8 @@ describe("action bar status pill", () => {
       status: "idle",
       step: null,
       label: null,
+      root: null,
+      progress: null,
       lines: [],
       unread: 0,
     });
@@ -327,11 +339,11 @@ describe("action bar status pill", () => {
       ],
     });
     await waitFor(() => {
-      expect(screen.getByTestId("status-pill-button")).toBeInTheDocument();
+      expect(screen.getByTestId("library-status-pill")).toBeInTheDocument();
     });
 
     await waitFor(() => {
-      expect(screen.getByText(/Up to date ·/)).toBeInTheDocument();
+      expect(screen.getByText(/Library up to date ·/)).toBeInTheDocument();
     });
 
     useJobStore.setState({
@@ -340,10 +352,11 @@ describe("action bar status pill", () => {
       lastFinishedStatus: "failed",
     });
     await waitFor(() => {
-      expect(screen.getByText("Last job failed")).toBeInTheDocument();
+      expect(screen.getByTestId("library-status-pill")).toHaveTextContent("Last update failed");
     });
 
-    await user.click(screen.getByTestId("status-pill-button"));
+    await user.click(screen.getByTestId("library-status-pill"));
+    await user.click(await screen.findByRole("menuitem", { name: /All jobs/i }));
     await waitFor(() => {
       expect(router.state.location.pathname).toBe("/jobs");
       expect(router.state.location.search.job).toBe("job-failed-1");
@@ -368,9 +381,10 @@ describe("action bar status pill", () => {
       ],
     });
     await waitFor(() => {
-      expect(screen.getByText("Last job failed")).toBeInTheDocument();
+      expect(screen.getByTestId("library-status-pill")).toHaveTextContent("Last update failed");
     });
-    await user.click(screen.getByTestId("status-pill-button"));
+    await user.click(screen.getByTestId("library-status-pill"));
+    await user.click(await screen.findByRole("menuitem", { name: /All jobs/i }));
     await waitFor(() => {
       expect(router.state.location.pathname).toBe("/jobs");
       expect(router.state.location.search.job).toBe("job-failed-reload");
@@ -381,9 +395,10 @@ describe("action bar status pill", () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime.bind(vi) });
     const { router } = await renderAppAtRoute("/course/cell-biology/notes");
     await waitFor(() => {
-      expect(screen.getByText(/Up to date ·/)).toBeInTheDocument();
+      expect(screen.getByText(/Library up to date ·/)).toBeInTheDocument();
     });
-    await user.click(screen.getByTestId("status-pill-button"));
+    await user.click(screen.getByTestId("library-status-pill"));
+    await user.click(await screen.findByRole("menuitem", { name: /All jobs/i }));
     await waitFor(() => {
       expect(router.state.location.pathname).toBe("/jobs");
     });

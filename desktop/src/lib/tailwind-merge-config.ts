@@ -44,7 +44,7 @@ export const twMerge = extendTailwindMerge({
     theme: {
       text: [...customTextSizes],
       radius: ["xs"],
-      shadow: ["card"],
+      shadow: ["card", "popover"],
       ease: ["out-soft"],
     },
     classGroups: {
@@ -57,7 +57,7 @@ export const twMerge = extendTailwindMerge({
       size: [{ size: ["icon-sm", "icon", "control", "control-lg"] }],
       z: [{ z: [...customZIndex] }],
       duration: [{ duration: ["fast", "panel"] }],
-      shadow: [{ shadow: ["card"] }],
+      shadow: [{ shadow: ["card", "popover"] }],
       rounded: [{ rounded: ["xs"] }],
       "font-size": [{ text: [...customTextSizes] }],
     },

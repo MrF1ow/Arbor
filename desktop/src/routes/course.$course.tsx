@@ -1,9 +1,6 @@
 import { createFileRoute, Link, Outlet } from "@tanstack/react-router";
 import { useEffect } from "react";
 
-import { ActionBar } from "~/components/app/action-bar";
-import { CourseHeader } from "~/components/app/course-header";
-import { useShellContext } from "~/components/app/shell-context";
 import { EmptyState } from "~/components/app/empty-state";
 import { pickActiveRoot } from "~/lib/knowledge-root";
 import { useCourses } from "~/lib/queries/library";
@@ -18,7 +15,6 @@ export const Route = createFileRoute("/course/$course")({
 
 function CourseLayout() {
   const { course } = Route.useParams();
-  const { onOpenSearch } = useShellContext();
   const settings = useSettings();
   const activeRoot = pickActiveRoot(settings.data);
   const courses = useCourses(activeRoot);
@@ -58,8 +54,6 @@ function CourseLayout() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <CourseHeader course={course} onOpenSearch={onOpenSearch} />
-      <ActionBar course={course} />
       <div className="min-h-0 flex-1 overflow-auto">
         <Outlet />
       </div>

@@ -9,6 +9,9 @@ import {
   useStudyWriteStatus,
 } from "~/lib/study-writes";
 import { qk } from "~/lib/queries/keys";
+import { useTodayAll } from "~/lib/queries/today";
+import { FIXTURE_ROOT_FALL, FIXTURE_ROOT_SHARED } from "~/test/fixtures/data";
+import { clearMockIpcLog, getMockIpcCalls } from "~/test/mock-handlers";
 import { useStudyWritesStore } from "~/stores/study-writes-store";
 import { renderWithProviders } from "~/test/render";
 import { toast } from "sonner";
@@ -26,8 +29,23 @@ function StudyWriteProbe() {
   return null;
 }
 
+/** Observes `study_today` for every library, as the always-mounted sidebar does. */
+function TodayProbe() {
+  useStudyWriteStatus();
+  useTodayAll();
+  return null;
+}
+
+const designTodayEmpty = {
+  courses: [],
+  weak_topics: [],
+  quiz_accuracy: { this_week: { correct: 0, total: 0 }, last_week: { correct: 0, total: 0 } },
+  next_exam: null,
+};
+
 describe("study writes", () => {
   afterEach(() => {
+    vi.useRealTimers();
     clearTauriMocks();
     resetStudyWriteQueueForTests();
     window.localStorage.removeItem(PENDING_STUDY_WRITES_KEY);
@@ -167,14 +185,45 @@ describe("study writes", () => {
     });
 
     await waitFor(() => {
-      expect(queryClient.getQueryState(keys.todayMine)?.isInvalidated).toBe(true);
+      expect(queryClient.getQueryState(keys.digestStats)?.isInvalidated).toBe(true);
     });
-    // Today covers every library, so a grade in one invalidates all of them.
-    expect(queryClient.getQueryState(keys.todayOther)?.isInvalidated).toBe(true);
+    // Today is coalesced: it is marked once the burst has been quiet for a moment.
+    await waitFor(() => expect(queryClient.getQueryState(keys.todayMine)?.isInvalidated).toBe(true), {
+      timeout: 4000,
+    });
+    // Only the library that was written to has its Today marked; the others are untouched.
+    expect(queryClient.getQueryState(keys.todayOther)?.isInvalidated).toBe(false);
     expect(queryClient.getQueryState(keys.digestStats)?.isInvalidated).toBe(true);
     expect(queryClient.getQueryState(keys.courseStats)?.isInvalidated).toBe(true);
     expect(queryClient.getQueryState(keys.overview)?.isInvalidated).toBe(true);
     // A different class's badges are untouched.
     expect(queryClient.getQueryState(keys.otherClass)?.isInvalidated).toBe(false);
+  });
+  it("a burst of grades refetches study_today once, for the written library only", async () => {
+    vi.useFakeTimers();
+    const { Wrapper } = renderWithProviders(<TodayProbe />, {
+      minimal: true,
+      fixtures: { study_progress: () => ({}), study_today: () => designTodayEmpty },
+    });
+    const { result } = renderHook(() => useEnqueueStudyWrite(), { wrapper: Wrapper });
+    await vi.advanceTimersByTimeAsync(100);
+    const todayCalls = () =>
+      getMockIpcCalls().filter((c) => c.cmd === "study_today").map((c) => (c.args as { root: string }).root);
+    expect(todayCalls().sort()).toEqual([FIXTURE_ROOT_FALL, FIXTURE_ROOT_SHARED].sort());
+    clearMockIpcLog();
+
+    for (let i = 0; i < 5; i += 1) {
+      result.current({
+        key: "grade",
+        root: FIXTURE_ROOT_FALL,
+        course: "cell-biology",
+        args: { action: "grade", card_id: `c${i}` },
+      });
+      await vi.advanceTimersByTimeAsync(300);
+    }
+    // Still inside the quiet window: nothing yet.
+    expect(todayCalls()).toEqual([]);
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(todayCalls()).toEqual([FIXTURE_ROOT_FALL]);
   });
 });

@@ -136,7 +136,7 @@ describe("welcome and library flows (PR 6)", () => {
       expect((dbCall?.args as { root?: string })?.root).toBe(NEW_ROOT);
       const watchCall = getMockIpcCalls().find((c) => c.cmd === "start_folder_watch");
       expect((watchCall?.args as { root?: string })?.root).toBe(NEW_ROOT);
-      expect(router.state.location.pathname).toContain("/course/cell-biology/notes");
+      expect(router.state.location.pathname).toContain("/course/cell-biology/overview");
     });
   });
 
@@ -228,7 +228,7 @@ describe("welcome and library flows (PR 6)", () => {
     clearMockIpcLog();
     expect(screen.getByText(DESKTOP_ONLY_WELCOME_COPY)).toBeInTheDocument();
     expect(screen.getByTestId("welcome-choose-folder")).toBeDisabled();
-    expect(screen.getByText("Desktop app required")).toBeInTheDocument();
+    expect(screen.getByTestId("library-status-pill")).toHaveTextContent("Desktop app required");
     expect(getMockIpcLog()).toEqual([]);
   });
 
@@ -250,7 +250,7 @@ describe("welcome and library flows (PR 6)", () => {
       const watchIdx = log.lastIndexOf("start_folder_watch");
       expect(saveIdx).toBeGreaterThanOrEqual(0);
       expect(watchIdx).toBeGreaterThan(saveIdx);
-      expect(router.state.location.pathname).toContain("/course/collab-notes/notes");
+      expect(router.state.location.pathname).toContain("/course/collab-notes/overview");
     });
   });
 });

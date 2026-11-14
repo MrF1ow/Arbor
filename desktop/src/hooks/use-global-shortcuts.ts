@@ -1,6 +1,7 @@
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useEffect } from "react";
 
+import { classPath, type ClassTab } from "~/lib/class-path";
 import { isEditableTarget, modKeyActive } from "~/lib/shortcuts";
 import { useUiStore } from "~/stores/ui-store";
 
@@ -49,17 +50,17 @@ export function useGlobalShortcuts(handlers: GlobalShortcutHandlers) {
         return;
       }
 
-      const modeRoutes: Record<string, string> = {
-        "1": "/course/$course/notes",
-        "2": "/course/$course/flashcards",
-        "3": "/course/$course/quiz",
-        "4": "/course/$course/graph",
-        "5": "/course/$course/chat",
+      const modeTabs: Record<string, ClassTab> = {
+        "1": "overview",
+        "2": "cards",
+        "3": "quiz",
+        "4": "map",
+        "5": "ask",
       };
-      const to = modeRoutes[event.key];
-      if (to) {
+      const tab = modeTabs[event.key];
+      if (tab) {
         event.preventDefault();
-        void navigate({ to, params: { course } });
+        void navigate(classPath(course, tab));
       }
     };
 

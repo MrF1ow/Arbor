@@ -16,6 +16,35 @@ let moduleStudyWriteQueue: StudyWriteQueue | null = null;
 let moduleQueueClient: QueryClient | null = null;
 let moduleQueueRestored = false;
 
+/**
+ * `study_today` is a cold worker spawn per library, and the always-mounted sidebar observes it,
+ * so a review session of rapid grades must not refetch it once per grade. Marking the key stale
+ * is therefore a trailing debounce per library: one refetch after the burst goes quiet.
+ */
+export const TODAY_REFRESH_DEBOUNCE_MS = 2000;
+
+const todayRefreshTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+/** Mark one library's Today stale once writes to it have been quiet for `TODAY_REFRESH_DEBOUNCE_MS`. */
+export function scheduleTodayRefresh(queryClient: QueryClient, root: string) {
+  const existing = todayRefreshTimers.get(root);
+  if (existing) {
+    clearTimeout(existing);
+  }
+  todayRefreshTimers.set(
+    root,
+    setTimeout(() => {
+      todayRefreshTimers.delete(root);
+      void queryClient.invalidateQueries({ queryKey: qk.todayRoot(root) });
+    }, TODAY_REFRESH_DEBOUNCE_MS),
+  );
+}
+
+function clearTodayRefreshTimers() {
+  todayRefreshTimers.forEach((timer) => clearTimeout(timer));
+  todayRefreshTimers.clear();
+}
+
 function studyWriteStatusLabel(pending: number, failing: boolean): string | null {
   if (!failing || pending === 0) {
     return null;
@@ -38,11 +67,11 @@ function ensureStudyWriteQueue(
     storage: window.localStorage,
     onStatus: setStatus,
     onSent: (w) => {
-      // A grade moves Today (every library), the lecture badges, the class stats and the due count.
+      // A grade moves Today (this library only, coalesced), the lecture badges, the class stats and the due count.
       void queryClient.invalidateQueries({
         queryKey: qk.courseOverview(w.root, w.course),
       });
-      void queryClient.invalidateQueries({ queryKey: qk.today() });
+      scheduleTodayRefresh(queryClient, w.root);
       void queryClient.invalidateQueries({ queryKey: qk.digestStats(w.root, w.course) });
       void queryClient.invalidateQueries({ queryKey: qk.courseStats(w.root, w.course) });
       const action = w.args.action;
@@ -64,6 +93,7 @@ export function resetStudyWriteQueueForTests() {
   moduleStudyWriteQueue = null;
   moduleQueueClient = null;
   moduleQueueRestored = false;
+  clearTodayRefreshTimers();
 }
 
 export async function flushStudyWritesForRootSwitch(timeoutMs = 3000): Promise<void> {

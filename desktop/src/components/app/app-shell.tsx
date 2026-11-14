@@ -4,6 +4,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { AppSidebar } from "~/components/app/app-sidebar";
 import { JobFailureToast } from "~/components/app/job-failure-toast";
 import { ShellContextProvider } from "~/components/app/shell-context";
+import { TopBar } from "~/components/app/top-bar";
 import { SidebarInset, SidebarProvider } from "~/components/ui/sidebar";
 import { useGlobalShortcuts } from "~/hooks/use-global-shortcuts";
 import { useIsMobile } from "~/hooks/use-mobile";
@@ -79,34 +80,31 @@ export function AppShell() {
 
   return (
     <SidebarProvider
+      contained
       open={sidebarOpen}
       onOpenChange={onSidebarOpenChange}
-      className="h-svh min-h-0 overflow-hidden"
+      className="h-svh min-h-0 flex-col overflow-hidden"
     >
-      <AppSidebar />
-      <SidebarInset className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <div className="relative flex min-h-0 flex-1 flex-col">
-          <ShellContextProvider
-            value={{
-              onOpenSearch: () => {
-                setSearchMounted(true);
-                setSearchOpen(true);
-              },
-            }}
-          >
-            <Outlet />
-          </ShellContextProvider>
-          <Suspense fallback={null}>
-            <LogDrawer />
-          </Suspense>
-          <Suspense fallback={null}>
-            <UpdateReviewDialog />
-          </Suspense>
-          <Suspense fallback={null}>
-            <SyncConflictDialogHost />
-          </Suspense>
-        </div>
-      </SidebarInset>
+      <TopBar onOpenSearch={() => onSearchOpenChange(true)} />
+      <div className="relative flex min-h-0 flex-1">
+        <AppSidebar />
+        <SidebarInset className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div className="relative flex min-h-0 flex-1 flex-col">
+            <ShellContextProvider value={{ onOpenSearch: () => onSearchOpenChange(true) }}>
+              <Outlet />
+            </ShellContextProvider>
+            <Suspense fallback={null}>
+              <LogDrawer />
+            </Suspense>
+            <Suspense fallback={null}>
+              <UpdateReviewDialog />
+            </Suspense>
+            <Suspense fallback={null}>
+              <SyncConflictDialogHost />
+            </Suspense>
+          </div>
+        </SidebarInset>
+      </div>
       {searchMounted ? (
         <Suspense fallback={null}>
           <SearchPalette

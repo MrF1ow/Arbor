@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   useCourseStats,
@@ -7,6 +7,8 @@ import {
   useStudyPlanStatus,
   useStudyPlanToggle,
 } from "~/lib/queries/class-stats";
+import { qk } from "~/lib/queries/keys";
+import { resetStudyWriteQueueForTests } from "~/lib/study-writes";
 import { useUsageSummary } from "~/lib/queries/usage";
 import { clearTauriMocks } from "~/test/mock-ipc";
 import { renderWithProviders } from "~/test/render";
@@ -64,6 +66,32 @@ describe("class stats queries", () => {
     });
     expect(toggles).toEqual([{ root: ROOT, course: "Bio", task: "0a1b2c3d4e", done: true }]);
     await waitFor(() => expect(status.result.current.data?.done).toBe(1));
+  });
+
+  it("a plan toggle marks only its own library's Today, after the toggles go quiet", async () => {
+    vi.useFakeTimers();
+    try {
+      const { Wrapper, queryClient } = renderWithProviders(<></>, {
+        minimal: true,
+        fixtures: { study_plan_toggle: () => ({}) },
+      });
+      queryClient.setQueryData(qk.todayRoot(ROOT), { stale: false });
+      queryClient.setQueryData(qk.todayRoot("/mock/other"), { stale: false });
+      const toggle = renderHook(() => useStudyPlanToggle(ROOT, "Bio"), { wrapper: Wrapper });
+      await act(async () => {
+        await toggle.result.current.mutateAsync({ task: "a", done: true });
+        await toggle.result.current.mutateAsync({ task: "b", done: true });
+      });
+      expect(queryClient.getQueryState(qk.todayRoot(ROOT))?.isInvalidated).toBe(false);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3000);
+      });
+      expect(queryClient.getQueryState(qk.todayRoot(ROOT))?.isInvalidated).toBe(true);
+      expect(queryClient.getQueryState(qk.todayRoot("/mock/other"))?.isInvalidated).toBe(false);
+    } finally {
+      vi.useRealTimers();
+      resetStudyWriteQueueForTests();
+    }
   });
 
   it("usage summary passes the day window", async () => {

@@ -4,6 +4,7 @@ import type { DigestStatsRow } from "~/domain/lectures";
 import type { CourseStats, StudyPlanStatus } from "~/domain/types";
 import { invoke } from "~/lib/ipc";
 import { qk } from "~/lib/queries/keys";
+import { scheduleTodayRefresh } from "~/lib/study-writes";
 
 /** Per-lecture card and quiz counts for the lecture column, keyed by `digests/x.md`. */
 export function useDigestStats(root: string | null, course: string | null) {
@@ -54,7 +55,7 @@ export function useStudyPlanToggle(root: string | null, course: string | null) {
     onSuccess: () => {
       if (root && course) {
         void queryClient.invalidateQueries({ queryKey: qk.studyPlanStatus(root, course) });
-        void queryClient.invalidateQueries({ queryKey: qk.todayRoot(root) });
+        scheduleTodayRefresh(queryClient, root);
       }
     },
   });

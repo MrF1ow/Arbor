@@ -18,4 +18,7 @@ export function reloadLibraryAfterSync(
     void queryClient.invalidateQueries({ queryKey: ["courseOverview", root] });
   }
   void queryClient.invalidateQueries({ queryKey: ["search", root] });
+  // A pull can bring another device's progress, which moves what is due: the sidebar counts and
+  // Today read it. Syncs are rare, so this refetches at once rather than through the debounce.
+  void queryClient.invalidateQueries({ queryKey: qk.todayRoot(root) });
 }

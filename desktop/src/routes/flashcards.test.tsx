@@ -661,7 +661,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
     ).length;
     await user.keyboard("{Control>}1{/Control}");
     await waitFor(() => {
-      expect(router.state.location.pathname).toContain("/notes");
+      expect(router.state.location.pathname).toContain("/overview");
     });
     const gradesAfter = getMockIpcCalls().filter(
       (c) => c.cmd === "study_progress" && (c.args as { action?: string }).action === "grade",
@@ -671,7 +671,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
 
   it("removes flashcard key listener after leaving the view", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/flashcards", {
+    const { router } = await renderAppAtRoute("/course/cell-biology/flashcards", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           return smallDeck;
@@ -680,7 +680,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
       },
     });
     await waitForFlashcardsReady();
-    await user.click(screen.getByRole("link", { name: /Notes/i }));
+    await router.navigate({ to: "/course/$course/overview", params: { course: "cell-biology" } });
     await waitFor(() => {
       expect(screen.getByText("Course overview")).toBeInTheDocument();
     });
@@ -868,7 +868,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
 
   it("resumes full-deck position and flip state after a Notes round trip", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/flashcards", {
+    const { router } = await renderAppAtRoute("/course/cell-biology/flashcards", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           return smallDeck;
@@ -883,11 +883,11 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
     expect(screen.getByText("Question ninety-nine")).toBeInTheDocument();
     await user.keyboard(" ");
     expect(screen.getByText("Answer ninety-nine")).toBeInTheDocument();
-    await user.click(screen.getByRole("link", { name: /Notes/i }));
+    await router.navigate({ to: "/course/$course/overview", params: { course: "cell-biology" } });
     await waitFor(() => {
       expect(screen.getByText("Course overview")).toBeInTheDocument();
     });
-    await user.click(screen.getByRole("link", { name: /Flashcards/i }));
+    await router.navigate({ to: "/course/$course/flashcards", params: { course: "cell-biology" } });
     await waitForFlashcardsReady();
     expect(screen.getByText("Question ninety-nine")).toBeInTheDocument();
     expect(screen.getByText("3 / 3")).toBeInTheDocument();
@@ -896,7 +896,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
 
   it("card focus deep link overrides a saved session position", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/flashcards", {
+    const { router } = await renderAppAtRoute("/course/cell-biology/flashcards", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           return smallDeck;
@@ -908,11 +908,11 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
     await user.click(screen.getByText(/Full deck · 86/i));
     await user.click(screen.getByRole("button", { name: /^Next$/i }));
     await user.click(screen.getByRole("button", { name: /^Next$/i }));
-    await user.click(screen.getByRole("link", { name: /Notes/i }));
+    await router.navigate({ to: "/course/$course/overview", params: { course: "cell-biology" } });
     await waitFor(() => {
       expect(screen.getByText("Course overview")).toBeInTheDocument();
     });
-    await user.click(screen.getByRole("link", { name: /Flashcards/i }));
+    await router.navigate({ to: "/course/$course/flashcards", params: { course: "cell-biology" } });
     await waitFor(() => {
       expect(screen.getByText("Question ninety-nine")).toBeInTheDocument();
     });
@@ -1022,7 +1022,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
 
   it("keeps due again requeue order live and after a Notes round trip", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/flashcards", {
+    const { router } = await renderAppAtRoute("/course/cell-biology/flashcards", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           return smallDeck;
@@ -1049,11 +1049,11 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
     });
     await user.click(screen.getByRole("button", { name: /^Next/i }));
     expect(screen.getByText("Question ninety-nine")).toBeInTheDocument();
-    await user.click(screen.getByRole("link", { name: /Notes/i }));
+    await router.navigate({ to: "/course/$course/overview", params: { course: "cell-biology" } });
     await waitFor(() => {
       expect(screen.getByText("Course overview")).toBeInTheDocument();
     });
-    await user.click(screen.getByRole("link", { name: /Flashcards/i }));
+    await router.navigate({ to: "/course/$course/flashcards", params: { course: "cell-biology" } });
     await waitFor(() => {
       expect(screen.getByText(/Due today · 3/i)).toBeInTheDocument();
     });

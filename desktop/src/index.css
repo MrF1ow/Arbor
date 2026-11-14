@@ -36,6 +36,7 @@
   --info: #4a6f86;
   --backdrop: rgb(43 36 32 / 0.35);
   --card-shadow: 0 1px 2px rgb(43 36 32 / 0.05), 0 8px 24px rgb(43 36 32 / 0.05);
+  --popover-shadow: 0 2px 4px rgb(43 36 32 / 0.1), 0 12px 32px rgb(43 36 32 / 0.14);
 
   --course-olive: #586d37;
   --course-bark: #6b5344;
@@ -91,6 +92,8 @@
   --info: #8db1c7;
   --backdrop: rgb(0 0 0 / 0.5);
   --card-shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px rgb(0 0 0 / 0.25);
+  /* Frame 5991 draws the open library menu with the same warm shadow in Dark as in Light. */
+  --popover-shadow: 0 2px 4px rgb(43 36 32 / 0.1), 0 12px 32px rgb(43 36 32 / 0.14);
 
   --course-olive: #9db46f;
   --course-bark: #c4a88a;
@@ -153,6 +156,7 @@
   --color-sidebar-ring: var(--sidebar-ring);
 
   --shadow-card: var(--card-shadow);
+  --shadow-popover: var(--popover-shadow);
 }
 
 @theme {

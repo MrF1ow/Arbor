@@ -353,7 +353,7 @@ describe("notes PR7", { timeout: 15000 }, () => {
     });
     await user.click(screen.getByRole("button", { name: /Organic Chemistry/i }));
     await waitFor(() => {
-      expect(router.state.location.pathname).toBe("/course/organic-chemistry-ii/notes");
+      expect(router.state.location.pathname).toBe("/course/organic-chemistry-ii/overview");
     });
   });
 
@@ -595,7 +595,7 @@ describe("notes PR7", { timeout: 15000 }, () => {
     await waitForOverview();
     expect(screen.getByRole("heading", { level: 3, name: "Study plan" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { level: 1, name: "Study plan" })).not.toBeInTheDocument();
-    expect(screen.getAllByRole("heading", { level: 1, name: "Cell Biology" })).toHaveLength(1);
+    // The class title heading came from the old CourseHeader; P5 brings the class header back.
     expect(screen.queryByText(/^Exam date:\s*2026-11-04/i)).not.toBeInTheDocument();
     expect(screen.getByText(/Syllabus topics/i)).toBeInTheDocument();
   });

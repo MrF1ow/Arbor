@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { invoke } from "~/lib/ipc";
 import { qk } from "~/lib/queries/keys";
+import { scheduleTodayRefresh } from "~/lib/study-writes";
 
 export function useStudyJson(root: string | null, course: string | null, file: string) {
   return useQuery({
@@ -61,6 +62,8 @@ export function useAppendCardMutation(root: string | null, course: string | null
           queryKey: qk.studyJson(root, course, "flashcards.json"),
         });
         void queryClient.invalidateQueries({ queryKey: qk.courseOverview(root, course) });
+        // A card with no progress entry is due at once, so the sidebar's counts and Today move.
+        scheduleTodayRefresh(queryClient, root);
       }
     },
   });

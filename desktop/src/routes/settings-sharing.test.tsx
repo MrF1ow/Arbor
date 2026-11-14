@@ -325,7 +325,11 @@ describe("settings sharing (14b)", () => {
       expect(within(settingsView()).getByRole("button", { name: "Save provider" })).toBeInTheDocument();
     });
     await user.click(within(settingsView()).getByRole("button", { name: "Save provider" }));
-    await user.click(within(settingsView()).getByRole("button", { name: "Provider & models" }));
+    await user.click(
+      within(screen.getByRole("navigation", { name: "Settings sections" })).getByRole("button", {
+        name: "Provider & models",
+      }),
+    );
     await waitFor(() => {
       expect(within(settingsView()).getByText("recommended by library")).toBeInTheDocument();
     });

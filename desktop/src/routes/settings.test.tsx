@@ -24,6 +24,11 @@ function settingsView() {
   return screen.getByTestId("settings-view");
 }
 
+/** The settings nav lives in the sidebar (settings mode), outside the page. */
+function settingsNav() {
+  return within(screen.getByRole("navigation", { name: "Settings sections" }));
+}
+
 async function waitForSettingsGeneral() {
   await waitFor(() => {
     expect(within(settingsView()).getByTestId("settings-general")).toBeInTheDocument();
@@ -101,12 +106,12 @@ describe("settings", () => {
     await renderAppAtRoute("/settings/general");
     await waitForSettingsGeneral();
 
-    await user.click(within(settingsView()).getByRole("button", { name: "Provider & models" }));
+    await user.click(settingsNav().getByRole("button", { name: "Provider & models" }));
     await waitFor(() => {
       expect(within(settingsView()).getByTestId("settings-provider")).toBeInTheDocument();
     });
 
-    await user.click(within(settingsView()).getByRole("button", { name: "Shortcuts" }));
+    await user.click(settingsNav().getByRole("button", { name: "Shortcuts" }));
     await waitFor(() => {
       expect(within(settingsView()).getByTestId("settings-shortcuts")).toBeInTheDocument();
     });
@@ -552,7 +557,7 @@ describe("settings", () => {
       "System",
     );
 
-    await user.click(within(settingsView()).getByRole("button", { name: "Provider & models" }));
+    await user.click(settingsNav().getByRole("button", { name: "Provider & models" }));
     await waitForProviderReady();
     expect(within(settingsView()).getByRole("combobox", { name: "Provider" })).toHaveTextContent(
       "Grok",
@@ -613,13 +618,13 @@ describe("settings", () => {
     await waitFor(() => {
       expect(within(settingsView()).getByTestId("settings-library")).toBeInTheDocument();
     });
-    const libraryNav = within(settingsView()).getByRole("button", { name: "Library & sharing" });
+    const libraryNav = settingsNav().getByRole("button", { name: "Library & sharing" });
     expect(libraryNav.getAttribute("aria-current")).toBe("page");
 
-    await user.click(within(settingsView()).getByRole("button", { name: "Sync" }));
+    await user.click(settingsNav().getByRole("button", { name: "Sync" }));
     await waitFor(() => {
       expect(within(settingsView()).getByTestId("settings-sync")).toBeInTheDocument();
-      expect(within(settingsView()).getByRole("button", { name: "Sync" }).getAttribute("aria-current")).toBe(
+      expect(settingsNav().getByRole("button", { name: "Sync" }).getAttribute("aria-current")).toBe(
         "page",
       );
     });
