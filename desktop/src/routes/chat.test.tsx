@@ -16,6 +16,7 @@ import { ChatView } from "~/components/chat/chat-view";
 import {
   FIXTURE_ROOT_FALL,
   FIXTURE_ROOT_SHARED,
+  fixtureCourses,
   fixtureDigests,
   fixtureSettings,
 } from "~/test/fixtures/data";
@@ -41,7 +42,10 @@ import {
 } from "~/stores/chat-live-store";
 import { resetChatDraftsStoreForTests, useChatDraftsStore } from "~/stores/chat-drafts-store";
 import { useJobStore } from "~/stores/job-store";
+import { classScopeKey, useLectureSelectionStore } from "~/stores/lecture-selection-store";
+import { useSelectionStore } from "~/stores/selection-store";
 import { useUiStore } from "~/stores/ui-store";
+import { qk } from "~/lib/queries/keys";
 import { renderAppAtRoute, renderWithProviders } from "~/test/render";
 import { emitToChannel, parseMockChannelId } from "~/test/emit-to-channel";
 import { ChatTranscript } from "~/components/chat/chat-transcript";
@@ -77,14 +81,12 @@ async function waitForChatReady() {
 
 function noopThreadHandlers(): Pick<
   ChatViewProps,
-  "onSearchClear" | "onModeSearchClear" | "onCourseChange" | "onThreadChange" | "onNewChatNavigate"
+  "onSearchClear" | "onModeSearchClear" | "onThreadChange"
 > {
   return {
     onSearchClear: () => undefined,
     onModeSearchClear: () => undefined,
-    onCourseChange: () => undefined,
     onThreadChange: () => undefined,
-    onNewChatNavigate: () => undefined,
   };
 }
 
@@ -98,9 +100,7 @@ function renderChatViewMinimal(
     <ChatView
       activeRoot={FIXTURE_ROOT_FALL}
       course="cell-biology"
-      courses={["cell-biology"]}
       digests={fixtureDigests}
-      roots={seedSettings.knowledge_roots}
       threadId={null}
       initialArtifactKind={initialArtifactKind}
       {...noopThreadHandlers()}
@@ -442,9 +442,7 @@ describe("chat threads", { timeout: 30000 }, () => {
       <ChatView
         activeRoot={FIXTURE_ROOT_FALL}
         course="cell-biology"
-        courses={["cell-biology"]}
-        digests={fixtureDigests}
-        roots={fixtureSettings.knowledge_roots}
+          digests={fixtureDigests}
         threadId={STREAM_THREAD_ID}
         {...noopThreadHandlers()}
       />,
@@ -534,9 +532,7 @@ describe("chat threads", { timeout: 30000 }, () => {
         <ChatView
           activeRoot={FIXTURE_ROOT_FALL}
           course="cell-biology"
-          courses={["cell-biology"]}
-          digests={fixtureDigests}
-          roots={fixtureSettings.knowledge_roots}
+              digests={fixtureDigests}
           threadId={STREAM_THREAD_ID}
           {...noopThreadHandlers()}
         />
@@ -668,7 +664,6 @@ describe("chat threads", { timeout: 30000 }, () => {
         expect(within(view).getByRole("button", { name: "Send" })).toBeDisabled();
       });
       expect(within(view).getByRole("button", { name: modeChipLabel("Ask") })).toBeDisabled();
-      expect(within(view).getByRole("combobox", { name: "Course" })).toBeDisabled();
       await vi.advanceTimersByTimeAsync(200);
     } finally {
       vi.useRealTimers();
@@ -842,7 +837,7 @@ describe("chat threads", { timeout: 30000 }, () => {
       screen.getByRole("button", { name: /Cell membranes · Membrane structure/i }),
     );
     await waitFor(() => {
-      expect(router.state.location.pathname).toContain("/notes/2026-09-12-membranes");
+      expect(router.state.location.pathname).toBe("/course/cell-biology/read/2026-09-12-membranes");
       expect(router.state.location.searchStr).toContain("heading=Membrane+structure");
     });
     await router.navigate({
@@ -858,7 +853,8 @@ describe("chat threads", { timeout: 30000 }, () => {
     });
     await user.click(screen.getByRole("button", { name: /Course overview · Overview/i }));
     await waitFor(() => {
-      expect(router.state.location.pathname).toBe("/course/cell-biology/notes");
+      expect(router.state.location.pathname).toBe("/course/cell-biology/overview");
+      expect(router.state.location.searchStr).toContain("heading=Overview");
     });
   });
 
@@ -897,9 +893,7 @@ describe("chat threads", { timeout: 30000 }, () => {
       <ChatView
         activeRoot={FIXTURE_ROOT_SHARED}
         course="collab-notes"
-        courses={["collab-notes"]}
         digests={[]}
-        roots={fixtureSettings.knowledge_roots}
         threadId={null}
         {...noopThreadHandlers()}
       />,
@@ -942,16 +936,14 @@ describe("chat threads", { timeout: 30000 }, () => {
           <ChatView
             activeRoot={FIXTURE_ROOT_FALL}
             course="cell-biology"
-            courses={["cell-biology"]}
             digests={fixtureDigests}
-            roots={fixtureSettings.knowledge_roots}
             threadId={null}
-        {...noopThreadHandlers()}
-      />
+            {...noopThreadHandlers()}
+          />
         </Profiler>,
         { minimal: true },
       );
-      await waitForChatReady();
+      await waitForChatShell();
       const before = chatViewUpdates;
       await fillComposer("Perf");
       await user.click(screen.getByRole("button", { name: "Send" }));
@@ -1302,9 +1294,7 @@ describe("chat threads", { timeout: 30000 }, () => {
           <ChatView
             activeRoot={FIXTURE_ROOT_FALL}
             course="cell-biology"
-            courses={["cell-biology"]}
-            digests={fixtureDigests}
-            roots={fixtureSettings.knowledge_roots}
+                  digests={fixtureDigests}
             threadId={null}
             promptParam={prompt}
             {...noopThreadHandlers()}
@@ -1456,4 +1446,352 @@ describe("chat threads", { timeout: 30000 }, () => {
   });
 
 
+});
+
+describe("Ask in the class workspace", { timeout: 30000 }, () => {
+  const ASK = "/course/cell-biology/ask";
+  const SCOPE_KEY = classScopeKey(FIXTURE_ROOT_FALL, "cell-biology");
+  const MEMBRANES = "cell-biology/digests/2026-09-12-membranes.md";
+  const MITO = "cell-biology/digests/2026-09-15-mitochondria.md";
+
+  beforeEach(() => {
+    vi.useRealTimers();
+    resetAuthRefreshForTests();
+    resetStudyWriteQueueForTests();
+    resetChatLiveStoreForTests();
+    resetChatDraftsStoreForTests();
+    localStorage.clear();
+    useUiStore.persist.clearStorage();
+    useUiStore.setState({ chatThreadsOpen: true, lastCourse: null });
+    useJobStore.setState({
+      activeJobId: null,
+      activeUpdateJobId: null,
+      status: "idle",
+      step: null,
+      label: null,
+      lines: [],
+      unread: 0,
+    });
+    useLectureSelectionStore.setState({ byClass: {} });
+    useSelectionStore.getState().clearSelection();
+    clearMockIpcLog();
+    resetMockChatHistoryForTests();
+  });
+
+  afterEach(() => {
+    cleanup();
+    resetMockHandlerTimers();
+    clearTauriMocks();
+    vi.restoreAllMocks();
+  });
+
+  const startChatArgs = () =>
+    getMockIpcCalls().find((c) => c.cmd === "start_chat")?.args as Record<string, unknown> | undefined;
+
+  async function sendFromNewChat(user: ReturnType<typeof userEvent.setup>, text: string) {
+    await user.click(screen.getByRole("button", { name: "New chat" }));
+    await fillComposer(text);
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(startChatArgs()).toBeDefined());
+  }
+
+  it("sends the ticked lectures as digests, and no digests when none are ticked", async () => {
+    const user = userEvent.setup();
+    useLectureSelectionStore.getState().setScope(SCOPE_KEY, [MEMBRANES, MITO]);
+    const first = await renderAppAtRoute(ASK);
+    await waitForChatReady();
+    await sendFromNewChat(user, "What is a bilayer?");
+    expect(startChatArgs()?.digests).toEqual([MEMBRANES, MITO]);
+    expect(startChatArgs()).not.toHaveProperty("focus");
+    first.unmount();
+
+    clearMockIpcLog();
+    resetChatLiveStoreForTests();
+    useLectureSelectionStore.setState({ byClass: {} });
+    await renderAppAtRoute(ASK);
+    await waitForChatReady();
+    await sendFromNewChat(user, "And without a scope?");
+    expect(startChatArgs()).not.toHaveProperty("digests");
+  });
+
+  it("ignores ticked lectures that are not lectures of the class", async () => {
+    const user = userEvent.setup();
+    useLectureSelectionStore.getState().setScope(SCOPE_KEY, [MEMBRANES, "cell-biology/digests/gone.md"]);
+    await renderAppAtRoute(ASK);
+    await waitForChatReady();
+    await sendFromNewChat(user, "Scope check");
+    expect(startChatArgs()?.digests).toEqual([MEMBRANES]);
+  });
+
+  it("Ask about this sends the focus once, then clears it from the selection store", async () => {
+    const user = userEvent.setup();
+    const focus = { digest: MEMBRANES, heading: "Membrane structure", text: "Phospholipid bilayer." };
+    useSelectionStore.getState().setAskFocus(focus);
+    await renderAppAtRoute(ASK);
+    await waitForChatReady();
+    expect(useSelectionStore.getState().askFocus).toBeNull();
+    await sendFromNewChat(user, "Explain this passage");
+    expect(startChatArgs()?.focus).toEqual(focus);
+    await waitFor(() => expect(screen.getByTestId("chat-status")).toHaveTextContent("Done"));
+
+    clearMockIpcLog();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Send" })).toBeDisabled());
+    await fillComposer("A follow-up");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(startChatArgs()).toBeDefined());
+    expect(startChatArgs()).not.toHaveProperty("focus");
+  });
+
+  it("drops an Ask about this focus that belongs to another class", async () => {
+    const user = userEvent.setup();
+    useSelectionStore.getState().setAskFocus({
+      digest: "organic-chemistry-ii/digests/2026-09-12-sn2.md",
+      heading: null,
+      text: "Backside attack.",
+    });
+    await renderAppAtRoute(ASK);
+    await waitForChatReady();
+    expect(useSelectionStore.getState().askFocus).toBeNull();
+    await sendFromNewChat(user, "Unrelated");
+    expect(startChatArgs()).not.toHaveProperty("focus");
+  });
+
+  it("keeps the class title whole in the Ask header: the title does not shrink", async () => {
+    await renderAppAtRoute(ASK);
+    await waitForChatShell();
+    const title = await screen.findByRole("heading", { level: 1, name: "Cell Biology" });
+    expect(title).toHaveClass("shrink-0", "truncate");
+    expect(title).not.toHaveClass("min-w-0");
+  });
+
+  it("Ask about this starts a new chat instead of opening the newest one", async () => {
+    const user = userEvent.setup();
+    const focus = { digest: MEMBRANES, heading: "Membrane structure", text: "Phospholipid bilayer." };
+    useSelectionStore.getState().setAskFocus(focus);
+    const { router } = await renderAppAtRoute(ASK);
+    await waitForChatReady();
+    expect(await screen.findByTestId("chat-focus")).toBeInTheDocument();
+    // Give the chats list time to load: the newest chat must not be auto-selected.
+    await waitFor(() => expect(screen.getByRole("button", { name: "Delete all chats" })).toBeEnabled());
+    expect((router.state.location.search as Record<string, unknown>).thread).toBeUndefined();
+    await fillComposer("Explain this passage");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(startChatArgs()).toBeDefined());
+    expect(startChatArgs()?.focus).toEqual(focus);
+    expect(startChatArgs()?.history).toEqual([]);
+  });
+
+  it("Ask about these (lectures ticked on entry) starts a new chat instead of opening the newest one", async () => {
+    const user = userEvent.setup();
+    useLectureSelectionStore.getState().setScope(SCOPE_KEY, [MEMBRANES, MITO]);
+    const { router } = await renderAppAtRoute(ASK);
+    await waitForChatReady();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Delete all chats" })).toBeEnabled());
+    expect((router.state.location.search as Record<string, unknown>).thread).toBeUndefined();
+    await fillComposer("What do these have in common?");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(startChatArgs()).toBeDefined());
+    expect(startChatArgs()?.digests).toEqual([MEMBRANES, MITO]);
+    expect(startChatArgs()?.history).toEqual([]);
+  });
+
+  it("drops an unsent Ask about this focus when the active library changes to one with a same-named class", async () => {
+    const sharedCourses = fixtureCourses[FIXTURE_ROOT_SHARED]!;
+    fixtureCourses[FIXTURE_ROOT_SHARED] = [...sharedCourses, "cell-biology"];
+    try {
+      useSelectionStore.getState().setAskFocus({
+        digest: MEMBRANES,
+        heading: "Membrane structure",
+        text: "Phospholipid bilayer.",
+      });
+      const { queryClient, router } = await renderAppAtRoute(ASK);
+      expect(await screen.findByTestId("chat-focus")).toBeInTheDocument();
+      const settings = queryClient.getQueryData<typeof fixtureSettings>(qk.settings())!;
+      act(() => {
+        queryClient.setQueryData(qk.settings(), { ...settings, active_root: FIXTURE_ROOT_SHARED });
+      });
+      await waitFor(() => expect(screen.getByRole("textbox", { name: "Chat message" })).toBeEnabled());
+      expect(router.state.location.pathname).toBe(ASK);
+      expect(screen.queryByTestId("chat-focus")).not.toBeInTheDocument();
+    } finally {
+      fixtureCourses[FIXTURE_ROOT_SHARED] = sharedCourses;
+    }
+  });
+
+  describe("answers", () => {
+    const seedAnswer = (citations: Array<{ digest_path: string; heading_id?: string }>) =>
+      seedMockChatHistory(FIXTURE_ROOT_FALL, "cell-biology", [
+        buildUserLine("ask", "Why does it saturate?"),
+        buildAssistantLine("ask", "Carriers saturate at **Vmax**.", true, citations),
+      ]);
+
+    it("shows Sources and the Make cards, Quiz me and Copy actions", async () => {
+      seedAnswer([{ digest_path: MEMBRANES, heading_id: "Membrane structure" }]);
+      await renderAppAtRoute(ASK);
+      await waitForChatShell();
+      expect(await screen.findByText("Sources")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Make cards from this" })).toBeEnabled();
+      expect(screen.getByRole("button", { name: "Quiz me on this" })).toBeEnabled();
+      expect(screen.getByRole("button", { name: "Copy" })).toBeEnabled();
+    });
+
+    it("names each source by its lecture title and heading in an outlined info chip", async () => {
+      seedAnswer([
+        { digest_path: MEMBRANES, heading_id: "Membrane structure" },
+        { digest_path: "cell-biology/digests/2026-10-01-ion-channels.md", heading_id: "Gating" },
+      ]);
+      await renderAppAtRoute(ASK);
+      const listed = await screen.findByRole("button", { name: "Cell membranes · Membrane structure" });
+      expect(listed).toHaveClass("border-info", "text-info");
+      // A lecture the list does not know is named from its file name, never the raw file name.
+      expect(screen.getByRole("button", { name: "Ion channels · Gating" })).toBeInTheDocument();
+      expect(screen.queryByText(/\.md/)).not.toBeInTheDocument();
+    });
+
+    it("Make cards from this starts a flashcard job from the answer text over its cited lectures", async () => {
+      const user = userEvent.setup();
+      seedAnswer([
+        { digest_path: MEMBRANES, heading_id: "Membrane structure" },
+        { digest_path: "cell-biology/course.md", heading_id: "Overview" },
+      ]);
+      await renderAppAtRoute(ASK);
+      await user.click(await screen.findByRole("button", { name: "Make cards from this" }));
+      await waitFor(() => expect(getMockIpcLog()).toContain("start_study_job"), { timeout: 5000 });
+      const args = getMockIpcCalls().find((c) => c.cmd === "start_study_job")?.args as Record<string, unknown>;
+      expect(args).toMatchObject({
+        course: "cell-biology",
+        skill: "flashcards",
+        fromText: "Carriers saturate at **Vmax**.",
+        digests: [MEMBRANES],
+      });
+    });
+
+    it("Quiz me on this starts a quiz job, falling back to the ticked lectures when nothing is cited", async () => {
+      const user = userEvent.setup();
+      useLectureSelectionStore.getState().setScope(SCOPE_KEY, [MITO]);
+      seedAnswer([]);
+      await renderAppAtRoute(ASK);
+      // Ticked lectures open Ask on a new chat: open the seeded one from the Chats list.
+      await user.click(await screen.findByRole("button", { name: /Why does it saturate/ }));
+      await user.click(await screen.findByRole("button", { name: "Quiz me on this" }));
+      await waitFor(() => expect(getMockIpcLog()).toContain("start_study_job"), { timeout: 5000 });
+      const args = getMockIpcCalls().find((c) => c.cmd === "start_study_job")?.args as Record<string, unknown>;
+      expect(args).toMatchObject({ skill: "quiz", fromText: "Carriers saturate at **Vmax**.", digests: [MITO] });
+    });
+
+    it("cannot make cards from an answer with no lecture to anchor them", async () => {
+      seedAnswer([]);
+      await renderAppAtRoute(ASK);
+      expect(await screen.findByRole("button", { name: "Make cards from this" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Quiz me on this" })).toBeDisabled();
+    });
+
+    it("Copy puts the answer on the clipboard", async () => {
+      const user = userEvent.setup();
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      seedAnswer([{ digest_path: MEMBRANES }]);
+      await renderAppAtRoute(ASK);
+      const button = await screen.findByRole("button", { name: "Copy" });
+      Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+      await user.click(button);
+      await waitFor(() => expect(writeText).toHaveBeenCalledWith("Carriers saturate at **Vmax**."));
+    });
+
+    it("a lecture source opens that lecture in Read at its heading", async () => {
+      const user = userEvent.setup();
+      seedAnswer([{ digest_path: MEMBRANES, heading_id: "Membrane structure" }]);
+      const { router } = await renderAppAtRoute(ASK);
+      await user.click(await screen.findByRole("button", { name: /Cell membranes · Membrane structure/ }));
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe("/course/cell-biology/read/2026-09-12-membranes");
+        expect(router.state.location.searchStr).toContain("heading=Membrane+structure");
+      });
+    });
+
+    it("the Course overview source opens the Overview at the cited heading, or Course notes", async () => {
+      const user = userEvent.setup();
+      seedAnswer([{ digest_path: "cell-biology/course.md", heading_id: "Exam format" }]);
+      const first = await renderAppAtRoute(ASK);
+      await user.click(await screen.findByRole("button", { name: /Course overview · Exam format/ }));
+      await waitFor(() => {
+        expect(first.router.state.location.pathname).toBe("/course/cell-biology/overview");
+        expect(first.router.state.location.searchStr).toContain("heading=Exam+format");
+      });
+      first.unmount();
+
+      seedAnswer([{ digest_path: "cell-biology/course.md" }]);
+      const second = await renderAppAtRoute(ASK);
+      await user.click(await screen.findByRole("button", { name: /Course overview/ }));
+      await waitFor(() => {
+        expect(second.router.state.location.pathname).toBe("/course/cell-biology/overview");
+        expect(second.router.state.location.searchStr).toContain("heading=Course+notes");
+      });
+    });
+  });
+
+  describe("layout", () => {
+    it("the Chats list replaces the lecture column, beside the class header with its Course select", async () => {
+      await renderAppAtRoute(ASK);
+      await waitForChatReady();
+      expect(screen.queryByRole("navigation", { name: "Lectures" })).not.toBeInTheDocument();
+      const chats = screen.getByRole("navigation", { name: "Chat threads" });
+      expect(within(chats).getByText("Chats")).toBeInTheDocument();
+      expect(within(chats).getByRole("button", { name: "New chat" })).toHaveTextContent("New");
+      expect(within(chats).getByRole("button", { name: "Hide chats" })).toHaveTextContent("Hide");
+      expect(within(chats).getByLabelText("Search chats")).toBeInTheDocument();
+      expect(within(chats).getByRole("button", { name: "Delete all chats" })).toBeInTheDocument();
+      const header = screen.getByRole("heading", { name: "Cell Biology", level: 1 });
+      expect(chats.compareDocumentPosition(header) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(chats.contains(header)).toBe(false);
+      // The header sits in the pane beside the Chats list, not above it.
+      expect(chats.parentElement?.contains(header)).toBe(true);
+      expect(within(screen.getByTestId("workspace-main")).getByRole("combobox", { name: "Course" })).toBeInTheDocument();
+    });
+
+    it("groups the chats by day", async () => {
+      const now = new Date().toISOString();
+      const long = "2026-01-05T10:00:00.000Z";
+      seedMockChatThread(FIXTURE_ROOT_FALL, "cell-biology", { id: "t-new", title: "Fresh question", mode: "explain", created_at: now, updated_at: now }, []);
+      seedMockChatThread(FIXTURE_ROOT_FALL, "cell-biology", { id: "t-old", title: "Ancient question", mode: "ask", created_at: long, updated_at: long }, []);
+      await renderAppAtRoute(ASK);
+      await waitForChatShell();
+      const chats = await screen.findByRole("navigation", { name: "Chat threads" });
+      await within(chats).findByText("Fresh question");
+      expect(within(chats).getByText("Today")).toBeInTheDocument();
+      expect(within(chats).getByText("Earlier")).toBeInTheDocument();
+      expect(within(chats).getByText("Explain · now")).toBeInTheDocument();
+    });
+
+    it("Hide closes the Chats list and the header's Show chats brings it back", async () => {
+      const user = userEvent.setup();
+      await renderAppAtRoute(ASK);
+      await waitForChatReady();
+      await user.click(screen.getByRole("button", { name: "Hide chats" }));
+      expect(screen.queryByRole("navigation", { name: "Chat threads" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("navigation", { name: "Lectures" })).not.toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Show chats" }));
+      expect(await screen.findByRole("navigation", { name: "Chat threads" })).toBeInTheDocument();
+    });
+
+    it("the Course select opens Ask for that class", async () => {
+      const user = userEvent.setup();
+      const { router } = await renderAppAtRoute(ASK);
+      await waitForChatShell();
+      await user.click(await screen.findByRole("combobox", { name: "Course" }));
+      await user.click(await screen.findByRole("option", { name: "Organic Chemistry II" }));
+      await waitFor(() => expect(router.state.location.pathname).toBe("/course/organic-chemistry-ii/ask"));
+    });
+
+    it("says what the answers are scoped to while lectures are ticked, and × clears it", async () => {
+      const user = userEvent.setup();
+      useLectureSelectionStore.getState().setScope(SCOPE_KEY, [MEMBRANES, MITO]);
+      await renderAppAtRoute(ASK);
+      await waitForChatShell();
+      // The newest chat opens once the chats load, which remounts the view: wait for it.
+      await waitForChatReady();
+      await user.click(await screen.findByRole("button", { name: /Stop asking about 2 lectures/ }));
+      await waitFor(() => expect(useLectureSelectionStore.getState().byClass[SCOPE_KEY]).toBeUndefined());
+      expect(screen.queryByRole("button", { name: /Stop asking about/ })).not.toBeInTheDocument();
+    });
+  });
 });

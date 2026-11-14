@@ -2,6 +2,7 @@ import { Outlet, useNavigate, useRouterState, useSearch } from "@tanstack/react-
 import { ListCollapse } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { AskCourseSelect, ChatsColumn, ShowChatsButton } from "~/components/chat/chats-column";
 import { formatExamDate } from "~/components/today/today-model";
 import { ClassHeader } from "~/components/workspace/class-header";
 import { ClassTabs } from "~/components/workspace/class-tabs";
@@ -36,8 +37,10 @@ const SHEET_BELOW_PX = 704;
 
 /**
  * The class workspace every `/course/$course/*` view renders in: the lecture column (Overview,
- * Read, Map), a full-width class header (Practice, Ask), the bar of Read / Practice / Map / Ask
- * tabs, and the selection tray. The views themselves are the Outlet.
+ * Read, Map), a full-width class header (Practice), the bar of Read / Practice / Map / Ask
+ * tabs, and the selection tray. Ask puts the Chats list where the lecture column stands and the
+ * class header (title, tabs, Course select) in the pane beside it. The views themselves are the
+ * Outlet.
  */
 export function ClassWorkspace({ course }: { course: string }) {
   const settings = useSettings();
@@ -86,6 +89,7 @@ export function ClassWorkspace({ course }: { course: string }) {
   }, [activeRoot, course, lecturesParam, loading, rows, navigate, setScope]);
 
   const columnMode = showsLectureColumn(location.mode);
+  const askMode = location.mode === "ask";
   if (!narrow && sheetOpen) {
     setSheetOpen(false);
   }
@@ -132,7 +136,7 @@ export function ClassWorkspace({ course }: { course: string }) {
       data-testid="class-workspace"
       className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden"
     >
-      {columnMode ? null : (
+      {columnMode || askMode ? null : (
         <ClassHeader
           course={course}
           location={location}
@@ -145,10 +149,22 @@ export function ClassWorkspace({ course }: { course: string }) {
         {columnMode && !narrow ? (
           <div className="flex min-h-0 shrink-0">{column({ className: trayOpen ? "pb-20" : undefined })}</div>
         ) : null}
+        {askMode ? <ChatsColumn root={activeRoot} course={course} /> : null}
         <div
           data-testid="workspace-main"
           className={cn("relative flex min-h-0 min-w-0 flex-1 flex-col", trayOpen && "pb-20")}
         >
+          {askMode ? (
+            <ClassHeader
+              course={course}
+              location={location}
+              readSlug={readSlug}
+              scope={null}
+              onClearScope={clearScope}
+              leading={<ShowChatsButton />}
+              trailing={<AskCourseSelect root={activeRoot} course={course} />}
+            />
+          ) : null}
           {columnMode ? (
             <div className="flex shrink-0 items-center gap-2 px-10 pt-4">
               {narrow ? (

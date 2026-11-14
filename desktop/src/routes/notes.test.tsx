@@ -1396,9 +1396,11 @@ describe("class workspace", { timeout: 15000 }, () => {
       selectFirstParagraph();
       await user.click(await screen.findByRole("button", { name: "Ask about this" }));
       await waitFor(() => expect(router.state.location.pathname).toBe(`/course/${COURSE}/ask`));
-      const focus = useSelectionStore.getState().askFocus;
-      expect(focus?.digest).toBe(DIGEST);
-      expect(focus?.text).toBe("Phospholipid bilayer with embedded proteins.");
+      // Ask takes the focus once: it shows the passage and leaves the store empty.
+      expect(await screen.findByTestId("chat-focus")).toHaveTextContent(
+        "Phospholipid bilayer with embedded proteins.",
+      );
+      expect(useSelectionStore.getState().askFocus).toBeNull();
     });
 
     it("make card saves append_card and opens the flashcards", async () => {
