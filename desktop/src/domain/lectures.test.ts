@@ -233,3 +233,24 @@ describe("scopeLabel", () => {
     expect(scopeLabel(rows, [])).toBeNull();
   });
 });
+
+describe("a class whose folder name ends in digests (C41)", () => {
+  const stats = { cards: 10, due: 2, mastered: 5, mastery: 0.5, quiz_correct: 0, quiz_wrong: 0, card_correct: 3, card_wrong: 1 };
+  for (const course of ["Biology", "Weekly digests", "digests"]) {
+    it(`${course}: list_digests path, digest-stats key and reading-state key join`, () => {
+      const path = `${course}/digests/2026-09-01-a.md`; // list_digests (Rust) format
+      const rows = buildLectureRows(
+        course,
+        [{ title: "A", date: "2026-09-01", path, unit: null, source_path: null } as never],
+        { "digests/2026-09-01-a.md": stats }, // study_progress digest-stats key
+        { [path]: { fraction: 1, last_opened: "2026-09-02T00:00:00Z", read: true } as never }, // read_reading_state key
+      );
+      const lecture = rows[0]!.lectures[0]!;
+      expect(lecture.digest).toBe(path);
+      expect(lecture.read).toBe(true);
+      expect(lecture.badge).toEqual({ kind: "mastery", value: 50, weak: false });
+      expect(toCourseDigest(course, path)).toBe(path);
+      expect(toCourseDigest(course, "digests/2026-09-01-a.md")).toBe(path);
+    });
+  }
+});

@@ -50,7 +50,10 @@ const WEAK_WRONG_SHARE = 0.4;
  * that `list_digests`, reading state, `start_chat` and `start_study_job` use (Q17).
  */
 export function toCourseDigest(course: string, path: string): string {
-  return `${course}/${digestKey(path)}`;
+  // The course prefix goes first: `digestKey` cuts at the first `digests/`, which is inside the
+  // folder name of a class such as "Weekly digests" and would double the segment.
+  const rest = path.startsWith(`${course}/`) ? path.slice(course.length + 1) : path;
+  return `${course}/${digestKey(rest)}`;
 }
 
 function isWeak(stats: DigestStatsRow | undefined): boolean {

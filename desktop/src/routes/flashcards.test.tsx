@@ -1605,3 +1605,31 @@ describe("Next: <class> opens the class on its due cards (C28)", { timeout: 3000
     expect(useLectureSelectionStore.getState().byClass[classScopeKey(FIXTURE_ROOT_FALL, NS_OC)]).toBeUndefined();
   });
 });
+
+describe("Next: <class> opens the class's due deck, not its saved Full deck (C39)", { timeout: 30000 }, () => {
+  beforeEach(() => { vi.useRealTimers(); resetAuthRefreshForTests(); resetStudyWriteQueueForTests(); localStorage.clear(); useStudySessionStore.persist.clearStorage(); useStudySessionStore.setState({ sessions: {} }); useLectureSelectionStore.setState({ byClass: {} }); clearMockIpcLog(); });
+  afterEach(() => { cleanup(); resetMockHandlerTimers(); clearTauriMocks(); vi.restoreAllMocks(); });
+
+  it("Next: Organic Chemistry II · 4 due lands on Due today, 1 / 4, when that class was left on Full deck", async () => {
+    const user = userEvent.setup();
+    const ids = ["oc-1", "oc-2", "oc-3", "oc-4", "oc-5"];
+    // Organic Chemistry II was left on Full deck, card 3 of 5 (same shape the Start review C36 test saves).
+    useStudySessionStore.setState({ sessions: { [studySessionKey(FIXTURE_ROOT_FALL, NS_OC, "flashcards")]: {
+      identity: `${FIXTURE_ROOT_FALL}|${NS_OC}:${ids.join("\0")}`, savedAt: Date.now(), deckMode: "full", cardIds: ids, index: 2, flipped: false } } });
+    const { router } = await renderAppAtRoute("/course/cell-biology/practice/cards", {
+      list_digests: (p: unknown) => nsCourse(p) === NS_OC ? [{ title: "Alkenes", date: "2026-09-12", path: OC_L1, unit: null, source_path: null }, { title: "Alkynes", date: "2026-09-19", path: OC_L2, unit: null, source_path: null }] : fixtureDigests,
+      read_study_json: (p: unknown) => nsFile(p) === "flashcards.json" ? (nsCourse(p) === NS_OC ? ocDeck : cbDeck) : { schema_version: 1, course: nsCourse(p), failures: [] },
+      study_progress: (a: unknown) => nsAct(a) === "overview" ? (nsCourse(a) === NS_OC ? { ...fixtureCourseOverview, due: { due_ids: ["oc-2", "oc-3", "oc-4", "oc-5"], count: 4, deck_count: 5 } } : { ...fixtureCourseOverview, due: { due_ids: ["fc-1"], count: 1, deck_count: 1 } }) : {},
+      study_today: () => ({ courses: [nsRow("cell-biology", 0), nsRow(NS_OC, 4)], weak_topics: [], quiz_accuracy: { this_week: { correct: 0, total: 0 }, last_week: { correct: 0, total: 0 } }, next_exam: null }),
+    });
+    await waitFor(() => expect(screen.getByText(/Due today · 1/i)).toBeInTheDocument(), { timeout: 8000 });
+    await user.click(screen.getByRole("button", { name: /^Flip$/i }));
+    await user.keyboard("3");
+    await user.click(await screen.findByRole("button", { name: /Next: Organic Chemistry II · 4 due/ }, { timeout: 8000 }));
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/course/${NS_OC}/practice/cards`));
+    await waitFor(() => expect(screen.getByTestId("flashcards-view")).toBeInTheDocument(), { timeout: 8000 });
+    await new Promise((r) => setTimeout(r, 1500));
+    expect(screen.getByRole("tab", { name: /Due today/i })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("1 / 4")).toBeInTheDocument();
+  });
+});

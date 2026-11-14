@@ -7,6 +7,7 @@ import { StudyArtifactToolbar } from "~/components/study/study-artifact-toolbar"
 import { StudyColumn, StudyViewShell } from "~/components/study/study-layout";
 import { StudyProgressBar } from "~/components/study/study-progress-bar";
 import { StudySourceChip } from "~/components/study/study-source-chip";
+import { resetClassDeck } from "~/components/study/reset-class-deck";
 import { inScope, scopedSessionKey, scopeItems, scopeNoun } from "~/components/study/study-scope";
 import { useNextReviewClass } from "~/components/study/use-next-review-class";
 import { useStudyScope } from "~/components/study/use-study-scope";
@@ -60,7 +61,6 @@ import { useSettings } from "~/lib/queries/settings";
 import { useStudyArtifactStale, useStudyJson } from "~/lib/queries/study";
 import { isDialogOpen, isEditableTarget } from "~/lib/shortcuts";
 import { flushStudyWrites, useEnqueueStudyWrite } from "~/lib/study-writes";
-import { classScopeKey, useLectureSelectionStore } from "~/stores/lecture-selection-store";
 import { useStudySessionStore } from "~/stores/study-session-store";
 type DeckMode = "due" | "full";
 
@@ -715,8 +715,8 @@ export function FlashcardsView({
               <Button
                 type="button"
                 onClick={() => {
-                  // The button promised the class's due cards: lectures ticked there earlier would scope them.
-                  useLectureSelectionStore.getState().clear(classScopeKey(nextClass.root, nextClass.course));
+                  // The button promised the class's due cards, from the first one.
+                  resetClassDeck(nextClass.root, nextClass.course);
                   void openClass(nextClass.root, nextClass.course, "cards");
                 }}
               >

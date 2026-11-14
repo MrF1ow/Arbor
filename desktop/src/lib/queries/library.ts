@@ -41,9 +41,11 @@ export function useCreateCourseMutation(root: string | null) {
   return useMutation({
     mutationFn: (name: string) =>
       invoke<string>("create_course", { root: root!, name }),
-    onSuccess: () => {
+    // Awaited: the caller navigates to the new class right after, and the class route must find
+    // it in the refreshed list of this library, not conclude it is missing.
+    onSuccess: async () => {
       if (root) {
-        void queryClient.invalidateQueries({ queryKey: qk.courses(root) });
+        await queryClient.invalidateQueries({ queryKey: qk.courses(root) });
       }
     },
   });

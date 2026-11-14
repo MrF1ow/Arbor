@@ -41,6 +41,10 @@ function CourseLayout() {
 
   const exists = (courses.data ?? []).includes(course);
   const missing = courses.isSuccess && !exists;
+  // A list that is being refetched may just lack a class that was created a moment ago ("+ Add
+  // class" navigates before the refetch lands): look in the other libraries, and switch to one,
+  // only once the active library's own list is fresh and still lacks the class.
+  const fresh = !courses.isFetching;
 
   // Class routes only look in the active library, but a link (browser Back after Today, Search,
   // Start review or Drill switched library) can name a class of another configured one: find it
@@ -52,11 +56,11 @@ function CourseLayout() {
     queries: otherRoots.map((root) => ({
       queryKey: qk.courses(root),
       queryFn: () => fetchCourses(root),
-      enabled: missing && canUseDesktopIpc(),
+      enabled: missing && fresh && canUseDesktopIpc(),
     })),
   });
-  const foundRoot = missing ? otherRoots.find((_, i) => lookups[i]?.data?.includes(course)) : undefined;
-  const searching = missing && foundRoot === undefined && lookups.some((q) => q.isPending);
+  const foundRoot = missing && fresh ? otherRoots.find((_, i) => lookups[i]?.data?.includes(course)) : undefined;
+  const searching = missing && (!fresh || (foundRoot === undefined && lookups.some((q) => q.isPending)));
   const { mutateAsync: switchRoot } = useSwitchActiveRootMutation();
   const switching = useRef<string | null>(null);
   useEffect(() => {

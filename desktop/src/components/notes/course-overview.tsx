@@ -3,6 +3,7 @@ import { ChevronRight } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { formatExamDate, reviewMinutes, daysLeftLabel, accuracyCaption, accuracyPercent } from "~/components/today/today-model";
+import { resetClassDeck } from "~/components/study/reset-class-deck";
 import { PreviewBarRight } from "~/components/workspace/preview-bar";
 import { isCommittableExamDate, useExamDateField } from "~/components/workspace/use-exam-date";
 import { Button } from "~/components/ui/button";
@@ -449,6 +450,9 @@ export function CourseOverview({
                       type="button"
                       onClick={() => {
                         if (item.kind === "due_cards") {
+                          if (activeRoot) {
+                            resetClassDeck(activeRoot, course);
+                          }
                           void navigate({ ...classPath(course, "cards"), search: {} });
                         } else if (item.digest) {
                           openDigest(item.digest, item.heading ?? null);
