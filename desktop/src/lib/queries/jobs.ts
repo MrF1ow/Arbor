@@ -7,16 +7,24 @@ import { flashcardJobArgs } from "~/domain/flashcards";
 import { JOB_START_LABEL } from "~/domain/job-labels";
 import { quizJobArgs } from "~/domain/quiz";
 import type { JobEventRow, JobSummary, SshWorker, UpdatePlan } from "~/domain/types";
-import { invoke } from "~/lib/ipc";
+import { invoke, type StudyJobScope } from "~/lib/ipc";
 import { qk } from "~/lib/queries/keys";
 import { useJobStore } from "~/stores/job-store";
 
-type StudyJobInput = {
+type StudyJobInput = StudyJobScope & {
   course: string;
   force: boolean;
   model: string;
   provider: string;
 };
+
+/** `start_study_job` args for the optional lecture scope or passage text; absent when unscoped. */
+function scopeArgs(input: StudyJobScope): StudyJobScope {
+  return {
+    ...(input.digests && input.digests.length > 0 ? { digests: input.digests } : {}),
+    ...(input.fromText ? { fromText: input.fromText } : {}),
+  };
+}
 
 function afterStudyJobStarted(
   queryClient: QueryClient,
@@ -24,7 +32,7 @@ function afterStudyJobStarted(
   jobId: string,
   label?: string,
 ) {
-  useJobStore.getState().start(jobId, label ? { label } : undefined);
+  useJobStore.getState().start(jobId, { ...(label ? { label } : {}), root });
   if (root) {
     void queryClient.invalidateQueries({ queryKey: qk.jobs(root) });
   }
@@ -70,7 +78,7 @@ export function useStartUpdateMutation(root: string | null) {
     mutationFn: (input: Record<string, unknown>) =>
       invoke<string>("start_update", { root: root!, ...input }),
     onSuccess: (jobId) => {
-      start(jobId, { isUpdate: true, label: JOB_START_LABEL.update });
+      start(jobId, { isUpdate: true, label: JOB_START_LABEL.update, root });
       if (root) {
         void queryClient.invalidateQueries({ queryKey: qk.jobs(root) });
       }
@@ -91,7 +99,7 @@ export function useStartEmbedJobMutation(root: string | null) {
     mutationFn: (input?: { force?: boolean }) =>
       invoke<string>("start_embed_job", { root: root!, force: input?.force ?? false }),
     onSuccess: (jobId) => {
-      start(jobId, { label: JOB_START_LABEL.embed });
+      start(jobId, { label: JOB_START_LABEL.embed, root });
       if (root) {
         void queryClient.invalidateQueries({ queryKey: qk.jobs(root) });
       }
@@ -124,7 +132,10 @@ export function useStartFlashcardJobMutation(root: string | null) {
     mutationFn: (input: StudyJobInput) =>
       invoke<string>(
         "start_study_job",
-        flashcardJobArgs(root!, input.course, input.force, input.model, input.provider),
+        {
+          ...flashcardJobArgs(root!, input.course, input.force, input.model, input.provider),
+          ...scopeArgs(input),
+        },
       ),
     onSuccess: (jobId) =>
       afterStudyJobStarted(queryClient, root, jobId, JOB_START_LABEL.flashcards),
@@ -137,7 +148,10 @@ export function useStartQuizJobMutation(root: string | null) {
     mutationFn: (input: StudyJobInput) =>
       invoke<string>(
         "start_study_job",
-        quizJobArgs(root!, input.course, input.force, input.model, input.provider),
+        {
+          ...quizJobArgs(root!, input.course, input.force, input.model, input.provider),
+          ...scopeArgs(input),
+        },
       ),
     onSuccess: (jobId) => afterStudyJobStarted(queryClient, root, jobId, JOB_START_LABEL.quiz),
   });
@@ -149,7 +163,10 @@ export function useStartConceptJobMutation(root: string | null) {
     mutationFn: (input: StudyJobInput) =>
       invoke<string>(
         "start_study_job",
-        conceptJobArgs(root!, input.course, input.force, input.model, input.provider),
+        {
+          ...conceptJobArgs(root!, input.course, input.force, input.model, input.provider),
+          ...scopeArgs(input),
+        },
       ),
     onSuccess: (jobId) =>
       afterStudyJobStarted(queryClient, root, jobId, JOB_START_LABEL.concepts),
@@ -162,7 +179,10 @@ export function useStartDiagramJobMutation(root: string | null) {
     mutationFn: (input: StudyJobInput) =>
       invoke<string>(
         "start_study_job",
-        diagramJobArgs(root!, input.course, input.force, input.model, input.provider),
+        {
+          ...diagramJobArgs(root!, input.course, input.force, input.model, input.provider),
+          ...scopeArgs(input),
+        },
       ),
     onSuccess: (jobId) =>
       afterStudyJobStarted(queryClient, root, jobId, JOB_START_LABEL.diagrams),
@@ -175,7 +195,10 @@ export function useStartCitationJobMutation(root: string | null) {
     mutationFn: (input: StudyJobInput) =>
       invoke<string>(
         "start_study_job",
-        citationJobArgs(root!, input.course, input.force, input.model, input.provider),
+        {
+          ...citationJobArgs(root!, input.course, input.force, input.model, input.provider),
+          ...scopeArgs(input),
+        },
       ),
     onSuccess: (jobId) =>
       afterStudyJobStarted(queryClient, root, jobId, JOB_START_LABEL.citations),

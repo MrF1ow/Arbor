@@ -75,6 +75,33 @@ describe("events", () => {
     });
   });
 
+  it("a finished job refreshes Today, the lecture badges and the class stats", () => {
+    const client = new QueryClient();
+    const spy = vi.spyOn(client, "invalidateQueries");
+    invalidateAfterJobFinished(client, "/mock/a", "cell-biology");
+    expect(spy).toHaveBeenCalledWith({ queryKey: qk.today() });
+    expect(spy).toHaveBeenCalledWith({ queryKey: qk.digestStats("/mock/a", "cell-biology") });
+    expect(spy).toHaveBeenCalledWith({ queryKey: qk.courseStats("/mock/a", "cell-biology") });
+    expect(spy).toHaveBeenCalledWith({ queryKey: qk.studyPlanStatus("/mock/a", "cell-biology") });
+    expect(spy).toHaveBeenCalledWith({ queryKey: qk.readingState("/mock/a") });
+  });
+
+  it("a finished update with no open class still refreshes Today", () => {
+    const client = new QueryClient();
+    const spy = vi.spyOn(client, "invalidateQueries");
+    invalidateAfterJobFinished(client, "/mock/a", null);
+    expect(spy).toHaveBeenCalledWith({ queryKey: qk.today() });
+  });
+
+  it("planned and source_started drive the job store's Updating N of M", () => {
+    const client = new QueryClient();
+    useJobStore.getState().start("update-1", { isUpdate: true, root: "/mock/a" });
+    const ctx = { root: "/mock/a", course: null, providerLabel: "Grok" };
+    handleWorkerProgressSideEffects(client, { type: "planned", total: 3 }, ctx);
+    handleWorkerProgressSideEffects(client, { type: "source_started", index: 2, total: 3 }, ctx);
+    expect(useJobStore.getState().progress).toEqual({ index: 2, total: 3 });
+  });
+
   it("respects suppressWatch window for files-changed", () => {
     const client = new QueryClient();
     const spy = vi.spyOn(client, "invalidateQueries");

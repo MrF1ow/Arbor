@@ -31,4 +31,12 @@ export const qk = {
   providerSecret: (provider: string) => ["providerSecret", provider] as const,
   syncConflict: (root: string) => ["syncConflict", root] as const,
   planUpdate: (root: string) => ["planUpdate", root] as const,
+  /** `study_today` for every library; invalidated as one by grades, quiz answers and finished jobs. */
+  today: () => ["today"] as const,
+  todayRoot: (root: string) => ["today", root] as const,
+  readingState: (root: string) => ["readingState", root] as const,
+  digestStats: (root: string, course: string) => ["digestStats", root, course] as const,
+  courseStats: (root: string, course: string) => ["courseStats", root, course] as const,
+  studyPlanStatus: (root: string, course: string) => ["studyPlanStatus", root, course] as const,
+  usageSummary: (root: string, days: number) => ["usageSummary", root, days] as const,
 };

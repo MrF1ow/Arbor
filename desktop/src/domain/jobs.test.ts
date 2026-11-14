@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatDuration, jobKindLabel, relativeTime } from "~/domain/jobs";
+import { formatDuration, jobKindLabel, jobScopeLabel, relativeTime } from "~/domain/jobs";
 
 const NOW = new Date("2026-10-20T12:00:00Z").getTime();
 
@@ -44,5 +44,55 @@ describe("formatDuration", () => {
 
   it("formats minutes and seconds", () => {
     expect(formatDuration("2026-10-20T11:00:00Z", "2026-10-20T11:02:14Z")).toBe("2m 14s");
+  });
+});
+
+describe("jobScopeLabel", () => {
+  const units = {
+    "Cell Biology": [
+      { path: "Cell Biology/digests/a.md", unit: "Unit 2" },
+      { path: "Cell Biology/digests/b.md", unit: "Unit 2" },
+      { path: "Cell Biology/digests/c.md", unit: "Unit 2" },
+      { path: "Cell Biology/digests/d.md", unit: "Unit 1" },
+    ],
+  };
+
+  it("names class, unit and count when every lecture shares a unit", () => {
+    expect(
+      jobScopeLabel(
+        {
+          course: "Cell Biology",
+          digests: ["Cell Biology/digests/a.md", "Cell Biology/digests/b.md", "Cell Biology/digests/c.md"],
+        },
+        units,
+      ),
+    ).toBe("Cell Biology · Unit 2 · 3 lectures");
+  });
+
+  it("drops the unit when the lectures span units", () => {
+    expect(
+      jobScopeLabel(
+        { course: "Cell Biology", digests: ["Cell Biology/digests/a.md", "Cell Biology/digests/d.md"] },
+        units,
+      ),
+    ).toBe("Cell Biology · 2 lectures");
+  });
+
+  it("shows the class alone for a whole-class run and a single lecture count for one", () => {
+    expect(jobScopeLabel({ course: "Cell Biology", digests: null }, units)).toBe("Cell Biology");
+    expect(
+      jobScopeLabel({ course: "Cell Biology", digests: ["Cell Biology/digests/d.md"] }, units),
+    ).toBe("Cell Biology · Unit 1 · 1 lecture");
+  });
+
+  it("is a dash for legacy rows and mixed-class updates", () => {
+    expect(jobScopeLabel({ course: null, digests: null }, units)).toBe("—");
+    expect(jobScopeLabel({ course: null, digests: ["A/x.pdf", "B/y.pdf"] }, units)).toBe("—");
+  });
+
+  it("falls back to a count when the units are unknown", () => {
+    expect(
+      jobScopeLabel({ course: "Genetics", digests: ["Genetics/digests/z.md"] }, units),
+    ).toBe("Genetics · 1 lecture");
   });
 });

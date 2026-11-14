@@ -38,9 +38,13 @@ function ensureStudyWriteQueue(
     storage: window.localStorage,
     onStatus: setStatus,
     onSent: (w) => {
+      // A grade moves Today (every library), the lecture badges, the class stats and the due count.
       void queryClient.invalidateQueries({
         queryKey: qk.courseOverview(w.root, w.course),
       });
+      void queryClient.invalidateQueries({ queryKey: qk.today() });
+      void queryClient.invalidateQueries({ queryKey: qk.digestStats(w.root, w.course) });
+      void queryClient.invalidateQueries({ queryKey: qk.courseStats(w.root, w.course) });
       const action = w.args.action;
       if (action === "quiz") {
         void queryClient.invalidateQueries({

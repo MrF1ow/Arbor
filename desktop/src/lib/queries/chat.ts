@@ -2,7 +2,7 @@ import type { Channel } from "@tauri-apps/api/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { ChatLine, ChatMode } from "~/domain/chat";
-import { invoke } from "~/lib/ipc";
+import { invoke, type StartChatScope } from "~/lib/ipc";
 import { qk } from "~/lib/queries/keys";
 
 export type ChatThreadMeta = {
@@ -39,7 +39,7 @@ export function useChatThread(
   });
 }
 
-export type StartChatInput = {
+export type StartChatInput = StartChatScope & {
   onEvent: Channel<unknown>;
   question: string;
   mode: string;

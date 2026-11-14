@@ -87,3 +87,36 @@ export function formatJobTimestamp(iso: string): string {
     timeStyle: "short",
   });
 }
+
+/** What a job covered, as stored on its row (I1). */
+export type JobScope = { course: string | null; digests: string[] | null };
+
+/** Digest paths per class with their unit, as `list_digests` returns them. */
+export type DigestUnitsByCourse = Record<string, { path: string; unit: string | null }[]>;
+
+function lectureCount(count: number): string {
+  return `${count} ${count === 1 ? "lecture" : "lectures"}`;
+}
+
+/**
+ * The Jobs table's Scope column: "<class> · <unit> · K lectures" when every lecture shares a
+ * unit, "<class> · K lectures" otherwise, "<class>" for a whole-class run or an update
+ * (whose digests are source files, not lectures), and "—" when the job has no class (Q30).
+ */
+export function jobScopeLabel(scope: JobScope, units: DigestUnitsByCourse): string {
+  const { course, digests } = scope;
+  if (!course) {
+    return "—";
+  }
+  const lectures = (digests ?? []).filter((path) => path.includes("/digests/"));
+  if (lectures.length === 0) {
+    return course;
+  }
+  const known = new Map((units[course] ?? []).map((d) => [d.path, d.unit]));
+  const found = lectures.map((path) => known.get(path) ?? null);
+  const first = found[0];
+  const sharedUnit = first && found.every((unit) => unit === first) ? first : null;
+  return sharedUnit
+    ? `${course} · ${sharedUnit} · ${lectureCount(lectures.length)}`
+    : `${course} · ${lectureCount(lectures.length)}`;
+}
