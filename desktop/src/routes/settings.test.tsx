@@ -676,3 +676,206 @@ describe("settings", () => {
     toastError.mockRestore();
   });
 });
+
+describe("settings pages in the design's layout", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    useUiStore.persist.clearStorage();
+    useUiStore.setState({ appearance: "system" });
+    resetAuthRefreshForTests();
+    resetEffectiveProviderApplyForTests();
+    resetSaveSettingsChainForTests();
+    vi.spyOn(window, "innerWidth", "get").mockReturnValue(1280);
+  });
+
+  afterEach(() => {
+    cleanup();
+    clearTauriMocks();
+    clearMockIpcLog();
+    vi.restoreAllMocks();
+  });
+
+  /** A settings group: the card under its heading. */
+  async function groupByTitle(title: string) {
+    const heading = await within(settingsView()).findByRole("heading", { level: 2, name: title });
+    return heading.closest("section") as HTMLElement;
+  }
+
+  it.each([
+    ["/settings/general", "General"],
+    ["/settings/provider", "Provider & models"],
+    ["/settings/library", "Library & sharing"],
+    ["/settings/sync", "Sync"],
+    ["/settings/skills", "Skills"],
+    ["/settings/workers", "Workers"],
+    ["/settings/shortcuts", "Shortcuts"],
+  ])("%s starts with a %s page heading", async (route, title) => {
+    await renderAppAtRoute(route);
+    await waitFor(() => {
+      expect(
+        within(settingsView()).getByRole("heading", { level: 1, name: title }),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("shows Usage this week from usage_summary: tokens and requests", async () => {
+    await renderAppAtRoute("/settings/provider", {
+      usage_summary: () => [
+        { provider: "grok", requests: 48, input_tokens: 182_400, output_tokens: 61_200, tokens_known: 48 },
+        { provider: "codex", requests: 12, input_tokens: 40_100, output_tokens: 9_800, tokens_known: 10 },
+      ],
+    });
+    const usage = await groupByTitle("Usage this week");
+    // 182,400 + 61,200 + 40,100 + 9,800 = 293,500 tokens; 48 + 12 = 60 requests.
+    expect(await within(usage).findByText("293.5K")).toBeInTheDocument();
+    expect(within(usage).getByText("60")).toBeInTheDocument();
+    expect(within(usage).getByText(/2 requests reported no token counts/)).toBeInTheDocument();
+    const call = getMockIpcCalls().find((c) => c.cmd === "usage_summary");
+    expect(call?.args).toMatchObject({ root: FIXTURE_ROOT_FALL, days: 7 });
+  });
+
+  it("says to choose a Knowledge folder when there is no active library", async () => {
+    await renderAppAtRoute("/settings/provider", {
+      get_settings: () => ({
+        ...fixtureSettings,
+        knowledge_root: null,
+        active_root: null,
+        knowledge_roots: [],
+      }),
+    });
+    const usage = await groupByTitle("Usage this week");
+    expect(
+      await within(usage).findByText("Choose a Knowledge folder to see usage"),
+    ).toBeInTheDocument();
+    expect(within(usage).queryByText("No usage yet this week.")).toBeNull();
+  });
+
+  it("has no Settings link inside the settings view on Provider & models", async () => {
+    await renderAppAtRoute("/settings/provider");
+    const limits = await groupByTitle("Provider limits");
+    expect(await within(limits).findByText("Weekly")).toBeInTheDocument();
+    expect(within(limits).getByRole("button", { name: "Refresh usage" })).toBeInTheDocument();
+    expect(within(settingsView()).queryByRole("link", { name: "Settings" })).toBeNull();
+  });
+
+  it("shows a labelled Status row with a ready chip on Provider & models", async () => {
+    await renderAppAtRoute("/settings/provider");
+    await waitForProviderReady();
+    const status = await within(settingsView()).findByTestId("provider-auth-status");
+    expect(within(status).getByText("Status")).toBeInTheDocument();
+    expect(await within(status).findByText("ready")).toBeInTheDocument();
+    expect(status).toHaveTextContent("· grok-4.7");
+  });
+
+  it("says so when there is no usage this week", async () => {
+    await renderAppAtRoute("/settings/provider", { usage_summary: () => [] });
+    const usage = await groupByTitle("Usage this week");
+    expect(await within(usage).findByText("No usage yet this week.")).toBeInTheDocument();
+  });
+
+  it("reuses the usage popover content: limit windows with reset times and Refresh", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/settings/provider");
+    const limits = await groupByTitle("Provider limits");
+    // The grok fixture reports one Weekly window, 37% used, resetting in two days.
+    expect(await within(limits).findByText("Weekly")).toBeInTheDocument();
+    expect(within(limits).getByText("63% left")).toBeInTheDocument();
+    expect(within(limits).getByText(/^resets in /)).toBeInTheDocument();
+    clearMockIpcLog();
+    await user.click(within(limits).getByRole("button", { name: "Refresh usage" }));
+    await waitFor(() => {
+      expect(
+        getMockIpcCalls().some(
+          (c) => c.cmd === "read_provider_usage" && (c.args as { force?: boolean }).force === true,
+        ),
+      ).toBe(true);
+    });
+  });
+
+  it("shows Last synced from sync_show.last_synced_at", async () => {
+    const minutesAgo = new Date(Date.now() - 12 * 60_000).toISOString();
+    await renderAppAtRoute("/settings/sync", {
+      sync_show: () => ({
+        remote: "git@example.com:me/notes.git",
+        shared: false,
+        remote_note: null,
+        last_synced_at: minutesAgo,
+      }),
+    });
+    expect(await within(settingsView()).findByText("Last synced 12 min ago")).toBeInTheDocument();
+  });
+
+  it("shows Never synced when last_synced_at is null", async () => {
+    await renderAppAtRoute("/settings/sync", {
+      sync_show: () => ({
+        remote: "git@example.com:me/notes.git",
+        shared: false,
+        remote_note: null,
+        last_synced_at: null,
+      }),
+    });
+    expect(await within(settingsView()).findByText("Never synced")).toBeInTheDocument();
+  });
+
+  it("General's Folder row shows the folder and Change… runs the folder picker", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/settings/general", {
+      "plugin:dialog|open": () => "/scratch/other-library",
+    });
+    await waitForSettingsGeneral();
+    expect(await within(settingsView()).findByText(FIXTURE_ROOT_FALL)).toBeInTheDocument();
+    clearMockIpcLog();
+    await user.click(within(settingsView()).getByRole("button", { name: "Change…" }));
+    await waitFor(() => {
+      expect(
+        getMockIpcCalls().some(
+          (c) =>
+            c.cmd === "start_folder_watch" &&
+            (c.args as { root?: string }).root === "/scratch/other-library",
+        ),
+      ).toBe(true);
+    });
+  });
+
+  it("General has no Folder row without a Knowledge folder", async () => {
+    await renderAppAtRoute("/settings/general", {
+      get_settings: () => ({
+        ...fixtureSettings,
+        knowledge_root: null,
+        active_root: null,
+        knowledge_roots: [],
+      }),
+    });
+    await waitForSettingsGeneral();
+    await within(settingsView()).findByText("Choose a Knowledge folder first");
+    expect(within(settingsView()).queryByRole("button", { name: "Change…" })).toBeNull();
+  });
+
+  it("General's Choose Knowledge folder… runs the folder picker when there is no folder", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/settings/general", {
+      get_settings: () => ({
+        ...fixtureSettings,
+        knowledge_root: null,
+        active_root: null,
+        knowledge_roots: [],
+      }),
+      "plugin:dialog|open": () => "/scratch/picked-library",
+    });
+    await waitForSettingsGeneral();
+    clearMockIpcLog();
+    await user.click(
+      await within(settingsView()).findByRole("button", { name: "Choose Knowledge folder…" }),
+    );
+    await waitFor(() => {
+      expect(getMockIpcLog().some((entry) => entry.includes("plugin:dialog|open"))).toBe(true);
+    });
+  });
+
+  it("lists Mod+1–5 as Open Overview, Cards, Quiz, Map and Ask", async () => {
+    await renderAppAtRoute("/settings/shortcuts");
+    for (const name of ["Open Overview", "Open Cards", "Open Quiz", "Open Map", "Open Ask"]) {
+      expect(await within(settingsView()).findByText(name)).toBeInTheDocument();
+    }
+  });
+});

@@ -21,6 +21,9 @@ import { useUiStore } from "~/stores/ui-store";
 import { renderAppAtRoute } from "~/test/render";
 import { toast } from "sonner";
 
+/** The SettingRow container (a label, optional description, and its control). */
+const ROW = '[class*="min-h-row"]';
+
 function settingsView() {
   return screen.getByTestId("settings-view");
 }
@@ -418,7 +421,7 @@ describe("settings sharing (14b)", () => {
     });
     const roleSelect = within(settingsView()).getAllByLabelText(/Role for /)[1]!;
     await user.click(roleSelect);
-    await user.click(await screen.findByRole("option", { name: "viewer" }));
+    await user.click(await screen.findByRole("option", { name: "Viewer" }));
     clearMockIpcLog();
     await user.click(within(settingsView()).getByRole("button", { name: "Save members" }));
     await waitFor(() => {
@@ -426,6 +429,93 @@ describe("settings sharing (14b)", () => {
       const members = (call?.args as { members?: { email: string; role: string }[] })?.members;
       expect(members?.find((m) => m.email === "editor@example.com")?.role).toBe("viewer");
     });
+  });
+
+  const sharedSync = () => ({
+    remote: "git@example.com:bio-group/library.git",
+    shared: true,
+    remote_note: null,
+  });
+
+  it("shows a This library row with the name, the remote and a shared chip", async () => {
+    await renderAppAtRoute("/settings/library", {
+      library_show: () => fixtureLibraryShowOwner,
+      sync_show: sharedSync,
+    });
+    const row = (await within(settingsView()).findByText("This library")).closest(ROW) as HTMLElement;
+    expect(row).not.toBeNull();
+    await waitFor(() => {
+      expect(
+        within(row).getByText("Fall 2026 library · shared from git@example.com:bio-group/library.git"),
+      ).toBeInTheDocument();
+    });
+    expect(within(row).getByText("shared")).toBeInTheDocument();
+  });
+
+  it("capitalises role labels and describes Your role", async () => {
+    await renderAppAtRoute("/settings/library", {
+      library_show: () => fixtureLibraryShowOwner,
+    });
+    const row = (await within(settingsView()).findByText("Your role")).closest(ROW) as HTMLElement;
+    expect(within(row).getByText("Owner")).toBeInTheDocument();
+    expect(
+      within(row).getByText("Owners manage members and the recommended provider."),
+    ).toBeInTheDocument();
+    expect(within(settingsView()).queryByText("owner")).toBeNull();
+  });
+
+  it("owner removes a member with library_set_members, leaving that member out", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/settings/library", {
+      library_show: () => fixtureLibraryShowOwner,
+    });
+    const remove = await within(settingsView()).findByRole("button", { name: "Remove editor@example.com" });
+    clearMockIpcLog();
+    await user.click(remove);
+    await waitFor(() => {
+      const call = getMockIpcCalls().find((c) => c.cmd === "library_set_members");
+      expect(call?.args).toMatchObject({
+        root: FIXTURE_ROOT_FALL,
+        members: [
+          { email: "owner@example.com", role: "owner" },
+          { email: "viewer@example.com", role: "viewer" },
+        ],
+      });
+    });
+  });
+
+  it("marks your own row You and gives it no Remove button", async () => {
+    await renderAppAtRoute("/settings/library", {
+      library_show: () => fixtureLibraryShowOwner,
+    });
+    const own = (await within(settingsView()).findByText("owner@example.com")).closest(ROW) as HTMLElement;
+    expect(within(own).getByText("You")).toBeInTheDocument();
+    expect(within(settingsView()).queryByRole("button", { name: "Remove owner@example.com" })).toBeNull();
+    expect(within(settingsView()).getByRole("button", { name: "Remove viewer@example.com" })).toBeInTheDocument();
+    expect(within(settingsView()).getAllByText("You")).toHaveLength(1);
+  });
+
+  it("keeps Create and Join reachable under Other libraries once a library is present", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/settings/library", {
+      library_show: () => fixtureLibraryShowOwner,
+    });
+    const heading = await within(settingsView()).findByRole("heading", { level: 2, name: "Other libraries" });
+    const group = heading.closest("section") as HTMLElement;
+    expect(within(group).getByRole("button", { name: "Create shared library" })).toBeInTheDocument();
+    await user.click(within(group).getByRole("button", { name: "Join a library" }));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("viewer gets no Remove buttons and no writing controls", async () => {
+    await renderAppAtRoute("/settings/library", {
+      library_show: () => fixtureLibraryShowViewer,
+    });
+    await within(settingsView()).findByText("Viewer");
+    expect(within(settingsView()).queryByRole("button", { name: /^Remove / })).toBeNull();
+    expect(within(settingsView()).queryByLabelText("Member email")).toBeNull();
+    expect(within(settingsView()).queryByRole("button", { name: "Save members" })).toBeNull();
+    expect(within(settingsView()).queryByRole("button", { name: "Save provider" })).toBeNull();
   });
 
   it("editor sees member note and can save provider", async () => {

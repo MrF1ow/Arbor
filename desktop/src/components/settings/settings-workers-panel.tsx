@@ -1,6 +1,7 @@
 import { useState } from "react";
 
-import { SettingRow, SettingsSection } from "~/components/app/settings-section";
+import { SettingRow } from "~/components/app/settings-section";
+import { SettingsGroup, SettingsPage } from "~/components/settings/settings-page";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import {
@@ -145,39 +146,43 @@ export function SettingsWorkersPanel() {
   };
 
   return (
-    <div className="space-y-6" data-testid="settings-workers">
-      <SettingsSection title="Workers">
-        {workers.map((worker) => (
-          <SettingRow
-            key={worker.id}
-            label={workerListLabel(worker)}
-            control={
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => {
-                    setEditingId(worker.id);
-                    setForm(fillWorkerFormFields(worker));
-                    setStatusLine("");
-                  }}
-                >
-                  Edit
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setRemoveTarget(worker)}
-                >
-                  Remove
-                </Button>
-              </div>
-            }
-          />
-        ))}
+    <SettingsPage title="Workers" description="Run heavy jobs on another computer over SSH." testId="settings-workers">
+      {workers.length > 0 ? (
+        <SettingsGroup title="Workers">
+          {workers.map((worker) => (
+            <SettingRow
+              key={worker.id}
+              label={workerListLabel(worker)}
+              control={
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      setEditingId(worker.id);
+                      setForm(fillWorkerFormFields(worker));
+                      setStatusLine("");
+                    }}
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setRemoveTarget(worker)}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              }
+            />
+          ))}
+        </SettingsGroup>
+      ) : null}
 
+      <SettingsGroup title="Add a worker">
         <SettingRow
           label="Label"
           control={
@@ -252,7 +257,7 @@ export function SettingsWorkersPanel() {
           }
         />
         <SettingRow
-          label="Worker"
+          label="Save"
           control={
             <div className="flex flex-wrap gap-2">
               <Button type="button" variant="secondary" size="sm" onClick={() => void onSaveWorker()}>
@@ -269,9 +274,9 @@ export function SettingsWorkersPanel() {
             {statusLine}
           </p>
         ) : null}
-      </SettingsSection>
+      </SettingsGroup>
 
-      <SettingsSection title="Per-root worker">
+      <SettingsGroup title="Per-root worker">
         {roots.length === 0 ? (
           <p className="px-4 py-3 text-sm text-muted-foreground">Add a knowledge folder to choose a worker.</p>
         ) : (
@@ -311,7 +316,7 @@ export function SettingsWorkersPanel() {
             );
           })
         )}
-      </SettingsSection>
+      </SettingsGroup>
 
       <AlertDialog open={removeTarget != null} onOpenChange={(open) => !open && setRemoveTarget(null)}>
         <AlertDialogContent>
@@ -327,6 +332,6 @@ export function SettingsWorkersPanel() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </SettingsPage>
   );
 }

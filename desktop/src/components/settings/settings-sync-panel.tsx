@@ -3,7 +3,8 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { EmptyState } from "~/components/app/empty-state";
-import { SettingRow, SettingsSection } from "~/components/app/settings-section";
+import { SettingRow } from "~/components/app/settings-section";
+import { SettingsGroup, SettingsPage } from "~/components/settings/settings-page";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Switch } from "~/components/ui/switch";
@@ -20,13 +21,24 @@ import {
   useSyncSetSharedMutation,
   useSyncState,
 } from "~/lib/queries/sync";
+import { relativeTime } from "~/domain/jobs";
+import type { SyncShowResult } from "~/domain/types";
+import { useNow } from "~/hooks/use-now";
 import { useSyncUiStore } from "~/stores/sync-ui-store";
 import { FolderOpen } from "lucide-react";
+
+/** `sync_show` also reports when the library last synced (null before the first sync). */
+type SyncShow = SyncShowResult & { last_synced_at?: string | null };
+
+function lastSyncedLabel(lastSyncedAt: string | null | undefined, now: number): string {
+  return lastSyncedAt ? `Last synced ${relativeTime(lastSyncedAt, now)}` : "Never synced";
+}
 
 export function SettingsSyncPanel() {
   const settings = useSettings();
   const activeRoot = pickActiveRoot(settings.data);
   const sync = useSyncState(activeRoot);
+  const now = useNow(60_000);
   const knowledge = useKnowledgeSettings(activeRoot);
   const saveKnowledge = useSaveKnowledgeSettingsMutation(activeRoot);
   const setRemote = useSyncSetRemoteMutation(activeRoot);
@@ -121,10 +133,11 @@ export function SettingsSyncPanel() {
   };
 
   return (
-    <div className="space-y-6" data-testid="settings-sync">
-      <SettingsSection title="Sync">
+    <SettingsPage title="Sync" description="Back up and share your library with git." testId="settings-sync">
+      <SettingsGroup title="Sync">
         <SettingRow
           label="Arbor remote"
+          description="Where this folder's git history is pushed."
           control={
             <div className="flex flex-wrap items-center gap-2">
               <Input
@@ -155,6 +168,7 @@ export function SettingsSyncPanel() {
         ) : null}
         <SettingRow
           label="Shared library (merge on sync)"
+          description="Pull members' changes before pushing yours."
           control={
             <Switch
               aria-label="Shared library (merge on sync)"
@@ -175,6 +189,7 @@ export function SettingsSyncPanel() {
         />
         <SettingRow
           label="Manual sync"
+          description={sync.data ? lastSyncedLabel((sync.data as SyncShow).last_synced_at, now) : undefined}
           control={
             <Button
               type="button"
@@ -199,7 +214,7 @@ export function SettingsSyncPanel() {
             {statusLine}
           </p>
         ) : null}
-      </SettingsSection>
-    </div>
+      </SettingsGroup>
+    </SettingsPage>
   );
 }

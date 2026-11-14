@@ -3,7 +3,10 @@ import { RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
-import { SettingRow, SettingsSection } from "~/components/app/settings-section";
+import { Chip } from "~/components/app/chip";
+import { SettingRow } from "~/components/app/settings-section";
+import { SettingsGroup, SettingsPage } from "~/components/settings/settings-page";
+import { ProviderLimits, UsageThisWeek } from "~/components/settings/settings-usage";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import {
@@ -62,21 +65,27 @@ function ProviderAuthStatus({
   const modelLabel = modelId ?? "no model";
 
   let text: string;
-  let dotClass = "bg-primary";
+  let chip: string;
+  let chipClass = "border-transparent bg-accent text-accent-foreground";
   if (!providerId) {
     text = "Checking provider…";
-    dotClass = "bg-muted-foreground";
+    chip = "checking";
+    chipClass = "";
   } else if (auth.isLoading) {
     text = `${providerLabel} · checking…`;
-    dotClass = "bg-muted-foreground";
+    chip = "checking";
+    chipClass = "";
   } else if (auth.data?.authenticated) {
     text = `${providerLabel} · ${modelLabel}`;
+    chip = "ready";
   } else {
     text = providerBadge(providerLabel, modelLabel, false, auth.data?.reason);
     if (auth.data?.reason && isWorkerUnavailableAuthReason(auth.data.reason)) {
-      dotClass = "bg-destructive";
+      chip = "unavailable";
+      chipClass = "border-destructive text-destructive";
     } else {
-      dotClass = "bg-muted-foreground";
+      chip = "not ready";
+      chipClass = "";
     }
   }
 
@@ -84,15 +93,20 @@ function ProviderAuthStatus({
   const showDocs = !auth.isLoading && auth.data && !auth.data.authenticated && docsUrl;
 
   return (
-    <div className="space-y-1 px-4 py-3 text-sm text-muted-foreground" data-testid="provider-auth-status">
-      <div className="flex items-center gap-2">
-        <span className={cn("size-1.5 shrink-0 rounded-full", dotClass)} aria-hidden />
-        <span>{text}</span>
-      </div>
+    <div data-testid="provider-auth-status">
+      <SettingRow
+        label="Status"
+        description={text}
+        control={
+          <Chip variant="plain" className={chipClass}>
+            {chip}
+          </Chip>
+        }
+      />
       {showDocs ? (
         <a
           href={docsUrl}
-          className="text-xs text-primary underline-offset-2 hover:underline"
+          className="block px-4 pb-3 text-xs text-primary underline-offset-2 hover:underline"
           target="_blank"
           rel="noreferrer"
         >
@@ -286,10 +300,11 @@ export function SettingsProviderPanel() {
   }, [effective.modelId, modelsQuery.data, modelsQuery.isLoading, persistProviderModel, providerId]);
 
   return (
-    <div className="space-y-6" data-testid="settings-provider">
-      <SettingsSection title="Provider & models">
+    <SettingsPage title="Provider & models" description="Which AI writes your digests, cards, quizzes and answers." testId="settings-provider">
+      <SettingsGroup title="Provider & models">
         <SettingRow
           label="Provider"
+          description="Every class uses this unless a shared library recommends another."
           control={
             <Select
               value={providerId ?? null}
@@ -317,6 +332,7 @@ export function SettingsProviderPanel() {
         {effective.source === "library" ? (
           <p className="px-4 py-2 text-xs text-faint-foreground">{LIBRARY_RECOMMENDATION_LABEL}</p>
         ) : null}
+        <ProviderAuthStatus providerId={providerId} modelId={selectModelId || effective.modelId} />
         {showKeyRow ? (
           <SettingRow
             label="API key"
@@ -421,8 +437,13 @@ export function SettingsProviderPanel() {
             </div>
           }
         />
-        <ProviderAuthStatus providerId={providerId} modelId={selectModelId || effective.modelId} />
-      </SettingsSection>
-    </div>
+      </SettingsGroup>
+      <UsageThisWeek root={activeRoot} />
+      <ProviderLimits
+        providerId={providerId}
+        label={providerOptions.find((p) => p.id === providerId)?.label ?? providerId ?? ""}
+        modelLabel={selectModelId || effective.modelId || "—"}
+      />
+    </SettingsPage>
   );
 }

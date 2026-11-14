@@ -1,7 +1,8 @@
 import { FolderOpen, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
-import { SettingRow, SettingsSection } from "~/components/app/settings-section";
+import { SettingRow } from "~/components/app/settings-section";
+import { SettingsGroup, SettingsPage } from "~/components/settings/settings-page";
 import { Button } from "~/components/ui/button";
 import {
   Select,
@@ -85,17 +86,19 @@ export function SettingsGeneralPanel() {
   };
 
   return (
-    <div className="space-y-6" data-testid="settings-general">
-      <SettingsSection title="Appearance">
+    <SettingsPage title="General" description="Theme and how Arbor watches your Knowledge folder." testId="settings-general">
+      <SettingsGroup title="Appearance">
         <SettingRow
-          label="Appearance"
+          label="Theme"
+          description="Follow the system or pick one."
+          controlId="settings-appearance"
           control={
             <Select
               value={appearance}
               items={APPEARANCE_OPTIONS}
               onValueChange={(v) => setAppearance(v as Appearance)}
             >
-              <SelectTrigger className="w-36" size="sm" aria-label="Appearance">
+              <SelectTrigger id="settings-appearance" className="w-36" size="sm" aria-label="Appearance">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -108,9 +111,9 @@ export function SettingsGeneralPanel() {
             </Select>
           }
         />
-      </SettingsSection>
+      </SettingsGroup>
 
-      <SettingsSection title="Knowledge folder">
+      <SettingsGroup title="Knowledge folder">
         {!settings.data ? (
           <div className="p-4">
             <Skeleton className="h-48 w-full" />
@@ -134,7 +137,22 @@ export function SettingsGeneralPanel() {
         ) : (
           <>
             <SettingRow
+              label="Folder"
+              description={activeRoot}
+              control={
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={choosingFolder}
+                  onClick={() => void chooseFolder()}
+                >
+                  Change…
+                </Button>
+              }
+            />
+            <SettingRow
               label="Watch folder for new files"
+              description="New PDFs, slides and documents are picked up automatically."
               control={
                 <Switch
                   checked={knowledge.data?.watch_enabled ?? false}
@@ -145,6 +163,7 @@ export function SettingsGeneralPanel() {
             />
             <SettingRow
               label="Auto-run after watch"
+              description="Start Update knowledge when new files arrive."
               control={
                 <Switch
                   checked={knowledge.data?.auto_update ?? false}
@@ -155,6 +174,7 @@ export function SettingsGeneralPanel() {
             />
             <SettingRow
               label="Embed after Update"
+              description="Needed for semantic search."
               control={
                 <Switch
                   checked={knowledge.data?.auto_embed ?? false}
@@ -165,6 +185,7 @@ export function SettingsGeneralPanel() {
             />
             <SettingRow
               label="Delete sources after digest"
+              description="Keeps only the digests. This can't be undone."
               control={
                 <Switch
                   checked={knowledge.data?.delete_sources_after_digest ?? false}
@@ -201,6 +222,7 @@ export function SettingsGeneralPanel() {
             />
             <SettingRow
               label="Search index"
+              description="Rebuild if search results look stale."
               control={
                 <Button
                   variant="secondary"
@@ -218,7 +240,7 @@ export function SettingsGeneralPanel() {
             />
           </>
         )}
-      </SettingsSection>
-    </div>
+      </SettingsGroup>
+    </SettingsPage>
   );
 }
