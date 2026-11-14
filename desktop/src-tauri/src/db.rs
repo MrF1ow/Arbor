@@ -10,8 +10,18 @@ pub fn db_path(knowledge_root: &Path) -> PathBuf {
 }
 
 pub fn open(knowledge_root: &Path) -> Result<Connection, String> {
+    // The library root is the user's folder: never recreate it. A deleted
+    // library must surface as an error, not come back as an empty folder.
+    if !knowledge_root.is_dir() {
+        return Err(format!(
+            "Library folder not found: {}",
+            knowledge_root.display()
+        ));
+    }
     let dir = arbor_dir(knowledge_root);
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    if !dir.is_dir() {
+        std::fs::create_dir(&dir).map_err(|e| e.to_string())?;
+    }
     let path = db_path(knowledge_root);
     let conn = Connection::open(&path).map_err(|e| e.to_string())?;
     init_schema(&conn)?;
@@ -67,6 +77,43 @@ mod tests {
         let root = std::env::temp_dir().join(format!("arbor-db-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).unwrap();
+        open(&root).unwrap();
+        assert!(db_path(&root).is_file());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn open_refuses_a_missing_root_and_does_not_create_it() {
+        let root = std::env::temp_dir().join(format!("arbor-db-missing-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let err = open(&root).unwrap_err();
+        assert!(
+            err.starts_with("Library folder not found:")
+                && err.contains(root.to_string_lossy().as_ref()),
+            "unexpected error: {err}"
+        );
+        assert!(!root.exists(), "open must not recreate the library root");
+    }
+
+    #[test]
+    fn open_refuses_a_root_that_is_a_file() {
+        let root = std::env::temp_dir().join(format!("arbor-db-file-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_file(&root);
+        std::fs::write(&root, b"not a folder").unwrap();
+        let err = open(&root).unwrap_err();
+        assert!(err.starts_with("Library folder not found:"), "unexpected error: {err}");
+        assert!(root.is_file());
+        assert_eq!(std::fs::read(&root).unwrap(), b"not a folder");
+        let _ = std::fs::remove_file(&root);
+    }
+
+    #[test]
+    fn open_twice_on_an_existing_root_works() {
+        let root = std::env::temp_dir().join(format!("arbor-db-twice-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        open(&root).unwrap();
         open(&root).unwrap();
         assert!(db_path(&root).is_file());
         let _ = std::fs::remove_dir_all(&root);
