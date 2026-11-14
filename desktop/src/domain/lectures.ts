@@ -57,8 +57,9 @@ function isWeak(stats: DigestStatsRow | undefined): boolean {
   if (!stats) {
     return false;
   }
-  const wrong = stats.quiz_wrong + stats.card_wrong;
-  const answers = stats.quiz_correct + stats.card_correct + wrong;
+  // A worker that leaves a count out (an older one) counts it as 0, not NaN.
+  const wrong = (stats.quiz_wrong ?? 0) + (stats.card_wrong ?? 0);
+  const answers = (stats.quiz_correct ?? 0) + (stats.card_correct ?? 0) + wrong;
   return answers >= WEAK_MIN_ANSWERS && wrong / answers > WEAK_WRONG_SHARE;
 }
 

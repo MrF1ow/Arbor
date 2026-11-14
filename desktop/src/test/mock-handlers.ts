@@ -749,6 +749,10 @@ export function createMockHandler(
       case "read_course_meta":
         return { ...mockCourseMetaState };
       case "set_course_meta": {
+        // Tauri v2 maps command args by camelCase: a snake_case key reaches Rust as None.
+        if ("exam_date" in payload) {
+          throw new Error("set_course_meta: send `examDate`, Tauri maps command args by camelCase");
+        }
         const course = String(payload.course ?? "");
         const icon = payload.icon as string | null | undefined;
         const color = payload.color as string | null | undefined;
@@ -764,7 +768,13 @@ export function createMockHandler(
         } else if (typeof color === "string") {
           entry.color = color;
         }
-        if (!entry.icon && !entry.color) {
+        const examDate = payload.examDate as string | null | undefined;
+        if (examDate === "" || examDate === null) {
+          delete entry.exam_date;
+        } else if (typeof examDate === "string") {
+          entry.exam_date = examDate;
+        }
+        if (!entry.icon && !entry.color && !entry.exam_date) {
           delete next[course];
         } else {
           next[course] = entry;

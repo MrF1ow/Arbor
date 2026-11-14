@@ -14,6 +14,8 @@ import { clearTauriMocks } from "~/test/mock-ipc";
 import { renderAppAtRoute } from "~/test/render";
 import { useJobStore } from "~/stores/job-store";
 import { classScopeKey, useLectureSelectionStore } from "~/stores/lecture-selection-store";
+import { studySessionKey } from "~/domain/study-session";
+import { useStudySessionStore } from "~/stores/study-session-store";
 import { useUiStore } from "~/stores/ui-store";
 
 type Fixtures = NonNullable<Parameters<typeof renderAppAtRoute>[1]>;
@@ -165,6 +167,7 @@ describe("Today (the / route)", () => {
     useUiStore.setState({ sidebarOpen: true, sidebarTouched: true, lastCourse: null });
     useJobStore.setState({ status: "idle", step: null, label: null, root: null, progress: null });
     clearMockIpcLog();
+    useStudySessionStore.setState({ sessions: {} });
     resetStudyWriteQueueForTests();
     vi.spyOn(window, "innerWidth", "get").mockReturnValue(1280);
   });
@@ -253,6 +256,23 @@ describe("Today (the / route)", () => {
     ]);
   });
 
+  it("a weak topic from a worker that sends no counts shows its name and Drill, with no \"undefined of NaN\"", async () => {
+    const bare: Partial<WeakTopic> = weak("cell-biology", { label: "Bare topic" });
+    delete bare.wrong;
+    delete bare.correct;
+    const { page } = await renderToday({
+      ...WITH_READING,
+      study_today: todayBy(
+        () => payload([row("cell-biology")], { weak_topics: [bare as WeakTopic] }),
+        EMPTY,
+      ),
+    });
+    const topics = within(page).getByTestId("today-weak");
+    expect(await within(topics).findByText("Bare topic")).toBeInTheDocument();
+    expect(within(topics).getByRole("button", { name: "Drill Bare topic" })).toBeInTheDocument();
+    expect(topics).not.toHaveTextContent(/undefined|NaN/);
+  });
+
   it("Your classes has a card per class from both libraries, with lectures, cards due and % mastered", async () => {
     const { page } = await renderToday();
     const classes = within(page).getByTestId("today-classes");
@@ -304,6 +324,32 @@ describe("Today (the / route)", () => {
       await waitFor(() => {
         expect(router.state.location.pathname).toBe("/course/organic-chemistry-ii/practice/cards");
       });
+    });
+
+    it("opens Cards on Due today from the first due card, not on the deck mode the class was left in", async () => {
+      const user = userEvent.setup();
+      // The class was left on Full deck, mid-deck (the default mock deck is fc-1..fc-86).
+      const ids = Array.from({ length: 86 }, (_, i) => `fc-${i + 1}`);
+      useStudySessionStore.setState({
+        sessions: {
+          [studySessionKey(FIXTURE_ROOT_FALL, "organic-chemistry-ii", "flashcards")]: {
+            identity: `${FIXTURE_ROOT_FALL}|organic-chemistry-ii:${ids.join("\0")}`,
+            savedAt: Date.now(),
+            deckMode: "full",
+            cardIds: ids,
+            index: 40,
+            flipped: false,
+          },
+        },
+      });
+      const { page, router } = await renderToday();
+      await user.click(await within(page).findByRole("button", { name: "Start review" }));
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe("/course/organic-chemistry-ii/practice/cards");
+      });
+      const dueTab = await screen.findByRole("tab", { name: /Due today/i }, { timeout: 8000 });
+      await waitFor(() => expect(dueTab).toHaveAttribute("aria-selected", "true"));
+      expect(await screen.findByText("1 / 14")).toBeInTheDocument();
     });
 
     it("opens the class's whole due deck, dropping lectures ticked there earlier", async () => {

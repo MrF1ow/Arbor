@@ -17,14 +17,14 @@ export function useExamDate(root: string | null, course: string): string | null 
 }
 
 /**
- * Save or clear (`""`) the exam date. Only `exam_date` goes out, so the class's icon and colour
+ * Save or clear (`""`) the exam date. Only `examDate` goes out (Tauri maps command args by camelCase), so the class's icon and colour
  * are left alone (the backend merges partial updates).
  */
 export function useSetExamDate(root: string | null, course: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (examDate: string) =>
-      invoke("set_course_meta", { root: root!, course, exam_date: examDate }),
+      invoke("set_course_meta", { root: root!, course, examDate }),
     // Returned, so the write settles only once the refetch it started has landed.
     onSuccess: () => {
       if (!root) {

@@ -141,6 +141,35 @@ describe("app shell", () => {
     expect(within(sidebar).getByRole("link", { name: /Today/ })).toHaveAttribute("aria-current", "page");
   });
 
+  it("a class link into a library that is not active (browser Back after a library switch) switches to it and shows the class", async () => {
+    const savePayloads: { settings: { active_root: string } }[] = [];
+    // Settings that keep what was saved, so the library switch really changes the active library.
+    let current = fixtureSettings;
+    const { router } = await renderAppAtRoute("/course/collab-notes/overview", {
+      get_settings: () => current,
+      save_settings: (args) => {
+        savePayloads.push(args as { settings: { active_root: string } });
+        current = (args as { settings: typeof fixtureSettings }).settings;
+        return null;
+      },
+    });
+    await waitFor(() => {
+      expect(savePayloads.at(-1)?.settings.active_root).toBe(FIXTURE_ROOT_SHARED);
+    });
+    // The class's own workspace is on screen (the shared library's class has no digests yet).
+    expect(await screen.findByText("No digests yet")).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/course/collab-notes/overview");
+    expect(screen.queryByText("Class not found")).not.toBeInTheDocument();
+  });
+
+  it("a class that is in none of the libraries says so and links to Today, not to first-run", async () => {
+    await renderAppAtRoute("/course/no-such-class/overview");
+    expect(await screen.findByText("Class not found")).toBeInTheDocument();
+    const link = screen.getByRole("link", { name: "Back to Today" });
+    expect(link).toHaveAttribute("href", "/");
+    expect(screen.queryByRole("link", { name: "Back to welcome" })).not.toBeInTheDocument();
+  });
+
   it("stays where it is when the header of the active library is clicked", async () => {
     const user = userEvent.setup();
     const { router } = await renderAppAtRoute("/course/cell-biology/overview");

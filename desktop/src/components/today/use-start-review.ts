@@ -9,7 +9,9 @@ import { useOpenClass } from "~/lib/open-class";
 import { qk } from "~/lib/queries/keys";
 import { useSettings } from "~/lib/queries/settings";
 import { flushStudyWrites } from "~/lib/study-writes";
+import { scopedSessionKey } from "~/components/study/study-scope";
 import { classScopeKey, useLectureSelectionStore } from "~/stores/lecture-selection-store";
+import { useStudySessionStore } from "~/stores/study-session-store";
 
 /**
  * Start review (Q15, Q27): open Practice > Cards of the class with the nearest exam that has cards due.
@@ -53,6 +55,9 @@ export function useStartReview(courses: TodayCourse[]) {
       if (next) {
         // Review means the class's whole due deck: drop lectures ticked there earlier.
         useLectureSelectionStore.getState().clear(classScopeKey(next.root, next.course));
+        // ...and its saved Cards session: Cards restores the deck mode and position it was left
+        // in (Full deck, mid-deck), but Review counted the due cards and starts at the first.
+        useStudySessionStore.getState().clear(scopedSessionKey(next.root, next.course, "flashcards", []));
         await openClass(next.root, next.course, "cards");
       }
     } catch (error) {

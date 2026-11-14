@@ -127,6 +127,17 @@ describe("buildLectureRows", () => {
     expect(weak({})).toBe(false);
   });
 
+  it("counts a missing answer count as 0 instead of turning the weak test into NaN", () => {
+    const weak = (s: unknown) =>
+      buildLectureRows(COURSE, [digest("a", "2026-09-01", "U")], { "digests/a.md": s as DigestStatsRow }, {})[0]!
+        .lectures[0]!.weak;
+    // An older worker sends no card_* counts: 4 wrong of 9 quiz answers is still weak.
+    expect(weak({ digest: "digests/a.md", due: 0, quiz_wrong: 4, quiz_correct: 5 })).toBe(true);
+    expect(weak({ digest: "digests/a.md", due: 0, card_wrong: 3 })).toBe(true);
+    expect(weak({ digest: "digests/a.md", due: 0, quiz_wrong: 1, quiz_correct: 5 })).toBe(false);
+    expect(weak({ digest: "digests/a.md", due: 0 })).toBe(false);
+  });
+
   it("shows the weak flag in red on the mastery badge and never weakens on mastery alone", () => {
     const rows = buildLectureRows(
       COURSE,

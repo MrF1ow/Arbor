@@ -206,9 +206,11 @@ export function WeakTopicsCard({
             <li key={`${topic.root}::${topic.digest}::${topic.heading ?? topic.label}`} className={cn(ROW, "py-2")}>
               <CourseSwatch meta={meta[topic.root]} course={topic.course} />
               <span className="min-w-0 flex-1 truncate text-small text-foreground">{topic.label}</span>
-              <span className="shrink-0 rounded-xs bg-destructive-surface px-1.5 py-0.5 text-micro text-destructive">
-                {`${topic.wrong} of ${topic.wrong + topic.correct}`}
-              </span>
+              {Number.isFinite(topic.wrong) && Number.isFinite(topic.correct) ? (
+                <span className="shrink-0 rounded-xs bg-destructive-surface px-1.5 py-0.5 text-micro text-destructive">
+                  {`${topic.wrong} of ${topic.wrong + topic.correct}`}
+                </span>
+              ) : null}
               <Button
                 variant="outline"
                 size="sm"

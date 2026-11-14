@@ -720,7 +720,7 @@ describe("class workspace", { timeout: 15000 }, () => {
       await waitFor(() => expect(getMockIpcLog()).toContain("study_plan_toggle"));
     });
 
-    it("editing the exam date calls set_course_meta with exam_date once, on blur", async () => {
+    it("editing the exam date calls set_course_meta with examDate once, on blur", async () => {
       await renderAppAtRoute(`/course/${COURSE}/overview`, workspaceFixtures);
       await waitForOverview();
       const input = await screen.findByLabelText("Exam date");
@@ -734,9 +734,9 @@ describe("class workspace", { timeout: 15000 }, () => {
       await waitFor(() => expect(getMockIpcLog()).toContain("set_course_meta"));
       const calls = getMockIpcCalls().filter((c) => c.cmd === "set_course_meta");
       expect(calls).toHaveLength(1);
-      expect(calls[0]?.args).toMatchObject({ course: COURSE, exam_date: "2027-12-01" });
+      expect(calls[0]?.args).toMatchObject({ course: COURSE, examDate: "2027-12-01" });
       // Only the exam date goes out, so the class's icon and colour are left alone.
-      expect(Object.keys(calls[0]?.args as object).sort()).toEqual(["course", "exam_date", "root"]);
+      expect(Object.keys(calls[0]?.args as object).sort()).toEqual(["course", "examDate", "root"]);
     });
 
     it("Enter saves the exam date, and a date that did not change is not written", async () => {
@@ -751,7 +751,7 @@ describe("class workspace", { timeout: 15000 }, () => {
       fireEvent.blur(input);
       const calls = getMockIpcCalls().filter((c) => c.cmd === "set_course_meta");
       expect(calls).toHaveLength(1);
-      expect(calls[0]?.args).toMatchObject({ exam_date: "2026-12-02" });
+      expect(calls[0]?.args).toMatchObject({ examDate: "2026-12-02" });
     });
 
     it("clearing the exam date clears it", async () => {
@@ -763,7 +763,7 @@ describe("class workspace", { timeout: 15000 }, () => {
       fireEvent.blur(input);
       await waitFor(() => expect(getMockIpcLog()).toContain("set_course_meta"));
       const call = getMockIpcCalls().find((c) => c.cmd === "set_course_meta");
-      expect(call?.args).toMatchObject({ exam_date: "" });
+      expect(call?.args).toMatchObject({ examDate: "" });
     });
 
     it.each([
@@ -831,10 +831,10 @@ describe("class workspace", { timeout: 15000 }, () => {
         ...workspaceFixtures,
         read_course_meta: () => structuredClone(meta),
         set_course_meta: (args) => {
-          const a = args as { course: string; exam_date?: string };
+          const a = args as { course: string; examDate?: string };
           const entry = { ...(meta[a.course] ?? {}) };
-          if (a.exam_date === "") delete entry.exam_date;
-          else if (a.exam_date) entry.exam_date = a.exam_date;
+          if (a.examDate === "") delete entry.exam_date;
+          else if (a.examDate) entry.exam_date = a.examDate;
           meta = { ...meta, [a.course]: entry };
           return structuredClone(meta);
         },
@@ -874,10 +874,10 @@ describe("class workspace", { timeout: 15000 }, () => {
         // Like Tauri, the refetch after the write takes a few ms.
         read_course_meta: () => new Promise((r) => setTimeout(() => r(structuredClone(meta)), 30)),
         set_course_meta: (args) => {
-          const a = args as { course: string; exam_date?: string };
+          const a = args as { course: string; examDate?: string };
           const entry = { ...(meta[a.course] ?? {}) };
-          if (a.exam_date === "") delete entry.exam_date;
-          else if (a.exam_date) entry.exam_date = a.exam_date;
+          if (a.examDate === "") delete entry.exam_date;
+          else if (a.examDate) entry.exam_date = a.examDate;
           meta = { ...meta, [a.course]: entry };
           return structuredClone(meta);
         },
@@ -904,10 +904,10 @@ describe("class workspace", { timeout: 15000 }, () => {
         },
         set_course_meta: (args) => {
           writes += 1;
-          const a = args as { course: string; exam_date?: string };
+          const a = args as { course: string; examDate?: string };
           const entry = { ...(meta[a.course] ?? {}) };
-          if (a.exam_date === "") delete entry.exam_date;
-          else if (a.exam_date) entry.exam_date = a.exam_date;
+          if (a.examDate === "") delete entry.exam_date;
+          else if (a.examDate) entry.exam_date = a.examDate;
           meta = { ...meta, [a.course]: entry };
           const out = structuredClone(meta);
           // The second write (the clear) takes longer than a meta read.
