@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import os
 import subprocess
 import time
 from datetime import timedelta
@@ -19,7 +20,7 @@ from arbor_worker.study_progress import (
     study_progress_quiz,
     study_progress_weak,
 )
-from arbor_worker.today import study_today
+from arbor_worker.today import list_knowledge_courses, study_today
 from tests.ui_overhaul_fixtures import (
     assert_local_ignore_patterns_in_info_exclude,
     build_ui_overhaul_root,
@@ -661,6 +662,45 @@ def test_study_today_tolerates_bad_class_and_invalid_folder_name(today_root: Pat
     bio_row = next((row for row in payload["courses"] if row["course"] == "Bio"), None)
     assert bio_row is not None
     assert "error" not in bio_row
+
+
+def _symlink_root(tmp_path: Path) -> Path:
+    """A library root with one real class plus every kind of folder Today must skip."""
+    root = tmp_path / "library"
+    root.mkdir()
+    (root / "Real" / "digests").mkdir(parents=True)
+    (root / "Chat").mkdir()
+    (root / "Local").mkdir()
+    outside = tmp_path / "outside"
+    (outside / "digests").mkdir(parents=True)
+    (root / "LinkInside").symlink_to(root / "Real", target_is_directory=True)
+    (root / "LinkOutside").symlink_to(outside, target_is_directory=True)
+    (root / "Broken").symlink_to(tmp_path / "missing", target_is_directory=True)
+    return root
+
+
+def test_list_knowledge_courses_skips_symlinks_and_chat_local(tmp_path: Path) -> None:
+    root = _symlink_root(tmp_path)
+    assert list_knowledge_courses(root) == ["Real"]
+
+
+def test_study_today_classes_skip_symlinked_folders(tmp_path: Path) -> None:
+    root = _symlink_root(tmp_path)
+    payload = study_today(root, now=CLOCK)
+    assert [row["course"] for row in payload["courses"]] == ["Real"]
+
+
+def test_today_skips_class_folder_with_non_utf8_name(tmp_path: Path) -> None:
+    root = tmp_path / "library"
+    (root / "Real").mkdir(parents=True)
+    try:
+        os.mkdir(os.fsencode(root) + b"/Bad\xff")
+    except OSError:
+        pytest.skip("filesystem refuses non-UTF-8 names")
+    assert list_knowledge_courses(root) == ["Real"]
+    payload = study_today(root, now=CLOCK)
+    assert [row["course"] for row in payload["courses"]] == ["Real"]
+    json.dumps(payload, ensure_ascii=False).encode("utf-8")
 
 
 def _exam_root(tmp_path: Path) -> Path:
