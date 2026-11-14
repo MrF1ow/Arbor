@@ -14,10 +14,12 @@ import pytest
 
 from arbor_worker import cli
 from arbor_worker.recommendations import _load_progress_doc
+from tests.ui_overhaul_fixtures import build_ui_overhaul_root
 from arbor_worker.study_progress import (
     StudyProgressError,
     parse_utc_now,
     progress_path,
+    study_progress_digest_stats,
     study_progress_due,
     study_progress_grade,
     study_progress_quiz,
@@ -755,3 +757,21 @@ def test_write_atomic_temp_names_unique(monkeypatch: pytest.MonkeyPatch, tmp_pat
     assert str(threading.get_ident()) in captured[0]
     assert "00000001" in captured[0]
     assert "00000002" in captured[1]
+
+
+def test_digest_stats_carry_card_correct_and_card_wrong(tmp_path: Path):
+    """Each digest row counts the graded cards' right and wrong answers beside the quiz counts."""
+    root = build_ui_overhaul_root(tmp_path).root
+
+    digests = study_progress_digest_stats(root, "Bio", now=parse_utc_now("2026-11-10T12:00:00Z"))[
+        "digests"
+    ]
+
+    # Fixture progress: fc_due (intro) 0 right 1 wrong; fc_mastered (unit-2) 3 right 0 wrong.
+    assert (digests["digests/intro.md"]["card_correct"], digests["digests/intro.md"]["card_wrong"]) == (0, 1)
+    assert (
+        digests["digests/unit-2.md"]["card_correct"],
+        digests["digests/unit-2.md"]["card_wrong"],
+    ) == (3, 0)
+    for row in digests.values():
+        assert {"quiz_correct", "quiz_wrong", "card_correct", "card_wrong"} <= set(row)

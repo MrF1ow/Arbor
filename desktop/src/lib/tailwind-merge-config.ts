@@ -13,13 +13,28 @@ const customSpacing = [
   "icon-sm",
   "icon",
   "palette-top",
-  "palette-list",
   "jobs-pane",
 ] as const;
 
 const customContainers = ["reading", "flashcards"] as const;
 
-const customTextSizes = ["2xs", "title", "read", "flashcard-q"] as const;
+const customTextSizes = [
+  "2xs",
+  "read",
+  "flashcard-q",
+  // Arbor text styles (`@utility text-*` in index.css)
+  "display",
+  "title",
+  "reading-title",
+  "heading",
+  "reading",
+  "body",
+  "small",
+  "caption",
+  "micro",
+  "label",
+  "kbd",
+] as const;
 
 const customZIndex = ["dropdown", "drawer", "overlay", "dialog", "floating", "toast"] as const;
 
@@ -28,7 +43,7 @@ export const twMerge = extendTailwindMerge({
     theme: {
       text: [...customTextSizes],
       radius: ["xs"],
-      shadow: ["card"],
+      shadow: ["card", "popover"],
       ease: ["out-soft"],
     },
     classGroups: {
@@ -36,12 +51,12 @@ export const twMerge = extendTailwindMerge({
       w: [{ w: [...customSpacing, ...customContainers] }],
       h: [{ h: [...customSpacing] }],
       "min-h": [{ "min-h": ["row"] }],
-      "max-h": [{ "max-h": ["palette-list", "jobs-pane"] }],
+      "max-h": [{ "max-h": ["jobs-pane"] }],
       top: [{ top: [...customSpacing] }],
       size: [{ size: ["icon-sm", "icon", "control", "control-lg"] }],
       z: [{ z: [...customZIndex] }],
       duration: [{ duration: ["fast", "panel"] }],
-      shadow: [{ shadow: ["card"] }],
+      shadow: [{ shadow: ["card", "popover"] }],
       rounded: [{ rounded: ["xs"] }],
       "font-size": [{ text: [...customTextSizes] }],
     },

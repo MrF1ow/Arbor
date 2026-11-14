@@ -5,6 +5,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  useMemo,
   useSyncExternalStore,
 } from "react";
 
@@ -14,10 +15,15 @@ import {
   isSlashSuggestionOpen,
   slashSuggestionInsert,
 } from "~/components/chat/composer-slash-suggestions";
-import { ChatThreadsPanel, ChatThreadsPanelShowButton } from "~/components/chat/chat-threads-panel";
-import { ChatTranscript } from "~/components/chat/chat-transcript";
+import {
+  AnswerByline,
+  ChatTranscript,
+  type AnswerActions,
+  type AnswerStudyKind,
+} from "~/components/chat/chat-transcript";
 import { LiveAnswer } from "~/components/chat/live-answer";
 import { ModeChip } from "~/components/chat/mode-chip";
+import { useLectureRows } from "~/components/workspace/use-lecture-rows";
 import { Button, IconButton } from "~/components/ui/button";
 import {
   Select,
@@ -27,17 +33,17 @@ import {
   SelectValue,
 } from "~/components/ui/select";
 import { Textarea } from "~/components/ui/textarea";
+import { cn } from "~/lib/utils";
 import type { ChatMode } from "~/domain/chat";
+import type { ChatLine } from "~/domain/chat";
 import { isChatMode, parseSlashCommand, workerHistory } from "~/domain/chat";
+import { scopeLabel, toCourseDigest } from "~/domain/lectures";
 import { useDictation } from "~/lib/dictation";
 import { isMacPlatform } from "~/lib/shortcuts";
-import { CourseIconDisplay } from "~/components/app/course-icon-display";
-import { courseDisplayName, workspaceRootLabel } from "~/domain/course";
 import { PROVIDER_FALLBACK } from "~/domain/provider";
-import type { DigestInfo, KnowledgeRootEntry } from "~/domain/types";
+import type { DigestInfo } from "~/domain/types";
 import { useStudyJobLauncher } from "~/hooks/use-study-job-launcher";
 import { sendChatMessage } from "~/lib/chat-runner";
-import { useCourseMeta } from "~/lib/queries/course-meta";
 import { useEffectiveProvider } from "~/lib/queries/effective-provider";
 import {
   useChatThread,
@@ -54,11 +60,26 @@ import {
   type ChatLiveStatusTone,
 } from "~/stores/chat-live-store";
 import { useChatDraftsStore } from "~/stores/chat-drafts-store";
-import { useUiStore } from "~/stores/ui-store";
 import { useJobStore } from "~/stores/job-store";
-import { Loader2, Mic, Square } from "lucide-react";
+import {
+  classScopeKey,
+  useLectureSelectionStore,
+  useTickedLectures,
+} from "~/stores/lecture-selection-store";
+import type { AskFocus } from "~/stores/selection-store";
+import { Loader2, Mic, Square, X } from "lucide-react";
 
-type ArtifactKind = "flashcards" | "quiz";
+type ArtifactKind = AnswerStudyKind;
+
+/** `Course/course.md` is the course overview, not a lecture; only digests anchor generated cards. */
+function citedDigests(line: ChatLine, course: string, known: Set<string> | null): string[] {
+  const cited = (line.citations ?? [])
+    .map((citation) => citation.digest_path ?? "")
+    .filter((path) => path !== "" && !path.endsWith("course.md"))
+    .map((path) => toCourseDigest(course, path))
+    .filter((digest) => known === null || known.has(digest));
+  return [...new Set(cited)];
+}
 
 const COMPOSER_SLASH_LISTBOX_ID = "chat-composer-slash-listbox";
 
@@ -70,43 +91,40 @@ const ARTIFACT_KIND_LABEL: Record<ArtifactKind, string> = {
 export function ChatView({
   activeRoot,
   course,
-  courses,
   digests,
-  roots,
   threadId,
   modeParam,
   promptParam,
+  focus = null,
+  onFocusUsed,
   onSearchClear,
   onModeSearchClear,
-  onCourseChange,
   onThreadChange,
-  onNewChatNavigate,
   initialArtifactKind = "flashcards",
 }: {
   activeRoot: string | null;
   course: string;
-  courses: string[];
   digests: DigestInfo[];
-  roots: KnowledgeRootEntry[];
   threadId: string | null;
   modeParam?: string;
   promptParam?: string;
+  /** The passage "Ask about this" handed over; sent with the next message only. */
+  focus?: AskFocus | null;
+  onFocusUsed?: () => void;
   onSearchClear: () => void;
   onModeSearchClear: () => void;
-  onCourseChange: (course: string) => void;
   onThreadChange: (nextThreadId: string, replace?: boolean) => void;
-  onNewChatNavigate: () => void;
   initialArtifactKind?: ArtifactKind;
 }) {
   const queryClient = useQueryClient();
-  const courseMeta = useCourseMeta(activeRoot);
   const threadsQuery = useChatThreads(activeRoot, course);
   const threadQuery = useChatThread(activeRoot, course, threadId);
   const setThreadMode = useSetChatThreadMode(activeRoot, course);
   const effective = useEffectiveProvider(activeRoot);
   const appendLog = useJobStore((s) => s.append);
-  const chatThreadsOpen = useUiStore((s) => s.chatThreadsOpen);
-  const setChatThreadsOpen = useUiStore((s) => s.setChatThreadsOpen);
+  const ticked = useTickedLectures(activeRoot, course);
+  const clearScope = useLectureSelectionStore((s) => s.clear);
+  const { rows: lectureRows } = useLectureRows(activeRoot, course);
 
   const draftText = useChatDraftsStore((s) =>
     activeRoot ? (s.drafts[`${activeRoot}\0${course}\0${threadId ?? "new"}`] ?? "") : "",
@@ -185,8 +203,17 @@ export function ChatView({
     async () => undefined,
   );
 
-  const rootEntry = roots.find((r) => r.path === activeRoot);
-  const rootLabel = rootEntry ? workspaceRootLabel(rootEntry, roots) : (activeRoot ?? "");
+  // The ticked lectures are the only scope. A tick that is no longer a lecture of the class is
+  // dropped (checked once the class's lectures are known).
+  const known = useMemo(
+    () => (digests.length > 0 ? new Set(digests.map((d) => toCourseDigest(course, d.path))) : null),
+    [course, digests],
+  );
+  const scopeDigests = useMemo(
+    () => (known ? ticked.filter((digest) => known.has(digest)) : ticked),
+    [known, ticked],
+  );
+  const scope = scopeLabel(lectureRows, scopeDigests);
   const providerLabel =
     PROVIDER_FALLBACK.find((p) => p.id === effective.providerId)?.label ??
     effective.providerId ??
@@ -321,10 +348,15 @@ export function ChatView({
         providerLabel,
         modelId,
         history: historySnapshot,
+        digests: scopeDigests,
+        focus: focus ?? undefined,
         onAuthGate: (text, tone) => setGateStatus({ text, tone }),
         appendLog,
       });
       setStreamingThreadId(result.threadId);
+      if (focus) {
+        onFocusUsed?.();
+      }
       if (!threadAtSend) {
         moveDraft(rootAtSend, courseAtSend, null, result.threadId);
         onThreadChange(result.threadId, true);
@@ -537,200 +569,225 @@ export function ChatView({
       el.scrollHeight - el.scrollTop - el.clientHeight < 24;
   };
 
+  const launcherFor = (kind: ArtifactKind) => (kind === "quiz" ? quizLauncher : flashcardLauncher);
+
   const onGenerateArtifact = () => {
     if (artifactKind === "quiz") {
       flashcardLauncher.clearModelHint();
     } else {
       quizLauncher.clearModelHint();
     }
-    void artifactLauncher.launchStudyJob(course, false);
+    void artifactLauncher.launchStudyJob(
+      course,
+      false,
+      scopeDigests.length > 0 ? { digests: scopeDigests } : undefined,
+    );
   };
 
-  const statusClass =
-    statusTone === "destructive" ? "text-destructive" : "text-muted-foreground";
+  // The lectures an answer's cards are drawn from: the ones it cites, else the ticked lectures.
+  const anchorsFor = (line: ChatLine) => {
+    const cited = citedDigests(line, course, known);
+    return cited.length > 0 ? cited : scopeDigests;
+  };
+  const answerActions: AnswerActions = {
+    canStudy: (line) =>
+      Boolean(line.content?.trim()) &&
+      anchorsFor(line).length > 0 &&
+      !flashcardLauncher.jobDisabled &&
+      !quizLauncher.jobDisabled,
+    onStudy: (kind, line) => {
+      void launcherFor(kind).launchStudyJob(course, false, {
+        digests: anchorsFor(line),
+        fromText: line.content,
+      });
+    },
+    onCopy: (line) => {
+      void navigator.clipboard?.writeText(line.content ?? "").catch(() => undefined);
+    },
+  };
 
   return (
-    <div
-      data-testid="chat-view"
-      className="flex h-full min-h-0 flex-1 overflow-hidden"
-    >
-      {activeRoot && chatThreadsOpen ? (
-        <ChatThreadsPanel
-          root={activeRoot}
-          course={course}
-          activeThreadId={threadId}
-          onSelectThread={(id) => onThreadChange(id)}
-          onNewChat={onNewChatNavigate}
-        />
-      ) : null}
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        {!chatThreadsOpen && activeRoot ? (
-          <div className="shrink-0 border-b border-border px-2 py-2">
-            <ChatThreadsPanelShowButton onClick={() => setChatThreadsOpen(true)} />
-          </div>
-        ) : null}
-        <div className="shrink-0 border-b border-border px-8 py-3">
-          <div className="mx-auto flex w-full max-w-reading flex-wrap items-center gap-2">
-            <Select
-              value={course}
-              items={courses.map((slug) => ({ value: slug, label: courseDisplayName(slug) }))}
-              disabled={controlsDisabled}
-              onValueChange={(value) => {
-                if (value) {
-                  onCourseChange(value);
-                }
-              }}
-            >
-              <SelectTrigger className="w-48" aria-label="Course" title={rootLabel}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {courses.map((slug) => (
-                  <SelectItem key={slug} value={slug}>
-                    <span className="flex items-center gap-2">
-                      <CourseIconDisplay meta={courseMeta.data} course={slug} />
-                      {courseDisplayName(slug)}
+    <div data-testid="chat-view" className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+      <div
+        ref={scrollRef}
+        className="min-h-0 flex-1 overflow-y-auto px-8 py-6"
+        data-testid="chat-transcript-scroll"
+        onScroll={onTranscriptScroll}
+      >
+        <div className="mx-auto w-full max-w-170">
+          <ChatTranscript course={course} lines={lines} digests={digests} actions={answerActions} />
+          {activeRoot && liveThreadId ? (
+            <div className="flex flex-col gap-2.5">
+              {inFlight ? (
+                <AnswerByline
+                  mode={mode}
+                  status={
+                    <span
+                      className={cn(
+                        "flex items-center gap-1.5",
+                        statusTone === "destructive" ? "text-destructive" : "text-accent-foreground",
+                      )}
+                    >
+                      <span className="size-1.5 rounded-full bg-current" aria-hidden />
+                      {liveStatusText}
                     </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        <div
-          ref={scrollRef}
-          className="min-h-0 flex-1 overflow-y-auto px-8 py-6"
-          data-testid="chat-transcript-scroll"
-          onScroll={onTranscriptScroll}
-        >
-          <div className="mx-auto w-full max-w-reading">
-            <ChatTranscript course={course} lines={lines} digests={digests} />
-            {activeRoot && liveThreadId ? (
+                  }
+                />
+              ) : null}
               <LiveAnswer
                 root={activeRoot}
                 course={course}
                 threadId={liveThreadId}
                 onContentChange={scrollTranscriptIfSticky}
               />
-            ) : null}
-          </div>
+            </div>
+          ) : null}
         </div>
+      </div>
 
-        <div className="shrink-0 border-t border-border px-8 py-4">
-          <div className="mx-auto flex w-full max-w-reading flex-col gap-3">
-            <p className={`min-h-4 text-xs ${statusClass}`} data-testid="chat-status">
+      <div className="shrink-0 border-t border-border px-8 pb-4 pt-3">
+        <div className="mx-auto flex w-full max-w-170 flex-col gap-2.5">
+          <div className="flex min-h-5 flex-wrap items-center gap-2 text-caption">
+            <p
+              className={cn("min-w-0", statusTone === "destructive" ? "text-destructive" : "text-accent-foreground")}
+              data-testid="chat-status"
+            >
               {statusText}
             </p>
-            <div className="relative flex flex-col gap-2">
-              {slashListOpen ? (
-                <ComposerSlashSuggestions
-                  draftPrefix={draftText}
-                  activeIndex={slashActiveIndex}
-                  listboxId={COMPOSER_SLASH_LISTBOX_ID}
-                  onPick={pickSlashSuggestion}
-                />
-              ) : null}
-              <Textarea
-                ref={composerRef}
-                value={draftText}
-                disabled={composerDisabled}
-                readOnly={composerLocked}
-                placeholder={composerPlaceholder}
-                rows={1}
-                className="max-h-36 min-h-10 w-full"
-                onChange={(event) => {
-                  setSlashDismissed(false);
-                  if (activeRoot) {
-                    setDraft(activeRoot, course, threadId, event.target.value);
-                  }
-                }}
-                onKeyDown={onComposerKeyDown}
-                aria-label="Chat message"
-                aria-activedescendant={slashActiveDescendant}
-                aria-controls={slashListOpen ? COMPOSER_SLASH_LISTBOX_ID : undefined}
-                aria-expanded={slashListOpen ? true : undefined}
-                aria-autocomplete={slashListOpen ? "list" : undefined}
-                role={slashListOpen ? "combobox" : undefined}
+            {scope ? (
+              <button
+                type="button"
+                aria-label={`Stop asking about ${scope}`}
+                onClick={() => activeRoot && clearScope(classScopeKey(activeRoot, course))}
+                className="ml-auto inline-flex h-6 items-center gap-1.5 rounded-full bg-accent px-2.5 text-caption text-accent-foreground transition-colors duration-fast ease-out-soft hover:bg-selected"
+              >
+                <span>Asking about {scope}</span>
+                <X className="size-icon-sm" aria-hidden />
+              </button>
+            ) : null}
+          </div>
+          {focus ? (
+            <div
+              data-testid="chat-focus"
+              className="flex items-start gap-2 rounded-lg bg-muted px-3 py-2 text-caption text-muted-foreground"
+            >
+              <p className="min-w-0 flex-1 line-clamp-2">
+                {focus.heading ? <span className="font-semibold text-foreground">{focus.heading}: </span> : null}
+                {focus.text}
+              </p>
+              <IconButton
+                icon={X}
+                label="Drop the selected passage"
+                size="icon-xs"
+                variant="ghost"
+                onClick={() => onFocusUsed?.()}
               />
-              <div className="flex items-center justify-between gap-2">
-                <ModeChip mode={mode} disabled={controlsDisabled} onToggle={toggleChatMode} />
-                <div className="flex items-center gap-2">
-                  {isMacPlatform() ? (
-                    <div className="flex items-center gap-1.5">
-                      {dictation.phase === "listening" && dictation.elapsedLabel ? (
-                        <>
-                          <span
-                            className="size-2 animate-pulse rounded-full bg-destructive"
-                            aria-hidden
-                          />
-                          <span className="tabular-nums text-xs text-muted-foreground">
-                            {dictation.elapsedLabel}
-                          </span>
-                        </>
-                      ) : null}
-                      <IconButton
-                        icon={DictationIcon}
-                        label={dictationMicLabel}
-                        size="icon-sm"
-                        className={dictationButtonClass}
-                        variant={dictation.phase === "listening" ? "destructive-outline" : "ghost"}
-                        disabled={
-                          composerDisabled ||
-                          dictation.phase === "starting" ||
-                          dictation.phase === "stopping"
-                        }
-                        onClick={onDictationClick}
-                      />
-                    </div>
-                  ) : null}
-                  <Button
-                    type="button"
-                    disabled={
-                      composerDisabled || composerLocked || draftText.trim().length === 0
-                    }
-                    onClick={() => void submitComposer(draftText)}
-                  >
-                    Send
-                  </Button>
-                </div>
+            </div>
+          ) : null}
+          <div className="relative flex flex-col gap-1 rounded-xl border border-border bg-card px-3 pb-2.5 pt-2 transition-colors duration-fast ease-out-soft focus-within:border-primary">
+            {slashListOpen ? (
+              <ComposerSlashSuggestions
+                draftPrefix={draftText}
+                activeIndex={slashActiveIndex}
+                listboxId={COMPOSER_SLASH_LISTBOX_ID}
+                onPick={pickSlashSuggestion}
+              />
+            ) : null}
+            <Textarea
+              ref={composerRef}
+              value={draftText}
+              disabled={composerDisabled}
+              readOnly={composerLocked}
+              placeholder={composerPlaceholder}
+              rows={1}
+              className="max-h-36 min-h-9 w-full rounded-none border-0 bg-transparent px-0 text-body shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+              onChange={(event) => {
+                setSlashDismissed(false);
+                if (activeRoot) {
+                  setDraft(activeRoot, course, threadId, event.target.value);
+                }
+              }}
+              onKeyDown={onComposerKeyDown}
+              aria-label="Chat message"
+              aria-activedescendant={slashActiveDescendant}
+              aria-controls={slashListOpen ? COMPOSER_SLASH_LISTBOX_ID : undefined}
+              aria-expanded={slashListOpen ? true : undefined}
+              aria-autocomplete={slashListOpen ? "list" : undefined}
+              role={slashListOpen ? "combobox" : undefined}
+            />
+            <div className="flex items-center justify-between gap-2">
+              <ModeChip mode={mode} disabled={controlsDisabled} onToggle={toggleChatMode} />
+              <div className="flex items-center gap-3">
+                {isMacPlatform() ? (
+                  <div className="flex items-center gap-1.5">
+                    {dictation.phase === "listening" && dictation.elapsedLabel ? (
+                      <>
+                        <span className="size-2 animate-pulse rounded-full bg-destructive" aria-hidden />
+                        <span className="tabular-nums text-caption text-muted-foreground">
+                          {dictation.elapsedLabel}
+                        </span>
+                      </>
+                    ) : null}
+                    <IconButton
+                      icon={DictationIcon}
+                      label={dictationMicLabel}
+                      size="icon-sm"
+                      className={dictationButtonClass}
+                      variant={dictation.phase === "listening" ? "destructive-outline" : "ghost"}
+                      disabled={
+                        composerDisabled ||
+                        dictation.phase === "starting" ||
+                        dictation.phase === "stopping"
+                      }
+                      onClick={onDictationClick}
+                    />
+                  </div>
+                ) : null}
+                <Button
+                  type="button"
+                  disabled={composerDisabled || composerLocked || draftText.trim().length === 0}
+                  onClick={() => void submitComposer(draftText)}
+                >
+                  Send
+                </Button>
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <Select
-                value={artifactKind}
-                items={(
-                  Object.entries(ARTIFACT_KIND_LABEL) as [ArtifactKind, string][]
-                ).map(([value, label]) => ({ value, label }))}
-                disabled={artifactJobDisabled}
-                onValueChange={(value) => {
-                  if (value === "flashcards" || value === "quiz") {
-                    setArtifactKind(value);
-                  }
-                }}
-              >
-                <SelectTrigger className="w-36" aria-label="Study artifact type">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="flashcards">Flashcards</SelectItem>
-                  <SelectItem value="quiz">Quiz</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                disabled={artifactJobDisabled}
-                title={
-                  artifactLauncher.viewerBlocked ? artifactLauncher.viewerWriteReason : undefined
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-caption text-muted-foreground">
+            <Select
+              value={artifactKind}
+              items={(Object.entries(ARTIFACT_KIND_LABEL) as [ArtifactKind, string][]).map(
+                ([value, label]) => ({ value, label }),
+              )}
+              disabled={artifactJobDisabled}
+              onValueChange={(value) => {
+                if (value === "flashcards" || value === "quiz") {
+                  setArtifactKind(value);
                 }
-                onClick={onGenerateArtifact}
-              >
-                Generate study artifact
-              </Button>
-              {artifactModelHint ? <span>{artifactModelHint}</span> : null}
-            </div>
+              }}
+            >
+              <SelectTrigger className="w-36" aria-label="Study artifact type">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="flashcards">Flashcards</SelectItem>
+                <SelectItem value="quiz">Quiz</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={artifactJobDisabled}
+              title={artifactLauncher.viewerBlocked ? artifactLauncher.viewerWriteReason : undefined}
+              onClick={onGenerateArtifact}
+            >
+              Generate study artifact
+            </Button>
+            <span>
+              {artifactModelHint ??
+                `from ${scope ?? "the whole class"} · ${providerLabel} ${effective.modelId ?? ""}`.trim()}
+            </span>
           </div>
         </div>
       </div>

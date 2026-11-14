@@ -65,7 +65,7 @@ export function LiveAnswer({
   return (
     <div className="mb-4 flex w-full flex-col gap-2" data-testid="chat-live-answer">
       <div
-        className="prose-arbor live-caret mx-0 w-full max-w-none text-sm"
+        className="prose-arbor live-caret mx-0 w-full max-w-none"
         dangerouslySetInnerHTML={{ __html: renderAnswerHtml(displayText) }}
       />
     </div>

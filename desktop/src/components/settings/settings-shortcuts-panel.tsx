@@ -1,4 +1,5 @@
-import { SettingRow, SettingsSection } from "~/components/app/settings-section";
+import { SettingRow } from "~/components/app/settings-section";
+import { SettingsGroup, SettingsPage } from "~/components/settings/settings-page";
 import { Kbd, KbdGroup } from "~/components/ui/kbd";
 import { SHORTCUT_CATALOG, type ShortcutEntry } from "~/lib/shortcuts";
 
@@ -23,9 +24,9 @@ export function SettingsShortcutsPanel() {
   }, new Map());
 
   return (
-    <div className="space-y-6" data-testid="settings-shortcuts">
+    <SettingsPage title="Shortcuts" description="Keyboard shortcuts." testId="settings-shortcuts">
       {[...groups.entries()].map(([group, entries]) => (
-        <SettingsSection key={group} title={group}>
+        <SettingsGroup key={group} title={group}>
           {entries.map((entry) => (
             <SettingRow
               key={`${group}-${entry.description}`}
@@ -33,8 +34,8 @@ export function SettingsShortcutsPanel() {
               control={<ShortcutKeys keys={entry.keys} />}
             />
           ))}
-        </SettingsSection>
+        </SettingsGroup>
       ))}
-    </div>
+    </SettingsPage>
   );
 }

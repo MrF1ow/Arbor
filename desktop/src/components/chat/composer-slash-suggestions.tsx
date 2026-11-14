@@ -31,7 +31,7 @@ export function ComposerSlashSuggestions({
       id={listboxId}
       role="listbox"
       aria-label="Slash commands"
-      className="absolute bottom-full left-0 z-floating mb-1 w-full max-w-reading rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-card"
+      className="absolute bottom-full left-0 z-floating mb-2 w-64 rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-card"
     >
       {options.map((entry, index) => (
         <li
@@ -40,7 +40,7 @@ export function ComposerSlashSuggestions({
           role="option"
           aria-selected={index === activeIndex}
           className={cn(
-            "cursor-default rounded-sm px-2 py-1.5 text-xs",
+            "flex cursor-default items-baseline gap-3 rounded-md px-2.5 py-1.5 text-small",
             index === activeIndex && "bg-selected text-foreground",
           )}
           onMouseDown={(event) => {
@@ -48,8 +48,8 @@ export function ComposerSlashSuggestions({
             onPick(index);
           }}
         >
-          <span className="font-medium">{entry.command}</span>
-          <span className="text-muted-foreground"> — {entry.description}</span>
+          <span className="font-mono text-foreground">{entry.command}</span>
+          <span className="text-muted-foreground">{entry.description}</span>
         </li>
       ))}
     </ul>

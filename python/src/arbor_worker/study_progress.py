@@ -1128,6 +1128,8 @@ def _empty_digest_stats_bucket() -> dict[str, Any]:
         "mastery": None,
         "quiz_correct": 0,
         "quiz_wrong": 0,
+        "card_correct": 0,
+        "card_wrong": 0,
     }
 
 
@@ -1212,6 +1214,13 @@ def study_progress_digest_stats(
             bucket["mastered"] += 1
         if _card_is_due(prog, clock):
             bucket["due"] += 1
+        if prog is not None:
+            card_correct = prog.get("correct", 0)
+            card_wrong = prog.get("wrong", 0)
+            if isinstance(card_correct, int) and card_correct > 0:
+                bucket["card_correct"] += card_correct
+            if isinstance(card_wrong, int) and card_wrong > 0:
+                bucket["card_wrong"] += card_wrong
 
     for question_id, entry in doc["questions"].items():
         if not isinstance(entry, dict):

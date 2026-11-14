@@ -1,4 +1,4 @@
-import { cleanup, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clearTauriMocks } from "~/test/mock-ipc";
@@ -16,6 +16,7 @@ import {
 } from "~/test/mock-handlers";
 import { studySessionKey } from "~/domain/study-session";
 import { useJobStore } from "~/stores/job-store";
+import { classScopeKey, useLectureSelectionStore } from "~/stores/lecture-selection-store";
 import { useStudySessionStore } from "~/stores/study-session-store";
 import { useUiStore } from "~/stores/ui-store";
 import { renderAppAtRoute } from "~/test/render";
@@ -101,7 +102,6 @@ describe("quiz PR9", { timeout: 20000 }, () => {
       sidebarTouched: true,
       logOpen: false,
       logHeight: 200,
-      notesIndexOpen: true,
       lastCourse: null,
     });
     useJobStore.setState({
@@ -125,7 +125,7 @@ describe("quiz PR9", { timeout: 20000 }, () => {
 
   it("optimistically submits while study_progress is pending", async () => {
     const user = userEvent.setup();
-    const { queryClient } = await renderAppAtRoute("/course/cell-biology/quiz", {
+    const { queryClient } = await renderAppAtRoute("/course/cell-biology/practice/quiz", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "quiz.json") {
           return smallQuiz;
@@ -146,7 +146,7 @@ describe("quiz PR9", { timeout: 20000 }, () => {
     await waitFor(() => {
       expect(screen.getByText("Explanation one")).toBeInTheDocument();
     });
-    expect(screen.getByText("1 / 2 correct")).toBeInTheDocument();
+    expect(screen.getByText("1 / 1 correct")).toBeInTheDocument();
     const quizCall = getMockIpcCalls().find(
       (c) =>
         c.cmd === "study_progress" && (c.args as { action?: string }).action === "quiz",
@@ -159,7 +159,9 @@ describe("quiz PR9", { timeout: 20000 }, () => {
       heading: "Membrane structure",
     });
     expect((quizCall?.args as { writeId?: string }).writeId).toBeTruthy();
-    await user.click(screen.getByRole("button", { name: /^Submit$/i }));
+    // Once answered the Submit button becomes "Next question", so an answer cannot be sent twice.
+    expect(screen.queryByRole("button", { name: /^Submit$/i })).not.toBeInTheDocument();
+    await user.keyboard("{Enter}{ArrowLeft}2{Enter}");
     const quizCalls = getMockIpcCalls().filter(
       (c) =>
         c.cmd === "study_progress" && (c.args as { action?: string }).action === "quiz",
@@ -173,7 +175,7 @@ describe("quiz PR9", { timeout: 20000 }, () => {
 
   it("sends empty heading when source heading is null", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/quiz", {
+    await renderAppAtRoute("/course/cell-biology/practice/quiz", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "quiz.json") {
           return smallQuiz;
@@ -189,7 +191,7 @@ describe("quiz PR9", { timeout: 20000 }, () => {
       },
     });
     await waitForQuizReady();
-    await user.click(screen.getByRole("button", { name: /Next/i }));
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
     await user.click(screen.getByRole("button", { name: /^One/i }));
     await user.click(screen.getByRole("button", { name: /^Submit$/i }));
     const quizCall = getMockIpcCalls().find(
@@ -203,7 +205,7 @@ describe("quiz PR9", { timeout: 20000 }, () => {
 
   it("handles keyboard select, submit, advance, and guards", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/quiz", {
+    await renderAppAtRoute("/course/cell-biology/practice/quiz", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "quiz.json") {
           return smallQuiz;
@@ -234,7 +236,7 @@ describe("quiz PR9", { timeout: 20000 }, () => {
 
   it("does not select on Ctrl+1", async () => {
     const user = userEvent.setup();
-    const { router } = await renderAppAtRoute("/course/cell-biology/quiz", {
+    const { router } = await renderAppAtRoute("/course/cell-biology/practice/quiz", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "quiz.json") {
           return smallQuiz;
@@ -246,12 +248,12 @@ describe("quiz PR9", { timeout: 20000 }, () => {
     await waitForQuizReady();
     await user.keyboard("{Control>}1{/Control}");
     await waitFor(() => {
-      expect(router.state.location.pathname).toContain("/notes");
+      expect(router.state.location.pathname).toContain("/overview");
     });
   });
 
   it("shows unverified badge from citations fixture", async () => {
-    await renderAppAtRoute("/course/cell-biology/quiz", {
+    await renderAppAtRoute("/course/cell-biology/practice/quiz", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "quiz.json") {
           return smallQuiz;
@@ -281,7 +283,7 @@ describe("quiz PR9", { timeout: 20000 }, () => {
   });
 
   it("shows stale badge when artifact is stale", async () => {
-    await renderAppAtRoute("/course/cell-biology/quiz", {
+    await renderAppAtRoute("/course/cell-biology/practice/quiz", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "quiz.json") {
           return smallQuiz;
@@ -297,7 +299,7 @@ describe("quiz PR9", { timeout: 20000 }, () => {
 
   it("shows unsaved badge and retries flush on click", async () => {
     let quizCalls = 0;
-    await renderAppAtRoute("/course/cell-biology/quiz", {
+    await renderAppAtRoute("/course/cell-biology/practice/quiz", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "quiz.json") {
           return smallQuiz;
@@ -332,7 +334,7 @@ describe("quiz PR9", { timeout: 20000 }, () => {
 
   it("navigates source chip to digest with heading", async () => {
     const user = userEvent.setup();
-    const { router } = await renderAppAtRoute("/course/cell-biology/quiz", {
+    const { router } = await renderAppAtRoute("/course/cell-biology/practice/quiz", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "quiz.json") {
           return smallQuiz;
@@ -348,14 +350,14 @@ describe("quiz PR9", { timeout: 20000 }, () => {
       }),
     );
     await waitFor(() => {
-      expect(router.state.location.pathname).toContain("/notes/2026-09-12-membranes");
+      expect(router.state.location.pathname).toContain("/read/2026-09-12-membranes");
       expect(router.state.location.searchStr).toContain("heading=Membrane+structure");
     });
   });
 
   it("empty state generate and refresh gates", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/quiz", {
+    await renderAppAtRoute("/course/cell-biology/practice/quiz", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "quiz.json") {
           throw new Error("ENOENT");
@@ -386,7 +388,7 @@ describe("quiz PR9", { timeout: 20000 }, () => {
 
   it("generate when signed out logs auth message without starting job", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/quiz", {
+    await renderAppAtRoute("/course/cell-biology/practice/quiz", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "quiz.json") {
           throw new Error("ENOENT");
@@ -416,7 +418,7 @@ describe("quiz PR9", { timeout: 20000 }, () => {
 
   it("refresh from digests uses force true", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/quiz", {
+    await renderAppAtRoute("/course/cell-biology/practice/quiz", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "quiz.json") {
           return smallQuiz;
@@ -434,7 +436,7 @@ describe("quiz PR9", { timeout: 20000 }, () => {
   });
 
   it("disables generate for viewer libraries", async () => {
-    await renderAppAtRoute("/course/cell-biology/quiz", {
+    await renderAppAtRoute("/course/cell-biology/practice/quiz", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "quiz.json") {
           throw new Error("ENOENT");
@@ -460,7 +462,7 @@ describe("quiz PR9", { timeout: 20000 }, () => {
   });
 
   it("shows empty state when pack course mismatches route", async () => {
-    await renderAppAtRoute("/course/cell-biology/quiz", {
+    await renderAppAtRoute("/course/cell-biology/practice/quiz", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "quiz.json") {
           return { ...smallQuiz, course: "other-course" };
@@ -480,7 +482,7 @@ describe("quiz PR9", { timeout: 20000 }, () => {
 
   it("keeps question index when pack data refetches", async () => {
     const user = userEvent.setup();
-    const { queryClient } = await renderAppAtRoute("/course/cell-biology/quiz", {
+    const { queryClient } = await renderAppAtRoute("/course/cell-biology/practice/quiz", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "quiz.json") {
           return smallQuiz;
@@ -490,7 +492,7 @@ describe("quiz PR9", { timeout: 20000 }, () => {
       read_quiz_progress: () => ({}),
     });
     await waitForQuizReady();
-    await user.click(screen.getByRole("button", { name: /Next/i }));
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
     expect(screen.getByText("Quiz prompt two")).toBeInTheDocument();
     const refreshed = {
       ...smallQuiz,
@@ -507,7 +509,7 @@ describe("quiz PR9", { timeout: 20000 }, () => {
 
   it("shows Select a model when generating without a model", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/quiz", {
+    await renderAppAtRoute("/course/cell-biology/practice/quiz", {
       get_settings: () => ({ ...fixtureSettings, model_id: null }),
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "quiz.json") {
@@ -529,7 +531,7 @@ describe("quiz PR9", { timeout: 20000 }, () => {
 
   it("disables generate while a study job is running", async () => {
     useJobStore.setState({ status: "running" });
-    await renderAppAtRoute("/course/cell-biology/quiz", {
+    await renderAppAtRoute("/course/cell-biology/practice/quiz", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "quiz.json") {
           throw new Error("ENOENT");
@@ -548,7 +550,7 @@ describe("quiz PR9", { timeout: 20000 }, () => {
 
   it("never flashes empty state while quiz data is loading", async () => {
     const finishTracking = trackEmptyStateText(/No quiz yet for/i);
-    await renderAppAtRoute("/course/cell-biology/quiz", {
+    await renderAppAtRoute("/course/cell-biology/practice/quiz", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "quiz.json") {
           return smallQuiz;
@@ -562,7 +564,7 @@ describe("quiz PR9", { timeout: 20000 }, () => {
   });
 
   it("renders the pack when quiz progress read fails", async () => {
-    await renderAppAtRoute("/course/cell-biology/quiz", {
+    await renderAppAtRoute("/course/cell-biology/practice/quiz", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "quiz.json") {
           return smallQuiz;
@@ -574,12 +576,12 @@ describe("quiz PR9", { timeout: 20000 }, () => {
       },
     });
     await waitForQuizReady();
-    expect(screen.getByText("0 / 2 correct")).toBeInTheDocument();
+    expect(screen.getByText("0 / 0 correct")).toBeInTheDocument();
   });
 
   it("applies success and destructive surfaces with icons after submit", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/quiz", {
+    await renderAppAtRoute("/course/cell-biology/practice/quiz", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "quiz.json") {
           return smallQuiz;
@@ -605,7 +607,7 @@ describe("quiz PR9", { timeout: 20000 }, () => {
 
   it("keeps selection and submitted state when the pack refetches", async () => {
     const user = userEvent.setup();
-    const { queryClient } = await renderAppAtRoute("/course/cell-biology/quiz", {
+    const { queryClient } = await renderAppAtRoute("/course/cell-biology/practice/quiz", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "quiz.json") {
           return smallQuiz;
@@ -639,7 +641,8 @@ describe("quiz PR9", { timeout: 20000 }, () => {
     await waitFor(() => {
       expect(screen.getByText("Quiz prompt one refreshed")).toBeInTheDocument();
     });
-    expect(screen.getByRole("button", { name: /^Submit$/i })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: /^Submit$/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Next question" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Beta/i }).className).toMatch(
       /border-primary|bg-success-surface/,
     );
@@ -647,7 +650,7 @@ describe("quiz PR9", { timeout: 20000 }, () => {
 
   it("selects choices with keys 1, 3, and 4", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/quiz", {
+    await renderAppAtRoute("/course/cell-biology/practice/quiz", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "quiz.json") {
           return smallQuiz;
@@ -667,7 +670,7 @@ describe("quiz PR9", { timeout: 20000 }, () => {
 
   it("advances with ArrowRight", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/quiz", {
+    await renderAppAtRoute("/course/cell-biology/practice/quiz", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "quiz.json") {
           return smallQuiz;
@@ -683,7 +686,7 @@ describe("quiz PR9", { timeout: 20000 }, () => {
 
   it("advances on Enter when no choice is selected", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/quiz", {
+    await renderAppAtRoute("/course/cell-biology/practice/quiz", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "quiz.json") {
           return smallQuiz;
@@ -699,7 +702,7 @@ describe("quiz PR9", { timeout: 20000 }, () => {
 
   it("ignores quiz choice keys while a dialog is open", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/quiz", {
+    await renderAppAtRoute("/course/cell-biology/practice/quiz", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "quiz.json") {
           return smallQuiz;
@@ -720,7 +723,7 @@ describe("quiz PR9", { timeout: 20000 }, () => {
 
   it("shows wrong styling when an incorrect choice is submitted", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/quiz", {
+    await renderAppAtRoute("/course/cell-biology/practice/quiz", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "quiz.json") {
           return smallQuiz;
@@ -741,7 +744,7 @@ describe("quiz PR9", { timeout: 20000 }, () => {
     await waitFor(() => {
       expect(screen.getByText("Explanation one")).toBeInTheDocument();
     });
-    expect(screen.getByText("0 / 2 correct")).toBeInTheDocument();
+    expect(screen.getByText("0 / 1 correct")).toBeInTheDocument();
     const quizCall = getMockIpcCalls().find(
       (c) =>
         c.cmd === "study_progress" && (c.args as { action?: string }).action === "quiz",
@@ -751,7 +754,7 @@ describe("quiz PR9", { timeout: 20000 }, () => {
 
   it("resumes a submitted question after a Notes round trip", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/quiz", {
+    const { router } = await renderAppAtRoute("/course/cell-biology/practice/quiz", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "quiz.json") {
           return smallQuiz;
@@ -766,22 +769,22 @@ describe("quiz PR9", { timeout: 20000 }, () => {
     await waitFor(() => {
       expect(screen.getByText("Explanation one")).toBeInTheDocument();
     });
-    expect(screen.getByText("1 / 2 correct")).toBeInTheDocument();
-    await user.click(screen.getByRole("link", { name: /Notes/i }));
+    expect(screen.getByText("1 / 1 correct")).toBeInTheDocument();
+    await router.navigate({ to: "/course/$course/overview", params: { course: "cell-biology" } });
     await waitFor(() => {
       expect(screen.getByText("Course overview")).toBeInTheDocument();
     });
-    await user.click(screen.getByRole("link", { name: /Quiz/i }));
+    await router.navigate({ to: "/course/$course/practice/quiz", params: { course: "cell-biology" } });
     await waitForQuizReady();
     expect(screen.getByText("Explanation one")).toBeInTheDocument();
-    expect(screen.getByText("1 / 2 correct")).toBeInTheDocument();
+    expect(screen.getByText("1 / 1 correct")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Beta/i }).className).toMatch(/success/);
   });
 
   it("starts fresh when quiz pack identity changes", async () => {
     const user = userEvent.setup();
     let packPayload = smallQuiz;
-    await renderAppAtRoute("/course/cell-biology/quiz", {
+    await renderAppAtRoute("/course/cell-biology/practice/quiz", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "quiz.json") {
           return packPayload;
@@ -793,7 +796,7 @@ describe("quiz PR9", { timeout: 20000 }, () => {
     await waitForQuizReady();
     await user.click(screen.getByRole("button", { name: /^Beta/i }));
     await user.click(screen.getByRole("button", { name: /^Submit$/i }));
-    await user.click(screen.getByRole("button", { name: /Next/i }));
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
     expect(screen.getByText("Quiz prompt two")).toBeInTheDocument();
     cleanup();
     packPayload = {
@@ -811,7 +814,7 @@ describe("quiz PR9", { timeout: 20000 }, () => {
         },
       ],
     };
-    await renderAppAtRoute("/course/cell-biology/quiz", {
+    await renderAppAtRoute("/course/cell-biology/practice/quiz", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "quiz.json") {
           return packPayload;
@@ -822,7 +825,7 @@ describe("quiz PR9", { timeout: 20000 }, () => {
     });
     await waitFor(() => {
       expect(screen.getByText("Quiz prompt one")).toBeInTheDocument();
-      expect(screen.getByText("0 / 3 correct")).toBeInTheDocument();
+      expect(screen.getByText("0 / 0 correct")).toBeInTheDocument();
     });
   });
 
@@ -831,7 +834,7 @@ describe("quiz PR9", { timeout: 20000 }, () => {
     useStudySessionStore.setState({
       sessions: { [key]: { identity: "x", savedAt: 1 } as never },
     });
-    await renderAppAtRoute("/course/cell-biology/quiz", {
+    await renderAppAtRoute("/course/cell-biology/practice/quiz", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "quiz.json") {
           return smallQuiz;
@@ -846,7 +849,7 @@ describe("quiz PR9", { timeout: 20000 }, () => {
 
   it("restart clears in-session answers and returns to question 1", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/quiz", {
+    await renderAppAtRoute("/course/cell-biology/practice/quiz", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "quiz.json") {
           return smallQuiz;
@@ -858,14 +861,14 @@ describe("quiz PR9", { timeout: 20000 }, () => {
     await waitForQuizReady();
     await user.click(screen.getByRole("button", { name: /^Beta/i }));
     await user.click(screen.getByRole("button", { name: /^Submit$/i }));
-    await user.click(screen.getByRole("button", { name: /Next/i }));
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
     expect(screen.getByText("Quiz prompt two")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /^Restart$/i }));
     await user.click(screen.getByRole("button", { name: /^Restart quiz$/i }));
     await waitFor(() => {
       expect(screen.getByText("Quiz prompt one")).toBeInTheDocument();
     });
-    expect(screen.getByText("0 / 2 correct")).toBeInTheDocument();
+    expect(screen.getByText("0 / 0 correct")).toBeInTheDocument();
     const key = studySessionKey(FIXTURE_ROOT_FALL, "cell-biology", "quiz");
     const saved = useStudySessionStore.getState().sessions[key];
     expect(saved && "index" in saved ? saved.index : -1).toBe(0);
@@ -888,7 +891,7 @@ describe("quiz PR9", { timeout: 20000 }, () => {
         },
       ],
     };
-    await renderAppAtRoute("/course/cell-biology/quiz", {
+    const { router } = await renderAppAtRoute("/course/cell-biology/practice/quiz", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "quiz.json") {
           return quizThree;
@@ -900,17 +903,184 @@ describe("quiz PR9", { timeout: 20000 }, () => {
     await waitFor(() => {
       expect(screen.getByText("Quiz prompt one")).toBeInTheDocument();
     });
-    await user.click(screen.getByRole("button", { name: /Next/i }));
-    await user.click(screen.getByRole("button", { name: /Next/i }));
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
     expect(screen.getByText("Quiz prompt three")).toBeInTheDocument();
-    await user.click(screen.getByRole("link", { name: /Notes/i }));
+    await router.navigate({ to: "/course/$course/overview", params: { course: "cell-biology" } });
     await waitFor(() => {
       expect(screen.getByText("Course overview")).toBeInTheDocument();
     });
-    await user.click(screen.getByRole("link", { name: /Quiz/i }));
+    await router.navigate({ to: "/course/$course/practice/quiz", params: { course: "cell-biology" } });
     await waitFor(() => {
       expect(screen.getByText("Quiz prompt three")).toBeInTheDocument();
     });
     expect(screen.getByText(/Question 3 of 3/i)).toBeInTheDocument();
+  });
+});
+
+const MEMBRANES = "cell-biology/digests/2026-09-12-membranes.md";
+const MITO = "cell-biology/digests/2026-09-15-mitochondria.md";
+const STEM = "cell-biology/digests/2026-10-12-stem-cells.md";
+const SCOPE_KEY = classScopeKey(FIXTURE_ROOT_FALL, "cell-biology");
+
+function question(id: string, digest: string) {
+  return {
+    id,
+    type: "multiple_choice" as const,
+    prompt: `Prompt ${id}`,
+    choices: ["Alpha", "Beta", "Gamma", "Delta"],
+    answer_index: 1,
+    explanation: `Explanation ${id}`,
+    source: { digest, heading: null },
+  };
+}
+
+const twoLectureQuiz = {
+  schema_version: 1 as const,
+  course: "cell-biology",
+  questions: [
+    question("q-1", "digests/2026-09-12-membranes.md"),
+    question("q-2", "digests/2026-09-15-mitochondria.md"),
+    question("q-3", "digests/2026-09-12-membranes.md"),
+    question("q-4", "digests/2026-09-15-mitochondria.md"),
+  ],
+};
+
+const twoLectureFixtures = {
+  read_study_json: (payload: unknown) =>
+    readStudyFile(payload) === "quiz.json"
+      ? twoLectureQuiz
+      : { schema_version: 1, course: "cell-biology", failures: [] },
+  read_quiz_progress: () => ({}),
+};
+
+describe("quiz scoped to the ticked lectures", { timeout: 20000 }, () => {
+  beforeEach(() => {
+    vi.useRealTimers();
+    resetAuthRefreshForTests();
+    resetStudyWriteQueueForTests();
+    localStorage.clear();
+    useStudySessionStore.persist.clearStorage();
+    useStudySessionStore.setState({ sessions: {} });
+    useLectureSelectionStore.setState({ byClass: {} });
+    useJobStore.setState({
+      activeJobId: null,
+      activeUpdateJobId: null,
+      status: "idle",
+      step: null,
+      label: null,
+      lines: [],
+      unread: 0,
+    });
+    clearMockIpcLog();
+  });
+
+  afterEach(() => {
+    cleanup();
+    resetMockHandlerTimers();
+    clearTauriMocks();
+    vi.restoreAllMocks();
+  });
+
+  it("asks only the questions of the ticked lectures and records the answer", async () => {
+    const user = userEvent.setup();
+    useLectureSelectionStore.getState().setScope(SCOPE_KEY, [MITO]);
+    await renderAppAtRoute("/course/cell-biology/practice/quiz", twoLectureFixtures);
+    await waitFor(() => expect(screen.getByText(/Question 1 of 2/i)).toBeInTheDocument(), { timeout: 8000 });
+    expect(screen.getByText("Prompt q-2")).toBeInTheDocument();
+    expect(screen.queryByText("Prompt q-1")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^Beta/i }));
+    await user.click(screen.getByRole("button", { name: /^Submit$/i }));
+    await waitFor(() => {
+      const call = getMockIpcCalls().find(
+        (c) => c.cmd === "study_progress" && (c.args as { action?: string }).action === "quiz",
+      );
+      expect(call?.args).toMatchObject({
+        id: "q-2",
+        result: "correct",
+        digest: "digests/2026-09-15-mitochondria.md",
+      });
+    });
+  });
+
+  it("shows No quiz yet for a scope with no questions, and Generate sends the lectures", async () => {
+    const user = userEvent.setup();
+    useLectureSelectionStore.getState().setScope(SCOPE_KEY, [STEM, MEMBRANES]);
+    await renderAppAtRoute("/course/cell-biology/practice/quiz", {
+      ...twoLectureFixtures,
+      read_study_json: (payload: unknown) =>
+        readStudyFile(payload) === "quiz.json"
+          ? { ...twoLectureQuiz, questions: [question("q-2", "digests/2026-09-15-mitochondria.md")] }
+          : { schema_version: 1, course: "cell-biology", failures: [] },
+    });
+    await waitFor(
+      () => expect(screen.getByText(/No quiz yet for these 2 lectures\. Generate questions from their digests\./)).toBeInTheDocument(),
+      { timeout: 8000 },
+    );
+    clearMockIpcLog();
+    await user.click(screen.getByRole("button", { name: /^Generate$/i }));
+    await waitFor(() => expect(getMockIpcLog()).toContain("start_study_job"));
+    const call = getMockIpcCalls().find((c) => c.cmd === "start_study_job");
+    expect(call?.args).toMatchObject({ skill: "quiz", force: false, digests: [STEM, MEMBRANES] });
+  });
+
+  it("refreshes the whole class from its digests even when lectures are ticked", async () => {
+    const user = userEvent.setup();
+    useLectureSelectionStore.getState().setScope(SCOPE_KEY, [MEMBRANES]);
+    await renderAppAtRoute("/course/cell-biology/practice/quiz", twoLectureFixtures);
+    await waitFor(() => expect(screen.getByText(/Question 1 of 2/i)).toBeInTheDocument(), { timeout: 8000 });
+    clearMockIpcLog();
+    await user.click(screen.getByRole("button", { name: /Refresh from digests/i }));
+    await waitFor(() => expect(getMockIpcLog()).toContain("start_study_job"));
+    const call = getMockIpcCalls().find((c) => c.cmd === "start_study_job");
+    expect(call?.args).toMatchObject({ force: true });
+    expect(call?.args).not.toHaveProperty("digests");
+  });
+
+  it("keeps the whole-class session and its answers while lectures are ticked and cleared", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/practice/quiz", twoLectureFixtures);
+    await waitFor(() => expect(screen.getByText(/Question 1 of 4/i)).toBeInTheDocument(), { timeout: 8000 });
+    await user.click(screen.getByRole("button", { name: /^Beta/i }));
+    await user.click(screen.getByRole("button", { name: /^Submit$/i }));
+    await user.click(screen.getByRole("button", { name: /^Next question$/i }));
+    await waitFor(() => expect(screen.getByText(/Question 2 of 4/i)).toBeInTheDocument());
+    act(() => useLectureSelectionStore.getState().setScope(SCOPE_KEY, [MITO]));
+    await waitFor(() => expect(screen.getByText(/Question 1 of 2/i)).toBeInTheDocument());
+    act(() => useLectureSelectionStore.getState().clear(SCOPE_KEY));
+    await waitFor(() => expect(screen.getByText(/Question 2 of 4/i)).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: /^Previous$/i }));
+    await waitFor(() => expect(screen.getByText("Prompt q-1")).toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: /^Submit$/i })).not.toBeInTheDocument();
+    const q1Writes = getMockIpcCalls().filter(
+      (c) =>
+        c.cmd === "study_progress" &&
+        (c.args as { action?: string; id?: string }).action === "quiz" &&
+        (c.args as { id?: string }).id === "q-1",
+    );
+    expect(q1Writes).toHaveLength(1);
+  });
+
+  it("scores correct answers out of the questions answered so far", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/practice/quiz", twoLectureFixtures);
+    await waitFor(() => expect(screen.getByText(/Question 1 of 4/i)).toBeInTheDocument(), { timeout: 8000 });
+    expect(screen.getByText("0 / 0 correct")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^Beta/i }));
+    await user.click(screen.getByRole("button", { name: /^Submit$/i }));
+    await user.click(screen.getByRole("button", { name: /^Next question$/i }));
+    await user.click(screen.getByRole("button", { name: /^Alpha/i }));
+    await user.click(screen.getByRole("button", { name: /^Submit$/i }));
+    expect(screen.getByText("1 / 2 correct")).toBeInTheDocument();
+  });
+
+  it("shows the whole pack once the scope is cleared", async () => {
+    const user = userEvent.setup();
+    useLectureSelectionStore.getState().setScope(SCOPE_KEY, [MITO]);
+    await renderAppAtRoute("/course/cell-biology/practice/quiz", twoLectureFixtures);
+    await waitFor(() => expect(screen.getByText(/Question 1 of 2/i)).toBeInTheDocument(), { timeout: 8000 });
+    await user.click(screen.getByRole("button", { name: "Stop studying 1 lecture" }));
+    await waitFor(() => expect(screen.getByText(/Question 1 of 4/i)).toBeInTheDocument());
+    expect(screen.getByText("Prompt q-1")).toBeInTheDocument();
   });
 });

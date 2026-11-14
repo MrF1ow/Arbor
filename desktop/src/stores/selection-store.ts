@@ -6,7 +6,17 @@ export type MakeCardDraft = {
   page: string | null;
 };
 
+/** What "Ask about this" hands to Ask: the digest, the heading it sits under and the selected text. */
+export type AskFocus = {
+  /** Course-prefixed digest path. */
+  digest: string;
+  heading: string | null;
+  text: string;
+};
+
 interface SelectionState {
+  askFocus: AskFocus | null;
+  setAskFocus: (focus: AskFocus | null) => void;
   selectionText: string;
   heading: string | null;
   page: string | null;
@@ -23,6 +33,8 @@ interface SelectionState {
 }
 
 export const useSelectionStore = create<SelectionState>((set) => ({
+  askFocus: null,
+  setAskFocus: (askFocus) => set({ askFocus }),
   selectionText: "",
   heading: null,
   page: null,
@@ -43,5 +55,6 @@ export const useSelectionStore = create<SelectionState>((set) => ({
       page: null,
       digest: null,
       draft: null,
+      askFocus: null,
     }),
 }));

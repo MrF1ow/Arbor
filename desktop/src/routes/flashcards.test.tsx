@@ -1,4 +1,4 @@
-import { cleanup, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clearTauriMocks } from "~/test/mock-ipc";
@@ -6,9 +6,10 @@ import { clearTauriMocks } from "~/test/mock-ipc";
 import * as flashcardsDomain from "~/domain/flashcards";
 import { resetAuthRefreshForTests } from "~/lib/auth-refresh";
 import { resetStudyWriteQueueForTests } from "~/lib/study-writes";
-import { fixtureCourseOverview, fixtureSettings } from "~/test/fixtures/data";
+import { fixtureCourseOverview, fixtureDigests, fixtureSettings } from "~/test/fixtures/data";
 import { qk } from "~/lib/queries/keys";
-import { FIXTURE_ROOT_FALL } from "~/test/fixtures/data";
+import { FIXTURE_ROOT_FALL, FIXTURE_ROOT_SHARED } from "~/test/fixtures/data";
+import type { TodayCourseRow, TodayPayload } from "~/domain/today";
 import {
   clearMockIpcLog,
   getMockIpcCalls,
@@ -17,6 +18,7 @@ import {
 } from "~/test/mock-handlers";
 import { studySessionKey } from "~/domain/study-session";
 import { useJobStore } from "~/stores/job-store";
+import { classScopeKey, useLectureSelectionStore } from "~/stores/lecture-selection-store";
 import { useStudySessionStore } from "~/stores/study-session-store";
 import { useUiStore } from "~/stores/ui-store";
 import { renderAppAtRoute } from "~/test/render";
@@ -107,7 +109,6 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
       sidebarTouched: true,
       logOpen: false,
       logHeight: 200,
-      notesIndexOpen: true,
       lastCourse: null,
     });
     useJobStore.setState({
@@ -131,7 +132,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
 
   it("never flashes empty state while deck data is loading", async () => {
     const finishTracking = trackEmptyStateText(/No flashcards yet for/i);
-    await renderAppAtRoute("/course/cell-biology/flashcards", {
+    await renderAppAtRoute("/course/cell-biology/practice/cards", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           return smallDeck;
@@ -145,7 +146,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
 
   it("optimistically advances after mastered grade while study_progress is pending", async () => {
     const user = userEvent.setup();
-    const { queryClient } = await renderAppAtRoute("/course/cell-biology/flashcards", {
+    const { queryClient } = await renderAppAtRoute("/course/cell-biology/practice/cards", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           return smallDeck;
@@ -194,7 +195,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
 
   it("due again requeues with unchanged due count", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/flashcards", {
+    await renderAppAtRoute("/course/cell-biology/practice/cards", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           return smallDeck;
@@ -228,7 +229,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
 
   it("due mastered drops due count", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/flashcards", {
+    await renderAppAtRoute("/course/cell-biology/practice/cards", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           return smallDeck;
@@ -258,7 +259,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
 
   it("full deck wrong advances to the next card", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/flashcards", {
+    await renderAppAtRoute("/course/cell-biology/practice/cards", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           return smallDeck;
@@ -278,7 +279,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
 
   it("toggles deck mode and rebuilds the session", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/flashcards", {
+    await renderAppAtRoute("/course/cell-biology/practice/cards", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           return smallDeck;
@@ -296,7 +297,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
 
   it("handles keyboard flip, grade gating, navigation, and input ignore", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/flashcards", {
+    await renderAppAtRoute("/course/cell-biology/practice/cards", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           return smallDeck;
@@ -323,7 +324,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
 
   it("focuses ?card= and clears the search param", async () => {
     const user = userEvent.setup();
-    const { router } = await renderAppAtRoute("/course/cell-biology/flashcards?card=fc-99", {
+    const { router } = await renderAppAtRoute("/course/cell-biology/practice/cards?card=fc-99", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           return smallDeck;
@@ -351,7 +352,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
 
   it("navigates source chip to digest with heading", async () => {
     const user = userEvent.setup();
-    const { router } = await renderAppAtRoute("/course/cell-biology/flashcards", {
+    const { router } = await renderAppAtRoute("/course/cell-biology/practice/cards", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           return smallDeck;
@@ -366,13 +367,13 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
       }),
     );
     await waitFor(() => {
-      expect(router.state.location.pathname).toContain("/notes/2026-09-12-membranes");
+      expect(router.state.location.pathname).toContain("/read/2026-09-12-membranes");
       expect(router.state.location.searchStr).toContain("heading=Membrane+structure");
     });
   });
 
   it("shows unverified badge from citations fixture", async () => {
-    await renderAppAtRoute("/course/cell-biology/flashcards", {
+    await renderAppAtRoute("/course/cell-biology/practice/cards", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           return smallDeck;
@@ -401,7 +402,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
   });
 
   it("shows stale badge when artifact is stale", async () => {
-    await renderAppAtRoute("/course/cell-biology/flashcards", {
+    await renderAppAtRoute("/course/cell-biology/practice/cards", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           return smallDeck;
@@ -416,7 +417,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
 
   it("shows unsaved badge and retries flush on click", async () => {
     let gradeCalls = 0;
-    await renderAppAtRoute("/course/cell-biology/flashcards", {
+    await renderAppAtRoute("/course/cell-biology/practice/cards", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           return smallDeck;
@@ -453,7 +454,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
 
   it("shows empty deck copy and generate gates", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/flashcards", {
+    await renderAppAtRoute("/course/cell-biology/practice/cards", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           throw new Error("ENOENT");
@@ -485,7 +486,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
 
   it("generate when signed out logs auth message without starting job", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/flashcards", {
+    await renderAppAtRoute("/course/cell-biology/practice/cards", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           throw new Error("ENOENT");
@@ -518,7 +519,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
 
   it("refresh from digests uses force true", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/flashcards", {
+    await renderAppAtRoute("/course/cell-biology/practice/cards", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           return smallDeck;
@@ -535,7 +536,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
   });
 
   it("disables generate for viewer libraries", async () => {
-    await renderAppAtRoute("/course/cell-biology/flashcards", {
+    await renderAppAtRoute("/course/cell-biology/practice/cards", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           throw new Error("ENOENT");
@@ -561,7 +562,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
 
   it("does not reset card index when deck data refetches with same ids", async () => {
     const user = userEvent.setup();
-    const { queryClient } = await renderAppAtRoute("/course/cell-biology/flashcards", {
+    const { queryClient } = await renderAppAtRoute("/course/cell-biology/practice/cards", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           return smallDeck;
@@ -589,7 +590,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
 
   it("sends empty heading when source heading is null", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/flashcards", {
+    await renderAppAtRoute("/course/cell-biology/practice/cards", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           return smallDeck;
@@ -624,7 +625,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
 
   it("ignores flashcard keys while a dialog is open", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/flashcards", {
+    await renderAppAtRoute("/course/cell-biology/practice/cards", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           return smallDeck;
@@ -646,7 +647,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
 
   it("does not grade on Ctrl+1 and navigates to Notes", async () => {
     const user = userEvent.setup();
-    const { router } = await renderAppAtRoute("/course/cell-biology/flashcards", {
+    const { router } = await renderAppAtRoute("/course/cell-biology/practice/cards", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           return smallDeck;
@@ -661,7 +662,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
     ).length;
     await user.keyboard("{Control>}1{/Control}");
     await waitFor(() => {
-      expect(router.state.location.pathname).toContain("/notes");
+      expect(router.state.location.pathname).toContain("/overview");
     });
     const gradesAfter = getMockIpcCalls().filter(
       (c) => c.cmd === "study_progress" && (c.args as { action?: string }).action === "grade",
@@ -671,7 +672,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
 
   it("removes flashcard key listener after leaving the view", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/flashcards", {
+    const { router } = await renderAppAtRoute("/course/cell-biology/practice/cards", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           return smallDeck;
@@ -680,7 +681,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
       },
     });
     await waitForFlashcardsReady();
-    await user.click(screen.getByRole("link", { name: /Notes/i }));
+    await router.navigate({ to: "/course/$course/overview", params: { course: "cell-biology" } });
     await waitFor(() => {
       expect(screen.getByText("Course overview")).toBeInTheDocument();
     });
@@ -695,7 +696,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
   });
 
   it("card focus stays in due mode when the card is already due", async () => {
-    await renderAppAtRoute("/course/cell-biology/flashcards?card=fc-1", {
+    await renderAppAtRoute("/course/cell-biology/practice/cards?card=fc-1", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           return smallDeck;
@@ -711,7 +712,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
   });
 
   it("unknown card param stays in due mode and clears search", async () => {
-    const { router } = await renderAppAtRoute("/course/cell-biology/flashcards?card=missing-id", {
+    const { router } = await renderAppAtRoute("/course/cell-biology/practice/cards?card=missing-id", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           return smallDeck;
@@ -740,7 +741,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
         },
       ],
     };
-    await renderAppAtRoute("/course/cell-biology/flashcards?card=fc-appended-1", {
+    await renderAppAtRoute("/course/cell-biology/practice/cards?card=fc-appended-1", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           return deckWithNew;
@@ -765,7 +766,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
 
   it("shows Select a model when generating without a model", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/flashcards", {
+    await renderAppAtRoute("/course/cell-biology/practice/cards", {
       get_settings: () => ({ ...fixtureSettings, model_id: null }),
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
@@ -786,7 +787,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
 
   it("disables generate while a study job is running", async () => {
     useJobStore.setState({ status: "running" });
-    await renderAppAtRoute("/course/cell-biology/flashcards", {
+    await renderAppAtRoute("/course/cell-biology/practice/cards", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           throw new Error("ENOENT");
@@ -803,7 +804,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
   });
 
   it("shows empty state when deck course mismatches route", async () => {
-    await renderAppAtRoute("/course/cell-biology/flashcards", {
+    await renderAppAtRoute("/course/cell-biology/practice/cards", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           return { ...smallDeck, course: "other-course" };
@@ -825,7 +826,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
     const createReviewSpy = vi
       .spyOn(flashcardsDomain, "createReview")
       .mockReturnValue({ cards: [], index: 0, flipped: false });
-    await renderAppAtRoute("/course/cell-biology/flashcards", {
+    await renderAppAtRoute("/course/cell-biology/practice/cards", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           return smallDeck;
@@ -841,7 +842,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
 
   it("Study full deck switches to the full deck session", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/flashcards", {
+    await renderAppAtRoute("/course/cell-biology/practice/cards", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           return smallDeck;
@@ -868,7 +869,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
 
   it("resumes full-deck position and flip state after a Notes round trip", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/flashcards", {
+    const { router } = await renderAppAtRoute("/course/cell-biology/practice/cards", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           return smallDeck;
@@ -883,11 +884,11 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
     expect(screen.getByText("Question ninety-nine")).toBeInTheDocument();
     await user.keyboard(" ");
     expect(screen.getByText("Answer ninety-nine")).toBeInTheDocument();
-    await user.click(screen.getByRole("link", { name: /Notes/i }));
+    await router.navigate({ to: "/course/$course/overview", params: { course: "cell-biology" } });
     await waitFor(() => {
       expect(screen.getByText("Course overview")).toBeInTheDocument();
     });
-    await user.click(screen.getByRole("link", { name: /Flashcards/i }));
+    await router.navigate({ to: "/course/$course/practice/cards", params: { course: "cell-biology" } });
     await waitForFlashcardsReady();
     expect(screen.getByText("Question ninety-nine")).toBeInTheDocument();
     expect(screen.getByText("3 / 3")).toBeInTheDocument();
@@ -896,7 +897,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
 
   it("card focus deep link overrides a saved session position", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/flashcards", {
+    const { router } = await renderAppAtRoute("/course/cell-biology/practice/cards", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           return smallDeck;
@@ -908,16 +909,16 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
     await user.click(screen.getByText(/Full deck · 86/i));
     await user.click(screen.getByRole("button", { name: /^Next$/i }));
     await user.click(screen.getByRole("button", { name: /^Next$/i }));
-    await user.click(screen.getByRole("link", { name: /Notes/i }));
+    await router.navigate({ to: "/course/$course/overview", params: { course: "cell-biology" } });
     await waitFor(() => {
       expect(screen.getByText("Course overview")).toBeInTheDocument();
     });
-    await user.click(screen.getByRole("link", { name: /Flashcards/i }));
+    await router.navigate({ to: "/course/$course/practice/cards", params: { course: "cell-biology" } });
     await waitFor(() => {
       expect(screen.getByText("Question ninety-nine")).toBeInTheDocument();
     });
     cleanup();
-    await renderAppAtRoute("/course/cell-biology/flashcards?card=fc-1", {
+    await renderAppAtRoute("/course/cell-biology/practice/cards?card=fc-1", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           return smallDeck;
@@ -947,7 +948,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
       ],
     };
     let deckPayload: typeof smallDeck = smallDeck;
-    await renderAppAtRoute("/course/cell-biology/flashcards", {
+    await renderAppAtRoute("/course/cell-biology/practice/cards", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           return deckPayload;
@@ -962,7 +963,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
     expect(screen.getByText("Question ninety-nine")).toBeInTheDocument();
     cleanup();
     deckPayload = deckV2;
-    await renderAppAtRoute("/course/cell-biology/flashcards", {
+    await renderAppAtRoute("/course/cell-biology/practice/cards", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           return deckPayload;
@@ -987,7 +988,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
         [key]: { identity: "bad", savedAt: 1 } as never,
       },
     });
-    await renderAppAtRoute("/course/cell-biology/flashcards", {
+    await renderAppAtRoute("/course/cell-biology/practice/cards", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           return smallDeck;
@@ -1008,7 +1009,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
     useStudySessionStore.setState({
       sessions: { [key]: corrupt as never },
     });
-    await renderAppAtRoute("/course/cell-biology/flashcards", {
+    await renderAppAtRoute("/course/cell-biology/practice/cards", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           return smallDeck;
@@ -1022,7 +1023,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
 
   it("keeps due again requeue order live and after a Notes round trip", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/flashcards", {
+    const { router } = await renderAppAtRoute("/course/cell-biology/practice/cards", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           return smallDeck;
@@ -1049,11 +1050,11 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
     });
     await user.click(screen.getByRole("button", { name: /^Next/i }));
     expect(screen.getByText("Question ninety-nine")).toBeInTheDocument();
-    await user.click(screen.getByRole("link", { name: /Notes/i }));
+    await router.navigate({ to: "/course/$course/overview", params: { course: "cell-biology" } });
     await waitFor(() => {
       expect(screen.getByText("Course overview")).toBeInTheDocument();
     });
-    await user.click(screen.getByRole("link", { name: /Flashcards/i }));
+    await router.navigate({ to: "/course/$course/practice/cards", params: { course: "cell-biology" } });
     await waitFor(() => {
       expect(screen.getByText(/Due today · 3/i)).toBeInTheDocument();
     });
@@ -1076,7 +1077,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
         },
       },
     });
-    await renderAppAtRoute("/course/cell-biology/flashcards", {
+    await renderAppAtRoute("/course/cell-biology/practice/cards", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           return smallDeck;
@@ -1103,7 +1104,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
 
   it("restart clears saved position and returns to the first card", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/flashcards", {
+    await renderAppAtRoute("/course/cell-biology/practice/cards", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           return smallDeck;
@@ -1150,7 +1151,7 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
         },
       },
     });
-    await renderAppAtRoute("/course/cell-biology/flashcards", {
+    await renderAppAtRoute("/course/cell-biology/practice/cards", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "flashcards.json") {
           return smallDeck;
@@ -1163,5 +1164,472 @@ describe("flashcards PR8", { timeout: 20000 }, () => {
     await waitFor(() => {
       expect(screen.getByText("Question ninety-nine")).toBeInTheDocument();
     });
+  });
+});
+
+const MEMBRANES = "cell-biology/digests/2026-09-12-membranes.md";
+const MITO = "cell-biology/digests/2026-09-15-mitochondria.md";
+const STEM = "cell-biology/digests/2026-10-12-stem-cells.md";
+const SCOPE_KEY = classScopeKey(FIXTURE_ROOT_FALL, "cell-biology");
+
+function card(id: string, digest: string) {
+  return {
+    id,
+    front: `Question ${id}`,
+    back: `Answer ${id}`,
+    tags: [],
+    source: { digest, heading: null, page: null },
+  };
+}
+
+/** Two lectures' cards, interleaved, all due. */
+const twoLectureDeck = {
+  schema_version: 1 as const,
+  course: "cell-biology",
+  cards: [
+    card("fc-1", "digests/2026-09-12-membranes.md"),
+    card("fc-2", "digests/2026-09-15-mitochondria.md"),
+    card("fc-3", "digests/2026-09-12-membranes.md"),
+    card("fc-4", "digests/2026-09-15-mitochondria.md"),
+  ],
+};
+
+const twoLectureFixtures = {
+  read_study_json: (payload: unknown) => {
+    if (readStudyFile(payload) === "flashcards.json") {
+      return twoLectureDeck;
+    }
+    return { schema_version: 1, course: "cell-biology", failures: [] };
+  },
+  study_progress: (args: unknown) =>
+    studyProgressAction(args) === "overview"
+      ? { ...fixtureCourseOverview, due: { due_ids: ["fc-1", "fc-2", "fc-3", "fc-4"], count: 4, deck_count: 4 } }
+      : {},
+};
+
+describe("flashcards scoped to the ticked lectures", { timeout: 20000 }, () => {
+  beforeEach(() => {
+    vi.useRealTimers();
+    resetAuthRefreshForTests();
+    resetStudyWriteQueueForTests();
+    localStorage.clear();
+    useStudySessionStore.persist.clearStorage();
+    useStudySessionStore.setState({ sessions: {} });
+    useLectureSelectionStore.setState({ byClass: {} });
+    useJobStore.setState({
+      activeJobId: null,
+      activeUpdateJobId: null,
+      status: "idle",
+      step: null,
+      label: null,
+      lines: [],
+      unread: 0,
+    });
+    clearMockIpcLog();
+  });
+
+  afterEach(() => {
+    cleanup();
+    resetMockHandlerTimers();
+    clearTauriMocks();
+    vi.restoreAllMocks();
+  });
+
+  it("reviews only the cards of the ticked lectures and grades them", async () => {
+    const user = userEvent.setup();
+    useLectureSelectionStore.getState().setScope(SCOPE_KEY, [MITO]);
+    await renderAppAtRoute("/course/cell-biology/practice/cards", twoLectureFixtures);
+    await waitForFlashcardsReady(2);
+    expect(screen.getByText(/Full deck · 2/i)).toBeInTheDocument();
+    expect(screen.getByText("Question fc-2")).toBeInTheDocument();
+    expect(screen.queryByText("Question fc-1")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /^Flip$/i }));
+    await user.keyboard("3");
+    await waitFor(() => expect(screen.getByText("Question fc-4")).toBeInTheDocument());
+    const grade = getMockIpcCalls().find(
+      (c) => c.cmd === "study_progress" && (c.args as { action?: string }).action === "grade",
+    );
+    expect(grade?.args).toMatchObject({
+      id: "fc-2",
+      result: "mastered",
+      digest: "digests/2026-09-15-mitochondria.md",
+    });
+  });
+
+  it('names a whole ticked unit in the chip: "Studying Membranes · 2 lectures"', async () => {
+    useLectureSelectionStore.getState().setScope(SCOPE_KEY, [MEMBRANES, MITO]);
+    await renderAppAtRoute("/course/cell-biology/practice/cards", {
+      ...twoLectureFixtures,
+      list_digests: () => [
+        { title: "Cell membranes", date: "2026-09-12", path: MEMBRANES, unit: "Membranes", source_path: null },
+        { title: "Mitochondria", date: "2026-09-15", path: MITO, unit: "Membranes", source_path: null },
+      ],
+    });
+    await waitForFlashcardsReady(4);
+    expect(screen.getByText("Studying")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Stop studying Membranes · 2 lectures" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Cards" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Quiz" })).toBeInTheDocument();
+  });
+
+  it("ignores a ticked lecture that no longer exists: whole deck, no chip, Generate sends no lectures", async () => {
+    const user = userEvent.setup();
+    useLectureSelectionStore.getState().setScope(SCOPE_KEY, ["cell-biology/digests/2026-01-01-deleted.md"]);
+    await renderAppAtRoute("/course/cell-biology/practice/cards", twoLectureFixtures);
+    await waitForFlashcardsReady(4);
+    expect(screen.getByText("Question fc-1")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Stop studying/ })).not.toBeInTheDocument();
+    clearMockIpcLog();
+    await user.click(screen.getByRole("button", { name: /Refresh from digests/ }));
+    await waitFor(() => expect(getMockIpcLog()).toContain("start_study_job"));
+    const call = getMockIpcCalls().find((c) => c.cmd === "start_study_job");
+    expect(JSON.stringify(call?.args)).not.toContain("deleted");
+  });
+
+  it("shows the Studying chip, and clearing it brings the whole deck back", async () => {
+    const user = userEvent.setup();
+    useLectureSelectionStore.getState().setScope(SCOPE_KEY, [MITO]);
+    await renderAppAtRoute("/course/cell-biology/practice/cards", twoLectureFixtures);
+    await waitForFlashcardsReady(2);
+    await user.click(screen.getByRole("button", { name: "Stop studying 1 lecture" }));
+    await waitForFlashcardsReady(4);
+    expect(useLectureSelectionStore.getState().byClass[SCOPE_KEY]).toBeUndefined();
+    expect(screen.getByText("Question fc-1")).toBeInTheDocument();
+  });
+
+  it("shows No flashcards yet for a scope with no cards, and Generate sends the lectures", async () => {
+    const user = userEvent.setup();
+    useLectureSelectionStore.getState().setScope(SCOPE_KEY, [STEM, MEMBRANES]);
+    useLectureSelectionStore.getState().setScope(SCOPE_KEY, [STEM]);
+    await renderAppAtRoute("/course/cell-biology/practice/cards", twoLectureFixtures);
+    await waitFor(
+      () => expect(screen.getByText(/No flashcards yet for this lecture\. Generate a deck from its digest\./)).toBeInTheDocument(),
+      { timeout: 8000 },
+    );
+    clearMockIpcLog();
+    await user.click(screen.getByRole("button", { name: /^Generate$/i }));
+    await waitFor(() => expect(getMockIpcLog()).toContain("start_study_job"));
+    const call = getMockIpcCalls().find((c) => c.cmd === "start_study_job");
+    expect(call?.args).toMatchObject({
+      course: "cell-biology",
+      skill: "flashcards",
+      force: false,
+      digests: [STEM],
+    });
+  });
+
+  it("refreshes the whole class from its digests even when lectures are ticked", async () => {
+    const user = userEvent.setup();
+    useLectureSelectionStore.getState().setScope(SCOPE_KEY, [MITO]);
+    await renderAppAtRoute("/course/cell-biology/practice/cards", twoLectureFixtures);
+    await waitForFlashcardsReady(2);
+    clearMockIpcLog();
+    await user.click(screen.getByRole("button", { name: /Refresh from digests/i }));
+    await waitFor(() => expect(getMockIpcLog()).toContain("start_study_job"));
+    const call = getMockIpcCalls().find((c) => c.cmd === "start_study_job");
+    expect(call?.args).toMatchObject({ force: true });
+    expect(call?.args).not.toHaveProperty("digests");
+  });
+
+  it("a scoped grade that cannot be sent leaves the class-wide due list intact", async () => {
+    const user = userEvent.setup();
+    useLectureSelectionStore.getState().setScope(SCOPE_KEY, [MITO]);
+    const { queryClient } = await renderAppAtRoute("/course/cell-biology/practice/cards", {
+      ...twoLectureFixtures,
+      study_progress: (args: unknown) => {
+        if (studyProgressAction(args) === "overview") {
+          return { ...fixtureCourseOverview, due: { due_ids: ["fc-1", "fc-2", "fc-3", "fc-4"], count: 4, deck_count: 4 } };
+        }
+        if (studyProgressAction(args) === "grade") {
+          throw new Error("worker offline");
+        }
+        return {};
+      },
+    });
+    await waitForFlashcardsReady(2);
+    await user.click(screen.getByRole("button", { name: /^Flip$/i }));
+    await user.keyboard("3");
+    await waitFor(() => expect(screen.getByText(/Due today · 1/i)).toBeInTheDocument());
+    const cached = queryClient.getQueryData<{ due: { due_ids: string[] } }>(
+      qk.courseOverview(FIXTURE_ROOT_FALL, "cell-biology"),
+    );
+    expect(cached?.due.due_ids).toEqual(["fc-1", "fc-3", "fc-4"]);
+    await user.click(screen.getByRole("button", { name: "Stop studying 1 lecture" }));
+    await waitFor(() => expect(screen.getByText(/Full deck · 4/i)).toBeInTheDocument(), { timeout: 8000 });
+    expect(screen.getByText(/Due today · 3/i)).toBeInTheDocument();
+  });
+
+  it("keeps the whole-class session while lectures are ticked and cleared", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/practice/cards", twoLectureFixtures);
+    await waitForFlashcardsReady(4);
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
+    await waitFor(() => expect(screen.getByText("Question fc-2")).toBeInTheDocument());
+    act(() => useLectureSelectionStore.getState().setScope(SCOPE_KEY, [MITO]));
+    await waitFor(() => expect(screen.getByText(/Full deck · 2/i)).toBeInTheDocument());
+    expect(screen.getByText("Question fc-2")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^Next$/i }));
+    await waitFor(() => expect(screen.getByText("Question fc-4")).toBeInTheDocument());
+    act(() => useLectureSelectionStore.getState().clear(SCOPE_KEY));
+    await waitFor(() => expect(screen.getByText(/Full deck · 4/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Question fc-2")).toBeInTheDocument());
+  });
+
+  it("an unscoped Generate sends no digests", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/practice/cards", {
+      read_study_json: (payload: unknown) => {
+        if (readStudyFile(payload) === "flashcards.json") {
+          throw new Error("ENOENT");
+        }
+        return { schema_version: 1, course: "cell-biology", failures: [] };
+      },
+    });
+    await waitFor(() => expect(screen.getByRole("button", { name: /^Generate$/i })).toBeInTheDocument(), { timeout: 8000 });
+    await user.click(screen.getByRole("button", { name: /^Generate$/i }));
+    await waitFor(() => expect(getMockIpcLog()).toContain("start_study_job"));
+    const call = getMockIpcCalls().find((c) => c.cmd === "start_study_job");
+    expect(call?.args).not.toHaveProperty("digests");
+  });
+
+  it("opens a search hit outside the scope by dropping the scope", async () => {
+    useLectureSelectionStore.getState().setScope(SCOPE_KEY, [MITO]);
+    await renderAppAtRoute("/course/cell-biology/practice/cards?card=fc-1", twoLectureFixtures);
+    await waitFor(() => expect(screen.getByText("Question fc-1")).toBeInTheDocument(), { timeout: 8000 });
+    await waitFor(() => expect(useLectureSelectionStore.getState().byClass[SCOPE_KEY]).toBeUndefined());
+    expect(screen.getByText("Question fc-1")).toBeInTheDocument();
+  });
+});
+
+function todayRow(course: string, dueCount: number, o: Partial<TodayCourseRow> = {}): TodayCourseRow {
+  return {
+    course,
+    digest_count: 6,
+    due_ids: Array.from({ length: dueCount }, (_, i) => `${course}-${i}`),
+    deck_count: 20,
+    mastered: 10,
+    mastery: 0.5,
+    exam_date: null,
+    days_to_exam: null,
+    plan: null,
+    ...o,
+  };
+}
+
+function todayPayload(courses: TodayCourseRow[]): TodayPayload {
+  return {
+    courses,
+    weak_topics: [],
+    quiz_accuracy: { this_week: { correct: 0, total: 0 }, last_week: { correct: 0, total: 0 } },
+    next_exam: null,
+  };
+}
+
+const oneCardDeck = {
+  schema_version: 1 as const,
+  course: "cell-biology",
+  cards: [card("fc-1", "digests/2026-09-12-membranes.md")],
+};
+
+/** A one-card deck whose single card is due; `today` answers `study_today` per library. */
+function lastCardFixtures(today: (root: string) => TodayPayload) {
+  return {
+    read_study_json: (payload: unknown) =>
+      readStudyFile(payload) === "flashcards.json"
+        ? oneCardDeck
+        : { schema_version: 1, course: "cell-biology", failures: [] },
+    study_progress: (args: unknown) =>
+      studyProgressAction(args) === "overview"
+        ? { ...fixtureCourseOverview, due: { due_ids: ["fc-1"], count: 1, deck_count: 1 } }
+        : {},
+    study_today: (args: unknown) => today(String((args as { root?: string }).root ?? "")),
+  };
+}
+
+async function gradeLastCard(user: ReturnType<typeof userEvent.setup>) {
+  await waitForFlashcardsReady(1);
+  await user.click(screen.getByRole("button", { name: /^Flip$/i }));
+  await user.keyboard("3");
+}
+
+describe("Next: <class> after the due cards are done", { timeout: 20000 }, () => {
+  beforeEach(() => {
+    vi.useRealTimers();
+    resetAuthRefreshForTests();
+    resetStudyWriteQueueForTests();
+    localStorage.clear();
+    useStudySessionStore.persist.clearStorage();
+    useStudySessionStore.setState({ sessions: {} });
+    useLectureSelectionStore.setState({ byClass: {} });
+    clearMockIpcLog();
+  });
+
+  afterEach(() => {
+    cleanup();
+    resetMockHandlerTimers();
+    clearTauriMocks();
+    vi.restoreAllMocks();
+  });
+
+  it("offers the next class with due cards and opens it", async () => {
+    const user = userEvent.setup();
+    const { router } = await renderAppAtRoute(
+      "/course/cell-biology/practice/cards",
+      lastCardFixtures((root) =>
+        root === FIXTURE_ROOT_SHARED
+          ? todayPayload([todayRow("collab-notes", 8)])
+          : todayPayload([
+              todayRow("cell-biology", 0),
+              todayRow("organic-chemistry-ii", 5, { exam_date: "2026-11-16", days_to_exam: 9 }),
+            ]),
+      ),
+    );
+    await gradeLastCard(user);
+    const next = await screen.findByRole("button", { name: "Next: Organic Chemistry II · 5 due" }, { timeout: 8000 });
+    await user.click(next);
+    await waitFor(() => expect(router.state.location.pathname).toBe("/course/organic-chemistry-ii/practice/cards"));
+  });
+
+  it("opens a class in another library through the library switch", async () => {
+    const user = userEvent.setup();
+    const { router } = await renderAppAtRoute(
+      "/course/cell-biology/practice/cards",
+      lastCardFixtures((root) =>
+        root === FIXTURE_ROOT_SHARED
+          ? todayPayload([todayRow("collab-notes", 8)])
+          : todayPayload([todayRow("cell-biology", 0)]),
+      ),
+    );
+    await gradeLastCard(user);
+    await user.click(await screen.findByRole("button", { name: "Next: Collab Notes · 8 due" }, { timeout: 8000 }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/course/collab-notes/practice/cards"));
+    expect(getMockIpcLog()).toContain("save_settings");
+  });
+
+  it("decides on fresh counts: a class reviewed since the last refresh is not offered", async () => {
+    const user = userEvent.setup();
+    let graded = false;
+    await renderAppAtRoute("/course/cell-biology/practice/cards", {
+      ...lastCardFixtures((root) =>
+        root === FIXTURE_ROOT_SHARED
+          ? todayPayload([todayRow("collab-notes", 8)])
+          : todayPayload([
+              todayRow("cell-biology", graded ? 0 : 1),
+              // On screen it still looks due; by now the worker says it is done.
+              todayRow("organic-chemistry-ii", graded ? 0 : 5, { exam_date: "2026-11-16", days_to_exam: 9 }),
+            ]),
+      ),
+      study_progress: (args: unknown) => {
+        if (studyProgressAction(args) === "grade") {
+          graded = true;
+          return {};
+        }
+        return studyProgressAction(args) === "overview"
+          ? { ...fixtureCourseOverview, due: { due_ids: ["fc-1"], count: 1, deck_count: 1 } }
+          : {};
+      },
+    });
+    await gradeLastCard(user);
+    expect(await screen.findByRole("button", { name: "Next: Collab Notes · 8 due" }, { timeout: 8000 })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Next: Organic Chemistry/ })).not.toBeInTheDocument();
+  });
+
+  it("never offers the class just finished, even when scoped cards are done and others remain due", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute(
+      "/course/cell-biology/practice/cards",
+      lastCardFixtures((root) =>
+        root === FIXTURE_ROOT_SHARED
+          ? todayPayload([])
+          : todayPayload([
+              todayRow("cell-biology", 3, { exam_date: "2026-11-16", days_to_exam: 9 }),
+              todayRow("linear-algebra", 2),
+            ]),
+      ),
+    );
+    await gradeLastCard(user);
+    expect(await screen.findByRole("button", { name: "Next: Linear Algebra · 2 due" }, { timeout: 8000 })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Next: Cell Biology/ })).not.toBeInTheDocument();
+  });
+
+  it("says no cards are due when no other class has any", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute(
+      "/course/cell-biology/practice/cards",
+      lastCardFixtures((root) =>
+        root === FIXTURE_ROOT_SHARED ? todayPayload([]) : todayPayload([todayRow("cell-biology", 0), todayRow("linear-algebra", 0)]),
+      ),
+    );
+    await gradeLastCard(user);
+    await waitFor(() => expect(screen.getByText("No cards due today.")).toBeInTheDocument(), { timeout: 8000 });
+    await waitFor(() => expect(getMockIpcLog()).toContain("study_today"));
+    expect(screen.queryByRole("button", { name: /^Next: / })).not.toBeInTheDocument();
+  });
+});
+
+const nsFile = (p: unknown) => String((p as Record<string, unknown>).file ?? "");
+const nsAct = (p: unknown) => String((p as Record<string, unknown>).action ?? "");
+const nsCourse = (p: unknown) => String((p as Record<string, unknown>).course ?? "");
+const nsCard = (id: string, digest: string) => ({ id, front: `Question ${id}`, back: `Answer ${id}`, tags: [], source: { digest, heading: null, page: null } });
+const NS_OC = "organic-chemistry-ii";
+const OC_L1 = `${NS_OC}/digests/2026-09-12-alkenes.md`;
+const OC_L2 = `${NS_OC}/digests/2026-09-19-alkynes.md`;
+const ocDeck = { schema_version: 1 as const, course: NS_OC, cards: [nsCard("oc-1", "digests/2026-09-12-alkenes.md"), nsCard("oc-2", "digests/2026-09-19-alkynes.md"), nsCard("oc-3", "digests/2026-09-19-alkynes.md"), nsCard("oc-4", "digests/2026-09-19-alkynes.md"), nsCard("oc-5", "digests/2026-09-19-alkynes.md")] };
+const cbDeck = { schema_version: 1 as const, course: "cell-biology", cards: [nsCard("fc-1", "digests/2026-09-12-membranes.md")] };
+const nsRow = (c: string, n: number, o = {}) => ({ course: c, digest_count: 6, due_ids: Array.from({ length: n }, (_, i) => `${c}-${i}`), deck_count: 20, mastered: 10, mastery: 0.5, exam_date: null, days_to_exam: null, plan: null, ...o });
+
+describe("Next: <class> opens the class on its due cards (C28)", { timeout: 30000 }, () => {
+  beforeEach(() => { vi.useRealTimers(); resetAuthRefreshForTests(); resetStudyWriteQueueForTests(); localStorage.clear(); useStudySessionStore.persist.clearStorage(); useStudySessionStore.setState({ sessions: {} }); useLectureSelectionStore.setState({ byClass: {} }); clearMockIpcLog(); });
+  afterEach(() => { cleanup(); resetMockHandlerTimers(); clearTauriMocks(); vi.restoreAllMocks(); });
+
+  it("Next: Organic Chemistry II · 4 due ignores the lectures ticked there earlier", async () => {
+    const user = userEvent.setup();
+    // the user ticked one Alkenes lecture in Organic Chemistry II earlier this session (its cards are not due)
+    useLectureSelectionStore.getState().setScope(classScopeKey(FIXTURE_ROOT_FALL, NS_OC), [OC_L1]);
+    const { router } = await renderAppAtRoute("/course/cell-biology/practice/cards", {
+      list_digests: (p: unknown) => nsCourse(p) === NS_OC ? [{ title: "Alkenes", date: "2026-09-12", path: OC_L1, unit: null, source_path: null }, { title: "Alkynes", date: "2026-09-19", path: OC_L2, unit: null, source_path: null }] : fixtureDigests,
+      read_study_json: (p: unknown) => nsFile(p) === "flashcards.json" ? (nsCourse(p) === NS_OC ? ocDeck : cbDeck) : { schema_version: 1, course: nsCourse(p), failures: [] },
+      study_progress: (a: unknown) => nsAct(a) === "overview" ? (nsCourse(a) === NS_OC ? { ...fixtureCourseOverview, due: { due_ids: ["oc-2", "oc-3", "oc-4", "oc-5"], count: 4, deck_count: 5 } } : { ...fixtureCourseOverview, due: { due_ids: ["fc-1"], count: 1, deck_count: 1 } }) : {},
+      study_today: () => ({ courses: [nsRow("cell-biology", 0), nsRow(NS_OC, 4)], weak_topics: [], quiz_accuracy: { this_week: { correct: 0, total: 0 }, last_week: { correct: 0, total: 0 } }, next_exam: null }),
+    });
+    await waitFor(() => expect(screen.getByText(/Due today · 1/i)).toBeInTheDocument(), { timeout: 8000 });
+    await user.click(screen.getByRole("button", { name: /^Flip$/i }));
+    await user.keyboard("3");
+    const next = await screen.findByRole("button", { name: /Next: Organic Chemistry II · 4 due/ }, { timeout: 8000 });
+    await user.click(next);
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/course/${NS_OC}/practice/cards`));
+    await waitFor(() => expect(screen.getByTestId("flashcards-view")).toBeInTheDocument(), { timeout: 8000 });
+    await new Promise((r) => setTimeout(r, 1500));
+    expect(screen.getByText(/Due today · 4/i)).toBeInTheDocument();
+    expect(useLectureSelectionStore.getState().byClass[classScopeKey(FIXTURE_ROOT_FALL, NS_OC)]).toBeUndefined();
+  });
+});
+
+describe("Next: <class> opens the class's due deck, not its saved Full deck (C39)", { timeout: 30000 }, () => {
+  beforeEach(() => { vi.useRealTimers(); resetAuthRefreshForTests(); resetStudyWriteQueueForTests(); localStorage.clear(); useStudySessionStore.persist.clearStorage(); useStudySessionStore.setState({ sessions: {} }); useLectureSelectionStore.setState({ byClass: {} }); clearMockIpcLog(); });
+  afterEach(() => { cleanup(); resetMockHandlerTimers(); clearTauriMocks(); vi.restoreAllMocks(); });
+
+  it("Next: Organic Chemistry II · 4 due lands on Due today, 1 / 4, when that class was left on Full deck", async () => {
+    const user = userEvent.setup();
+    const ids = ["oc-1", "oc-2", "oc-3", "oc-4", "oc-5"];
+    // Organic Chemistry II was left on Full deck, card 3 of 5 (same shape the Start review C36 test saves).
+    useStudySessionStore.setState({ sessions: { [studySessionKey(FIXTURE_ROOT_FALL, NS_OC, "flashcards")]: {
+      identity: `${FIXTURE_ROOT_FALL}|${NS_OC}:${ids.join("\0")}`, savedAt: Date.now(), deckMode: "full", cardIds: ids, index: 2, flipped: false } } });
+    const { router } = await renderAppAtRoute("/course/cell-biology/practice/cards", {
+      list_digests: (p: unknown) => nsCourse(p) === NS_OC ? [{ title: "Alkenes", date: "2026-09-12", path: OC_L1, unit: null, source_path: null }, { title: "Alkynes", date: "2026-09-19", path: OC_L2, unit: null, source_path: null }] : fixtureDigests,
+      read_study_json: (p: unknown) => nsFile(p) === "flashcards.json" ? (nsCourse(p) === NS_OC ? ocDeck : cbDeck) : { schema_version: 1, course: nsCourse(p), failures: [] },
+      study_progress: (a: unknown) => nsAct(a) === "overview" ? (nsCourse(a) === NS_OC ? { ...fixtureCourseOverview, due: { due_ids: ["oc-2", "oc-3", "oc-4", "oc-5"], count: 4, deck_count: 5 } } : { ...fixtureCourseOverview, due: { due_ids: ["fc-1"], count: 1, deck_count: 1 } }) : {},
+      study_today: () => ({ courses: [nsRow("cell-biology", 0), nsRow(NS_OC, 4)], weak_topics: [], quiz_accuracy: { this_week: { correct: 0, total: 0 }, last_week: { correct: 0, total: 0 } }, next_exam: null }),
+    });
+    await waitFor(() => expect(screen.getByText(/Due today · 1/i)).toBeInTheDocument(), { timeout: 8000 });
+    await user.click(screen.getByRole("button", { name: /^Flip$/i }));
+    await user.keyboard("3");
+    await user.click(await screen.findByRole("button", { name: /Next: Organic Chemistry II · 4 due/ }, { timeout: 8000 }));
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/course/${NS_OC}/practice/cards`));
+    await waitFor(() => expect(screen.getByTestId("flashcards-view")).toBeInTheDocument(), { timeout: 8000 });
+    await new Promise((r) => setTimeout(r, 1500));
+    expect(screen.getByRole("tab", { name: /Due today/i })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("1 / 4")).toBeInTheDocument();
   });
 });

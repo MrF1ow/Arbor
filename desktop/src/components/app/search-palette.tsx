@@ -1,53 +1,160 @@
-import { useNavigate } from "@tanstack/react-router";
+import { useQueries } from "@tanstack/react-query";
+import { Command as CommandPrimitive } from "cmdk";
+import { ArrowDown, ArrowUp, Search } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
-import { Badge } from "~/components/ui/badge";
-import {
-  Command,
-  CommandDialog,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "~/components/ui/command";
-import { Label } from "~/components/ui/label";
+import { CourseSwatch } from "~/components/app/course-swatch";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "~/components/ui/dialog";
+import { Kbd } from "~/components/ui/kbd";
 import { Spinner } from "~/components/ui/spinner";
-import { Switch } from "~/components/ui/switch";
-import { CourseIconDisplay } from "~/components/app/course-icon-display";
 import { courseDisplayName } from "~/domain/course";
 import { resolveDigestSlug } from "~/domain/notes";
-import {
-  groupSearchHitsByCourse,
-  resolveSearchHitNavigation,
-  searchHitItemValue,
-  searchHitKindLabel,
-  searchHitMeta,
-} from "~/domain/search-hit";
+import { resolveSearchHitNavigation } from "~/domain/search-hit";
+import type { SearchHit } from "~/domain/types";
+import { invoke } from "~/lib/ipc";
 import { pickActiveRoot } from "~/lib/knowledge-root";
+import { useOpenClass, type OpenClassSearch, type OpenClassTarget } from "~/lib/open-class";
 import { useCourseMeta } from "~/lib/queries/course-meta";
-import { useSearch, useSemanticSearch } from "~/lib/queries/search";
+import { qk } from "~/lib/queries/keys";
 import { useSettings } from "~/lib/queries/settings";
+import { modShortcut } from "~/lib/shortcuts";
 import { cn } from "~/lib/utils";
 import { useUiStore } from "~/stores/ui-store";
 
 const DEBOUNCE_MS = 250;
+const SEARCH_LIMIT = 20;
 
-function SearchHitRow({ hit }: { hit: import("~/domain/types").SearchHit }) {
-  const showKindBadge = hit.kind !== "digest";
+/** What the search commands return: a `SearchHit`, plus the card, question or concept id for study rows. */
+export type PaletteHit = SearchHit & { item_id?: string | null };
+
+/** A hit and the library it came from: the palette searches every library. */
+export type RootHit = { root: string; hit: PaletteHit };
+
+type GroupKey = "digests" | "cards" | "concepts" | "overview";
+
+const GROUPS: { key: GroupKey; heading: string }[] = [
+  { key: "digests", heading: "Digests" },
+  { key: "cards", heading: "Cards" },
+  { key: "concepts", heading: "Concepts" },
+  { key: "overview", heading: "Overview" },
+];
+
+function groupKeyOf(kind: string): GroupKey {
+  switch (kind) {
+    case "digest":
+      return "digests";
+    case "card":
+    case "question":
+      return "cards";
+    case "concept":
+      return "concepts";
+    default:
+      return "overview";
+  }
+}
+
+/** Hits under Digests, Cards, Concepts and (class overview, plan, anything else) Overview, in that order. */
+export function groupRootHits(hits: RootHit[]) {
+  return GROUPS.map(({ key, heading }) => ({
+    key,
+    heading,
+    hits: hits.filter((entry) => groupKeyOf(entry.hit.kind) === key),
+  })).filter((group) => group.hits.length > 0);
+}
+
+/** "4 results in 2 classes": a class is one class of one library. */
+export function resultCountLabel(hits: RootHit[]): string {
+  const classes = new Set(hits.map(({ root, hit }) => `${root}\u0000${hit.course}`)).size;
+  const results = `${hits.length} ${hits.length === 1 ? "result" : "results"}`;
+  return `${results} in ${classes} ${classes === 1 ? "class" : "classes"}`;
+}
+
+const KIND_WORD: Record<string, string> = {
+  card: "card",
+  question: "question",
+  concept: "concept",
+  plan: "plan",
+  course_md: "overview",
+};
+
+function hitMeta(hit: PaletteHit): string {
+  const name = courseDisplayName(hit.course);
+  if (hit.kind === "digest") {
+    return name;
+  }
+  return `${name} · ${KIND_WORD[hit.kind] ?? hit.kind}`;
+}
+
+function hitValue({ root, hit }: RootHit, index: number): string {
+  return `${root}:${hit.course}:${hit.path}:${hit.kind}:${index}`;
+}
+
+function RootSwatch({ root, course }: { root: string; course: string }) {
+  const meta = useCourseMeta(root);
+  return <CourseSwatch meta={meta.data} course={course} className="mt-1.5" />;
+}
+
+function SearchHitRow({ entry }: { entry: RootHit }) {
+  const { root, hit } = entry;
   return (
-    <div className="flex min-w-0 flex-1 flex-col gap-0.5 py-0.5">
-      <div className="flex min-w-0 items-center gap-2">
-        <span className="min-w-0 truncate font-medium">{hit.title}</span>
-        {showKindBadge ? (
-          <Badge variant="outline" className="h-5 shrink-0 px-1.5 text-2xs">
-            {searchHitKindLabel(hit.kind)}
-          </Badge>
-        ) : null}
+    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+      <div className="flex min-w-0 items-start gap-2">
+        <RootSwatch root={root} course={hit.course} />
+        <span className="min-w-0 flex-1 truncate text-small font-semibold">{hit.title}</span>
+        <span className="shrink-0 text-caption text-faint-foreground">{hitMeta(hit)}</span>
       </div>
-      <span className="text-2xs text-faint-foreground">{searchHitMeta(hit)}</span>
-      <span className="line-clamp-2 text-xs text-muted-foreground">{hit.snippet}</span>
+      <span className="line-clamp-2 pl-4.5 text-caption text-muted-foreground">{hit.snippet}</span>
     </div>
+  );
+}
+
+/** One search per library, in parallel; the active library's hits come first. */
+function useSearchAll(roots: string[], query: string, semantic: boolean) {
+  const trimmed = query.trim();
+  const results = useQueries({
+    queries: roots.map((root) => ({
+      queryKey: qk.search(root, trimmed, semantic),
+      enabled: trimmed.length > 0,
+      queryFn: () =>
+        invoke<PaletteHit[]>(semantic ? "search_semantic" : "search_knowledge", {
+          root,
+          query: trimmed,
+          limit: SEARCH_LIMIT,
+        }),
+    })),
+  });
+  const hits: RootHit[] = results.flatMap((result, index) =>
+    (result.data ?? []).map((hit) => ({ root: roots[index]!, hit })),
+  );
+  const failed = results.find((result) => result.isError);
+  const failedRoots = roots.filter((_, index) => results[index]?.isError);
+  return {
+    hits,
+    failedRoots,
+    isLoading: trimmed.length > 0 && results.some((result) => result.isLoading),
+    error: failed?.error ?? null,
+    settled: trimmed.length > 0 && results.every((result) => !result.isLoading),
+  };
+}
+
+function SemanticChip({ checked, onCheckedChange }: { checked: boolean; onCheckedChange: (checked: boolean) => void }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label="Semantic search"
+      onClick={() => onCheckedChange(!checked)}
+      className={cn(
+        "inline-flex h-6.25 shrink-0 items-center rounded-full border px-2.5 text-caption outline-none transition-colors duration-fast ease-out-soft focus-visible:ring-2 focus-visible:ring-ring",
+        checked
+          ? "border-accent bg-accent text-accent-foreground"
+          : "border-border bg-card text-muted-foreground hover:bg-muted",
+      )}
+    >
+      Semantic
+    </button>
   );
 }
 
@@ -66,12 +173,16 @@ function SearchPaletteBody({
   debouncedQuery: string;
   setDebouncedQuery: (query: string) => void;
 }) {
-  const navigate = useNavigate();
   const settings = useSettings();
+  const openClass = useOpenClass();
   const activeRoot = pickActiveRoot(settings.data);
-  const courseMeta = useCourseMeta(activeRoot);
   const searchSemantic = useUiStore((s) => s.searchSemantic);
   const setSearchSemantic = useUiStore((s) => s.setSearchSemantic);
+
+  const configured = (settings.data?.knowledge_roots ?? []).map((entry) => entry.path);
+  const roots = activeRoot
+    ? [activeRoot, ...configured.filter((root) => root !== activeRoot)]
+    : configured;
 
   useEffect(() => {
     if (!open) {
@@ -83,13 +194,9 @@ function SearchPaletteBody({
     return () => window.clearTimeout(timer);
   }, [query, open, setDebouncedQuery]);
 
-  const textSearch = useSearch(activeRoot, searchSemantic ? "" : debouncedQuery);
-  const semanticSearch = useSemanticSearch(activeRoot, searchSemantic ? debouncedQuery : "");
-  const active = searchSemantic ? semanticSearch : textSearch;
-  const hits =
-    active.data?.query === debouncedQuery.trim() ? (active.data?.hits ?? []) : [];
-  const grouped = groupSearchHitsByCourse(hits);
-  const multiCourse = grouped.length > 1;
+  const search = useSearchAll(roots, debouncedQuery, searchSemantic);
+  const { hits } = search;
+  const groups = groupRootHits(hits);
 
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -112,120 +219,139 @@ function SearchPaletteBody({
     setDebouncedQuery(query);
   };
 
-  const openHit = (hit: import("~/domain/types").SearchHit) => {
+  const openHit = ({ root, hit }: RootHit) => {
     onOpenChange(false);
-    const navigation = resolveSearchHitNavigation(hit);
-    switch (navigation.kind) {
-      case "digest": {
-        const slug = resolveDigestSlug(navigation.digestRef, []);
-        void navigate({
-          to: "/course/$course/notes/$digest",
-          params: { course: navigation.course, digest: slug },
-        });
+    let to: OpenClassTarget;
+    let searchParams: OpenClassSearch | undefined;
+    let notice: string | null = null;
+    switch (hit.kind) {
+      case "card":
+        to = "cards";
+        searchParams = hit.item_id ? { card: hit.item_id } : undefined;
         break;
+      case "question":
+        // The quiz route takes no question param, so the hit opens the quiz tab.
+        to = "quiz";
+        break;
+      case "concept":
+        to = "map";
+        searchParams = hit.item_id ? { concept: hit.item_id } : undefined;
+        break;
+      default: {
+        const navigation = resolveSearchHitNavigation(hit);
+        if (navigation.kind === "digest") {
+          to = { tab: "read", digest: resolveDigestSlug(navigation.digestRef, []) };
+        } else {
+          to = "overview";
+          if (navigation.kind === "plan") {
+            // The overview route reads `heading` to scroll to the plan.
+            searchParams = { heading: "Study plan" };
+          }
+          if (navigation.kind === "overview_with_toast") {
+            notice = `Opened ${courseDisplayName(hit.course)}`;
+          }
+        }
       }
-      case "overview":
-        void navigate({ to: "/course/$course/notes", params: { course: navigation.course } });
-        break;
-      case "plan":
-        void navigate({
-          to: "/course/$course/notes",
-          params: { course: navigation.course },
-          search: { heading: "Study plan" },
-        });
-        break;
-      case "overview_with_toast":
-        void navigate({ to: "/course/$course/notes", params: { course: navigation.course } });
-        toast.info(`Opened ${courseDisplayName(navigation.course)}`);
-        break;
     }
+    void openClass(root, hit.course, to, searchParams).then(() => {
+      if (notice) {
+        toast.info(notice);
+      }
+    });
   };
 
-  const showEmptyHint = Boolean(activeRoot) && !debouncedQuery.trim();
-  const showNoResults =
-    Boolean(activeRoot) &&
-    debouncedQuery.trim().length > 0 &&
-    !active.isLoading &&
-    !active.isError &&
-    hits.length === 0;
-  const showLoading = Boolean(activeRoot) && debouncedQuery.trim().length > 0 && active.isLoading;
-  const showError = Boolean(activeRoot) && active.isError;
+  const hasRoot = roots.length > 0;
+  const typed = debouncedQuery.trim().length > 0;
+  const showEmptyHint = hasRoot && !typed;
+  const showLoading = hasRoot && typed && hits.length === 0 && search.isLoading;
+  const showError = hasRoot && typed && hits.length === 0 && !search.isLoading && search.error !== null;
+  const showNoResults = hasRoot && typed && hits.length === 0 && search.settled && search.error === null;
 
-  const renderHits = (list: import("~/domain/types").SearchHit[], indexOffset = 0) =>
-    list.map((hit, index) => (
-      <CommandItem
-        key={searchHitItemValue(hit, indexOffset + index)}
-        value={searchHitItemValue(hit, indexOffset + index)}
-        className="min-h-0 items-start py-2"
-        onSelect={() => openHit(hit)}
-      >
-        <SearchHitRow hit={hit} />
-      </CommandItem>
-    ));
+  const failedLibraries = search.failedRoots.map((root) => {
+    const entry = settings.data?.knowledge_roots.find((candidate) => candidate.path === root);
+    return entry?.name || root.split("/").filter(Boolean).pop() || root;
+  });
+  const showFailedNotice = typed && hits.length > 0 && failedLibraries.length > 0;
+
+  const ordered = groups.flatMap((group) => group.hits);
 
   return (
-    <Command shouldFilter={false}>
-      <div className="flex items-center gap-2 border-b border-border">
-        <div className="min-w-0 flex-1">
-          <CommandInput
-            ref={inputRef}
-            placeholder="Search digests…"
-            value={query}
-            onValueChange={setQuery}
-            aria-label="Search digests"
-          />
-        </div>
-        <Label className="flex shrink-0 items-center gap-1.5 pr-2 text-2xs text-muted-foreground">
-          <span>Semantic</span>
-          <Switch
-            checked={searchSemantic}
-            onCheckedChange={onSemanticChange}
-            aria-label="Semantic search"
-          />
-        </Label>
+    <CommandPrimitive
+      shouldFilter={false}
+      className="flex flex-col text-popover-foreground"
+      onKeyDown={(event) => {
+        if (event.key === "Tab" && !event.shiftKey) {
+          event.preventDefault();
+          onSemanticChange(!searchSemantic);
+        }
+      }}
+    >
+      <div className="flex items-center gap-2.5 border-b border-border px-4 py-3.25">
+        <Search className="size-icon-sm shrink-0 text-faint-foreground" aria-hidden />
+        <CommandPrimitive.Input
+          ref={inputRef}
+          placeholder="Search notes, concepts, and cards in every class"
+          value={query}
+          onValueChange={setQuery}
+          aria-label="Search digests"
+          className="min-w-0 flex-1 bg-transparent text-body text-foreground outline-hidden placeholder:text-muted-foreground"
+        />
+        <SemanticChip checked={searchSemantic} onCheckedChange={onSemanticChange} />
+        <Kbd className="border-border bg-background text-kbd">{modShortcut("K")}</Kbd>
       </div>
-      <CommandList className="max-h-palette-list">
-        {!activeRoot ? (
-          <p className="py-6 text-center text-xs text-muted-foreground">
-            Choose a Knowledge folder first.
-          </p>
+      <CommandPrimitive.List data-slot="command-list" className="max-h-80 overflow-x-hidden overflow-y-auto p-2 outline-none">
+        {!hasRoot ? (
+          <p className="py-6 text-center text-caption text-muted-foreground">Choose a Knowledge folder first.</p>
         ) : null}
         {showEmptyHint ? (
-          <p className="py-6 text-center text-xs text-muted-foreground">Type to search digests</p>
+          <p className="py-6 text-center text-caption text-muted-foreground">Type to search every class</p>
         ) : null}
         {showLoading ? (
-          <div className="flex items-center justify-center gap-2 py-6 text-xs text-muted-foreground">
+          <div className="flex items-center justify-center gap-2 py-6 text-caption text-muted-foreground">
             <Spinner className="size-icon-sm" />
             Searching…
           </div>
         ) : null}
         {showError ? (
-          <p className="px-3 py-6 text-center text-xs text-destructive">
-            {active.error instanceof Error ? active.error.message : String(active.error)}
+          <p className="px-3 py-6 text-center text-caption text-destructive">
+            {search.error instanceof Error ? search.error.message : String(search.error)}
           </p>
         ) : null}
-        {showNoResults ? (
-          <p className="py-6 text-center text-xs text-muted-foreground">No results</p>
+        {showNoResults ? <p className="py-6 text-center text-caption text-muted-foreground">No results</p> : null}
+        {showFailedNotice ? (
+          <p role="status" className="px-3 py-1.5 text-caption text-muted-foreground">
+            Couldn&apos;t search {failedLibraries.join(", ")}
+          </p>
         ) : null}
-        {hits.length > 0 && !multiCourse ? renderHits(hits) : null}
-        {hits.length > 0 && multiCourse
-          ? grouped.map(([course, courseHits], groupIndex) => {
-              const indexOffset = grouped
-                .slice(0, groupIndex)
-                .reduce((sum, [, list]) => sum + list.length, 0);
+        {groups.map((group) => (
+          <CommandPrimitive.Group
+            key={group.key}
+            heading={group.heading}
+            className="pb-2 **:[[cmdk-group-heading]]:px-0.5 **:[[cmdk-group-heading]]:pb-1 **:[[cmdk-group-heading]]:text-label **:[[cmdk-group-heading]]:text-faint-foreground"
+          >
+            {group.hits.map((entry) => {
+              const value = hitValue(entry, ordered.indexOf(entry));
               return (
-                <div key={course}>
-                  <div className="flex items-center gap-2 px-2.5 py-1.5 text-xs font-medium text-muted-foreground">
-                    <CourseIconDisplay meta={courseMeta.data} course={course} />
-                    <span>{courseDisplayName(course)}</span>
-                  </div>
-                  <CommandGroup>{renderHits(courseHits, indexOffset)}</CommandGroup>
-                </div>
+                <CommandPrimitive.Item
+                  key={value}
+                  value={value}
+                  onSelect={() => openHit(entry)}
+                  className="flex cursor-default flex-col rounded-md px-2.5 py-2 outline-hidden select-none data-[selected=true]:bg-selected"
+                >
+                  <SearchHitRow entry={entry} />
+                </CommandPrimitive.Item>
               );
-            })
-          : null}
-      </CommandList>
-    </Command>
+            })}
+          </CommandPrimitive.Group>
+        ))}
+      </CommandPrimitive.List>
+      <div className="flex items-center gap-1 border-t border-border px-4 py-2.25 text-caption text-faint-foreground">
+        <ArrowUp className="size-3" aria-hidden />
+        <ArrowDown className="size-3" aria-hidden />
+        <span>move · Enter opens · Tab toggles semantic</span>
+        <span className="ml-auto">{hits.length > 0 ? resultCountLabel(hits) : null}</span>
+      </div>
+    </CommandPrimitive>
   );
 }
 
@@ -248,22 +374,24 @@ export function SearchPalette({
   }, [rootKey]);
 
   return (
-    <CommandDialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title="Search"
-      description="Search knowledge digests"
-      className={cn("max-w-reading")}
-      showCloseButton={false}
-    >
-      <SearchPaletteBody
-        open={open}
-        onOpenChange={onOpenChange}
-        query={query}
-        setQuery={setQuery}
-        debouncedQuery={debouncedQuery}
-        setDebouncedQuery={setDebouncedQuery}
-      />
-    </CommandDialog>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="top-palette-top max-w-reading translate-y-0 gap-0 overflow-hidden rounded-xl p-0 shadow-popover"
+        showCloseButton={false}
+      >
+        <DialogHeader className="sr-only">
+          <DialogTitle>Search</DialogTitle>
+          <DialogDescription>Search notes, concepts, and cards in every class</DialogDescription>
+        </DialogHeader>
+        <SearchPaletteBody
+          open={open}
+          onOpenChange={onOpenChange}
+          query={query}
+          setQuery={setQuery}
+          debouncedQuery={debouncedQuery}
+          setDebouncedQuery={setDebouncedQuery}
+        />
+      </DialogContent>
+    </Dialog>
   );
 }

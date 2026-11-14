@@ -1,145 +1,132 @@
 import { useNavigate } from "@tanstack/react-router";
-import { GraduationCap, House, Info, Layers } from "lucide-react";
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { ChevronRight } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
-import { Chip } from "~/components/app/chip";
+import { formatExamDate, reviewMinutes, daysLeftLabel, accuracyCaption, accuracyPercent } from "~/components/today/today-model";
+import { resetClassDeck } from "~/components/study/reset-class-deck";
+import { PreviewBarRight } from "~/components/workspace/preview-bar";
+import { isCommittableExamDate, useExamDateField } from "~/components/workspace/use-exam-date";
 import { Button } from "~/components/ui/button";
+import { Checkbox } from "~/components/ui/checkbox";
 import { Input } from "~/components/ui/input";
 import { Skeleton } from "~/components/ui/skeleton";
 import { courseDisplayName } from "~/domain/course";
+import { toCourseDigest, type ReadingEntry } from "~/domain/lectures";
 import { VIEWER_WRITE_REASON, viewerBlocksWrite } from "~/domain/library-role";
 import { headingId, renderMarkdown } from "~/domain/markdown";
-import {
-  courseMarkdownForOverview,
-  daysUntil,
-  digestFlags,
-  digestSlugFromPath,
-  examDateFromPlan,
-  examFocusCallout,
-  firstParagraph,
-  quizAccuracy,
-  resolveDigestSlug,
-  studyPlanMarkdownForOverview,
-  unreviewedDigestRecommend,
-  weakestRecommendTopic,
-} from "~/domain/notes";
+import { daysUntil, resolveDigestSlug } from "~/domain/notes";
 import { PROVIDER_FALLBACK, signedOutJobMessage } from "~/domain/provider";
-import { parseQuizProgress } from "~/domain/quiz";
 import type { CourseOverviewPayload, DigestInfo, StudyRecommendItem } from "~/domain/types";
 import { fetchAuthStatus } from "~/lib/auth-refresh";
+import { classPath, lecturesToSearch } from "~/lib/class-path";
 import { pickActiveRoot } from "~/lib/knowledge-root";
+import { useCourseStats, useStudyPlanStatus, useStudyPlanToggle } from "~/lib/queries/class-stats";
 import { useEffectiveProvider } from "~/lib/queries/effective-provider";
 import { useLibrary } from "~/lib/queries/library";
 import { useCourseOverview, useMarkdown } from "~/lib/queries/notes";
-import { useQuizProgress, useStudyPlan, useStudyPlanMutation } from "~/lib/queries/study";
+import { useReadingState } from "~/lib/queries/reading-state";
 import { useSettings } from "~/lib/queries/settings";
+import { useStudyPlanMutation } from "~/lib/queries/study";
 import { flushStudyWrites } from "~/lib/study-writes";
+import { cn } from "~/lib/utils";
 import { useJobStore } from "~/stores/job-store";
 
-function padUnitNumber(index: number): string {
-  return String(index + 1).padStart(2, "0");
+/** A weak topic as `study_progress overview` lists it; the counts feed the "4 of 9" tag. */
+type WeakTopic = CourseOverviewPayload["weak"]["topics"][number] & {
+  wrong?: number;
+  correct?: number;
+};
+
+const CARD = "rounded-xl border border-border bg-card p-4 shadow-card";
+
+function StatCard({
+  label,
+  value,
+  caption,
+  testId,
+}: {
+  label: string;
+  value: string;
+  caption: string;
+  testId: string;
+}) {
+  return (
+    <section data-testid={testId} aria-label={label} className={cn(CARD, "flex min-w-0 flex-col gap-2")}>
+      <h3 className="text-label text-muted-foreground">{label}</h3>
+      <p className="text-display text-foreground">{value}</p>
+      <p className="text-caption text-muted-foreground">{caption}</p>
+    </section>
+  );
 }
 
-function RecommendList({
-  items,
-  loading,
-  error,
-  course,
-  onNavigateDigest,
+function CardTitle({
+  children,
+  aside,
+  id,
 }: {
-  items: StudyRecommendItem[] | undefined;
-  loading: boolean;
-  error: boolean;
-  course: string;
-  onNavigateDigest: (digest: string, heading?: string | null) => void;
+  children: React.ReactNode;
+  aside?: React.ReactNode;
+  id?: string;
 }) {
-  const navigate = useNavigate();
-  if (loading) {
-    return <Skeleton className="h-20 w-full" />;
-  }
-  if (error) {
-    return <p className="text-sm text-muted-foreground">Could not load recommendations.</p>;
-  }
-  if (!items || items.length === 0) {
-    return <p className="text-sm text-muted-foreground">No recommendations yet.</p>;
-  }
   return (
-    <div className="flex flex-wrap gap-2">
-      {items.map((item) => (
-        <Chip
-          key={`${item.kind}-${item.label}`}
-          onClick={() => {
-            if (item.kind === "due_cards") {
-              void navigate({ to: "/course/$course/flashcards", params: { course } });
-              return;
-            }
-            if (
-              (item.kind === "weakest_topic" || item.kind === "unreviewed_digest") &&
-              item.digest
-            ) {
-              onNavigateDigest(item.digest, item.heading ?? null);
-            }
-          }}
-        >
-          {item.label}
-        </Chip>
-      ))}
+    <div className="mb-3 flex items-center gap-3">
+      <h3 id={id} className="min-w-0 flex-1 text-heading text-foreground">
+        {children}
+      </h3>
+      {aside}
     </div>
   );
 }
 
-function WeakTopicsList({
-  topics,
-  loading,
-  error,
-  onNavigateDigest,
-}: {
-  topics: CourseOverviewPayload["weak"]["topics"] | undefined;
-  loading: boolean;
-  error: boolean;
-  onNavigateDigest: (digest: string, heading?: string | null) => void;
-}) {
-  if (loading) {
-    return <Skeleton className="h-16 w-full" />;
+/** The worker labels an unread lecture "Read <file name>"; show its title ("Read Membrane transport"). */
+function recommendedLabel(item: StudyRecommendItem, course: string, digests: DigestInfo[]): string {
+  if (item.kind !== "unreviewed_digest" || !item.digest) {
+    return item.label;
   }
-  if (error) {
-    return <p className="text-sm text-muted-foreground">Could not load weak topics.</p>;
-  }
-  if (!topics || topics.length === 0) {
-    return <p className="text-sm text-muted-foreground">No weak topics yet.</p>;
-  }
-  return (
-    <ul className="flex flex-wrap gap-2">
-      {topics.map((topic) => {
-        if (!topic.digest) {
-          return null;
-        }
-        return (
-          <li key={topic.label}>
-            <Chip
-              onClick={() => {
-                onNavigateDigest(topic.digest!, topic.heading ?? null);
-              }}
-            >
-              {topic.label}
-            </Chip>
-          </li>
-        );
-      })}
-    </ul>
-  );
+  const wanted = toCourseDigest(course, item.digest);
+  const lecture = digests.find((d) => toCourseDigest(course, d.path) === wanted);
+  return lecture ? `Read ${lecture.title}` : item.label;
 }
 
+/**
+ * The right-hand note on a recommendation, where the data gives one. A digest the worker calls
+ * unreviewed (no card or quiz answer seen yet) takes its note from the reading state, as the
+ * lecture column does (Q26): New when never opened, "N% read" part-way, nothing once read.
+ */
+function recommendedMeta(
+  item: StudyRecommendItem & { count?: number },
+  course: string,
+  reading: Record<string, ReadingEntry> | undefined,
+): string | null {
+  if (item.kind === "unreviewed_digest") {
+    if (!item.digest || !reading) {
+      return null;
+    }
+    const entry = reading[toCourseDigest(course, item.digest)];
+    if (!entry) {
+      return "New";
+    }
+    return entry.read ? null : `${Math.round(entry.fraction * 100)}% read`;
+  }
+  if (item.kind === "due_cards" && typeof item.count === "number" && item.count > 0) {
+    return `${reviewMinutes(item.count)} min`;
+  }
+  return null;
+}
+
+/**
+ * Overview (design "Class · Overview"): the stat cards, the study plan as a checklist, weak topics
+ * with Drill, Recommended, and the exam date.
+ */
 export function CourseOverview({
   course,
   digests,
   heading,
-  scrollRef,
 }: {
   course: string;
   digests: DigestInfo[];
+  /** A section to scroll to, from a search hit (`?heading=Study plan`). */
   heading?: string;
-  scrollRef?: RefObject<HTMLElement | null>;
 }) {
   const navigate = useNavigate();
   const settings = useSettings();
@@ -150,18 +137,23 @@ export function CourseOverview({
   const effective = useEffectiveProvider(activeRoot);
   const appendLog = useJobStore((s) => s.append);
 
-  const [examDateOverride, setExamDateOverride] = useState<string | null>(null);
-  const [planStatus, setPlanStatus] = useState("");
+  const [planStatusText, setPlanStatusText] = useState("");
   const [planBusy, setPlanBusy] = useState(false);
   const [flushDone, setFlushDone] = useState(false);
-  const courseNotesRef = useRef<HTMLDivElement>(null);
+  // Course notes (course.md) opens expanded: search hits and chat citations land here, and the
+  // text they point at must be visible. It still folds away.
+  const [courseNotesOpen, setCourseNotesOpen] = useState(true);
+  const paneRef = useRef<HTMLDivElement>(null);
 
-  const courseMdPath = `${course}/course.md`;
-  const courseMd = useMarkdown(activeRoot, courseMdPath);
-  const studyPlan = useStudyPlan(activeRoot, course);
-  const quizProgress = useQuizProgress(activeRoot, course);
   const overview = useCourseOverview(activeRoot, course, flushDone);
+  const stats = useCourseStats(activeRoot, course);
+  const plan = useStudyPlanStatus(activeRoot, course);
+  const toggleTask = useStudyPlanToggle(activeRoot, course);
   const studyPlanMutation = useStudyPlanMutation(activeRoot, course);
+  const exam = useExamDateField(activeRoot, course, viewerBlocked);
+  const examDate = exam.saved || null;
+  const courseMd = useMarkdown(activeRoot, `${course}/course.md`);
+  const readingState = useReadingState(activeRoot);
 
   useEffect(() => {
     let cancelled = false;
@@ -184,94 +176,59 @@ export function CourseOverview({
     }
   }, [overview.isError, overview.error, appendLog]);
 
-  const courseBody = courseMd.data ?? "";
-  const lede = courseMd.isSuccess ? firstParagraph(courseBody) : null;
   const courseNotesHtml =
-    courseMd.isSuccess && courseBody.trim() !== ""
-      ? renderMarkdown(lede ? courseMarkdownForOverview(courseBody, lede) : courseBody).html
-      : "";
-  const planHtml =
-    studyPlan.isSuccess && studyPlan.data.trim() !== ""
-      ? renderMarkdown(studyPlanMarkdownForOverview(studyPlan.data)).html
-      : null;
+    courseMd.isSuccess && courseMd.data.trim() !== "" ? renderMarkdown(courseMd.data).html : "";
 
+  // A `?heading=` from a search hit or a chat citation scrolls to that heading: one of this
+  // page's sections ("Course notes" included), or a heading of course.md, once its text shows.
+  const headingDone = useRef<string | null>(null);
   useEffect(() => {
-    const pane = scrollRef?.current;
-    if (!pane) {
-      return;
-    }
+    headingDone.current = null;
+    const pane = paneRef.current;
     const id = heading ? headingId(heading) : "";
-    if (!id) {
-      pane.scrollTo(0, 0);
+    const target = id ? pane?.querySelector(`#${CSS.escape(id)}`) : null;
+    if (target instanceof HTMLElement) {
+      target.scrollIntoView({ block: "start" });
+      headingDone.current = heading ?? null;
+    } else {
+      pane?.scrollTo(0, 0);
+    }
+  }, [heading]);
+  useEffect(() => {
+    const id = heading ? headingId(heading) : "";
+    if (!id || headingDone.current === heading || !courseNotesOpen) {
       return;
     }
-
-    let cancelled = false;
-    let retryTimer: ReturnType<typeof setTimeout> | undefined;
-
-    const tryScroll = () => {
-      if (cancelled) {
-        return true;
-      }
-      const target = pane.querySelector(`#${CSS.escape(id)}`);
-      if (target instanceof HTMLElement) {
-        target.scrollIntoView({ block: "start" });
-        return true;
-      }
-      return false;
-    };
-
-    if (!tryScroll()) {
-      retryTimer = window.setTimeout(() => {
-        if (!tryScroll() && !cancelled) {
-          pane.scrollTo(0, 0);
-        }
-      }, 0);
+    const target = paneRef.current?.querySelector(`#${CSS.escape(id)}`);
+    if (target instanceof HTMLElement) {
+      target.scrollIntoView({ block: "start" });
+      headingDone.current = heading ?? null;
     }
-
-    return () => {
-      cancelled = true;
-      if (retryTimer !== undefined) {
-        window.clearTimeout(retryTimer);
-      }
-    };
-  }, [heading, courseNotesHtml, planHtml, scrollRef]);
-
-  const goToDigest = (digestRef: string, digestHeading?: string | null) => {
-    const slug = resolveDigestSlug(digestRef, digests);
-    void navigate({
-      to: "/course/$course/notes/$digest",
-      params: { course, digest: slug },
-      search: digestHeading ? { heading: digestHeading } : {},
-    });
-  };
+  }, [heading, courseNotesOpen, courseNotesHtml]);
 
   const overviewPending = !flushDone || overview.isLoading;
   const overviewError = flushDone && overview.isError;
-  const overviewData = overview.data;
+  const data = overview.data;
 
-  let accuracy: ReturnType<typeof quizAccuracy> = null;
-  if (quizProgress.data) {
-    try {
-      accuracy = quizAccuracy(parseQuizProgress(quizProgress.data));
-    } catch {
-      accuracy = null;
-    }
-  }
+  const quizThisWeek = stats.data?.quiz.this_week;
+  const quizPercent = quizThisWeek ? accuracyPercent(quizThisWeek) : null;
+  const daysLeft = examDate ? daysUntil(examDate, new Date()) : null;
+  const examValue = exam.value;
+  // The plan request carries a date only when the field holds one it would save: a draft the field
+  // rejects (`0002-…`) never goes out, the saved date does.
+  const planExamDate = examValue.trim() === "" || isCommittableExamDate(examValue) ? examValue.trim() || null : exam.saved || null;
 
-  const examFromPlan = studyPlan.data ? examDateFromPlan(studyPlan.data) : null;
-  const examDate = examDateOverride ?? examFromPlan ?? "";
-  const daysLeft = examFromPlan ? daysUntil(examFromPlan, new Date()) : null;
+  const openDigest = (digestRef: string, heading?: string | null) => {
+    const slug = resolveDigestSlug(digestRef, digests);
+    void navigate({ ...classPath(course, "read", slug), search: heading ? { heading } : {} });
+  };
 
-  const flags = overviewData ? digestFlags(overviewData, digests) : new Map();
-  const weakest = overviewData ? weakestRecommendTopic(overviewData.recommend.items) : null;
-  const unreviewedDigest = overviewData
-    ? unreviewedDigestRecommend(overviewData.recommend.items, digests)
-    : null;
-  const callout = examFocusCallout({
-    weakLabel: overviewData?.weak.topics[0]?.label ?? null,
-    unreviewedTitle: unreviewedDigest?.title ?? null,
-  });
+  const drill = (digestRef: string) => {
+    void navigate({
+      ...classPath(course, "quiz"),
+      search: { lectures: lecturesToSearch([toCourseDigest(course, digestRef)]) },
+    });
+  };
 
   const onGeneratePlan = async () => {
     if (viewerBlocked || !effective.providerId) {
@@ -279,229 +236,265 @@ export function CourseOverview({
     }
     const providerId = effective.providerId;
     if (!effective.modelId) {
-      setPlanStatus("Select a model in Settings.");
+      setPlanStatusText("Select a model in Settings.");
       return;
     }
     try {
       const auth = await fetchAuthStatus(providerId, true);
       if (!auth.authenticated) {
         const label = PROVIDER_FALLBACK.find((p) => p.id === providerId)?.label ?? providerId;
-        setPlanStatus(signedOutJobMessage(label, auth.reason ?? ""));
+        setPlanStatusText(signedOutJobMessage(label, auth.reason ?? ""));
         return;
       }
       setPlanBusy(true);
-      setPlanStatus("Generating study plan…");
+      setPlanStatusText("Generating study plan…");
       await studyPlanMutation.mutateAsync({
         provider: providerId,
         model: effective.modelId,
-        examDate: examDate.trim() || null,
+        examDate: planExamDate,
       });
-      setPlanStatus("");
+      setPlanStatusText("");
     } catch (error) {
-      setPlanStatus(String(error));
+      setPlanStatusText(String(error));
     } finally {
       setPlanBusy(false);
     }
   };
 
+  const weakTopics = (overviewError ? [] : (data?.weak.topics ?? [])) as WeakTopic[];
+  const recommended: StudyRecommendItem[] = overviewError ? [] : (data?.recommend.items ?? []);
+  const tasks = plan.data?.tasks ?? [];
+
   return (
-    <div className="mx-auto w-full max-w-reading px-8 py-9 pb-16 font-serif text-read">
-      <div className="notes-eyebrow">
-        <House className="size-icon-sm" aria-hidden />
-        <span>Course overview</span>
+    <div
+      ref={paneRef}
+      data-testid="overview-pane"
+      className="@container/overview min-h-0 flex-1 overflow-y-auto px-10 pb-10 pt-6"
+    >
+      <PreviewBarRight>{digests.length === 1 ? "1 lecture" : `${digests.length} lectures`}</PreviewBarRight>
+      <h2 className="text-title text-foreground">Course overview</h2>
+      <p className="mt-1 text-caption text-muted-foreground">
+        {[
+          courseDisplayName(course),
+          digests.length === 1 ? "1 lecture" : `${digests.length} lectures`,
+          examDate ? `exam ${formatExamDate(examDate)}` : null,
+        ]
+          .filter(Boolean)
+          .join(" · ")}
+      </p>
+
+      <div className="mt-6 grid grid-cols-1 gap-4 @2xl/overview:grid-cols-3">
+        {overviewPending ? (
+          <Skeleton className="h-28 w-full @2xl/overview:col-span-3" />
+        ) : data && data.due.deck_count > 0 ? (
+          <StatCard
+            testId="overview-due"
+            label="Cards due today"
+            value={data.due.count === 1 ? "1 card" : `${data.due.count} cards`}
+            caption={
+              data.due.count > 0
+                ? `about ${reviewMinutes(data.due.count)} min · ${data.due.deck_count} in the deck`
+                : `${data.due.deck_count} in the deck`
+            }
+          />
+        ) : null}
+        {quizPercent !== null && quizThisWeek && stats.data ? (
+          <StatCard
+            testId="overview-quiz"
+            label="Quiz accuracy"
+            value={`${quizPercent}%`}
+            caption={accuracyCaption(quizThisWeek, stats.data.quiz.last_week)}
+          />
+        ) : null}
+        {examDate && daysLeft !== null && daysLeft >= 0 ? (
+          <StatCard
+            testId="overview-exam"
+            label="Exam"
+            value={daysLeftLabel(daysLeft)}
+            caption={formatExamDate(examDate)}
+          />
+        ) : null}
       </div>
-      <h2 className="mb-2 font-serif text-3xl font-medium leading-tight">
-        {courseDisplayName(course)}
-      </h2>
-      {courseMd.isLoading ? (
-        <Skeleton className="mb-6 h-4 w-full max-w-md" />
-      ) : lede ? (
-        <p className="notes-lede">{lede}</p>
-      ) : null}
 
-      {overviewPending ? (
-        <Skeleton className="notes-stats mb-6 h-24 w-full" />
-      ) : overviewData ? (
-        <div className="notes-stats">
-          {overviewData.due.deck_count > 0 ? (
-            <div className="notes-stat">
-              <div className="notes-stat-label">Cards due today</div>
-              <div className="notes-stat-value">
-                {overviewData.due.count}
-                <small>of {overviewData.due.deck_count}</small>
-              </div>
-            </div>
-          ) : null}
-          {accuracy ? (
-            <div className="notes-stat">
-              <div className="notes-stat-label">Quiz accuracy</div>
-              <div className="notes-stat-value">
-                {accuracy.percent}%
-                <small>{accuracy.answerCount} answers</small>
-              </div>
-            </div>
-          ) : null}
-          {daysLeft != null && daysLeft >= 0 ? (
-            <div className="notes-stat">
-              <div className="notes-stat-label">Exam</div>
-              <div className="notes-stat-value">
-                {daysLeft === 0 ? "today" : daysLeft}
-                {daysLeft !== 0 ? <small>days away</small> : null}
-              </div>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-
-      {overviewData ? (
-        <div className="notes-next mb-6">
-          {overviewData.due.count > 0 ? (
-            <Button
-              size="lg"
-              onClick={() => {
-                void navigate({ to: "/course/$course/flashcards", params: { course } });
-              }}
-            >
-              <Layers className="size-icon-sm" />
-              Review {overviewData.due.count} due cards
-            </Button>
-          ) : null}
-          <Button
-            size="lg"
-            variant="outline"
-            disabled={!weakest}
-            onClick={() => {
-              if (!weakest) {
-                return;
-              }
-              void navigate({
-                to: "/course/$course/chat",
-                params: { course },
-                search: {
-                  mode: "explain",
-                  prompt: `Explain the weakest topic "${weakest.label}". Stay inside this course and cite sources.`,
-                },
-              });
-            }}
-          >
-            <GraduationCap className="size-icon-sm" />
-            Explain weakest topic
-          </Button>
-        </div>
-      ) : null}
-
-      <h3 className="notes-section-title">Course map</h3>
-      {overviewPending ? (
-        <Skeleton className="mb-6 h-32 w-full" />
-      ) : (
-        <ul className="notes-units mb-6">
-          {digests.map((digest, index) => {
-            const flag = flags.get(digest.path);
-            return (
-              <li key={digest.path}>
-                <button
-                  type="button"
-                  className="notes-unit-row"
-                  onClick={() => goToDigest(digestSlugFromPath(digest.path))}
-                >
-                  <span className="notes-unit-no">{padUnitNumber(index)}</span>
-                  <span>
-                    <span className="notes-unit-title">{digest.title}</span>
-                    <span className="notes-unit-sub">{digest.date}</span>
+      <div className="mt-4 grid grid-cols-1 items-start gap-4 @3xl/overview:grid-cols-2">
+        <section className={CARD} aria-label="Study plan">
+          <CardTitle
+            id={headingId("Study plan")}
+            aside={
+              <>
+                {plan.data && plan.data.total > 0 ? (
+                  <span className="rounded-xs bg-accent px-1.5 py-0.5 text-micro text-accent-foreground">
+                    {`${plan.data.done} of ${plan.data.total} done`}
                   </span>
-                  {flag ? (
-                    <span
-                      className={
-                        flag === "weak" ? "notes-unit-flag-weak" : "notes-unit-flag-new"
-                      }
-                    >
-                      {flag}
-                    </span>
-                  ) : (
-                    <span className="notes-unit-flag-new" aria-hidden />
-                  )}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-
-      {callout ? (
-        <div className="notes-callout mb-6">
-          <Info className="size-icon shrink-0 text-primary" aria-hidden />
-          <span>{callout}</span>
-        </div>
-      ) : null}
-
-      <h3 className="notes-section-title">Recommended</h3>
-      <div className="mb-6">
-        <RecommendList
-          items={overviewError ? undefined : overviewData?.recommend.items}
-          loading={overviewPending}
-          error={overviewError}
-          course={course}
-          onNavigateDigest={goToDigest}
-        />
-      </div>
-
-      <h3 className="notes-section-title">Weak topics</h3>
-      <div className="mb-6">
-        <WeakTopicsList
-          topics={overviewError ? undefined : overviewData?.weak.topics}
-          loading={overviewPending}
-          error={overviewError}
-          onNavigateDigest={goToDigest}
-        />
-      </div>
-
-      <h3 className="notes-section-title" id={headingId("Study plan")}>
-        Study plan
-      </h3>
-      <div className="mb-6 space-y-3">
-        {studyPlan.isLoading ? (
-          <Skeleton className="h-24 w-full" />
-        ) : planHtml ? (
-          <div className="prose-arbor" dangerouslySetInnerHTML={{ __html: planHtml }} />
-        ) : (
-          <p className="text-sm text-muted-foreground">No study plan yet.</p>
-        )}
-        <div className="flex flex-wrap items-end gap-3 font-sans text-sm">
-          <label className="space-y-1">
-            <span className="text-xs text-muted-foreground">Exam date</span>
+                ) : null}
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="ghost"
+                  disabled={viewerBlocked || planBusy || studyPlanMutation.isPending || exam.invalid}
+                  title={viewerBlocked ? VIEWER_WRITE_REASON : undefined}
+                  onClick={() => void onGeneratePlan()}
+                >
+                  {tasks.length > 0 ? "Regenerate" : "Generate"}
+                </Button>
+              </>
+            }
+          >
+            Study plan
+          </CardTitle>
+          {plan.isLoading ? (
+            <Skeleton className="h-24 w-full" />
+          ) : tasks.length > 0 ? (
+            <ul className="flex flex-col gap-2.5">
+              {tasks.map((task) => (
+                <li key={task.id} className="flex items-center gap-2.5 text-small text-foreground">
+                  <Checkbox
+                    aria-label={task.text}
+                    checked={task.done}
+                    disabled={toggleTask.isPending}
+                    onCheckedChange={(checked) => toggleTask.mutate({ task: task.id, done: checked })}
+                  />
+                  <span className="min-w-0 flex-1">{task.text}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-small text-muted-foreground">No study plan yet.</p>
+          )}
+          <label className="mt-4 flex items-center gap-2 text-caption text-muted-foreground">
+            <span>Exam date</span>
             <Input
               type="date"
-              value={examDate}
-              onChange={(e) => setExamDateOverride(e.target.value)}
+              aria-label="Exam date"
+              value={examValue}
+              disabled={viewerBlocked}
+              title={viewerBlocked ? VIEWER_WRITE_REASON : undefined}
+              aria-invalid={exam.invalid || undefined}
+              onChange={(event) => exam.onChange(event.target.value, event.target.validity.badInput)}
+              onBlur={exam.onBlur}
+              onKeyDown={exam.onKeyDown}
+              className="w-40"
             />
           </label>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={viewerBlocked || planBusy || studyPlanMutation.isPending}
-            title={viewerBlocked ? VIEWER_WRITE_REASON : undefined}
-            onClick={() => void onGeneratePlan()}
-          >
-            {planHtml ? "Regenerate" : "Generate"}
-          </Button>
+          {exam.invalid ? (
+            <p role="alert" className="mt-2 text-small text-destructive">
+              Enter a full date with a four-digit year between 1900 and 2100.
+            </p>
+          ) : exam.error ? (
+            <p role="alert" className="mt-2 text-small text-destructive">
+              Could not save the exam date. Click away or press Enter to try again.
+            </p>
+          ) : null}
+          {planStatusText ? <p className="mt-2 text-small text-muted-foreground">{planStatusText}</p> : null}
+        </section>
+
+        <div className="flex flex-col gap-4">
+          <section className={CARD} aria-label="Weak topics">
+            <CardTitle>Weak topics</CardTitle>
+            {overviewPending ? (
+              <Skeleton className="h-16 w-full" />
+            ) : overviewError ? (
+              <p className="text-small text-muted-foreground">Could not load weak topics.</p>
+            ) : weakTopics.length === 0 ? (
+              <p className="text-small text-muted-foreground">No weak topics yet.</p>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {weakTopics.map((topic) => (
+                  <li key={topic.label} className="flex items-center gap-3 text-small text-foreground">
+                    {topic.digest ? (
+                      <button
+                        type="button"
+                        onClick={() => openDigest(topic.digest!, topic.heading ?? null)}
+                        className="min-w-0 flex-1 truncate text-left hover:text-primary"
+                      >
+                        {topic.label}
+                      </button>
+                    ) : (
+                      <span className="min-w-0 flex-1 truncate">{topic.label}</span>
+                    )}
+                    {typeof topic.wrong === "number" && typeof topic.correct === "number" ? (
+                      <span className="rounded-xs bg-destructive-surface px-1.5 py-0.5 text-micro text-destructive">
+                        {`${topic.wrong} of ${topic.wrong + topic.correct}`}
+                      </span>
+                    ) : null}
+                    {topic.digest ? (
+                      <Button
+                        type="button"
+                        size="xs"
+                        variant="outline"
+                        aria-label={`Drill ${topic.label}`}
+                        onClick={() => drill(topic.digest!)}
+                      >
+                        Drill
+                      </Button>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <section className={CARD} aria-label="Recommended">
+            <CardTitle>Recommended</CardTitle>
+            {overviewPending ? (
+              <Skeleton className="h-20 w-full" />
+            ) : overviewError ? (
+              <p className="text-small text-muted-foreground">Could not load recommendations.</p>
+            ) : recommended.length === 0 ? (
+              <p className="text-small text-muted-foreground">No recommendations yet.</p>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {recommended.map((item) => (
+                  <li key={`${item.kind}-${item.label}`}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (item.kind === "due_cards") {
+                          if (activeRoot) {
+                            resetClassDeck(activeRoot, course);
+                          }
+                          void navigate({ ...classPath(course, "cards"), search: {} });
+                        } else if (item.digest) {
+                          openDigest(item.digest, item.heading ?? null);
+                        }
+                      }}
+                      className="flex w-full items-center gap-2.5 text-left text-small text-foreground hover:text-primary"
+                    >
+                      <span aria-hidden className="size-2 shrink-0 rounded-full bg-primary" />
+                      <span className="min-w-0 flex-1 truncate">{recommendedLabel(item, course, digests)}</span>
+                      {recommendedMeta(item, course, readingState.data) ? (
+                        <span className="shrink-0 text-caption text-muted-foreground">
+                          {recommendedMeta(item, course, readingState.data)}
+                        </span>
+                      ) : null}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
         </div>
-        {planStatus ? <p className="text-sm text-muted-foreground">{planStatus}</p> : null}
       </div>
 
-      <h3 className="notes-section-title">Course notes</h3>
-      {courseMd.isLoading ? (
-        <Skeleton className="h-40 w-full" />
-      ) : courseMd.isSuccess ? (
-        <div
-          ref={courseNotesRef}
-          className="prose-arbor"
-          dangerouslySetInnerHTML={{ __html: courseNotesHtml }}
-        />
-      ) : (
-        <p className="text-sm text-muted-foreground">
-          No notes yet. Add lecture files, then Update knowledge.
-        </p>
-      )}
+      {courseNotesHtml ? (
+        <section id={headingId("Course notes")} className={cn(CARD, "mt-4")} aria-label="Course notes">
+          <button
+            type="button"
+            aria-expanded={courseNotesOpen}
+            onClick={() => setCourseNotesOpen((open) => !open)}
+            className="flex w-full items-center gap-2 text-left text-heading text-foreground"
+          >
+            <ChevronRight
+              aria-hidden
+              className={cn("size-icon-sm text-muted-foreground transition-transform", courseNotesOpen && "rotate-90")}
+            />
+            Course notes
+          </button>
+          {courseNotesOpen ? (
+            <div className="prose-arbor mt-3" dangerouslySetInnerHTML={{ __html: courseNotesHtml }} />
+          ) : null}
+        </section>
+      ) : null}
     </div>
   );
 }

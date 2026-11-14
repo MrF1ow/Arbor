@@ -1,36 +1,41 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
+import { TriangleAlert } from "lucide-react";
 
-import { canUseDesktopIpc } from "~/domain/tauri";
-import { hasAnyKnowledgeRoot, pickActiveRoot } from "~/lib/knowledge-root";
-import { invoke } from "~/lib/ipc";
-import type { Settings } from "~/domain/types";
-import { useUiStore } from "~/stores/ui-store";
+import { EmptyState } from "~/components/app/empty-state";
+import { FirstRun } from "~/components/today/first-run";
+import { TodayPage } from "~/components/today/today-page";
+import { Button } from "~/components/ui/button";
+import { hasAnyKnowledgeRoot } from "~/lib/knowledge-root";
+import { useSettings } from "~/lib/queries/settings";
 
 export const Route = createFileRoute("/")({
-  loader: async () => {
-    if (!canUseDesktopIpc()) {
-      throw redirect({ to: "/welcome" });
-    }
-    const settings = await invoke<Settings>("get_settings");
-    if (!hasAnyKnowledgeRoot(settings)) {
-      throw redirect({ to: "/welcome" });
-    }
-    const activeRoot = pickActiveRoot(settings);
-    if (!activeRoot) {
-      throw redirect({ to: "/welcome" });
-    }
-    const courses = await invoke<string[]>("list_courses", { root: activeRoot });
-    const lastCourse = useUiStore.getState().lastCourse;
-    if (lastCourse && lastCourse.root === activeRoot && courses.includes(lastCourse.course)) {
-      throw redirect({
-        to: "/course/$course/notes",
-        params: { course: lastCourse.course },
-      });
-    }
-    if (courses[0]) {
-      throw redirect({ to: "/course/$course/notes", params: { course: courses[0] } });
-    }
-    throw redirect({ to: "/welcome" });
-  },
-  component: () => null,
+  component: IndexPage,
 });
+
+/** Today across every library, or First run until a library exists (Q7). */
+function IndexPage() {
+  const settings = useSettings();
+  if (settings.isPending && settings.fetchStatus !== "idle") {
+    return <div className="min-h-0 flex-1" />;
+  }
+  // Unreadable settings are not "no library": First run would invite choosing a folder over them.
+  if (settings.isError) {
+    return (
+      <div className="flex min-h-0 flex-1 items-center justify-center p-8">
+        <div role="alert">
+          <EmptyState
+            icon={TriangleAlert}
+            title="Arbor could not read its settings"
+            description={String(settings.error)}
+            actions={
+              <Button variant="outline" size="sm" onClick={() => void settings.refetch()}>
+                Retry
+              </Button>
+            }
+          />
+        </div>
+      </div>
+    );
+  }
+  return hasAnyKnowledgeRoot(settings.data) ? <TodayPage /> : <FirstRun />;
+}

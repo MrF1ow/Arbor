@@ -268,7 +268,46 @@ def test_study_today_weak_topics_include_course(today_root: Path) -> None:
     payload = json.loads(out.strip())
     assert payload["weak_topics"]
     for row in payload["weak_topics"]:
-        assert {"course", "label", "digest", "heading", "wrong_rate"} <= set(row)
+        assert {"course", "label", "digest", "heading", "wrong_rate", "wrong", "correct"} <= set(row)
+        assert isinstance(row["wrong"], int) and isinstance(row["correct"], int)
+        assert row["wrong"] > 0
+
+
+def test_study_today_weak_topic_carries_wrong_and_correct_counts(tmp_path: Path) -> None:
+    """Today shows "4 of 9": wrong of wrong + correct, straight from the progress entry."""
+    root = tmp_path / "Knowledge"
+    root.mkdir(parents=True)
+    _run_git(root, "init", "-q")
+    _run_git(root, "config", "user.email", "test@arbor.local")
+    _run_git(root, "config", "user.name", "Arbor Test")
+    (root / "Cell" / "digests").mkdir(parents=True)
+    (root / "Cell" / "digests" / "membranes.md").write_text("# Membranes\n", encoding="utf-8")
+    (root / "Cell" / "study").mkdir(parents=True)
+    _quiz_wrong(root, "Cell", "q_mem", "digests/membranes.md", "Membranes", wrongs=4, corrects=5)
+    (root / "Cell" / "study" / "quiz.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "course": "Cell",
+                "questions": [
+                    {
+                        "id": "q_mem",
+                        "type": "short",
+                        "prompt": "P?",
+                        "answer": "A",
+                        "source": {"digest": "digests/membranes.md", "heading": "Membranes"},
+                    }
+                ],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    weak = study_today(root, now=CLOCK)["weak_topics"]
+
+    assert [(row["wrong"], row["correct"]) for row in weak] == [(4, 5)]
+    assert weak[0]["wrong_rate"] == pytest.approx(4 / 9)
 
 
 def test_graded_mastered_float_counts_as_mastered(tmp_path: Path) -> None:

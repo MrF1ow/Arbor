@@ -5,7 +5,11 @@ export type Appearance = "system" | "light" | "dark";
 export interface DigestInfo {
   title: string;
   date: string;
+  /** Course-prefixed path, e.g. `Cell Biology/digests/2026-09-12-membranes.md`. */
   path: string;
+  /** Sub-folder name of the source the digest came from; null when it sits at the class root. */
+  unit?: string | null;
+  source_path?: string | null;
 }
 
 export interface Model {
@@ -291,6 +295,10 @@ export interface JobSummary {
   finished_at: string | null;
   error_summary: string | null;
   exit_code: number | null;
+  /** The class the job covered; null for legacy rows and updates that span classes. */
+  course?: string | null;
+  /** Digest paths (study jobs) or source paths (updates); null when unknown or whole-class. */
+  digests?: string[] | null;
 }
 
 export interface JobEventRow {
@@ -344,6 +352,10 @@ export interface WorkerEvent {
   chunks?: number;
   digest_count?: number;
   sources?: number;
+  /** `planned.total` and `source_started.total`: sources in the run. */
+  total?: number;
+  /** `source_started.index`: 1-based position of the source being processed. */
+  index?: number;
   stage?: string;
   status?: string;
   detail?: string;
@@ -373,4 +385,27 @@ export interface WorkerEvent {
   files?: string[];
   kind?: string;
   exit_code?: number;
+}
+
+/** `study_progress stats`: quiz and card accuracy by week. */
+export interface CourseStats {
+  quiz: { this_week: { correct: number; total: number }; last_week: { correct: number; total: number } };
+  cards: { this_week: { correct: number; total: number }; last_week: { correct: number; total: number } };
+}
+
+/** `study_plan_status`: the plan's checklist and how much of it is ticked. */
+export interface StudyPlanStatus {
+  done: number;
+  total: number;
+  tasks: { id: string; text: string; done: boolean }[];
+}
+
+/** `usage_summary`: one row per provider over the last N days. */
+export interface ProviderUsageSummary {
+  provider: string;
+  requests: number;
+  input_tokens: number;
+  output_tokens: number;
+  /** Calls where the provider reported both token counts. */
+  tokens_known: number;
 }

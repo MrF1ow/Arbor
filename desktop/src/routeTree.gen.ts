@@ -23,13 +23,13 @@ import { Route as SettingsShortcutsRouteImport } from './routes/settings.shortcu
 import { Route as SettingsSkillsRouteImport } from './routes/settings.skills'
 import { Route as SettingsSyncRouteImport } from './routes/settings.sync'
 import { Route as SettingsWorkersRouteImport } from './routes/settings.workers'
-import { Route as CourseCourseChatRouteImport } from './routes/course.$course.chat'
-import { Route as CourseCourseFlashcardsRouteImport } from './routes/course.$course.flashcards'
-import { Route as CourseCourseGraphRouteImport } from './routes/course.$course.graph'
-import { Route as CourseCourseNotesRouteImport } from './routes/course.$course.notes'
-import { Route as CourseCourseQuizRouteImport } from './routes/course.$course.quiz'
-import { Route as CourseCourseNotesIndexRouteImport } from './routes/course.$course.notes.index'
-import { Route as CourseCourseNotesDigestRouteImport } from './routes/course.$course.notes.$digest'
+import { Route as CourseCourseIndexRouteImport } from './routes/course.$course.index'
+import { Route as CourseCourseAskRouteImport } from './routes/course.$course.ask'
+import { Route as CourseCourseMapRouteImport } from './routes/course.$course.map'
+import { Route as CourseCourseOverviewRouteImport } from './routes/course.$course.overview'
+import { Route as CourseCoursePracticeCardsRouteImport } from './routes/course.$course.practice.cards'
+import { Route as CourseCoursePracticeQuizRouteImport } from './routes/course.$course.practice.quiz'
+import { Route as CourseCourseReadDigestRouteImport } from './routes/course.$course.read.$digest'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -101,40 +101,42 @@ const SettingsWorkersRoute = SettingsWorkersRouteImport.update({
   path: '/workers',
   getParentRoute: () => SettingsRoute,
 } as any)
-const CourseCourseChatRoute = CourseCourseChatRouteImport.update({
-  id: '/chat',
-  path: '/chat',
-  getParentRoute: () => CourseCourseRoute,
-} as any)
-const CourseCourseFlashcardsRoute = CourseCourseFlashcardsRouteImport.update({
-  id: '/flashcards',
-  path: '/flashcards',
-  getParentRoute: () => CourseCourseRoute,
-} as any)
-const CourseCourseGraphRoute = CourseCourseGraphRouteImport.update({
-  id: '/graph',
-  path: '/graph',
-  getParentRoute: () => CourseCourseRoute,
-} as any)
-const CourseCourseNotesRoute = CourseCourseNotesRouteImport.update({
-  id: '/notes',
-  path: '/notes',
-  getParentRoute: () => CourseCourseRoute,
-} as any)
-const CourseCourseQuizRoute = CourseCourseQuizRouteImport.update({
-  id: '/quiz',
-  path: '/quiz',
-  getParentRoute: () => CourseCourseRoute,
-} as any)
-const CourseCourseNotesIndexRoute = CourseCourseNotesIndexRouteImport.update({
+const CourseCourseIndexRoute = CourseCourseIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => CourseCourseNotesRoute,
+  getParentRoute: () => CourseCourseRoute,
 } as any)
-const CourseCourseNotesDigestRoute = CourseCourseNotesDigestRouteImport.update({
-  id: '/$digest',
-  path: '/$digest',
-  getParentRoute: () => CourseCourseNotesRoute,
+const CourseCourseAskRoute = CourseCourseAskRouteImport.update({
+  id: '/ask',
+  path: '/ask',
+  getParentRoute: () => CourseCourseRoute,
+} as any)
+const CourseCourseMapRoute = CourseCourseMapRouteImport.update({
+  id: '/map',
+  path: '/map',
+  getParentRoute: () => CourseCourseRoute,
+} as any)
+const CourseCourseOverviewRoute = CourseCourseOverviewRouteImport.update({
+  id: '/overview',
+  path: '/overview',
+  getParentRoute: () => CourseCourseRoute,
+} as any)
+const CourseCoursePracticeCardsRoute =
+  CourseCoursePracticeCardsRouteImport.update({
+    id: '/practice/cards',
+    path: '/practice/cards',
+    getParentRoute: () => CourseCourseRoute,
+  } as any)
+const CourseCoursePracticeQuizRoute =
+  CourseCoursePracticeQuizRouteImport.update({
+    id: '/practice/quiz',
+    path: '/practice/quiz',
+    getParentRoute: () => CourseCourseRoute,
+  } as any)
+const CourseCourseReadDigestRoute = CourseCourseReadDigestRouteImport.update({
+  id: '/read/$digest',
+  path: '/read/$digest',
+  getParentRoute: () => CourseCourseRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -152,19 +154,18 @@ export interface FileRoutesByFullPath {
   '/settings/sync': typeof SettingsSyncRoute
   '/settings/workers': typeof SettingsWorkersRoute
   '/settings/': typeof SettingsIndexRoute
-  '/course/$course/chat': typeof CourseCourseChatRoute
-  '/course/$course/flashcards': typeof CourseCourseFlashcardsRoute
-  '/course/$course/graph': typeof CourseCourseGraphRoute
-  '/course/$course/notes': typeof CourseCourseNotesRouteWithChildren
-  '/course/$course/quiz': typeof CourseCourseQuizRoute
-  '/course/$course/notes/$digest': typeof CourseCourseNotesDigestRoute
-  '/course/$course/notes/': typeof CourseCourseNotesIndexRoute
+  '/course/$course/ask': typeof CourseCourseAskRoute
+  '/course/$course/map': typeof CourseCourseMapRoute
+  '/course/$course/overview': typeof CourseCourseOverviewRoute
+  '/course/$course/': typeof CourseCourseIndexRoute
+  '/course/$course/practice/cards': typeof CourseCoursePracticeCardsRoute
+  '/course/$course/practice/quiz': typeof CourseCoursePracticeQuizRoute
+  '/course/$course/read/$digest': typeof CourseCourseReadDigestRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/jobs': typeof JobsRoute
   '/welcome': typeof WelcomeRoute
-  '/course/$course': typeof CourseCourseRouteWithChildren
   '/dev/ui': typeof DevUiRoute
   '/settings/general': typeof SettingsGeneralRoute
   '/settings/library': typeof SettingsLibraryRoute
@@ -174,12 +175,13 @@ export interface FileRoutesByTo {
   '/settings/sync': typeof SettingsSyncRoute
   '/settings/workers': typeof SettingsWorkersRoute
   '/settings': typeof SettingsIndexRoute
-  '/course/$course/chat': typeof CourseCourseChatRoute
-  '/course/$course/flashcards': typeof CourseCourseFlashcardsRoute
-  '/course/$course/graph': typeof CourseCourseGraphRoute
-  '/course/$course/quiz': typeof CourseCourseQuizRoute
-  '/course/$course/notes/$digest': typeof CourseCourseNotesDigestRoute
-  '/course/$course/notes': typeof CourseCourseNotesIndexRoute
+  '/course/$course/ask': typeof CourseCourseAskRoute
+  '/course/$course/map': typeof CourseCourseMapRoute
+  '/course/$course/overview': typeof CourseCourseOverviewRoute
+  '/course/$course': typeof CourseCourseIndexRoute
+  '/course/$course/practice/cards': typeof CourseCoursePracticeCardsRoute
+  '/course/$course/practice/quiz': typeof CourseCoursePracticeQuizRoute
+  '/course/$course/read/$digest': typeof CourseCourseReadDigestRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -197,13 +199,13 @@ export interface FileRoutesById {
   '/settings/sync': typeof SettingsSyncRoute
   '/settings/workers': typeof SettingsWorkersRoute
   '/settings/': typeof SettingsIndexRoute
-  '/course/$course/chat': typeof CourseCourseChatRoute
-  '/course/$course/flashcards': typeof CourseCourseFlashcardsRoute
-  '/course/$course/graph': typeof CourseCourseGraphRoute
-  '/course/$course/notes': typeof CourseCourseNotesRouteWithChildren
-  '/course/$course/quiz': typeof CourseCourseQuizRoute
-  '/course/$course/notes/$digest': typeof CourseCourseNotesDigestRoute
-  '/course/$course/notes/': typeof CourseCourseNotesIndexRoute
+  '/course/$course/ask': typeof CourseCourseAskRoute
+  '/course/$course/map': typeof CourseCourseMapRoute
+  '/course/$course/overview': typeof CourseCourseOverviewRoute
+  '/course/$course/': typeof CourseCourseIndexRoute
+  '/course/$course/practice/cards': typeof CourseCoursePracticeCardsRoute
+  '/course/$course/practice/quiz': typeof CourseCoursePracticeQuizRoute
+  '/course/$course/read/$digest': typeof CourseCourseReadDigestRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -222,19 +224,18 @@ export interface FileRouteTypes {
     | '/settings/sync'
     | '/settings/workers'
     | '/settings/'
-    | '/course/$course/chat'
-    | '/course/$course/flashcards'
-    | '/course/$course/graph'
-    | '/course/$course/notes'
-    | '/course/$course/quiz'
-    | '/course/$course/notes/$digest'
-    | '/course/$course/notes/'
+    | '/course/$course/ask'
+    | '/course/$course/map'
+    | '/course/$course/overview'
+    | '/course/$course/'
+    | '/course/$course/practice/cards'
+    | '/course/$course/practice/quiz'
+    | '/course/$course/read/$digest'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/jobs'
     | '/welcome'
-    | '/course/$course'
     | '/dev/ui'
     | '/settings/general'
     | '/settings/library'
@@ -244,12 +245,13 @@ export interface FileRouteTypes {
     | '/settings/sync'
     | '/settings/workers'
     | '/settings'
-    | '/course/$course/chat'
-    | '/course/$course/flashcards'
-    | '/course/$course/graph'
-    | '/course/$course/quiz'
-    | '/course/$course/notes/$digest'
-    | '/course/$course/notes'
+    | '/course/$course/ask'
+    | '/course/$course/map'
+    | '/course/$course/overview'
+    | '/course/$course'
+    | '/course/$course/practice/cards'
+    | '/course/$course/practice/quiz'
+    | '/course/$course/read/$digest'
   id:
     | '__root__'
     | '/'
@@ -266,13 +268,13 @@ export interface FileRouteTypes {
     | '/settings/sync'
     | '/settings/workers'
     | '/settings/'
-    | '/course/$course/chat'
-    | '/course/$course/flashcards'
-    | '/course/$course/graph'
-    | '/course/$course/notes'
-    | '/course/$course/quiz'
-    | '/course/$course/notes/$digest'
-    | '/course/$course/notes/'
+    | '/course/$course/ask'
+    | '/course/$course/map'
+    | '/course/$course/overview'
+    | '/course/$course/'
+    | '/course/$course/practice/cards'
+    | '/course/$course/practice/quiz'
+    | '/course/$course/read/$digest'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -384,54 +386,54 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsWorkersRouteImport
       parentRoute: typeof SettingsRoute
     }
-    '/course/$course/chat': {
-      id: '/course/$course/chat'
-      path: '/chat'
-      fullPath: '/course/$course/chat'
-      preLoaderRoute: typeof CourseCourseChatRouteImport
-      parentRoute: typeof CourseCourseRoute
-    }
-    '/course/$course/flashcards': {
-      id: '/course/$course/flashcards'
-      path: '/flashcards'
-      fullPath: '/course/$course/flashcards'
-      preLoaderRoute: typeof CourseCourseFlashcardsRouteImport
-      parentRoute: typeof CourseCourseRoute
-    }
-    '/course/$course/graph': {
-      id: '/course/$course/graph'
-      path: '/graph'
-      fullPath: '/course/$course/graph'
-      preLoaderRoute: typeof CourseCourseGraphRouteImport
-      parentRoute: typeof CourseCourseRoute
-    }
-    '/course/$course/notes': {
-      id: '/course/$course/notes'
-      path: '/notes'
-      fullPath: '/course/$course/notes'
-      preLoaderRoute: typeof CourseCourseNotesRouteImport
-      parentRoute: typeof CourseCourseRoute
-    }
-    '/course/$course/quiz': {
-      id: '/course/$course/quiz'
-      path: '/quiz'
-      fullPath: '/course/$course/quiz'
-      preLoaderRoute: typeof CourseCourseQuizRouteImport
-      parentRoute: typeof CourseCourseRoute
-    }
-    '/course/$course/notes/': {
-      id: '/course/$course/notes/'
+    '/course/$course/': {
+      id: '/course/$course/'
       path: '/'
-      fullPath: '/course/$course/notes/'
-      preLoaderRoute: typeof CourseCourseNotesIndexRouteImport
-      parentRoute: typeof CourseCourseNotesRoute
+      fullPath: '/course/$course/'
+      preLoaderRoute: typeof CourseCourseIndexRouteImport
+      parentRoute: typeof CourseCourseRoute
     }
-    '/course/$course/notes/$digest': {
-      id: '/course/$course/notes/$digest'
-      path: '/$digest'
-      fullPath: '/course/$course/notes/$digest'
-      preLoaderRoute: typeof CourseCourseNotesDigestRouteImport
-      parentRoute: typeof CourseCourseNotesRoute
+    '/course/$course/ask': {
+      id: '/course/$course/ask'
+      path: '/ask'
+      fullPath: '/course/$course/ask'
+      preLoaderRoute: typeof CourseCourseAskRouteImport
+      parentRoute: typeof CourseCourseRoute
+    }
+    '/course/$course/map': {
+      id: '/course/$course/map'
+      path: '/map'
+      fullPath: '/course/$course/map'
+      preLoaderRoute: typeof CourseCourseMapRouteImport
+      parentRoute: typeof CourseCourseRoute
+    }
+    '/course/$course/overview': {
+      id: '/course/$course/overview'
+      path: '/overview'
+      fullPath: '/course/$course/overview'
+      preLoaderRoute: typeof CourseCourseOverviewRouteImport
+      parentRoute: typeof CourseCourseRoute
+    }
+    '/course/$course/practice/cards': {
+      id: '/course/$course/practice/cards'
+      path: '/practice/cards'
+      fullPath: '/course/$course/practice/cards'
+      preLoaderRoute: typeof CourseCoursePracticeCardsRouteImport
+      parentRoute: typeof CourseCourseRoute
+    }
+    '/course/$course/practice/quiz': {
+      id: '/course/$course/practice/quiz'
+      path: '/practice/quiz'
+      fullPath: '/course/$course/practice/quiz'
+      preLoaderRoute: typeof CourseCoursePracticeQuizRouteImport
+      parentRoute: typeof CourseCourseRoute
+    }
+    '/course/$course/read/$digest': {
+      id: '/course/$course/read/$digest'
+      path: '/read/$digest'
+      fullPath: '/course/$course/read/$digest'
+      preLoaderRoute: typeof CourseCourseReadDigestRouteImport
+      parentRoute: typeof CourseCourseRoute
     }
   }
 }
@@ -462,33 +464,24 @@ const SettingsRouteWithChildren = SettingsRoute._addFileChildren(
   SettingsRouteChildren,
 )
 
-interface CourseCourseNotesRouteChildren {
-  CourseCourseNotesDigestRoute: typeof CourseCourseNotesDigestRoute
-  CourseCourseNotesIndexRoute: typeof CourseCourseNotesIndexRoute
-}
-
-const CourseCourseNotesRouteChildren: CourseCourseNotesRouteChildren = {
-  CourseCourseNotesDigestRoute: CourseCourseNotesDigestRoute,
-  CourseCourseNotesIndexRoute: CourseCourseNotesIndexRoute,
-}
-
-const CourseCourseNotesRouteWithChildren =
-  CourseCourseNotesRoute._addFileChildren(CourseCourseNotesRouteChildren)
-
 interface CourseCourseRouteChildren {
-  CourseCourseChatRoute: typeof CourseCourseChatRoute
-  CourseCourseFlashcardsRoute: typeof CourseCourseFlashcardsRoute
-  CourseCourseGraphRoute: typeof CourseCourseGraphRoute
-  CourseCourseNotesRoute: typeof CourseCourseNotesRouteWithChildren
-  CourseCourseQuizRoute: typeof CourseCourseQuizRoute
+  CourseCourseAskRoute: typeof CourseCourseAskRoute
+  CourseCourseMapRoute: typeof CourseCourseMapRoute
+  CourseCourseOverviewRoute: typeof CourseCourseOverviewRoute
+  CourseCourseIndexRoute: typeof CourseCourseIndexRoute
+  CourseCoursePracticeCardsRoute: typeof CourseCoursePracticeCardsRoute
+  CourseCoursePracticeQuizRoute: typeof CourseCoursePracticeQuizRoute
+  CourseCourseReadDigestRoute: typeof CourseCourseReadDigestRoute
 }
 
 const CourseCourseRouteChildren: CourseCourseRouteChildren = {
-  CourseCourseChatRoute: CourseCourseChatRoute,
-  CourseCourseFlashcardsRoute: CourseCourseFlashcardsRoute,
-  CourseCourseGraphRoute: CourseCourseGraphRoute,
-  CourseCourseNotesRoute: CourseCourseNotesRouteWithChildren,
-  CourseCourseQuizRoute: CourseCourseQuizRoute,
+  CourseCourseAskRoute: CourseCourseAskRoute,
+  CourseCourseMapRoute: CourseCourseMapRoute,
+  CourseCourseOverviewRoute: CourseCourseOverviewRoute,
+  CourseCourseIndexRoute: CourseCourseIndexRoute,
+  CourseCoursePracticeCardsRoute: CourseCoursePracticeCardsRoute,
+  CourseCoursePracticeQuizRoute: CourseCoursePracticeQuizRoute,
+  CourseCourseReadDigestRoute: CourseCourseReadDigestRoute,
 }
 
 const CourseCourseRouteWithChildren = CourseCourseRoute._addFileChildren(

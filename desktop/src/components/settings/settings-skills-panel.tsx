@@ -2,7 +2,8 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Chip } from "~/components/app/chip";
-import { SettingRow, SettingsSection } from "~/components/app/settings-section";
+import { SettingRow } from "~/components/app/settings-section";
+import { SettingsGroup, SettingsPage } from "~/components/settings/settings-page";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import {
@@ -219,8 +220,8 @@ export function SettingsSkillsPanel() {
   };
 
   return (
-    <div className="space-y-6" data-testid="settings-skills">
-      <SettingsSection title="Skills">
+    <SettingsPage title="Skills" description="Add or remove what Arbor can read and make." testId="settings-skills">
+      <SettingsGroup title="Marketplace">
         <SettingRow
           label="Index source"
           control={
@@ -267,10 +268,10 @@ export function SettingsSkillsPanel() {
             {statusLine}
           </p>
         ) : null}
-      </SettingsSection>
+      </SettingsGroup>
 
       {browsePackages.length > 0 ? (
-        <SettingsSection title="Packages">
+        <SettingsGroup title="Packages">
           {browsePackages.map((pkg) => {
             const runBlocked = viewerBlocksSkillRun(pkg);
             return (
@@ -319,7 +320,7 @@ export function SettingsSkillsPanel() {
               </div>
             );
           })}
-        </SettingsSection>
+        </SettingsGroup>
       ) : null}
 
       <Suspense fallback={null}>
@@ -348,6 +349,6 @@ export function SettingsSkillsPanel() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </SettingsPage>
   );
 }

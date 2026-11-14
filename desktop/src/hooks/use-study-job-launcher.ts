@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import type { StudyJobScope } from "~/lib/ipc";
 import { VIEWER_WRITE_REASON, viewerBlocksWrite } from "~/domain/library-role";
 import { PROVIDER_FALLBACK, signedOutJobMessage } from "~/domain/provider";
 import { fetchAuthStatus } from "~/lib/auth-refresh";
@@ -7,7 +8,7 @@ import { useEffectiveProvider } from "~/lib/queries/effective-provider";
 import { useLibrary } from "~/lib/queries/library";
 import { useJobStore } from "~/stores/job-store";
 
-type StudyJobInput = {
+type StudyJobInput = StudyJobScope & {
   course: string;
   force: boolean;
   model: string;
@@ -33,7 +34,7 @@ export function useStudyJobLauncher(
 
   const jobDisabled = viewerBlocked || studyJobRunning || options.isPending;
 
-  async function launchStudyJob(course: string, force: boolean) {
+  async function launchStudyJob(course: string, force: boolean, opts?: StudyJobScope) {
     if (!activeRoot || viewerBlocked || !effective.providerId) {
       return;
     }
@@ -62,6 +63,8 @@ export function useStudyJobLauncher(
         force,
         model: modelId,
         provider: providerId,
+        ...(opts?.digests && opts.digests.length > 0 ? { digests: opts.digests } : {}),
+        ...(opts?.fromText ? { fromText: opts.fromText } : {}),
       });
       appendLog(options.startedMessage(jobId));
     } catch (error) {

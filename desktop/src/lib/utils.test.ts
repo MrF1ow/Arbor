@@ -24,7 +24,7 @@ describe("cn / tailwind-merge custom tokens", () => {
   });
 
   it("merges custom max-height tokens", () => {
-    expect(cn("max-h-72", "max-h-palette-list")).toBe("max-h-palette-list");
+    expect(cn("max-h-72", "max-h-jobs-pane")).toBe("max-h-jobs-pane");
   });
 
   it("merges dialog top offset against fractional top", () => {

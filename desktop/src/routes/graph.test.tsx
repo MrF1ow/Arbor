@@ -18,7 +18,21 @@ import {
   resetMockHandlerTimers,
 } from "~/test/mock-handlers";
 import { useJobStore } from "~/stores/job-store";
+import { classScopeKey, useLectureSelectionStore } from "~/stores/lecture-selection-store";
 import { renderAppAtRoute } from "~/test/render";
+
+const layoutCalls = vi.hoisted(() => ({ count: 0, widths: [] as (number | undefined)[] }));
+vi.mock("~/components/graph/graph-layout", async (importOriginal) => {
+  const real = await importOriginal<typeof import("~/components/graph/graph-layout")>();
+  return {
+    ...real,
+    layoutConcepts: (...args: Parameters<typeof real.layoutConcepts>) => {
+      layoutCalls.count += 1;
+      layoutCalls.widths.push(args[2]);
+      return real.layoutConcepts(...args);
+    },
+  };
+});
 import { useUiStore } from "~/stores/ui-store";
 
 function readStudyFile(payload: unknown): string {
@@ -39,47 +53,6 @@ async function waitForGraphReady() {
     },
     { timeout: 8000 },
   );
-}
-
-function installVariableWidthResizeObserver(initialWidth: number) {
-  const OriginalRO = globalThis.ResizeObserver;
-  let width = initialWidth;
-  const callbacks: Array<{ el: Element; cb: ResizeObserverCallback; ro: ResizeObserver }> = [];
-
-  class MockResizeObserver {
-    private cb: ResizeObserverCallback;
-    constructor(cb: ResizeObserverCallback) {
-      this.cb = cb;
-    }
-    observe(el: Element) {
-      Object.defineProperty(el, "clientWidth", {
-        configurable: true,
-        get: () => width,
-      });
-      this.cb([{ target: el } as ResizeObserverEntry], this as unknown as ResizeObserver);
-      callbacks.push({ el, cb: this.cb, ro: this as unknown as ResizeObserver });
-    }
-    disconnect() {}
-    unobserve() {}
-  }
-
-  globalThis.ResizeObserver = MockResizeObserver as typeof ResizeObserver;
-
-  return {
-    setWidth(next: number) {
-      width = next;
-      for (const { el, cb, ro } of callbacks) {
-        Object.defineProperty(el, "clientWidth", {
-          configurable: true,
-          get: () => width,
-        });
-        cb([{ target: el } as ResizeObserverEntry], ro);
-      }
-    },
-    restore() {
-      globalThis.ResizeObserver = OriginalRO;
-    },
-  };
 }
 
 function trackEmptyStateText(pattern: RegExp): () => string[] {
@@ -110,7 +83,6 @@ describe("graph PR10", { timeout: 20000 }, () => {
       sidebarTouched: true,
       logOpen: false,
       logHeight: 200,
-      notesIndexOpen: true,
       lastCourse: null,
     });
     useJobStore.setState({
@@ -132,9 +104,43 @@ describe("graph PR10", { timeout: 20000 }, () => {
     vi.restoreAllMocks();
   });
 
-  it("renders concept list with figure and unverified styling", async () => {
-    await renderAppAtRoute("/course/cell-biology/graph", {
-      read_study_json: (payload) => {
+  const withGraph = (extra: Record<string, unknown> = {}) => ({
+    read_study_json: (payload: unknown) => {
+      if (readStudyFile(payload) === "concepts.json") {
+        return conceptGraph;
+      }
+      return { schema_version: 1, course: readStudyCourse(payload), failures: [] };
+    },
+    ...extra,
+  });
+
+  it("draws a pill per concept, figures dashed, with a link between neighbours", async () => {
+    await renderAppAtRoute("/course/cell-biology/map", withGraph());
+    await waitForGraphReady();
+    const canvas = screen.getByTestId("concept-canvas");
+    expect(within(canvas).getByRole("button", { name: "Facilitated diffusion" })).toBeInTheDocument();
+    const figure = within(canvas).getByRole("button", { name: "Figure · Figure 3.2" });
+    expect(figure.className).toMatch(/border-dashed/);
+    expect(canvas.querySelectorAll("polyline")).toHaveLength(1);
+  });
+
+  it("shows the concept, its neighbours and its sources in side panels", async () => {
+    await renderAppAtRoute("/course/cell-biology/map?concept=concept-1", withGraph());
+    await waitForGraphReady();
+    const concept = screen.getByRole("region", { name: "Concept" });
+    expect(within(concept).getByRole("heading", { level: 2, name: "Facilitated diffusion" })).toBeInTheDocument();
+    expect(within(concept).getByText("Carrier-mediated passive transport.")).toBeInTheDocument();
+    const neighbors = screen.getByRole("region", { name: "Neighbors" });
+    expect(within(neighbors).getByRole("button", { name: /Figure 3\.2/ })).toBeInTheDocument();
+    const sources = screen.getByRole("region", { name: "Sources" });
+    expect(within(sources).getByText("Cell membranes")).toBeInTheDocument();
+    expect(within(sources).getByRole("button", { name: "Read in digest" })).toBeInTheDocument();
+  });
+
+  it("flags an unverified concept in its panel with the reason on hover", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/map?concept=concept-1", {
+      read_study_json: (payload: unknown) => {
         if (readStudyFile(payload) === "concepts.json") {
           return conceptGraph;
         }
@@ -142,95 +148,205 @@ describe("graph PR10", { timeout: 20000 }, () => {
           return {
             schema_version: 1,
             course: readStudyCourse(payload),
-            failures: [
-              {
-                path: "study/concepts.json",
-                id: "concept-1",
-                reason: "Missing citation anchor",
-              },
-            ],
+            failures: [{ path: "study/concepts.json", id: "concept-1", reason: "Missing citation anchor" }],
           };
         }
         return { schema_version: 1, course: readStudyCourse(payload), failures: [] };
       },
     });
     await waitForGraphReady();
-    const list = screen.getByRole("navigation", { name: /Concepts/i });
-    expect(within(list).getByRole("button", { name: /Facilitated diffusion/i })).toBeInTheDocument();
-    expect(within(list).getByRole("button", { name: /Figure · Figure 3\.2/i })).toBeInTheDocument();
-    expect(within(list).getByText("Unverified")).toBeInTheDocument();
-    const figureRow = within(list).getByRole("button", { name: /Figure · Figure 3\.2/i });
-    expect(figureRow.className).toMatch(/border-dashed/);
-
-    const user = userEvent.setup();
-    await user.hover(within(list).getByText("Unverified"));
-    await waitFor(() => {
-      expect(screen.getByText("Missing citation anchor")).toBeInTheDocument();
-    });
+    const concept = screen.getByRole("region", { name: "Concept" });
+    await user.hover(within(concept).getByText("Unverified"));
+    await waitFor(() => expect(screen.getByText("Missing citation anchor")).toBeInTheDocument());
   });
 
-  it("selects list rows and updates concept search param", async () => {
+  it("selects a concept by clicking its pill and updates the concept search param", async () => {
     const user = userEvent.setup();
-    const { router } = await renderAppAtRoute("/course/cell-biology/graph", {
-      read_study_json: (payload) => {
-        if (readStudyFile(payload) === "concepts.json") {
-          return conceptGraph;
-        }
-        return { schema_version: 1, course: readStudyCourse(payload), failures: [] };
-      },
-    });
+    const { router } = await renderAppAtRoute("/course/cell-biology/map", withGraph());
     await waitForGraphReady();
-    const list = screen.getByRole("navigation", { name: /Concepts/i });
-    await user.click(within(list).getByRole("button", { name: /Figure · Figure 3\.2/i }));
+    await user.click(within(screen.getByTestId("concept-canvas")).getByRole("button", { name: "Figure · Figure 3.2" }));
     await waitFor(() => {
+      expect(router.state.location.pathname).toBe("/course/cell-biology/map");
       expect(router.state.location.searchStr).toContain("concept=concept-2");
     });
-    expect(
-      screen.getByRole("heading", { level: 2, name: /Figure · Figure 3\.2/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "Figure · Figure 3.2" })).toBeInTheDocument();
   });
 
-  it("selects neighbor chips", async () => {
+  it("selects a neighbour from the Neighbors panel", async () => {
     const user = userEvent.setup();
-    const { router } = await renderAppAtRoute("/course/cell-biology/graph?concept=concept-1", {
-      read_study_json: (payload) => {
-        if (readStudyFile(payload) === "concepts.json") {
-          return conceptGraph;
-        }
-        return { schema_version: 1, course: readStudyCourse(payload), failures: [] };
-      },
-    });
+    const { router } = await renderAppAtRoute("/course/cell-biology/map?concept=concept-1", withGraph());
     await waitForGraphReady();
-    await user.click(screen.getByRole("button", { name: /Figure 3\.2 · illustrates/i }));
+    await user.click(within(screen.getByRole("region", { name: "Neighbors" })).getByRole("button", { name: /Figure 3\.2/ }));
     await waitFor(() => {
       expect(router.state.location.searchStr).toContain("concept=concept-2");
     });
   });
 
-  it("navigates source chips to notes digest with heading", async () => {
+  it("opens a source in Read at its heading, and Read in digest opens the first source", async () => {
     const user = userEvent.setup();
-    const { router } = await renderAppAtRoute("/course/cell-biology/graph?concept=concept-1", {
-      read_study_json: (payload) => {
-        if (readStudyFile(payload) === "concepts.json") {
-          return conceptGraph;
-        }
-        return { schema_version: 1, course: readStudyCourse(payload), failures: [] };
-      },
-    });
+    const { router } = await renderAppAtRoute("/course/cell-biology/map?concept=concept-1", withGraph());
     await waitForGraphReady();
-    await user.click(
-      screen.getByRole("button", { name: /Cell membranes · Membrane structure/i }),
-    );
+    const sources = screen.getByRole("region", { name: "Sources" });
+    await user.click(within(sources).getByRole("button", { name: /Membrane structure/ }));
     await waitFor(() => {
-      expect(router.state.location.pathname).toContain("/notes/2026-09-12-membranes");
+      expect(router.state.location.pathname).toContain("/read/2026-09-12-membranes");
       expect(router.state.location.searchStr).toMatch(/heading=Membrane(\+|%20)structure/);
     });
+    await router.navigate({ to: "/course/$course/map", params: { course: "cell-biology" }, search: { concept: "concept-1" } });
+    await user.click(await screen.findByRole("button", { name: "Read in digest" }));
+    await waitFor(() => expect(router.state.location.pathname).toContain("/read/2026-09-12-membranes"));
+  });
+
+  it("zooms with the + and - buttons and fits the whole map again", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/map", withGraph());
+    await waitForGraphReady();
+    const canvas = screen.getByTestId("concept-canvas");
+    const zoom = () => Number(canvas.getAttribute("data-zoom"));
+    const start = zoom();
+    await user.click(screen.getByRole("button", { name: "Zoom in" }));
+    expect(zoom()).toBeGreaterThan(start);
+    await user.click(screen.getByRole("button", { name: "Zoom out" }));
+    await user.click(screen.getByRole("button", { name: "Zoom out" }));
+    expect(zoom()).toBeLessThan(start);
+    await user.click(screen.getByRole("button", { name: "Fit" }));
+    expect(zoom()).toBe(start);
+  });
+
+  it("counts the concepts, links and digests in the bar above", async () => {
+    await renderAppAtRoute("/course/cell-biology/map", withGraph());
+    await waitForGraphReady();
+    expect(await screen.findByText("2 concepts · 1 link · from 1 digest")).toBeInTheDocument();
+  });
+
+  it("highlights the concepts of the ticked lectures (Show on map)", async () => {
+    useLectureSelectionStore.setState({ byClass: {} });
+    useLectureSelectionStore
+      .getState()
+      .setScope(classScopeKey(FIXTURE_ROOT_FALL, "cell-biology"), ["cell-biology/digests/2026-09-15-mitochondria.md"]);
+    const graph = {
+      ...conceptGraph,
+      nodes: [
+        conceptGraph.nodes[0]!,
+        { ...conceptGraph.nodes[1]!, sources: [{ digest: "digests/2026-09-15-mitochondria.md", heading: null }] },
+      ],
+    };
+    await renderAppAtRoute("/course/cell-biology/map", {
+      read_study_json: (payload: unknown) =>
+        readStudyFile(payload) === "concepts.json"
+          ? graph
+          : { schema_version: 1, course: readStudyCourse(payload), failures: [] },
+    });
+    await waitForGraphReady();
+    const canvas = screen.getByTestId("concept-canvas");
+    expect(within(canvas).getByRole("button", { name: "Figure · Figure 3.2" })).toHaveAttribute("data-highlighted", "true");
+    expect(within(canvas).getByRole("button", { name: "Facilitated diffusion" })).toHaveAttribute("data-highlighted", "false");
+    // The preview bar keeps the totals; the scope count sits with the legend (design frame 4842).
+    expect(await screen.findByText("2 concepts · 1 link · from 2 digests")).toBeInTheDocument();
+    expect(within(canvas).getByText("1 of 2 concepts in the selected lecture")).toBeInTheDocument();
+  });
+
+  it("lays the graph out once, not again on every concept click", async () => {
+    const user = userEvent.setup();
+    await renderAppAtRoute("/course/cell-biology/map", withGraph());
+    await waitForGraphReady();
+    const canvas = screen.getByTestId("concept-canvas");
+    const before = layoutCalls.count;
+    await user.click(within(canvas).getByRole("button", { name: "Figure · Figure 3.2" }));
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { level: 2, name: "Figure · Figure 3.2" })).toBeInTheDocument(),
+    );
+    await user.click(within(canvas).getByRole("button", { name: "Facilitated diffusion" }));
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { level: 2, name: "Facilitated diffusion" })).toBeInTheDocument(),
+    );
+    expect(layoutCalls.count).toBe(before);
+  });
+
+  it("lays the map out for the measured canvas width, again when it changes, and not on a click (C29)", async () => {
+    const user = userEvent.setup();
+    let width = 600;
+    const offset = vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(() => width);
+    const resizes: (() => void)[] = [];
+    class StubObserver {
+      constructor(callback: ResizeObserverCallback) {
+        resizes.push(() => callback([], this as unknown as ResizeObserver));
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+    vi.stubGlobal("ResizeObserver", StubObserver);
+    try {
+      await renderAppAtRoute("/course/cell-biology/map", withGraph());
+      await waitForGraphReady();
+      // the canvas width less room for a scrollbar, rounded down to a multiple of 8
+      await waitFor(() => expect(layoutCalls.widths.at(-1)).toBe(584));
+      width = 480;
+      resizes.forEach((resize) => resize());
+      await waitFor(() => expect(layoutCalls.widths.at(-1)).toBe(464));
+      width = 482; // a few px more rounds to the same width: no new layout
+      const before = layoutCalls.count;
+      resizes.forEach((resize) => resize());
+      const canvas = screen.getByTestId("concept-canvas");
+      await user.click(within(canvas).getByRole("button", { name: "Facilitated diffusion" }));
+      expect(layoutCalls.count).toBe(before);
+    } finally {
+      vi.unstubAllGlobals();
+      offset.mockRestore();
+    }
+  });
+
+  it("draws a source's slide as a citation chip, and lists neighbours without a relation label", async () => {
+    await renderAppAtRoute("/course/cell-biology/map?concept=concept-1", withGraph());
+    await waitForGraphReady();
+    const sources = screen.getByRole("region", { name: "Sources" });
+    const chip = within(sources).getByRole("button", { name: "Membrane structure" });
+    expect(chip.className).toMatch(/border-info/);
+    expect(chip.className).toMatch(/text-info/);
+    expect(chip.className).toMatch(/text-micro/);
+    const neighbors = screen.getByRole("region", { name: "Neighbors" });
+    expect(within(neighbors).queryByText("illustrates")).not.toBeInTheDocument();
+  });
+
+  it("scrolls a concept picked in Neighbors into view in the scrolling canvas (F114)", async () => {
+    const user = userEvent.setup();
+    // The canvas is a small scrolling viewport (jsdom has no layout): a pill below the fold needs a scroll.
+    const size = vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(20);
+    const wide = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(40);
+    const scrollTo = vi.fn();
+    const original = Element.prototype.scrollTo;
+    Element.prototype.scrollTo = scrollTo as unknown as typeof Element.prototype.scrollTo;
+    try {
+      await renderAppAtRoute("/course/cell-biology/map", withGraph());
+      await waitForGraphReady();
+      scrollTo.mockClear();
+      await user.click(within(screen.getByRole("region", { name: "Neighbors" })).getAllByRole("button")[0]!);
+      await waitFor(() => expect(scrollTo).toHaveBeenCalled());
+      const [target] = scrollTo.mock.calls.at(-1)!;
+      expect(target.top).toBeGreaterThan(0);
+      expect(Number.isFinite(target.left)).toBe(true);
+    } finally {
+      Element.prototype.scrollTo = original;
+      size.mockRestore();
+      wide.mockRestore();
+    }
+  });
+
+  it("highlights nothing when no lecture is ticked", async () => {
+    useLectureSelectionStore.setState({ byClass: {} });
+    await renderAppAtRoute("/course/cell-biology/map", withGraph());
+    await waitForGraphReady();
+    const pills = within(screen.getByTestId("concept-canvas")).getAllByRole("button", { name: /Facilitated|Figure/ });
+    for (const pill of pills) {
+      expect(pill).not.toHaveAttribute("data-highlighted", "true");
+    }
   });
 
   it("lands on concept from notes chip and falls back unknown ids", async () => {
     const user = userEvent.setup();
     const { router: fromNotes } = await renderAppAtRoute(
-      "/course/cell-biology/notes/2026-09-12-membranes",
+      "/course/cell-biology/read/2026-09-12-membranes",
     );
     await waitFor(() => expect(screen.getByTestId("digest-view")).toBeInTheDocument(), {
       timeout: 8000,
@@ -243,13 +359,13 @@ describe("graph PR10", { timeout: 20000 }, () => {
     );
     await user.click(screen.getByRole("button", { name: "Facilitated diffusion" }));
     await waitFor(() => {
-      expect(fromNotes.state.location.pathname).toContain("/graph");
+      expect(fromNotes.state.location.pathname).toContain("/map");
       expect(fromNotes.state.location.searchStr).toContain("concept=concept-1");
     });
 
     cleanup();
     clearTauriMocks();
-    const { router } = await renderAppAtRoute("/course/cell-biology/graph?concept=missing-id", {
+    const { router } = await renderAppAtRoute("/course/cell-biology/map?concept=missing-id", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "concepts.json") {
           return conceptGraph;
@@ -268,7 +384,7 @@ describe("graph PR10", { timeout: 20000 }, () => {
 
   it("moves selection with arrow keys and ignores typing and dialogs", async () => {
     const user = userEvent.setup();
-    const { router } = await renderAppAtRoute("/course/cell-biology/graph?concept=concept-1", {
+    const { router } = await renderAppAtRoute("/course/cell-biology/map?concept=concept-1", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "concepts.json") {
           return conceptGraph;
@@ -309,7 +425,7 @@ describe("graph PR10", { timeout: 20000 }, () => {
 
   it("uses replace navigation without growing history", async () => {
     const user = userEvent.setup();
-    const { router } = await renderAppAtRoute("/course/cell-biology/graph?concept=concept-1", {
+    const { router } = await renderAppAtRoute("/course/cell-biology/map?concept=concept-1", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "concepts.json") {
           return conceptGraph;
@@ -332,7 +448,7 @@ describe("graph PR10", { timeout: 20000 }, () => {
       nodes: [conceptGraph.nodes[0]!],
       edges: [],
     };
-    await renderAppAtRoute("/course/cell-biology/graph?concept=concept-1", {
+    await renderAppAtRoute("/course/cell-biology/map?concept=concept-1", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "concepts.json") {
           return loneNodeGraph;
@@ -347,7 +463,7 @@ describe("graph PR10", { timeout: 20000 }, () => {
 
   it("keeps selection on ArrowDown at the last list row", async () => {
     const user = userEvent.setup();
-    const { router } = await renderAppAtRoute("/course/cell-biology/graph?concept=concept-2", {
+    const { router } = await renderAppAtRoute("/course/cell-biology/map?concept=concept-2", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "concepts.json") {
           return conceptGraph;
@@ -362,7 +478,7 @@ describe("graph PR10", { timeout: 20000 }, () => {
 
   it("shows empty state copy and job payloads with gates", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/graph", {
+    await renderAppAtRoute("/course/cell-biology/map", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "concepts.json") {
           throw new Error("ENOENT");
@@ -401,7 +517,7 @@ describe("graph PR10", { timeout: 20000 }, () => {
 
   it("refresh concepts and diagrams use force true", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/graph", {
+    await renderAppAtRoute("/course/cell-biology/map", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "concepts.json") {
           return conceptGraph;
@@ -429,7 +545,7 @@ describe("graph PR10", { timeout: 20000 }, () => {
   });
 
   it("shows empty state when concepts payload fails parseConceptGraph", async () => {
-    await renderAppAtRoute("/course/cell-biology/graph", {
+    await renderAppAtRoute("/course/cell-biology/map", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "concepts.json") {
           return { schema_version: 1, course: "cell-biology", nodes: [], edges: [] };
@@ -449,7 +565,7 @@ describe("graph PR10", { timeout: 20000 }, () => {
   it("keeps the graph visible while concepts refetch", async () => {
     let resolvePending: (value: unknown) => void = () => {};
     let fetchCount = 0;
-    const { queryClient } = await renderAppAtRoute("/course/cell-biology/graph", {
+    const { queryClient } = await renderAppAtRoute("/course/cell-biology/map", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "concepts.json") {
           fetchCount += 1;
@@ -470,15 +586,14 @@ describe("graph PR10", { timeout: 20000 }, () => {
     await waitFor(() => {
       expect(fetchCount).toBeGreaterThan(1);
     });
-    expect(screen.getByText(/Concepts · 2/i)).toBeInTheDocument();
-    expect(screen.getByRole("navigation", { name: /Concepts/i })).toBeInTheDocument();
+    expect(screen.getByTestId("concept-canvas")).toBeInTheDocument();
     resolvePending(conceptGraph);
     await waitForGraphReady();
   });
 
   it("keeps the graph when a refetch fails but cached data remains", async () => {
     let fetchCount = 0;
-    const { queryClient } = await renderAppAtRoute("/course/cell-biology/graph", {
+    const { queryClient } = await renderAppAtRoute("/course/cell-biology/map", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "concepts.json") {
           fetchCount += 1;
@@ -497,7 +612,7 @@ describe("graph PR10", { timeout: 20000 }, () => {
     await waitFor(() => {
       expect(fetchCount).toBeGreaterThan(1);
     });
-    expect(screen.getByText(/Concepts · 2/i)).toBeInTheDocument();
+    expect(screen.getByTestId("concept-canvas")).toBeInTheDocument();
     expect(
       screen.queryByText(/No concept graph yet for Cell Biology/i),
     ).not.toBeInTheDocument();
@@ -505,7 +620,7 @@ describe("graph PR10", { timeout: 20000 }, () => {
 
   it("logs concept job started", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/graph", {
+    await renderAppAtRoute("/course/cell-biology/map", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "concepts.json") {
           throw new Error("ENOENT");
@@ -527,7 +642,7 @@ describe("graph PR10", { timeout: 20000 }, () => {
 
   it("logs diagram job started", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/graph", {
+    await renderAppAtRoute("/course/cell-biology/map", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "concepts.json") {
           throw new Error("ENOENT");
@@ -549,7 +664,7 @@ describe("graph PR10", { timeout: 20000 }, () => {
 
   it("logs concept job start failure", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/graph", {
+    await renderAppAtRoute("/course/cell-biology/map", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "concepts.json") {
           throw new Error("ENOENT");
@@ -576,7 +691,7 @@ describe("graph PR10", { timeout: 20000 }, () => {
 
   it("logs diagram job start failure", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/graph", {
+    await renderAppAtRoute("/course/cell-biology/map", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "concepts.json") {
           throw new Error("ENOENT");
@@ -603,7 +718,7 @@ describe("graph PR10", { timeout: 20000 }, () => {
 
   it("gates refresh concepts and diagram toolbar buttons", async () => {
     useJobStore.setState({ status: "running" });
-    await renderAppAtRoute("/course/cell-biology/graph", {
+    await renderAppAtRoute("/course/cell-biology/map", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "concepts.json") {
           return conceptGraph;
@@ -619,7 +734,7 @@ describe("graph PR10", { timeout: 20000 }, () => {
     cleanup();
     clearTauriMocks();
     useJobStore.setState({ status: "idle", activeJobId: null });
-    await renderAppAtRoute("/course/cell-biology/graph", {
+    await renderAppAtRoute("/course/cell-biology/map", {
       get_settings: () => ({ ...fixtureSettings, model_id: null }),
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "concepts.json") {
@@ -635,7 +750,7 @@ describe("graph PR10", { timeout: 20000 }, () => {
 
     cleanup();
     clearTauriMocks();
-    await renderAppAtRoute("/course/cell-biology/graph", {
+    await renderAppAtRoute("/course/cell-biology/map", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "concepts.json") {
           return conceptGraph;
@@ -658,7 +773,7 @@ describe("graph PR10", { timeout: 20000 }, () => {
   });
 
   it("shows empty state on course mismatch", async () => {
-    await renderAppAtRoute("/course/cell-biology/graph", {
+    await renderAppAtRoute("/course/cell-biology/map", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "concepts.json") {
           return { ...conceptGraph, course: "other-course" };
@@ -677,7 +792,7 @@ describe("graph PR10", { timeout: 20000 }, () => {
 
   it("never flashes empty state while concepts load", async () => {
     const finishTracking = trackEmptyStateText(/No concept graph yet for/i);
-    await renderAppAtRoute("/course/cell-biology/graph", {
+    await renderAppAtRoute("/course/cell-biology/map", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "concepts.json") {
           return conceptGraph;
@@ -690,7 +805,7 @@ describe("graph PR10", { timeout: 20000 }, () => {
   });
 
   it("disables generate for viewer libraries", async () => {
-    await renderAppAtRoute("/course/cell-biology/graph", {
+    await renderAppAtRoute("/course/cell-biology/map", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "concepts.json") {
           throw new Error("ENOENT");
@@ -716,7 +831,7 @@ describe("graph PR10", { timeout: 20000 }, () => {
 
   it("shows Select a model when generating without a model", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/graph", {
+    await renderAppAtRoute("/course/cell-biology/map", {
       get_settings: () => ({ ...fixtureSettings, model_id: null }),
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "concepts.json") {
@@ -737,7 +852,7 @@ describe("graph PR10", { timeout: 20000 }, () => {
 
   it("blocks signed-out concept jobs without opening log", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/graph", {
+    await renderAppAtRoute("/course/cell-biology/map", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "concepts.json") {
           throw new Error("ENOENT");
@@ -766,7 +881,7 @@ describe("graph PR10", { timeout: 20000 }, () => {
 
   it("disables generate while a study job is running", async () => {
     useJobStore.setState({ status: "running" });
-    await renderAppAtRoute("/course/cell-biology/graph", {
+    await renderAppAtRoute("/course/cell-biology/map", {
       read_study_json: (payload) => {
         if (readStudyFile(payload) === "concepts.json") {
           throw new Error("ENOENT");
@@ -780,57 +895,5 @@ describe("graph PR10", { timeout: 20000 }, () => {
       },
       { timeout: 8000 },
     );
-  });
-
-  it("opens narrow concept list sheet", async () => {
-    const ro = installVariableWidthResizeObserver(500);
-    const user = userEvent.setup();
-    try {
-      await renderAppAtRoute("/course/cell-biology/graph", {
-        read_study_json: (payload) => {
-          if (readStudyFile(payload) === "concepts.json") {
-            return conceptGraph;
-          }
-          return { schema_version: 1, course: readStudyCourse(payload), failures: [] };
-        },
-      });
-      await waitForGraphReady();
-      expect(screen.queryByRole("navigation", { name: /Concepts/i })).not.toBeInTheDocument();
-      await user.click(screen.getByRole("button", { name: /^Concepts$/i }));
-      await waitFor(() => {
-        expect(screen.getByRole("dialog")).toBeInTheDocument();
-      });
-      expect(screen.getByRole("navigation", { name: /Concepts/i })).toBeInTheDocument();
-    } finally {
-      ro.restore();
-    }
-  });
-
-  it("closes the concept sheet after widening past the narrow breakpoint", async () => {
-    const ro = installVariableWidthResizeObserver(500);
-    const user = userEvent.setup();
-    try {
-      await renderAppAtRoute("/course/cell-biology/graph", {
-        read_study_json: (payload) => {
-          if (readStudyFile(payload) === "concepts.json") {
-            return conceptGraph;
-          }
-          return { schema_version: 1, course: readStudyCourse(payload), failures: [] };
-        },
-      });
-      await waitForGraphReady();
-      await user.click(screen.getByRole("button", { name: /^Concepts$/i }));
-      await waitFor(() => {
-        expect(screen.getByRole("dialog")).toBeInTheDocument();
-      });
-      ro.setWidth(900);
-      await waitFor(() => {
-        expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-      });
-      ro.setWidth(500);
-      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    } finally {
-      ro.restore();
-    }
   });
 });

@@ -5,6 +5,18 @@ import { confirm as tauriConfirm, open as tauriOpen } from "@tauri-apps/plugin-d
 
 import { hasTauriInvoke, TAURI_UNAVAILABLE } from "~/domain/tauri";
 
+/** `start_chat` input added by the PR 138 backend: scope the answer to lectures, or focus on one passage. */
+export type StartChatScope = {
+  digests?: string[];
+  focus?: { digest: string; heading: string | null; text: string };
+};
+
+/** `start_study_job` input added by the PR 138 backend: scope generation to lectures, or to a passage's text. */
+export type StudyJobScope = {
+  digests?: string[];
+  fromText?: string;
+};
+
 /** IPC commands the 0.6 UI may invoke (0.5.2 inventory; `list_providers` excluded). */
 export type Command =
   | "append_card"
@@ -41,6 +53,7 @@ export type Command =
   | "set_chat_thread_mode"
   | "read_markdown"
   | "read_provider_usage"
+  | "read_reading_state"
   | "read_quiz_progress"
   | "read_study_json"
   | "read_sync_conflict"
@@ -65,14 +78,19 @@ export type Command =
   | "start_update"
   | "study_artifact_stale"
   | "study_plan"
+  | "study_plan_status"
+  | "study_plan_toggle"
   | "study_progress"
+  | "study_today"
   | "sync_continue"
   | "sync_now"
   | "sync_resolve"
   | "sync_set_remote"
   | "sync_set_shared"
   | "sync_show"
-  | "test_worker_connection";
+  | "test_worker_connection"
+  | "usage_summary"
+  | "write_reading_state";
 
 function rejectUnavailable(): Promise<never> {
   return Promise.reject(new Error(TAURI_UNAVAILABLE));

@@ -10,9 +10,9 @@ Living tracker for **implemented / locally tested / live-run tested**. Capabilit
 - Check **Mac (optional)** only when a recorded MacBook run covered that row. One run covers many rows. Mac never blocks a tag. Do not live-test every PR.
 - **Blockers from Mac runs** at the bottom catch E2E findings from optional Mac proof. Fix locally. Retest on the next Linux live run. They do not start the next version.
 
-**Current era:** Version 5 closed at `v0.5.0`. Version 4’s Linux live run is recorded (2026-10-18). Version 5’s Linux live run is recorded the same day. A Mac run does not close a version.
+**Current era:** Version 6, the new desktop UI (`v0.6.0`). Version 5 closed at `v0.5.0`. Version 4’s Linux live run is recorded (2026-10-18). Version 5’s Linux live run is recorded the same day. A Mac run does not close a version.
 
-**Current package:** `0.5.36` (tag `v0.5.36`). Every release up to it is tagged. `v0.6.0` waits for UI plan row 16 (cutover). Tags stay below 1.0: Version N completes at `v0.N.0` (see `.cursor/rules/arbor-versioning.mdc` rule 8). Version 3’s two Notes rows stay open: markdown tables, and bold/italic, because no live digest contained them. The 2026-09-20 Mac blockers were retested on the 2026-10-17 run.
+**Current package:** `0.6.0` (tag `v0.6.0` after merge). Every earlier release is tagged. `v0.6.0` is the Version 6 UI cutover and waits for the Linux live run of the new UI before it is tagged. Tags stay below 1.0: Version N completes at `v0.N.0` (see `.cursor/rules/arbor-versioning.mdc` rule 8). Version 3’s two Notes rows stay open: markdown tables, and bold/italic, because no live digest contained them. The 2026-09-20 Mac blockers were retested on the 2026-10-17 run.
 
 | Marker | Meaning |
 |--------|---------|
@@ -141,7 +141,7 @@ Also Version 4 (not extra GitHub issues): review scheduling, weak-topic detectio
 
 ## Version 5 — collaboration (closed at `v0.5.0`)
 
-No current GitHub issue for the milestone. Cloud sync, shared libraries, marketplaces, permissions, remote workers. Version 4 is closed at `v0.4.0`. This package is `0.5.36`.
+No current GitHub issue for the milestone. Cloud sync, shared libraries, marketplaces, permissions, remote workers. Version 4 is closed at `v0.4.0`. This package is `0.6.0`.
 
 | Item | Implemented | Local/VM | Live run | Mac (optional) |
 |------|-------------|----------|----------|----------------|
@@ -152,6 +152,24 @@ No current GitHub issue for the milestone. Cloud sync, shared libraries, marketp
 | Remote workers over SSH (v0.4.5) | [x] | [x] | [x] | [ ] |
 
 Git remote sync: boxes C1 and C2. Shared libraries and per-user progress: boxes C1 and C3. Skill packages: box C4 installed, confirmed, and uninstalled the local `anki-export` pin. The run did not write the TSV. The folder picker never accepted Open (issue #70), so that Live run box stays open. Role checks: box C5. The UI disabled write jobs and the worker refused. The git host's permissions remain the real control. Remote workers: box C6, private sshd on 127.0.0.1:22222, local commit after sync back. Host keys stayed in the Arbor-managed file. `~/.ssh` was unchanged.
+
+---
+
+## Version 6 — new desktop UI (`v0.6.0`)
+
+The approved FigCraft design, built in the app: a Today home, a shell with a top bar and library pill, and a class workspace. It replaces the v0.5 layout (class header tabs, the notes index, the sidebar footer). No new worker commands beyond the Today and study-progress reads.
+
+| Item | Implemented | Local/VM | Live run | Mac (optional) |
+|------|-------------|----------|----------|----------------|
+| Today home, First run, merged due counts across libraries (`v0.6.0`) | [x] | [x] | [ ] | [ ] |
+| Shell: top bar, search, library status pill and menu, sidebar with Today (`v0.6.0`) | [x] | [x] | [ ] | [ ] |
+| Class workspace: lecture column, Overview, Read, selection tray (`v0.6.0`) | [x] | [x] | [ ] | [ ] |
+| Map as a concept graph; Practice scoped to the ticked lectures (`v0.6.0`) | [x] | [x] | [ ] | [ ] |
+| Ask inside the class workspace (`v0.6.0`) | [x] | [x] | [ ] | [ ] |
+| Jobs, Search and Settings pages (`v0.6.0`) | [x] | [x] | [ ] | [ ] |
+| Old class routes (`/notes`, `/flashcards`, `/quiz`, `/graph`, `/chat`) removed | [x] | [x] | n/a | n/a |
+
+`v0.6.0` is tagged only after the Linux live run of the new UI is recorded and the macos-dmg CI job is green. Mac never blocks the tag.
 
 ---
 

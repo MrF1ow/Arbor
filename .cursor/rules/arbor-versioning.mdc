@@ -21,7 +21,7 @@ alwaysApply: true
 
 6. **Version gates** live in [`docs/implementation-checklist.md`](docs/implementation-checklist.md). Local/VM tests gate every merge. A Linux live run gates the product-version tags (`v0.3.0`, `v0.4.0`, …). Mac batches are optional and never block a tag. Do not live-test every small feature. Do not start the next product version until the current version’s Linux live run is recorded.
 
-7. **Version 6 is in progress.** It ships as **`v0.5.3`, `v0.5.4`, …** until `v0.6.0`. `v0.6.0` is the UI cutover (plan row 16). Do not tag `v0.6.0` before that row lands.
+7. **Version 6 is the new UI.** It ships as **`v0.6.0`**, the UI cutover. Tag `v0.6.0` once its Linux live run is recorded.
 
 8. **Stay below 1.0.** Tags are `v0.MINOR.PATCH`. MINOR is the product version: Version N completes at `v0.N.0`. Every release on the way to the next Version bumps PATCH (`v0.5.36`, `v0.5.37`, …), features and fixes alike. Never tag `v1.0.0` or higher unless the owner asks for it. On 2026-11-01 every tag was renumbered: old major X became `0.X` with releases numbered in order (`v1.0.0` → `v0.1.0`, `v2.1.0` → `v0.2.1`, `v5.26.5` → `v0.5.34`, untagged 5.26.6 → `v0.5.35`; the old `v0.1.0`/`v0.2.0` pre-releases became `v0.0.1`/`v0.0.2`). Same commits. Plans and docs under `docs/` use the new numbers too; historical branch names such as `release/v3.0.0` keep their real names.
 
@@ -84,5 +84,6 @@ alwaysApply: true
 | `v0.5.34` | Version 6 in progress | patch: folder pickers start in the home folder (issue #70). Package `0.5.34`. Tagged. |
 | `v0.5.35` | Version 6 in progress | patch: macOS dictation writes the transcript. Package `0.5.35`. Tagged (no DMG). |
 | `v0.5.36` | Version 6 in progress | renumber all releases below 1.0; first DMG with the dictation fix. Package `0.5.36`. Tagged. |
+| `v0.6.0` | Version 6 | the new desktop UI: Today home, shell with top bar and library pill, class workspace (lecture column, Overview, Read, Map, Practice, Ask), Jobs, Search and Settings pages; the v0.5 layout and old class routes are removed. Package `0.6.0`. Tag after merge, once the Linux live run and the macos-dmg job pass. |
 
-Program: `docs/superpowers/plans/2026-08-22-v3-program/overview.md`. Gates: `docs/implementation-checklist.md`. Live runs: `docs/superpowers/plans/2026-10-17-roadmap-completion/linux-live-run.md`. `mac-e2e.md` is optional. Version 4 shipped at `v0.4.0`. Version 5 shipped at `v0.5.0`. This package is `0.5.36`.
+Program: `docs/superpowers/plans/2026-08-22-v3-program/overview.md`. Gates: `docs/implementation-checklist.md`. Live runs: `docs/superpowers/plans/2026-10-17-roadmap-completion/linux-live-run.md`. `mac-e2e.md` is optional. Version 4 shipped at `v0.4.0`. Version 5 shipped at `v0.5.0`. This package is `0.6.0`.

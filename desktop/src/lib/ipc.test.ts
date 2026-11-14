@@ -5,6 +5,7 @@ import { clearTauriMocks } from "~/test/mock-ipc";
 import { TAURI_UNAVAILABLE } from "~/domain/tauri";
 import type { Command } from "~/lib/ipc";
 import { invoke, openDialog } from "~/lib/ipc";
+import ipcSource from "~/lib/ipc.ts?raw";
 
 describe("ipc", () => {
   afterEach(() => {
@@ -74,6 +75,12 @@ describe("ipc", () => {
     });
     await openDialog({ directory: true });
     expect((opens[0] as { options: object }).options).not.toHaveProperty("defaultPath");
+  });
+
+  it("keeps the Command inventory doc comment directly above the union", () => {
+    expect(ipcSource).toContain(
+      "/** IPC commands the 0.6 UI may invoke (0.5.2 inventory; `list_providers` excluded). */\nexport type Command =",
+    );
   });
 });
 

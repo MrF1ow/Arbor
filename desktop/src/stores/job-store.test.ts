@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { JOB_START_LABEL } from "~/domain/job-labels";
-import { useJobStore } from "~/stores/job-store";
+import { applyWorkerEventToJobProgress, resetJobStoreForRootSwitch, useJobStore } from "~/stores/job-store";
 import { useUiStore } from "~/stores/ui-store";
 
 describe("job-store", () => {
@@ -14,6 +14,8 @@ describe("job-store", () => {
       label: null,
       lines: [],
       unread: 0,
+      root: null,
+      progress: null,
     });
     useUiStore.setState({ logOpen: false });
   });
@@ -60,5 +62,74 @@ describe("job-store", () => {
       label: JOB_START_LABEL.update,
     });
     expect(useJobStore.getState().activeUpdateJobId).toBe("update-1");
+  });
+
+  it("start records the library the job belongs to", () => {
+    useJobStore.getState().start("update-1", { isUpdate: true, root: "/k/mine" });
+    expect(useJobStore.getState().root).toBe("/k/mine");
+    expect(useJobStore.getState().progress).toBeNull();
+  });
+
+  it("tracks Updating N of M from planned and source_started, and clears it when the run ends", () => {
+    useJobStore.getState().start("update-1", { isUpdate: true, root: "/k/mine" });
+
+    applyWorkerEventToJobProgress({ type: "planned", total: 3 });
+    expect(useJobStore.getState().progress).toEqual({ index: 0, total: 3 });
+
+    applyWorkerEventToJobProgress({ type: "source_started", index: 2, total: 3 });
+    expect(useJobStore.getState().progress).toEqual({ index: 2, total: 3 });
+
+    applyWorkerEventToJobProgress({ type: "stage", stage: "generate" });
+    expect(useJobStore.getState().progress).toEqual({ index: 2, total: 3 });
+
+    useJobStore.getState().finish({
+      job_id: "update-1",
+      status: "succeeded",
+      summary: null,
+      root: "/k/mine",
+      operation: "update",
+    });
+    expect(useJobStore.getState().progress).toBeNull();
+    expect(useJobStore.getState().root).toBeNull();
+  });
+
+  it("keeps a running job and its progress when the library is switched mid-update", () => {
+    useJobStore.getState().start("update-1", {
+      isUpdate: true,
+      label: JOB_START_LABEL.update,
+      root: "/k/mine",
+    });
+    applyWorkerEventToJobProgress({ type: "source_started", index: 2, total: 3 });
+    useJobStore.getState().setStep("Cell Biology");
+    useJobStore.getState().append("  • week2.pdf");
+    useJobStore.setState({ lastFinishedJobId: "old", lastFinishedStatus: "failed" });
+
+    resetJobStoreForRootSwitch();
+
+    const state = useJobStore.getState();
+    expect(state.status).toBe("running");
+    expect(state.activeJobId).toBe("update-1");
+    expect(state.activeUpdateJobId).toBe("update-1");
+    expect(state.root).toBe("/k/mine");
+    expect(state.progress).toEqual({ index: 2, total: 3 });
+    expect(state.step).toBe("Cell Biology");
+    expect(state.label).toBe(JOB_START_LABEL.update);
+    // Finished-job state is what resets.
+    expect(state.lastFinishedJobId).toBeNull();
+    expect(state.lastFinishedStatus).toBeNull();
+  });
+
+  it("resets everything on a library switch when nothing is running", () => {
+    useJobStore.setState({ status: "failed", lastFinishedJobId: "j", lines: ["x"], unread: 1 });
+    resetJobStoreForRootSwitch();
+    const state = useJobStore.getState();
+    expect(state.status).toBe("idle");
+    expect(state.lines).toEqual([]);
+    expect(state.lastFinishedJobId).toBeNull();
+  });
+
+  it("ignores progress events when no job is running", () => {
+    applyWorkerEventToJobProgress({ type: "planned", total: 3 });
+    expect(useJobStore.getState().progress).toBeNull();
   });
 });

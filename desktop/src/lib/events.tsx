@@ -25,7 +25,7 @@ import { reloadLibraryAfterSync } from "~/lib/library-reload";
 import { useEffectiveProvider } from "~/lib/queries/effective-provider";
 import { qk } from "~/lib/queries/keys";
 import { useSettings } from "~/lib/queries/settings";
-import { useJobStore } from "~/stores/job-store";
+import { applyWorkerEventToJobProgress, useJobStore } from "~/stores/job-store";
 import { useSyncUiStore } from "~/stores/sync-ui-store";
 import { useUiStore } from "~/stores/ui-store";
 import { toast } from "sonner";
@@ -60,6 +60,9 @@ function invalidateCourseStudyKeys(
   void queryClient.invalidateQueries({ queryKey: qk.studyJson(root, course, "citations.json") });
   void queryClient.invalidateQueries({ queryKey: qk.quizProgress(root, course) });
   void queryClient.invalidateQueries({ queryKey: qk.studyPlan(root, course) });
+  void queryClient.invalidateQueries({ queryKey: qk.studyPlanStatus(root, course) });
+  void queryClient.invalidateQueries({ queryKey: qk.digestStats(root, course) });
+  void queryClient.invalidateQueries({ queryKey: qk.courseStats(root, course) });
   void queryClient.invalidateQueries({ queryKey: ["markdown", root] });
   for (const skill of STUDY_SKILLS) {
     void queryClient.invalidateQueries({ queryKey: qk.studyArtifactStale(root, course, skill) });
@@ -73,6 +76,10 @@ export function invalidateAfterJobFinished(
 ) {
   void queryClient.invalidateQueries({ queryKey: qk.jobs(root) });
   void queryClient.invalidateQueries({ queryKey: ["jobEvents", root] });
+  // Today and the sidebar due counts cover every library; a finished job can change any class.
+  void queryClient.invalidateQueries({ queryKey: qk.today() });
+  void queryClient.invalidateQueries({ queryKey: qk.readingState(root) });
+  void queryClient.invalidateQueries({ queryKey: ["digestStats", root] });
   if (course) {
     invalidateCourseStudyKeys(queryClient, root, course);
   }
@@ -163,6 +170,7 @@ export async function presentUpdatePlan(root: string, deps: PresentUpdatePlanDep
       useJobStore.getState().start(jobId, {
         isUpdate: true,
         label: JOB_START_LABEL.update,
+        root,
       });
       return;
     }
@@ -238,6 +246,7 @@ export function handleWorkerProgressSideEffects(
     providerLabel: string;
   },
 ) {
+  applyWorkerEventToJobProgress(ev);
   switch (ev.type) {
     case "committed":
     case "sync_done":
@@ -281,7 +290,10 @@ type WorkerEventsBridgeContext = {
   append: (line: string) => void;
   finish: (payload: JobFinished) => void;
   setStep: (step: string | null) => void;
-  startJob: (jobId: string, opts?: { isUpdate?: boolean; label?: string }) => void;
+  startJob: (
+    jobId: string,
+    opts?: { isUpdate?: boolean; label?: string; root?: string | null },
+  ) => void;
 };
 
 export function WorkerEventsBridge() {
@@ -403,7 +415,7 @@ export function WorkerEventsBridge() {
                   ctx.providerId,
                 ),
               );
-              ctx.startJob(jobId, { label: JOB_START_LABEL.flashcards });
+              ctx.startJob(jobId, { label: JOB_START_LABEL.flashcards, root: ctx.activeRoot });
             },
             startQuizJob: async (force) => {
               if (!ctx.activeRoot || !currentCourse || !ctx.modelId) {
@@ -419,11 +431,11 @@ export function WorkerEventsBridge() {
                   ctx.providerId,
                 ),
               );
-              ctx.startJob(jobId, { label: JOB_START_LABEL.quiz });
+              ctx.startJob(jobId, { label: JOB_START_LABEL.quiz, root: ctx.activeRoot });
             },
             startEmbedJob: async (root) => {
               const jobId = await invoke<string>("start_embed_job", { root, force: false });
-              ctx.startJob(jobId, { label: JOB_START_LABEL.embed });
+              ctx.startJob(jobId, { label: JOB_START_LABEL.embed, root });
             },
           },
           jobStateRef.current,

@@ -92,7 +92,6 @@ describe("tailwind-merge render audit", { timeout: 120_000 }, () => {
       sidebarTouched: true,
       logOpen: false,
       logHeight: 200,
-      notesIndexOpen: true,
       searchSemantic: false,
       lastCourse: null,
     });
@@ -109,12 +108,12 @@ describe("tailwind-merge render audit", { timeout: 120_000 }, () => {
   it("collects cn merge diffs across primary screens", async () => {
     const user = userEvent.setup();
     const routes = [
-      "/course/cell-biology/notes",
-      "/course/cell-biology/notes/2026-09-12-membranes",
-      "/course/cell-biology/flashcards",
-      "/course/cell-biology/quiz",
-      "/course/cell-biology/graph",
-      "/course/cell-biology/chat",
+      "/course/cell-biology/overview",
+      "/course/cell-biology/read/2026-09-12-membranes",
+      "/course/cell-biology/practice/cards",
+      "/course/cell-biology/practice/quiz",
+      "/course/cell-biology/map",
+      "/course/cell-biology/ask",
       "/jobs",
       "/welcome",
       "/settings/general",
@@ -190,12 +189,12 @@ describe("tailwind-merge render audit", { timeout: 120_000 }, () => {
         await screen.findByTestId("sync-conflict-dialog");
         useSyncUiStore.setState({ syncConflictOpen: false });
       }
-      if (route.includes("/notes") && !route.includes("/notes/")) {
+      if (route.endsWith("/overview")) {
         await waitForOverview();
       }
     }
     cleanup();
-    await renderAppAtRoute("/course/cell-biology/notes");
+    await renderAppAtRoute("/course/cell-biology/overview");
     await waitForOverview();
     await openSearchPalette(user);
     cleanup();

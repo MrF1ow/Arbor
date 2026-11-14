@@ -82,6 +82,8 @@ def _weak_topics_for_course(root: Path, course: str) -> list[dict[str, Any]]:
                 "digest": topic.get("digest"),
                 "heading": topic.get("heading"),
                 "wrong_rate": topic.get("wrong_rate"),
+                "wrong": topic.get("wrong", 0),
+                "correct": topic.get("correct", 0),
             }
         )
     return out

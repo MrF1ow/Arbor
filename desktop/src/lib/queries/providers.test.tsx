@@ -9,7 +9,6 @@ import { useChatThreads } from "~/lib/queries/chat";
 import { useJobEvents, useJobs } from "~/lib/queries/jobs";
 import { useCourses, useDigests, useLibrary } from "~/lib/queries/library";
 import { useCourseOverview, useMarkdown } from "~/lib/queries/notes";
-import { useSearch, useSemanticSearch } from "~/lib/queries/search";
 import { useSettings, useKnowledgeSettings } from "~/lib/queries/settings";
 import { useSkillIndex } from "~/lib/queries/skills";
 import { useStudyJson, useQuizProgress, useStudyPlan } from "~/lib/queries/study";
@@ -42,8 +41,6 @@ function AllReadHooks() {
   useSyncConflict(root);
   useSkillIndex();
   useChatThreads(root, course);
-  useSearch(root, "membrane");
-  useSemanticSearch(root, "membrane");
   return null;
 }
 

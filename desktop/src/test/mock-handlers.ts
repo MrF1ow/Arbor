@@ -24,6 +24,7 @@ import type {
   JobEventRow,
   JobSummary,
   LibraryShowResult,
+  PendingSource,
   SearchHit,
   SyncConflictSession,
   SyncShowResult,
@@ -34,12 +35,60 @@ import {
   fixtureSyncConflictSession,
 } from "~/test/fixtures/settings-sharing";
 import { emitToChannel, parseMockChannelId } from "~/test/emit-to-channel";
+import { isMockMode } from "~/domain/tauri";
+import {
+  designCourseMeta,
+  designCourseStats,
+  designCoursesByRoot,
+  designDigestStats,
+  designDigests,
+  designPlanStatus,
+  designPlanToggle,
+  designReadingState,
+  designSettings,
+  designTodayPayload,
+  designUsageSummary,
+  resetDesignPlanToggles,
+} from "~/test/fixtures/design";
 
-let mockSettingsState = structuredClone(fixtureSettings);
-let mockCourseMetaState: CourseMetaMap = {
-  "cell-biology": { icon: "microscope", color: "olive" },
-  "organic-chemistry-ii": { icon: "flask-conical", color: "clay" },
-};
+/**
+ * Mock mode (`vite --mode mock`) shows the approved design's data: two libraries and six classes.
+ * Tests keep the older fixtures (`fixtureSettings`, `cell-biology`, ...) so existing assertions hold;
+ * the backend 138 commands answer from the design data for either set of class names.
+ */
+function baseSettings(): typeof fixtureSettings {
+  return structuredClone(isMockMode() ? (designSettings as unknown as typeof fixtureSettings) : fixtureSettings);
+}
+
+function baseCourseMeta(): CourseMetaMap {
+  return isMockMode()
+    ? structuredClone(designCourseMeta)
+    : {
+        "cell-biology": { icon: "microscope", color: "olive" },
+        "organic-chemistry-ii": { icon: "flask-conical", color: "clay" },
+      };
+}
+
+function coursesForRoot(root: string): string[] {
+  return (isMockMode() ? designCoursesByRoot[root] : fixtureCourses[root]) ?? designCoursesByRoot[root] ?? [];
+}
+
+/** Test mode lists the legacy fixture digests for `cell-biology` only (mock mode uses the design's). */
+function legacyDigests(course: string) {
+  return course === "cell-biology" ? fixtureDigests : [];
+}
+
+/** The paths test mode's `list_digests` answers for a class, so stats and reading state join on them. */
+function legacyDigestPaths(course: string): string[] | undefined {
+  if (isMockMode()) {
+    return undefined;
+  }
+  const listed = legacyDigests(course);
+  return listed.length > 0 ? listed.map((d) => d.path) : undefined;
+}
+
+let mockSettingsState = baseSettings();
+let mockCourseMetaState: CourseMetaMap = baseCourseMeta();
 let mockKnowledgeSettingsState = structuredClone(fixtureKnowledgeSettings);
 const mockProviderSecretReady = new Set<string>(["openai_api", "anthropic_api"]);
 let mockLibraryShowState: LibraryShowResult = { present: false };
@@ -175,16 +224,14 @@ export function clearMockIpcLog() {
 }
 
 export function resetMockSettingsForTests() {
-  mockSettingsState = structuredClone(fixtureSettings);
+  mockSettingsState = baseSettings();
+  resetDesignPlanToggles();
   mockKnowledgeSettingsState = structuredClone(fixtureKnowledgeSettings);
   mockProviderSecretReady.clear();
   mockProviderSecretReady.add("openai_api");
   mockProviderSecretReady.add("anthropic_api");
   mockLibraryShowState = { present: false };
-  mockCourseMetaState = {
-    "cell-biology": { icon: "microscope", color: "olive" },
-    "organic-chemistry-ii": { icon: "flask-conical", color: "clay" },
-  };
+  mockCourseMetaState = baseCourseMeta();
   mockSyncShowState = { remote: null, shared: false, remote_note: null };
   mockSyncConflictState = structuredClone(fixtureSyncConflictSession);
   mockSkillPackagesState = structuredClone(fixtureSkillPackages);
@@ -565,7 +612,45 @@ const mockJobSummariesBase: JobSummary[] = [
   },
 ];
 
+/** Study jobs carry the class and lectures they covered (I1); the rest are whole-library runs. */
+function withMockJobScope(jobs: JobSummary[]): JobSummary[] {
+  const course = isMockMode() ? "Cell Biology" : "cell-biology";
+  const membranes = designDigests(course)
+    .filter((d) => d.unit === "Membranes")
+    .map((d) => d.path);
+  return jobs.map((job) => {
+    if (job.id === "job-flashcards") {
+      return { ...job, course, digests: membranes.slice(0, 3) };
+    }
+    if (job.id === "job-quiz" || job.id === "job-citations") {
+      return { ...job, course, digests: null };
+    }
+    return { ...job, course: job.course ?? null, digests: job.digests ?? null };
+  });
+}
+
+/** Mock mode shows "3 new files" in the library menu, as the design's frames do. */
+function mockPendingSources(): PendingSource[] {
+  return [
+    ["Cell Biology", "week-6-membrane-transport.pdf", 18],
+    ["Cell Biology", "week-7-signalling.pdf", 22],
+    ["Organic Chemistry", "chapter-9-substitution.pdf", 31],
+  ].map(([course, file, pages]) => ({
+    path: `${course}/${file}`,
+    course: String(course),
+    source_type: "pdf",
+    page_count: Number(pages),
+    suggested_ranges: [],
+    alignment_status: "clean_append" as const,
+    previously_digested: false,
+  }));
+}
+
 function mockJobSummariesList(): JobSummary[] {
+  return withMockJobScope(mockJobSummariesListUnscoped());
+}
+
+function mockJobSummariesListUnscoped(): JobSummary[] {
   if (!mockUpdateJobRunning) {
     return mockJobSummariesBase.slice();
   }
@@ -659,11 +744,15 @@ export function createMockHandler(
       }
       case "list_courses": {
         const root = String(payload.root ?? FIXTURE_ROOT_FALL);
-        return fixtureCourses[root] ?? [];
+        return coursesForRoot(root);
       }
       case "read_course_meta":
         return { ...mockCourseMetaState };
       case "set_course_meta": {
+        // Tauri v2 maps command args by camelCase: a snake_case key reaches Rust as None.
+        if ("exam_date" in payload) {
+          throw new Error("set_course_meta: send `examDate`, Tauri maps command args by camelCase");
+        }
         const course = String(payload.course ?? "");
         const icon = payload.icon as string | null | undefined;
         const color = payload.color as string | null | undefined;
@@ -679,7 +768,13 @@ export function createMockHandler(
         } else if (typeof color === "string") {
           entry.color = color;
         }
-        if (!entry.icon && !entry.color) {
+        const examDate = payload.examDate as string | null | undefined;
+        if (examDate === "" || examDate === null) {
+          delete entry.exam_date;
+        } else if (typeof examDate === "string") {
+          entry.exam_date = examDate;
+        }
+        if (!entry.icon && !entry.color && !entry.exam_date) {
           delete next[course];
         } else {
           next[course] = entry;
@@ -688,10 +783,10 @@ export function createMockHandler(
         return { ...mockCourseMetaState };
       }
       case "list_digests":
-        if (payload.course === "cell-biology") {
-          return fixtureDigests;
+        if (!isMockMode()) {
+          return legacyDigests(String(payload.course ?? ""));
         }
-        return [];
+        return designDigests(String(payload.course ?? ""));
       case "read_markdown": {
         const path = String(payload.relativePath ?? "");
         if (path.endsWith("/course.md")) {
@@ -709,7 +804,39 @@ export function createMockHandler(
         if (payload.action === "overview") {
           return fixtureCourseOverview;
         }
+        if (payload.action === "digest-stats") {
+          const course = String(payload.course ?? "");
+          return { digests: designDigestStats(course, legacyDigestPaths(course)) };
+        }
+        if (payload.action === "stats") {
+          return designCourseStats(String(payload.course ?? ""));
+        }
         return {};
+      case "study_today":
+        return designTodayPayload(coursesForRoot(String(payload.root ?? "")));
+      case "read_reading_state": {
+        const courses = coursesForRoot(String(payload.root ?? ""));
+        const listed: Record<string, string[]> = {};
+        for (const course of courses) {
+          const paths = legacyDigestPaths(course);
+          if (paths) {
+            listed[course] = paths;
+          }
+        }
+        return designReadingState(courses, listed);
+      }
+      case "write_reading_state":
+        return null;
+      case "study_plan_status":
+        return designPlanStatus(String(payload.course ?? ""));
+      case "study_plan_toggle":
+        return designPlanToggle(
+          String(payload.course ?? ""),
+          String(payload.task ?? ""),
+          payload.done === true,
+        );
+      case "usage_summary":
+        return structuredClone(designUsageSummary);
       case "read_provider_usage": {
         const provider = String(payload.provider ?? "codex");
         const force = Boolean(payload.force);
@@ -888,7 +1015,7 @@ export function createMockHandler(
         return { path: dest, name, kind: "shared" };
       }
       case "test_worker_connection":
-        return "arbor-worker 0.5.36 (mock)";
+        return "arbor-worker 0.6.0 (mock)";
       case "list_jobs":
         return mockJobSummariesList();
       case "get_job_events":
@@ -976,9 +1103,15 @@ export function createMockHandler(
         }
         const chatCourse = String(payload.course ?? "cell-biology");
         const markdown = "**Mock answer** from streaming.";
+        // The answer cites a lecture the class really lists, so Make cards from this and Quiz me
+        // on this are enabled; mock mode lists the design's lectures, test mode the legacy ones.
+        const citedDigest = isMockMode()
+          ? (designDigests(chatCourse).find((d) => d.title === "Membrane transport") ??
+            designDigests(chatCourse)[0])?.path
+          : `${chatCourse}/digests/2026-09-12-membranes.md`;
         const citations = [
           {
-            digest_path: `${chatCourse}/digests/2026-09-12-membranes.md`,
+            digest_path: citedDigest ?? `${chatCourse}/digests/2026-09-12-membranes.md`,
             heading_id: "Membrane structure",
           },
         ];
@@ -1108,8 +1241,9 @@ export function createMockHandler(
       case "study_plan":
         return null;
       case "cancel_update":
-      case "plan_update":
         return { pending: [] };
+      case "plan_update":
+        return { pending: isMockMode() ? mockPendingSources() : [] };
       case "start_update":
         return simulateUpdateJob(String(payload.root ?? FIXTURE_ROOT_FALL));
       case "start_embed_job":

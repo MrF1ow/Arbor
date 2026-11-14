@@ -1,190 +1,268 @@
-import { useVirtualizer } from "@tanstack/react-virtual";
-import { FolderOpen, RefreshCw } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useQueries } from "@tanstack/react-query";
+import { FolderOpen } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { EmptyState } from "~/components/app/empty-state";
-import { SettingsSection } from "~/components/app/settings-section";
-import { ShellPageHeader } from "~/components/app/shell-page-header";
-import {
-  JobLogPanel,
-  JobStatusDot,
-  jobStatusTextClass,
-} from "~/components/jobs/job-log-panel";
+import { JobLogPanel } from "~/components/jobs/job-log-panel";
 import { Button } from "~/components/ui/button";
-import { Skeleton } from "~/components/ui/skeleton";
 import { LazyTooltip, LazyTooltipContent, LazyTooltipTrigger } from "~/components/ui/lazy-tooltip";
+import { Skeleton } from "~/components/ui/skeleton";
 import {
+  type DigestUnitsByCourse,
   formatDuration,
   formatJobTimestamp,
-  jobKindLabel,
-  relativeTime,
+  jobScopeLabel,
+  jobStartedLabel,
+  jobStatusCounts,
+  jobTitle,
 } from "~/domain/jobs";
-import type { JobSummary } from "~/domain/types";
+import type { DigestInfo, JobSummary } from "~/domain/types";
 import { useNow } from "~/hooks/use-now";
 import { useChooseKnowledgeFolder } from "~/lib/hooks/use-choose-knowledge-folder";
+import { invoke } from "~/lib/ipc";
 import { pickActiveRoot } from "~/lib/knowledge-root";
-import { useJobEvents, useJobs } from "~/lib/queries/jobs";
+import { useCancelUpdateMutation, useJobEvents, useJobs } from "~/lib/queries/jobs";
+import { qk } from "~/lib/queries/keys";
+import { useOpenClass } from "~/lib/open-class";
 import { useSettings } from "~/lib/queries/settings";
 import { cn } from "~/lib/utils";
 import { useJobStore } from "~/stores/job-store";
 
-function JobListRow({
-  job,
-  active,
-  selected,
-  nowMs,
-  onSelect,
-}: {
-  job: JobSummary;
-  active: boolean;
-  selected: boolean;
-  nowMs: number;
-  onSelect: () => void;
-}) {
-  const label = jobKindLabel(job.trigger_kind, job.skill);
-  const started = relativeTime(job.started_at, nowMs);
-  const duration = formatDuration(job.started_at, job.finished_at);
-  const statusLabel =
-    job.status === "succeeded"
-      ? "Succeeded"
-      : job.status === "failed"
-        ? "Failed"
-        : job.status === "cancelled"
-          ? "Cancelled"
-          : "Running";
+type StatusFilter = "all" | "running" | "failed" | "succeeded";
 
+const FILTERS: { key: StatusFilter; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "running", label: "Running" },
+  { key: "failed", label: "Failed" },
+  { key: "succeeded", label: "Succeeded" },
+];
+
+const STATUS_LABEL: Record<string, string> = {
+  running: "Running",
+  failed: "Failed",
+  succeeded: "Succeeded",
+  cancelled: "Cancelled",
+};
+
+const STATUS_TAG_CLASS: Record<string, string> = {
+  running: "bg-muted text-muted-foreground",
+  failed: "bg-destructive-surface text-destructive",
+  succeeded: "bg-accent text-success",
+  cancelled: "bg-muted text-muted-foreground",
+};
+
+/** `list_digests` for each class the jobs touched, so the Scope column can name a lecture's unit (Q30). */
+function useDigestUnits(root: string | null, jobs: JobSummary[] | undefined): DigestUnitsByCourse {
+  const courses = useMemo(
+    () => [...new Set((jobs ?? []).map((job) => job.course).filter((course): course is string => Boolean(course)))],
+    [jobs],
+  );
+  const results = useQueries({
+    queries: courses.map((course) => ({
+      queryKey: qk.digests(root ?? "", course),
+      enabled: Boolean(root),
+      queryFn: () => invoke<DigestInfo[]>("list_digests", { root: root!, course }),
+    })),
+  });
+  const byCourse: DigestUnitsByCourse = {};
+  courses.forEach((course, index) => {
+    byCourse[course] = (results[index]?.data ?? []).map((d) => ({ path: d.path, unit: d.unit ?? null }));
+  });
+  return byCourse;
+}
+
+function FilterChip({
+  label,
+  count,
+  pressed,
+  onClick,
+}: {
+  label: string;
+  count: number;
+  pressed: boolean;
+  onClick: () => void;
+}) {
   return (
     <button
       type="button"
+      aria-pressed={pressed}
+      onClick={onClick}
       className={cn(
-        "relative flex w-full flex-col gap-0.5 px-2 py-2 text-left outline-none transition-colors duration-fast ease-out-soft",
-        "before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-transparent",
-        (selected || active) && "before:bg-primary",
-        selected && "bg-transparent",
-        !selected && "hover:bg-muted",
-        active && !selected && "bg-accent",
+        "inline-flex h-6.25 items-center rounded-full border px-2.5 text-caption outline-none transition-colors duration-fast ease-out-soft focus-visible:ring-2 focus-visible:ring-ring",
+        pressed
+          ? "border-accent bg-accent text-accent-foreground"
+          : "border-border bg-card text-muted-foreground hover:bg-muted",
       )}
-      aria-current={selected ? "true" : undefined}
-      aria-label={`${label}, ${statusLabel}`}
-      onClick={onSelect}
-      data-testid={`job-row-${job.id}`}
     >
-      <span className="flex min-w-0 items-center gap-2 pr-1">
-        <span className="min-w-0 flex-1 truncate text-sm font-medium">{label}</span>
-        <JobStatusDot status={job.status} />
-        <span className={cn("shrink-0 text-2xs capitalize", jobStatusTextClass(job.status))}>
-          {statusLabel}
-        </span>
-        <LazyTooltip>
-          <LazyTooltipTrigger
-            render={(tooltipProps) => (
-              <span
-                {...tooltipProps}
-                className="shrink-0 text-2xs text-faint-foreground tabular-nums"
-              >
-                {started}
-              </span>
-            )}
-          />
-          <LazyTooltipContent>{formatJobTimestamp(job.started_at)}</LazyTooltipContent>
-        </LazyTooltip>
-        <span className="shrink-0 text-2xs text-faint-foreground tabular-nums">{duration}</span>
-      </span>
-      {job.model_id ? (
-        <span className="truncate text-2xs text-faint-foreground">{job.model_id}</span>
-      ) : null}
-      {job.status === "failed" && job.error_summary ? (
-        <LazyTooltip>
-          <LazyTooltipTrigger
-            render={(tooltipProps) => (
-              <span
-                {...tooltipProps}
-                className="truncate text-2xs text-destructive"
-              >
-                {job.error_summary}
-              </span>
-            )}
-          />
-          <LazyTooltipContent className="max-w-sm">{job.error_summary}</LazyTooltipContent>
-        </LazyTooltip>
-      ) : null}
+      {label} {count}
     </button>
   );
 }
 
-function JobList({
-  jobs,
-  selectedId,
-  activeJobId,
-  nowMs,
-  onSelect,
-}: {
-  jobs: JobSummary[];
-  selectedId: string | null;
-  activeJobId: string | null;
-  nowMs: number;
-  onSelect: (id: string) => void;
-}) {
-  const parentRef = useRef<HTMLDivElement>(null);
-  const virtualize = jobs.length > 50;
-
-  // eslint-disable-next-line react-hooks/incompatible-library -- virtualizer row offsets are imperative
-  const virtualizer = useVirtualizer({
-    count: jobs.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => 52,
-    overscan: 8,
-  });
-
-  if (!virtualize) {
-    return (
-      <div
-        className="flex flex-col divide-y divide-border jobs:min-h-0 jobs:flex-1 jobs:overflow-y-auto"
-        data-testid="job-list-scroll"
-      >
-        {jobs.map((job) => (
-          <JobListRow
-            key={job.id}
-            job={job}
-            active={job.id === activeJobId}
-            selected={job.id === selectedId}
-            nowMs={nowMs}
-            onSelect={() => onSelect(job.id)}
-          />
-        ))}
-      </div>
-    );
-  }
-
+function StatusTag({ status }: { status: string }) {
   return (
-    <div ref={parentRef} className="min-h-0 flex-1 overflow-y-auto">
+    <span
+      className={cn(
+        "inline-flex h-4.25 items-center rounded-xs px-1.5 text-micro",
+        STATUS_TAG_CLASS[status] ?? STATUS_TAG_CLASS.cancelled,
+      )}
+    >
+      {STATUS_LABEL[status] ?? status}
+    </span>
+  );
+}
+
+/** The running job's bar: the update run's position when known, else a pulse. */
+function RunBar({ jobId }: { jobId: string }) {
+  const activeJobId = useJobStore((s) => s.activeJobId);
+  const progress = useJobStore((s) => s.progress);
+  const share =
+    activeJobId === jobId && progress && progress.total > 0
+      ? Math.min(1, Math.max(0, progress.index / progress.total))
+      : null;
+  return (
+    <div
+      role="progressbar"
+      aria-label="Job progress"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={share === null ? undefined : Math.round(share * 100)}
+      className="h-0.75 w-full overflow-hidden rounded-full bg-muted"
+    >
       <div
-        style={{ height: virtualizer.getTotalSize(), position: "relative" }} // style-allow: virtualizer total height
-      >
-        {virtualizer.getVirtualItems().map((item) => {
-          const job = jobs[item.index]!;
-          return (
-            <div
-              key={job.id}
-              data-index={item.index}
-              ref={virtualizer.measureElement}
-              className="absolute inset-x-0 border-b border-border"
-              style={{ transform: `translateY(${item.start}px)` }} // style-allow: virtualizer row offset
-            >
-              <JobListRow
-                job={job}
-                active={job.id === activeJobId}
-                selected={job.id === selectedId}
-                nowMs={nowMs}
-                onSelect={() => onSelect(job.id)}
-              />
-            </div>
-          );
-        })}
-      </div>
+        className={cn("h-full rounded-full bg-primary", share === null && "w-full animate-pulse")}
+        style={share === null ? undefined : { width: `${share * 100}%` }} // style-allow: progress share
+      />
     </div>
   );
 }
+
+function JobResult({ job }: { job: JobSummary }) {
+  if (job.status === "running") {
+    return <RunBar jobId={job.id} />;
+  }
+  if (job.status === "failed") {
+    return (
+      <LazyTooltip>
+        <LazyTooltipTrigger
+          render={(tooltipProps) => (
+            <span {...tooltipProps} className="block truncate text-destructive">
+              {job.error_summary ?? "Failed"}
+            </span>
+          )}
+        />
+        <LazyTooltipContent className="max-w-sm">{job.error_summary ?? "Failed"}</LazyTooltipContent>
+      </LazyTooltip>
+    );
+  }
+  if (job.status === "succeeded") {
+    return <span>{formatDuration(job.started_at, job.finished_at)}</span>;
+  }
+  return <span>—</span>;
+}
+
+function JobRow({
+  job,
+  scope,
+  selected,
+  nowMs,
+  canCancel,
+  onSelect,
+  onOpenClass,
+}: {
+  job: JobSummary;
+  scope: string;
+  selected: boolean;
+  nowMs: number;
+  canCancel: boolean;
+  onSelect: () => void;
+  onOpenClass: (course: string) => void;
+}) {
+  const cancelUpdate = useCancelUpdateMutation();
+  const title = jobTitle(job.trigger_kind, job.skill);
+  return (
+    <tr
+      data-testid={`job-row-${job.id}`}
+      aria-current={selected ? "true" : undefined}
+      onClick={onSelect}
+      className={cn(
+        "cursor-pointer border-b border-border transition-colors duration-fast ease-out-soft last:border-b-0",
+        selected ? "bg-selected" : "hover:bg-muted",
+      )}
+    >
+      <td className="px-4 py-3 align-middle">
+        <StatusTag status={job.status} />
+      </td>
+      <td className="px-3 py-3 align-middle text-small font-semibold">
+        <button
+          type="button"
+          className="text-left outline-none focus-visible:underline"
+          aria-label={`${title}, ${STATUS_LABEL[job.status] ?? job.status}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onSelect();
+          }}
+        >
+          {title}
+        </button>
+      </td>
+      <td data-column="scope" className="min-w-0 px-3 py-3 align-middle text-small text-muted-foreground">
+        {job.course ? (
+          <button
+            type="button"
+            className="text-left outline-none hover:text-foreground hover:underline focus-visible:underline"
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpenClass(job.course!);
+            }}
+          >
+            {scope}
+          </button>
+        ) : (
+          <span>{scope}</span>
+        )}
+      </td>
+      <td className="px-3 py-3 align-middle text-caption whitespace-nowrap text-muted-foreground">
+        <LazyTooltip>
+          <LazyTooltipTrigger
+            render={(tooltipProps) => <span {...tooltipProps}>{jobStartedLabel(job.started_at, nowMs)}</span>}
+          />
+          <LazyTooltipContent>{formatJobTimestamp(job.started_at)}</LazyTooltipContent>
+        </LazyTooltip>
+      </td>
+      <td className="px-3 py-3 align-middle text-caption text-muted-foreground">
+        <JobResult job={job} />
+      </td>
+      <td className="px-4 py-2 text-right align-middle">
+        {job.status === "running" && canCancel ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={(event) => {
+              event.stopPropagation();
+              void cancelUpdate.mutateAsync();
+            }}
+          >
+            Cancel
+          </Button>
+        ) : (
+          <button
+            type="button"
+            className="rounded-sm px-2 py-1 text-caption text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={(event) => {
+              event.stopPropagation();
+              onSelect();
+            }}
+          >
+            Log
+          </button>
+        )}
+      </td>
+    </tr>
+  );
+}
+
+const HEADERS = ["Status", "Job", "Scope", "Started", "Result"];
 
 export function JobsView({
   jobParam,
@@ -196,21 +274,30 @@ export function JobsView({
   const settings = useSettings();
   const activeRoot = pickActiveRoot(settings.data);
   const jobsQuery = useJobs(activeRoot);
-  const activeJobId = useJobStore((s) => s.activeJobId);
+  const activeUpdateJobId = useJobStore((s) => s.activeUpdateJobId);
   const { chooseFolder, isPending: choosingFolder } = useChooseKnowledgeFolder();
+  const openClass = useOpenClass();
   const nowMs = useNow();
+  const [filter, setFilter] = useState<StatusFilter>("all");
 
   const jobRows = jobsQuery.data;
   const jobCount = jobRows?.length ?? 0;
+  const counts = jobStatusCounts(jobRows ?? []);
+  const visible = (jobRows ?? []).filter((job) => filter === "all" || job.status === filter);
+  const units = useDigestUnits(activeRoot, jobRows);
+  const scopeOf = (job: JobSummary) =>
+    jobScopeLabel({ course: job.course ?? null, digests: job.digests ?? null }, units);
 
+  // The log always belongs to a listed row: a filter that hides the picked job hands the
+  // selection to the first job it still lists, or to none.
   const selectedId = (() => {
-    if (!jobRows || jobRows.length === 0) {
+    if (visible.length === 0) {
       return null;
     }
-    if (jobParam && jobRows.some((j) => j.id === jobParam)) {
+    if (jobParam && visible.some((j) => j.id === jobParam)) {
       return jobParam;
     }
-    return jobRows[0]!.id;
+    return visible[0]!.id;
   })();
 
   useEffect(() => {
@@ -223,88 +310,133 @@ export function JobsView({
     if (!jobsQuery.isSuccess || !jobRows || jobRows.length === 0) {
       return;
     }
-    const effective =
-      jobParam && jobRows.some((j) => j.id === jobParam) ? jobParam : jobRows[0]!.id;
-    if (jobParam !== effective) {
-      onJobParamSync(effective);
+    if (selectedId && jobParam !== selectedId) {
+      onJobParamSync(selectedId);
     }
-  }, [jobParam, jobRows, jobsQuery.isSuccess, onJobParamSync]);
+  }, [jobParam, jobRows, jobsQuery.isSuccess, selectedId, onJobParamSync]);
+
+  // The table is capped, so a picked job's log can sit below the fold: bring it into view
+  // when a row is picked and for a `?job=` deep link.
+  const logRef = useRef<HTMLDivElement>(null);
+  const showLog = () => logRef.current?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
+  const deepLink = useRef(jobParam);
+  useEffect(() => {
+    if (!jobsQuery.isSuccess || !deepLink.current) {
+      return;
+    }
+    deepLink.current = undefined;
+    logRef.current?.scrollIntoView?.({ block: "nearest" });
+  }, [jobsQuery.isSuccess]);
 
   const eventsQuery = useJobEvents(activeRoot, selectedId);
-
-  const onSelectJob = (id: string) => {
-    onJobParamSync(id);
-  };
-
-  const onRefresh = () => {
-    void jobsQuery.refetch();
-    if (selectedId) {
-      void eventsQuery.refetch();
-    }
-  };
-
   const selectedJob = jobRows?.find((j) => j.id === selectedId) ?? null;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-auto p-6" data-testid="jobs-view">
-      <div className="mx-auto flex w-full max-w-4xl min-h-0 flex-1 flex-col gap-6">
-        <ShellPageHeader
-          title="Jobs"
-          description="Job history from your Knowledge folder."
+    <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-auto p-6" data-testid="jobs-view">
+      <header className="flex flex-col gap-0.5">
+        <h2 className="text-title font-medium">Jobs</h2>
+        <p className="text-caption text-muted-foreground">Job history from your Knowledge folder.</p>
+      </header>
+
+      {!activeRoot ? (
+        <EmptyState
+          icon={FolderOpen}
+          title="No Knowledge folder selected"
           actions={
-            <Button variant="ghost" size="sm" onClick={onRefresh} disabled={!activeRoot || jobsQuery.isFetching}>
-              <RefreshCw className={cn("size-icon-sm", jobsQuery.isFetching && "animate-spin")} />
-              Refresh
+            <Button variant="default" disabled={choosingFolder} onClick={() => void chooseFolder()}>
+              Choose Knowledge folder…
             </Button>
           }
         />
+      ) : jobsQuery.isLoading ? (
+        <Skeleton className="h-48 w-full" />
+      ) : jobsQuery.isError ? (
+        <p className="text-small text-destructive" role="alert">
+          Could not load jobs: {String(jobsQuery.error)}
+        </p>
+      ) : jobCount === 0 ? (
+        <EmptyState title="No runs yet" />
+      ) : (
+        <>
+          <div className="flex shrink-0 flex-wrap gap-1.5" role="group" aria-label="Filter jobs by status">
+            {FILTERS.map(({ key, label }) => (
+              <FilterChip
+                key={key}
+                label={label}
+                count={counts[key]}
+                pressed={filter === key}
+                onClick={() => setFilter(key)}
+              />
+            ))}
+          </div>
 
-        {!activeRoot ? (
-          <EmptyState
-            icon={FolderOpen}
-            title="No Knowledge folder selected"
-            actions={
-              <Button variant="default" disabled={choosingFolder} onClick={() => void chooseFolder()}>
-                Choose Knowledge folder…
-              </Button>
-            }
-          />
-        ) : jobsQuery.isLoading ? (
-          <Skeleton className="h-48 w-full" />
-        ) : jobsQuery.isError ? (
-          <p className="text-sm text-destructive" role="alert">
-            Could not load jobs: {String(jobsQuery.error)}
-          </p>
-        ) : jobCount === 0 ? (
-          <EmptyState title="No runs yet" />
-        ) : (
-          <div className="flex min-h-0 flex-1 flex-col gap-4 jobs:flex-row jobs:items-stretch">
-            <SettingsSection title="Recent runs" className="min-w-0 jobs:min-h-0 jobs:flex-1 jobs:max-w-md">
-              <div
-                className="flex flex-col jobs:min-h-0 jobs:max-h-jobs-pane jobs:flex-1"
-                data-testid="job-list-container"
-              >
-                <JobList
-                  jobs={jobRows ?? []}
-                  selectedId={selectedId}
-                  activeJobId={activeJobId}
-                  nowMs={nowMs}
-                  onSelect={onSelectJob}
-                />
-              </div>
-            </SettingsSection>
+          <div
+            className="max-h-jobs-pane shrink-0 overflow-y-auto rounded-lg border border-border bg-card"
+            data-testid="job-list-container"
+          >
+            <table className="w-full table-fixed border-collapse text-left">
+              <colgroup>
+                <col className="w-26" />
+                <col className="w-40" />
+                <col />
+                <col className="w-22" />
+                <col className="w-28" />
+                <col className="w-16" />
+              </colgroup>
+              <thead>
+                <tr className="sticky top-0 z-dropdown bg-muted">
+                  {HEADERS.map((header) => (
+                    <th
+                      key={header}
+                      scope="col"
+                      className="px-3 py-2.5 text-label font-semibold tracking-wider text-faint-foreground first:px-4"
+                    >
+                      {header}
+                    </th>
+                  ))}
+                  <th scope="col" className="px-4 py-2.5">
+                    <span className="sr-only">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((job) => (
+                  <JobRow
+                    key={job.id}
+                    job={job}
+                    scope={scopeOf(job)}
+                    selected={job.id === selectedId}
+                    nowMs={nowMs}
+                    canCancel={job.id === activeUpdateJobId}
+                    onSelect={() => {
+                      onJobParamSync(job.id);
+                      showLog();
+                    }}
+                    onOpenClass={(course) => void openClass(activeRoot, course, "overview")}
+                  />
+                ))}
+              </tbody>
+            </table>
+            {visible.length === 0 ? (
+              <p className="px-4 py-6 text-center text-small text-muted-foreground">
+                No {filter} jobs
+              </p>
+            ) : null}
+          </div>
+
+          <div ref={logRef} className="flex max-h-jobs-pane min-h-48 shrink-0 flex-col">
             <JobLogPanel
-              className="min-h-80 jobs:min-h-0"
+              className="min-h-48"
               job={selectedJob}
+              scope={selectedJob ? scopeOf(selectedJob) : null}
               events={eventsQuery.data}
               eventsLoading={eventsQuery.isLoading}
               eventsFetching={eventsQuery.isFetching}
               eventsDataUpdatedAt={eventsQuery.dataUpdatedAt}
-              nowMs={nowMs}
             />
           </div>
-        )}
-      </div>
+        </>
+      )}
     </div>
   );
 }

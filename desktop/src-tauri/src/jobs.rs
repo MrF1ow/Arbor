@@ -59,6 +59,57 @@ pub struct JobSummary {
     pub finished_at: Option<String>,
     pub error_summary: Option<String>,
     pub exit_code: Option<i32>,
+    /// The class a job covered, from `plan_json`; `None` for legacy rows and mixed-class updates.
+    pub course: Option<String>,
+    /// Digest paths (study jobs) or source paths (update jobs) the job covered; `None` when unknown or whole-class.
+    pub digests: Option<Vec<String>>,
+}
+
+/// Class and lecture scope of a job, parsed from `plan_json` like `skill_from_plan`.
+/// Study rows carry `{course, digests}`. Update rows carry `{selections: [{path}]}`: the
+/// paths are the scope and the class is the first path component when all agree.
+pub fn scope_from_plan(trigger_kind: &str, plan_json: &str) -> (Option<String>, Option<Vec<String>>) {
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(plan_json) else {
+        return (None, None);
+    };
+    if trigger_kind == "study" {
+        let course = value
+            .get("course")
+            .and_then(|c| c.as_str())
+            .map(str::to_string);
+        let digests = value
+            .get("digests")
+            .and_then(|d| d.as_array())
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|d| d.as_str().map(str::to_string))
+                    .collect::<Vec<_>>()
+            })
+            .filter(|items| !items.is_empty());
+        return (course, digests);
+    }
+    let Some(selections) = value.get("selections").and_then(|s| s.as_array()) else {
+        return (None, None);
+    };
+    let paths: Vec<String> = selections
+        .iter()
+        .filter_map(|s| s.get("path").and_then(|p| p.as_str()).map(str::to_string))
+        .collect();
+    if paths.is_empty() {
+        return (None, None);
+    }
+    let mut classes = paths
+        .iter()
+        .map(|p| p.split('/').next().unwrap_or(p.as_str()));
+    let first = classes.next();
+    let course = match first {
+        Some(first) if classes.all(|c| c == first) && paths.iter().any(|p| p.contains('/')) => {
+            Some(first.to_string())
+        }
+        _ => None,
+    };
+    (course, Some(paths))
 }
 
 pub fn skill_from_plan(trigger_kind: &str, plan_json: &str) -> Option<String> {
@@ -211,6 +262,7 @@ fn list_jobs_conn(conn: &Connection, limit: u32) -> Result<Vec<JobSummary>, Stri
         .query_map(params![limit], |row| {
             let trigger_kind: String = row.get(2)?;
             let plan_json: String = row.get(3)?;
+            let (course, digests) = scope_from_plan(&trigger_kind, &plan_json);
             Ok(JobSummary {
                 id: row.get(0)?,
                 status: row.get(1)?,
@@ -221,6 +273,8 @@ fn list_jobs_conn(conn: &Connection, limit: u32) -> Result<Vec<JobSummary>, Stri
                 finished_at: row.get(6)?,
                 error_summary: row.get(7)?,
                 exit_code: row.get(8)?,
+                course,
+                digests,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -340,6 +394,73 @@ mod tests {
         assert_eq!(jobs[0].status, "succeeded");
         let events = job_events(&root, &id).unwrap();
         assert_eq!(events.len(), 1);
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn scope_from_plan_covers_study_update_and_legacy_rows() {
+        // Study job: course and digests come straight from the plan.
+        let study = r#"{"course":"Cell Biology","skill":"flashcards","force":false,"digests":["Cell Biology/digests/a.md","Cell Biology/digests/b.md"]}"#;
+        let (course, digests) = scope_from_plan("study", study);
+        assert_eq!(course.as_deref(), Some("Cell Biology"));
+        assert_eq!(
+            digests,
+            Some(vec![
+                "Cell Biology/digests/a.md".to_string(),
+                "Cell Biology/digests/b.md".to_string()
+            ])
+        );
+
+        // Study job over the whole class: no digests.
+        let full = r#"{"course":"Genetics","skill":"quiz","force":true,"digests":[]}"#;
+        let (course, digests) = scope_from_plan("study", full);
+        assert_eq!(course.as_deref(), Some("Genetics"));
+        assert_eq!(digests, None);
+
+        // Update job inside one class: that class, with the source paths.
+        let one = r#"{"selections":[{"path":"Cell Biology/week1.pdf","ranges":null},{"path":"Cell Biology/Unit 2/week2.pdf","ranges":[[1,3]]}]}"#;
+        let (course, digests) = scope_from_plan("manual", one);
+        assert_eq!(course.as_deref(), Some("Cell Biology"));
+        assert_eq!(
+            digests,
+            Some(vec![
+                "Cell Biology/week1.pdf".to_string(),
+                "Cell Biology/Unit 2/week2.pdf".to_string()
+            ])
+        );
+
+        // Update job across classes: no single class.
+        let many = r#"{"selections":[{"path":"Cell Biology/a.pdf"},{"path":"Genetics/b.pdf"}]}"#;
+        let (course, digests) = scope_from_plan("watch", many);
+        assert_eq!(course, None);
+        assert_eq!(digests.map(|d| d.len()), Some(2));
+
+        // Legacy rows without the keys, an embed job and bad JSON give null.
+        assert_eq!(scope_from_plan("manual", r#"{"selections":[]}"#), (None, None));
+        assert_eq!(scope_from_plan("manual", r#"{"op":"embed"}"#), (None, None));
+        assert_eq!(scope_from_plan("study", "{}"), (None, None));
+        assert_eq!(scope_from_plan("manual", "not json"), (None, None));
+    }
+
+    #[test]
+    fn list_jobs_returns_scope_for_study_and_update_rows() {
+        let root = temp_root("scope");
+        create_job(
+            &root,
+            JobTrigger::Study,
+            "m",
+            r#"{"course":"Cell Biology","skill":"quiz","force":false,"digests":["Cell Biology/digests/a.md"]}"#,
+        )
+        .unwrap();
+        create_job(&root, JobTrigger::Manual, "m", r#"{"selections":[{"path":"Genetics/a.pdf"}]}"#)
+            .unwrap();
+        create_job(&root, JobTrigger::Manual, "m", r#"{"selections":[]}"#).unwrap();
+        let jobs = list_jobs(&root, 10).unwrap();
+        assert_eq!(jobs.len(), 3);
+        let courses: Vec<Option<&str>> = jobs.iter().map(|j| j.course.as_deref()).collect();
+        assert!(courses.contains(&Some("Cell Biology")));
+        assert!(courses.contains(&Some("Genetics")));
+        assert!(courses.contains(&None));
         let _ = fs::remove_dir_all(&root);
     }
 

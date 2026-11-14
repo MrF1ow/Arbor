@@ -4,7 +4,8 @@ import { toast } from "sonner";
 
 import { Chip } from "~/components/app/chip";
 import { EmptyState } from "~/components/app/empty-state";
-import { SettingRow, SettingsSection } from "~/components/app/settings-section";
+import { SettingRow } from "~/components/app/settings-section";
+import { SettingsGroup, SettingsPage } from "~/components/settings/settings-page";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import {
@@ -31,6 +32,7 @@ import {
 } from "~/lib/queries/library";
 import { saveSettingsSerialized, usePersistSettingsMutation, useSettings } from "~/lib/queries/settings";
 import { useSwitchActiveRootMutation } from "~/lib/queries/active-root";
+import { useSyncState } from "~/lib/queries/sync";
 import { FolderOpen } from "lucide-react";
 
 const LibraryCreateDialog = lazy(() =>
@@ -46,10 +48,36 @@ const LibraryJoinDialog = lazy(() =>
 );
 
 const MEMBER_ROLES: { value: LibraryRole; label: string }[] = [
-  { value: "owner", label: "owner" },
-  { value: "editor", label: "editor" },
-  { value: "viewer", label: "viewer" },
+  { value: "owner", label: "Owner" },
+  { value: "editor", label: "Editor" },
+  { value: "viewer", label: "Viewer" },
 ];
+
+function roleLabel(role: LibraryRole): string {
+  return MEMBER_ROLES.find((r) => r.value === role)?.label ?? role;
+}
+
+const ROLE_DESCRIPTION: Record<LibraryRole, string> = {
+  owner: "Owners manage members and the recommended provider.",
+  editor: "Editors change the library and its recommended provider.",
+  viewer: "Viewers read the library but can't change it.",
+};
+
+/**
+ * The member row that is you. The worker reports your role but not your email, so a row
+ * counts as yours only when you are the one member holding your role (an owner or editor
+ * is always a listed member). With several members in your role this stays null.
+ */
+function ownRowEmail(
+  members: { email: string; role: LibraryRole }[],
+  role: LibraryRole,
+): string | null {
+  if (role === "viewer") {
+    return null;
+  }
+  const same = members.filter((m) => m.role === role);
+  return same.length === 1 ? same[0]!.email : null;
+}
 
 function rootEntryName(roots: KnowledgeRootEntry[], root: string): string {
   const entry = roots.find((e) => e.path === root);
@@ -60,6 +88,7 @@ export function SettingsLibraryPanel() {
   const settings = useSettings();
   const activeRoot = pickActiveRoot(settings.data);
   const library = useLibrary(activeRoot);
+  const sync = useSyncState(activeRoot);
   const queryClient = useQueryClient();
   const persistSettings = usePersistSettingsMutation();
   const setMembers = useLibrarySetMembersMutation(activeRoot);
@@ -235,6 +264,25 @@ export function SettingsLibraryPanel() {
     }
   };
 
+  const onRemoveMember = async (email: string) => {
+    if (!activeRoot || !isOwner) {
+      return;
+    }
+    const remaining = membersDraft.filter((m) => m.email !== email);
+    if (!remaining.some((m) => m.role === "owner")) {
+      setMembersNote("At least one owner is required.");
+      return;
+    }
+    setMembersNote("");
+    try {
+      await setMembers.mutateAsync(remaining);
+      toast.success("Member removed.");
+      await invalidateLibraryStack(activeRoot);
+    } catch (error) {
+      setMembersNote(String(error));
+    }
+  };
+
   const onAddMember = () => {
     const email = memberEmail.trim();
     if (!isValidMemberEmail(email)) {
@@ -282,8 +330,45 @@ export function SettingsLibraryPanel() {
     }
   };
 
+  const otherLibraryRows = (
+    <>
+      <SettingRow
+        label="Create shared library"
+        description="Turn a folder into a shared library with members and a recommended provider."
+        control={
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            aria-label="Create shared library"
+            onClick={() => setCreateOpen(true)}
+          >
+            Create…
+          </Button>
+        }
+      />
+      <SettingRow
+        label="Join a library"
+        description="Clone a remote shared library into a new folder."
+        control={
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            aria-label="Join a library"
+            onClick={() => setJoinOpen(true)}
+          >
+            Join…
+          </Button>
+        }
+      />
+    </>
+  );
+  const ownEmail = show?.present === true ? ownRowEmail(show.members, show.role) : null;
+  const remote = sync.data?.remote?.trim();
+
   return (
-    <div className="space-y-6" data-testid="settings-library">
+    <SettingsPage title="Library & sharing" description="Share a library with classmates and choose who can change it." testId="settings-library">
       {!settings.data ? (
         <Skeleton className="h-48 w-full" />
       ) : !activeRoot ? (
@@ -300,47 +385,36 @@ export function SettingsLibraryPanel() {
       ) : library.isLoading ? (
         <Skeleton className="h-48 w-full" />
       ) : show?.present !== true ? (
-        <SettingsSection title="Library & sharing">
-          <SettingRow
-            label="Create shared library"
-            description="Turn this folder into a shared library with members and a recommended provider."
-            control={
-              <Button type="button" variant="secondary" size="sm" onClick={() => setCreateOpen(true)}>
-                Create shared library
-              </Button>
-            }
-          />
-          <SettingRow
-            label="Join a library"
-            description="Clone a remote shared library into a new folder."
-            control={
-              <Button type="button" variant="secondary" size="sm" onClick={() => setJoinOpen(true)}>
-                Join a library
-              </Button>
-            }
-          />
-        </SettingsSection>
+        <SettingsGroup title="Library & sharing">{otherLibraryRows}</SettingsGroup>
       ) : (
         <>
-          <SettingsSection title="Library & sharing">
+          <SettingsGroup title="Library & sharing">
+            <SettingRow
+              label="This library"
+              description={remote ? `${show.name} · shared from ${remote}` : show.name}
+              control={<Chip variant="plain">shared</Chip>}
+            />
             <SettingRow
               label="Your role"
-              control={<Chip variant="plain">{show.role}</Chip>}
+              description={ROLE_DESCRIPTION[show.role]}
+              control={<Chip variant="plain">{roleLabel(show.role)}</Chip>}
             />
             {show.role === "viewer" ? (
               <p className="px-4 py-3 text-sm text-muted-foreground" data-testid="library-role-note-settings">
                 {VIEWER_WRITE_REASON}
               </p>
             ) : null}
-          </SettingsSection>
+          </SettingsGroup>
 
-          <SettingsSection title="Members">
+          <SettingsGroup title="Members">
             {membersDraft.map((member, index) => (
               <SettingRow
                 key={`${member.email}-${index}`}
                 label={member.email}
+                description={ownEmail !== null && member.email === ownEmail ? "You" : undefined}
                 control={
                   isOwner ? (
+                    <div className="flex items-center gap-2">
                     <Select
                       value={member.role}
                       items={MEMBER_ROLES}
@@ -363,8 +437,21 @@ export function SettingsLibraryPanel() {
                         ))}
                       </SelectContent>
                     </Select>
+                    {member.email !== ownEmail ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        aria-label={`Remove ${member.email}`}
+                        disabled={setMembers.isPending}
+                        onClick={() => void onRemoveMember(member.email)}
+                      >
+                        Remove
+                      </Button>
+                    ) : null}
+                    </div>
                   ) : (
-                    <span className="text-sm text-muted-foreground">{member.role}</span>
+                    <span className="text-sm text-muted-foreground">{roleLabel(member.role)}</span>
                   )
                 }
               />
@@ -420,9 +507,9 @@ export function SettingsLibraryPanel() {
               </>
             )}
             {membersNote ? <p className="px-4 pb-3 text-sm text-destructive">{membersNote}</p> : null}
-          </SettingsSection>
+          </SettingsGroup>
 
-          <SettingsSection title="Library provider">
+          <SettingsGroup title="Library provider">
             <SettingRow
               label="Provider"
               control={
@@ -475,7 +562,9 @@ export function SettingsLibraryPanel() {
               </div>
             ) : null}
             {providerNote ? <p className="px-4 pb-3 text-sm text-destructive">{providerNote}</p> : null}
-          </SettingsSection>
+          </SettingsGroup>
+
+          <SettingsGroup title="Other libraries">{otherLibraryRows}</SettingsGroup>
         </>
       )}
 
@@ -498,6 +587,6 @@ export function SettingsLibraryPanel() {
           />
         ) : null}
       </Suspense>
-    </div>
+    </SettingsPage>
   );
 }

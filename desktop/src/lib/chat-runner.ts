@@ -10,7 +10,7 @@ import {
 } from "~/domain/chat";
 import { signedOutJobMessage } from "~/domain/provider";
 import { fetchAuthStatus } from "~/lib/auth-refresh";
-import { invoke } from "~/lib/ipc";
+import { invoke, type StartChatScope } from "~/lib/ipc";
 import { qk } from "~/lib/queries/keys";
 import type { ChatThreadMeta } from "~/lib/queries/chat";
 import {
@@ -23,7 +23,7 @@ import {
   type ChatLiveStatusTone,
 } from "~/stores/chat-live-store";
 
-export type SendChatMessageOpts = {
+export type SendChatMessageOpts = StartChatScope & {
   queryClient: QueryClient;
   root: string;
   course: string;
@@ -77,6 +77,8 @@ export async function sendChatMessage(opts: SendChatMessageOpts): Promise<{ thre
     history,
     onAuthGate,
     appendLog,
+    digests,
+    focus,
   } = opts;
   let threadId = opts.threadId;
 
@@ -218,6 +220,8 @@ export async function sendChatMessage(opts: SendChatMessageOpts): Promise<{ thre
     provider: providerId,
     model: trimmedModel,
     history,
+    ...(digests && digests.length > 0 ? { digests } : {}),
+    ...(focus ? { focus } : {}),
   }).catch((error) => {
     finishChatLiveStream(streamKey);
     const message = chatAuthErrorMessage(providerLabel, error);

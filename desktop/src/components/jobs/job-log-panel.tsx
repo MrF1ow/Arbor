@@ -1,18 +1,15 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Copy, X } from "lucide-react";
+import { Copy } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
-import { Button, IconButton } from "~/components/ui/button";
+import { IconButton } from "~/components/ui/button";
+import { Kbd } from "~/components/ui/kbd";
 import { Spinner } from "~/components/ui/spinner";
-import {
-  formatDuration,
-  jobKindLabel,
-  relativeTime,
-} from "~/domain/jobs";
+import { jobTitle } from "~/domain/jobs";
 import type { JobEventRow, JobSummary } from "~/domain/types";
 import { useStickToBottomScroll } from "~/hooks/use-stick-to-bottom-scroll";
-import { useCancelUpdateMutation } from "~/lib/queries/jobs";
+import { modShortcut } from "~/lib/shortcuts";
 import { cn } from "~/lib/utils";
 import { useJobStore } from "~/stores/job-store";
 
@@ -64,43 +61,26 @@ export function buildLogLines(
   return [...fromDb, ...fromLive];
 }
 
-function jobStatusLabel(status: string): string {
-  if (status === "succeeded") {
-    return "Succeeded";
-  }
-  if (status === "failed") {
-    return "Failed";
-  }
-  if (status === "cancelled") {
-    return "Cancelled";
-  }
-  if (status === "running") {
-    return "Running";
-  }
-  return status;
-}
-
 export function JobLogPanel({
   job,
+  scope,
   events,
   eventsLoading,
   eventsFetching,
   eventsDataUpdatedAt,
-  nowMs,
   className,
 }: {
   job: JobSummary | null;
+  /** The Scope column's label for the job ("Cell Biology · Unit 2 · 3 lectures"). */
+  scope?: string | null;
   events: JobEventRow[] | undefined;
   eventsLoading: boolean;
   eventsFetching?: boolean;
   eventsDataUpdatedAt?: number;
-  nowMs: number;
   className?: string;
 }) {
   const activeJobId = useJobStore((s) => s.activeJobId);
-  const activeUpdateJobId = useJobStore((s) => s.activeUpdateJobId);
   const storeLines = useJobStore((s) => s.lines);
-  const cancelUpdate = useCancelUpdateMutation();
 
   const [lineCursor, setLineCursor] = useState(0);
   const [tailJobId, setTailJobId] = useState<string | null>(null);
@@ -174,16 +154,11 @@ export function JobLogPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- scrollRef is stable; stickiness reads scroll height imperatively
   }, [lines.length, virtualizer, stickToBottomRef]);
 
-  const showCancel =
-    job?.status === "running" &&
-    job.id === activeUpdateJobId &&
-    activeUpdateJobId != null;
-
   if (!job) {
     return (
       <div
         className={cn(
-          "flex min-h-48 flex-1 items-center justify-center rounded-md border border-border bg-card p-6 text-sm text-muted-foreground",
+          "flex min-h-48 flex-1 items-center justify-center rounded-lg border border-border bg-muted p-6 text-small text-muted-foreground",
           className,
         )}
       >
@@ -192,37 +167,20 @@ export function JobLogPanel({
     );
   }
 
-  const duration = formatDuration(job.started_at, job.finished_at);
-  const startedRelative = relativeTime(job.started_at, nowMs);
+  const heading = ["Log", jobTitle(job.trigger_kind, job.skill), scope && scope !== "—" ? scope : null]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <section
       className={cn(
-        "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-card",
+        "flex min-h-0 min-w-0 flex-1 flex-col gap-1 overflow-hidden rounded-lg border border-border bg-muted p-4",
         className,
       )}
       data-testid="job-log-panel"
     >
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-4 py-3">
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium">
-            {jobKindLabel(job.trigger_kind, job.skill)}
-          </p>
-          <p className="text-2xs text-muted-foreground">
-            {jobStatusLabel(job.status)} · {startedRelative} · {duration}
-          </p>
-        </div>
-        {showCancel ? (
-          <Button
-            variant="outline"
-            size="sm"
-            className="border-destructive text-destructive hover:bg-destructive-surface"
-            onClick={() => void cancelUpdate.mutateAsync()}
-          >
-            <X className="size-icon-sm" />
-            Cancel
-          </Button>
-        ) : null}
+      <div className="flex shrink-0 items-center gap-2">
+        <h3 className="min-w-0 flex-1 truncate text-small font-semibold">{heading}</h3>
         <IconButton
           icon={Copy}
           label="Copy log"
@@ -232,20 +190,21 @@ export function JobLogPanel({
           data-testid="copy-job-log"
           onClick={() => void copyLogLines(lines)}
         />
+        <Kbd className="border-transparent bg-transparent text-kbd">{modShortcut("`")}</Kbd>
       </div>
       <div
         ref={scrollRef}
         onScroll={onScroll}
-        className="min-h-48 flex-1 overflow-auto px-4 py-2 font-mono text-2xs text-muted-foreground"
+        className="min-h-48 flex-1 overflow-auto font-mono text-kbd text-muted-foreground"
       >
         {eventsLoading && lines.length === 0 ? (
-          <div className="flex items-center gap-2 py-4 text-sm">
+          <div className="flex items-center gap-2 py-4 text-small">
             <Spinner className="size-icon-sm" />
             Loading log…
           </div>
         ) : null}
         {!eventsLoading && lines.length === 0 ? (
-          <p className="py-4 text-sm text-muted-foreground">No log lines for this job.</p>
+          <p className="py-4 text-small text-muted-foreground">No log lines for this job.</p>
         ) : null}
         {lines.length > 0 && lines.length <= 200
           ? lines.map((row) => (
@@ -283,30 +242,4 @@ export function JobLogPanel({
       </div>
     </section>
   );
-}
-
-export function JobStatusDot({ status, className }: { status: string; className?: string }) {
-  if (status === "running") {
-    return <Spinner className={cn("size-icon-sm shrink-0 text-primary", className)} />;
-  }
-  const color =
-    status === "succeeded"
-      ? "bg-success"
-      : status === "failed"
-        ? "bg-destructive"
-        : "bg-muted-foreground";
-  return <span className={cn("size-1.5 shrink-0 rounded-full", color, className)} aria-hidden />;
-}
-
-export function jobStatusTextClass(status: string): string {
-  if (status === "running") {
-    return "text-primary";
-  }
-  if (status === "succeeded") {
-    return "text-success";
-  }
-  if (status === "failed") {
-    return "text-destructive";
-  }
-  return "text-muted-foreground";
 }

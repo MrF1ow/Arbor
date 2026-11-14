@@ -2,19 +2,22 @@ import type { KnowledgeRootEntry } from "~/domain/types";
 
 const ROMAN = new Set(["i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x"]);
 
-export function courseDisplayName(slug: string): string {
-  return slug
-    .split("-")
-    .map((part) => {
-      const lower = part.toLowerCase();
-      if (ROMAN.has(lower)) {
-        return lower.toUpperCase();
-      }
-      if (lower.length === 0) {
-        return lower;
-      }
-      return lower.charAt(0).toUpperCase() + lower.slice(1);
-    })
+/** An all-lower-case folder name with its words joined by hyphens or underscores. */
+const SLUG = /^[\p{Ll}\p{N}]+(?:[-_][\p{Ll}\p{N}]+)*$/u;
+
+/**
+ * "cell-biology" → "Cell Biology". Only a slug-like folder name (all lower case, no spaces,
+ * words joined by hyphens or underscores) is turned into words, each with a capital first
+ * letter; a lone Roman numeral ("ii") goes upper case. Any other name is a typed one and is
+ * kept exactly as typed ("iOS Development", "Pre-Med Biology", "BIOL 2410").
+ */
+export function courseDisplayName(name: string): string {
+  if (!SLUG.test(name)) {
+    return name;
+  }
+  return name
+    .split(/[-_]/)
+    .map((part) => (ROMAN.has(part) ? part.toUpperCase() : part.charAt(0).toUpperCase() + part.slice(1)))
     .join(" ");
 }
 

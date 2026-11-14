@@ -2,6 +2,7 @@ import { useNavigate } from "@tanstack/react-router";
 import type { MouseEvent } from "react";
 
 import { Chip } from "~/components/app/chip";
+import { classPath } from "~/lib/class-path";
 import { formatFlashcardSourceLabel, resolveDigestSlug } from "~/domain/notes";
 import type { CardSource, DigestInfo } from "~/domain/types";
 
@@ -20,13 +21,13 @@ export function StudySourceChip({
   return (
     <Chip
       variant="plain"
+      className="h-auto border-info px-1 text-micro text-info hover:bg-muted"
       onClick={(event) => {
         onClick?.(event);
         event.stopPropagation();
         const slug = resolveDigestSlug(source.digest, digests);
         void navigate({
-          to: "/course/$course/notes/$digest",
-          params: { course, digest: slug },
+          ...classPath(course, "read", slug),
           search: source.heading ? { heading: source.heading } : {},
         });
       }}
