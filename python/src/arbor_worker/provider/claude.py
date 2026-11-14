@@ -194,7 +194,14 @@ class ClaudeCliProvider:
                     proc.stderr or stdout,
                 )
         usage: dict[str, int] = {}
-        markdown = iter_stream_json(lines, lambda _text: None, label="claude", usage=usage)
+        try:
+            markdown = iter_stream_json(lines, lambda _text: None, label="claude", usage=usage)
+        except ProviderError as exc:
+            # An is_error result carries no exit code; the text-only path
+            # reports the process's, so do the same here.
+            if exc.exit_code is None and proc.returncode:
+                exc.exit_code = proc.returncode
+            raise
         return ProviderResult(markdown=markdown, **usage_tokens(usage))
 
     def stream(self, request: ProviderRequest, on_delta: DeltaFn) -> ProviderResult:

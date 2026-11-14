@@ -9,7 +9,7 @@ watches:
   - python/pyproject.toml
   - .github/workflows/test.yml
   - docs/superpowers/plans/2026-10-17-roadmap-completion/linux-live-run.md
-updated: "c5d2a6304a47c7a785463ed75e529ddaf4f12a68"
+updated: "2234e0c79f4697fed1266d961808d69b68145d37"
 ---
 
 # Run, test and verify Arbor
@@ -32,14 +32,14 @@ Three parts: `python/` (the `arbor-worker` CLI, uv), `desktop/` (React + Vite fr
   - `cd python && timeout 900 uv run pytest` (~60s)
   - `mkdir -p desktop/dist && timeout 1800 cargo test --manifest-path desktop/src-tauri/Cargo.toml` (~1 min warm; first build much longer)
 - Desktop tests are mostly source greps and miss type and runtime errors. Build and lint are not optional.
-- Known local flake: `src/components/app/search-palette.test.tsx` ("anchors the palette below the header…") times out under load on this machine (`Unable to find role="dialog"`), and CI is green on the same commit. Rerun `npx vitest run src/components/app/search-palette.test.tsx` before blaming your change.
+- Known local flake: `src/components/app/search-palette.test.tsx` ("anchors the palette below the header…") times out under load on this machine (`Unable to find role="dialog"`), and CI is green on the same commit. Rerun `npx vitest run src/components/app/search-palette.test.tsx` before blaming your change. Same for `src/routes/settings.test.tsx > settings > forces check_auth after a provider change`: it fails under load (full `npm test` while pytest runs) and passes alone.
 - CI: `test.yml` (python, desktop, rust jobs) on every PR and on main; `macos-dmg.yml` builds the DMG on main; `release-macos.yml` publishes a Release on a `v*` tag.
 
 ## Verify on the real thing
 - UI, mocked: start mock mode (above) and load it in a headless browser; screenshot from there, never from the real outputs.
 - UI, real app: Tauri on a private Xvfb display. Follow `docs/superpowers/plans/2026-10-17-roadmap-completion/linux-live-run.md`: `dbus-run-session`, `GDK_BACKEND=x11`, `WAYLAND_DISPLAY` and `HYPRLAND_INSTANCE_SIGNATURE` unset, scratch `HOME`/XDG/`GIT_CONFIG_GLOBAL`, screenshots with `magick import -display :<n>`, input with `xdotool --display :<n>` (type paths with `--delay 150`). Get the display number from `flow-run lease <run> display`.
-- CLI/worker: `uv run arbor-worker update --root <scratch root> --provider fake --model m` with `ARBOR_FAKE_MD` set to a digest carrying page markers (copy `_marked_fake_md` from `python/tests/test_cli.py`); without markers the source fails at `generate`. Read the JSONL events and `git -C <root> log`.
-- Live provider runs: the Claude Code provider (the `claude` CLI, already signed in on the user's Claude plan). Under a scratch `HOME`, copy only `~/.claude/.credentials.json` into `<scratch HOME>/.claude/` (mode 600). Before starting the app, run the pre-check under exactly the env the app gets: the same scratch `HOME` and `PATH`, `MISE_TRUSTED_CONFIG_PATHS` set when `claude` is the mise wrapper, and `CLAUDECODE` unset (the app refuses the Claude provider when `CLAUDECODE=1`). Send it as a stream-json user line with the flags the page-image path uses (it checks the flags, not an image payload):
+- CLI/worker: `uv run arbor-worker update --root <scratch root> --provider fake --model m` with `ARBOR_FAKE_MD` set to a digest carrying page markers (copy `_marked_fake_md` from `python/tests/test_cli.py`); without markers the source fails at `generate`. Read the JSONL events and `git -C <root> log`. Under a scratch `HOME`, `uv run` starts with an empty uv cache and Python dir: set `UV_CACHE_DIR=~/.cache/uv UV_PYTHON_INSTALL_DIR=~/.local/share/uv/python` (the real paths) and use `uv run --no-sync`. Live variant: `env -u CLAUDECODE HOME=<scratch HOME> UV_CACHE_DIR=… UV_PYTHON_INSTALL_DIR=… uv run --no-sync arbor-worker update --root <scratch root> --provider claude --model claude-haiku-5-5`, with the scratch root a `git init` repo with an init commit, a `.gitignore` containing `_arbor_cache/`, and `<Course>/<file>.pdf`. Success shows `committed` and a `digest: <Course>` commit.
+- Live provider runs: the Claude Code provider (the `claude` CLI, already signed in on the user's Claude plan). Under a scratch `HOME`, copy only `~/.claude/.credentials.json` into `<scratch HOME>/.claude/` (mode 600). Before starting the app, run the pre-check under exactly the env the app gets: the same scratch `HOME` and `PATH`, `MISE_TRUSTED_CONFIG_PATHS` set when `claude` is the mise wrapper (`~/.local/share/mise/command-wrappers/bin/claude` may not resolve under a scratch `HOME`: either put a symlink to `mise which claude` first on `PATH`, or set `MISE_TRUSTED_CONFIG_PATHS`), and `CLAUDECODE` unset (the app refuses the Claude provider when `CLAUDECODE=1`). Send it as a stream-json user line with the flags the page-image path uses (it checks the flags, not an image payload):
   ```bash
   echo '{"type":"user","message":{"role":"user","content":[{"type":"text","text":"say ok"}]}}' \
     | env -u CLAUDECODE HOME=<scratch HOME> PATH=<app PATH> MISE_TRUSTED_CONFIG_PATHS=<repo root> \

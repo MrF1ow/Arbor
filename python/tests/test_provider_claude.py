@@ -267,6 +267,14 @@ def test_run_with_images_auth_error_stream_exits_1(tmp_path: Path):
     assert "{" not in str(exc.value)
 
 
+def test_run_with_images_auth_error_stream_reports_exit_code(tmp_path: Path):
+    stream = (FIXTURES / "claude-stream-auth-error.jsonl").read_text()
+    prov = _provider(lambda *a, **k: _completed(1, stdout=stream))
+    with pytest.raises(ProviderError) as exc:
+        prov.run(_image_request(tmp_path))
+    assert exc.value.event_fields() == {"kind": "auth", "exit_code": 1}
+
+
 def test_run_with_images_model_error_stream_keeps_cli_text(tmp_path: Path):
     stream = (FIXTURES / "claude-stream-model-error.jsonl").read_text()
     prov = _provider(lambda *a, **k: _completed(1, stdout=stream))
