@@ -334,6 +334,9 @@ describe("class workspace", { timeout: 15000 }, () => {
       await go("Show on map", "map");
       await go("Ask about these", "ask");
       await go("Quiz me", "practice/quiz");
+      // Practice has no tray (its scope chip stands in for it): go back to Read for the last button.
+      await router.navigate({ to: "/course/$course/read/$digest", params: { course: COURSE, digest: "2026-09-02-cell-theory" } });
+      await waitFor(() => expect(router.state.location.pathname).toBe(`/course/${COURSE}/read/2026-09-02-cell-theory`));
       await go("Flashcards", "practice/cards");
       expect(useLectureSelectionStore.getState().byClass[SCOPE_KEY]).toEqual([
         `${COURSE}/digests/2026-09-02-cell-theory.md`,
@@ -501,6 +504,16 @@ describe("class workspace", { timeout: 15000 }, () => {
       expect(chip).toHaveTextContent("Membranes · 3 lectures");
       await user.click(chip);
       expect(useLectureSelectionStore.getState().byClass[SCOPE_KEY]).toBeUndefined();
+    });
+
+    it("shows no selection tray on Practice, where the scope chip stands in for it", async () => {
+      useLectureSelectionStore.getState().setScope(SCOPE_KEY, [
+        `${COURSE}/digests/2026-10-01-lipid-bilayers.md`,
+        `${COURSE}/digests/2026-10-08-membrane-transport.md`,
+      ]);
+      await renderAppAtRoute(`/course/${COURSE}/practice/cards`, workspaceFixtures);
+      await screen.findByRole("button", { name: /Stop studying/ });
+      expect(screen.queryByRole("region", { name: "Selected lectures" })).not.toBeInTheDocument();
     });
 
     it("opens the lecture list as a sheet when the window is narrow", async () => {

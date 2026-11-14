@@ -193,7 +193,8 @@ export function ClassWorkspace({ course }: { course: string }) {
         </div>
       </div>
       {/* The sheet is modal and drawn under the tray, so hide the tray while it is open. */}
-      {narrow && columnMode && sheetOpen ? null : (
+      {/* Practice shows the scope as its "Studying …" chip, and the tray would cover its controls. */}
+      {location.mode === "practice" || (narrow && columnMode && sheetOpen) ? null : (
         <SelectionTray course={course} count={ticked.length} onClear={clearScope} />
       )}
       {narrow && columnMode ? (

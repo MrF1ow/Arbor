@@ -13,6 +13,7 @@ import { clearMockIpcLog, getMockIpcLog } from "~/test/mock-handlers";
 import { clearTauriMocks } from "~/test/mock-ipc";
 import { renderAppAtRoute } from "~/test/render";
 import { useJobStore } from "~/stores/job-store";
+import { classScopeKey, useLectureSelectionStore } from "~/stores/lecture-selection-store";
 import { useUiStore } from "~/stores/ui-store";
 
 type Fixtures = NonNullable<Parameters<typeof renderAppAtRoute>[1]>;
@@ -303,6 +304,18 @@ describe("Today (the / route)", () => {
       await waitFor(() => {
         expect(router.state.location.pathname).toBe("/course/organic-chemistry-ii/practice/cards");
       });
+    });
+
+    it("opens the class's whole due deck, dropping lectures ticked there earlier", async () => {
+      const user = userEvent.setup();
+      const key = classScopeKey(FIXTURE_ROOT_FALL, "organic-chemistry-ii");
+      useLectureSelectionStore.getState().setScope(key, ["organic-chemistry-ii/digests/old-pick.md"]);
+      const { page, router } = await renderToday();
+      await user.click(await within(page).findByRole("button", { name: "Start review" }));
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe("/course/organic-chemistry-ii/practice/cards");
+      });
+      expect(useLectureSelectionStore.getState().byClass[key] ?? []).toEqual([]);
     });
 
     it("skips a class that is nearest to its exam but has nothing due", async () => {

@@ -9,6 +9,7 @@ import { useOpenClass } from "~/lib/open-class";
 import { qk } from "~/lib/queries/keys";
 import { useSettings } from "~/lib/queries/settings";
 import { flushStudyWrites } from "~/lib/study-writes";
+import { classScopeKey, useLectureSelectionStore } from "~/stores/lecture-selection-store";
 
 /**
  * Start review (Q15, Q27): open Practice > Cards of the class with the nearest exam that has cards due.
@@ -50,6 +51,8 @@ export function useStartReview(courses: TodayCourse[]) {
       );
       const [next] = reviewOrder(fresh.flat());
       if (next) {
+        // Review means the class's whole due deck: drop lectures ticked there earlier.
+        useLectureSelectionStore.getState().clear(classScopeKey(next.root, next.course));
         await openClass(next.root, next.course, "cards");
       }
     } catch (error) {
