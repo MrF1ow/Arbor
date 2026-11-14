@@ -243,7 +243,7 @@ describe("graph PR10", { timeout: 20000 }, () => {
     );
     await user.click(screen.getByRole("button", { name: "Facilitated diffusion" }));
     await waitFor(() => {
-      expect(fromNotes.state.location.pathname).toContain("/graph");
+      expect(fromNotes.state.location.pathname).toContain("/map");
       expect(fromNotes.state.location.searchStr).toContain("concept=concept-1");
     });
 

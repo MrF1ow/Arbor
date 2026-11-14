@@ -963,15 +963,13 @@ describe("chat threads", { timeout: 30000 }, () => {
     }
   });
 
-  it("explain weakest from overview navigates and auto-sends", async () => {
+  it("an explain-weakest link auto-sends once the chat is ready", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
-      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      await renderAppAtRoute("/course/cell-biology/notes");
-      await waitFor(() => {
-        expect(screen.getByRole("button", { name: /Explain weakest topic/i })).toBeInTheDocument();
-      });
-      await user.click(screen.getByRole("button", { name: /Explain weakest topic/i }));
+      const prompt = encodeURIComponent(
+        'Explain the weakest topic "Cytoskeleton". Stay inside this course and cite sources.',
+      );
+      await renderAppAtRoute(`/course/cell-biology/chat?mode=explain&prompt=${prompt}`);
       await waitForChatReady();
       await vi.advanceTimersByTimeAsync(350);
       await waitFor(() => {

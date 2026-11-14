@@ -1,13 +1,14 @@
-import { createFileRoute, Link, Outlet } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { BookOpen } from "lucide-react";
 import { useEffect } from "react";
 
 import { EmptyState } from "~/components/app/empty-state";
+import { ClassWorkspace } from "~/components/workspace/class-workspace";
+import { courseDisplayName } from "~/domain/course";
 import { pickActiveRoot } from "~/lib/knowledge-root";
 import { useCourses } from "~/lib/queries/library";
 import { useSettings } from "~/lib/queries/settings";
 import { useUiStore } from "~/stores/ui-store";
-import { courseDisplayName } from "~/domain/course";
-import { BookOpen } from "lucide-react";
 
 export const Route = createFileRoute("/course/$course")({
   component: CourseLayout,
@@ -54,9 +55,7 @@ function CourseLayout() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="min-h-0 flex-1 overflow-auto">
-        <Outlet />
-      </div>
+      <ClassWorkspace course={course} />
     </div>
   );
 }
