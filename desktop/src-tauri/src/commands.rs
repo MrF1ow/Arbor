@@ -2948,6 +2948,20 @@ mod tests {
         assert_eq!(listed, vec!["Biology", "Organic Chem"]);
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn list_courses_skips_symlinked_directories() {
+        let root = temp_root("list-courses-symlinks");
+        let outside = temp_root("list-courses-symlink-target");
+        fs::create_dir(root.join("Biology")).unwrap();
+        std::os::unix::fs::symlink(root.join("Biology"), root.join("LinkInside")).unwrap();
+        std::os::unix::fs::symlink(&outside, root.join("LinkOutside")).unwrap();
+        std::os::unix::fs::symlink(root.join("missing"), root.join("Broken")).unwrap();
+
+        let listed = block_on_cmd(list_courses(root.to_string_lossy().into_owned())).unwrap();
+        assert_eq!(listed, vec!["Biology"]);
+    }
+
     #[test]
     fn list_courses_still_lists_existing_chat_and_local_folders() {
         let root = temp_root("list-courses-chat-local");
