@@ -246,6 +246,27 @@ def merge_deck_by_id(
     return existing.model_copy(update={"cards": merged_cards}), added
 
 
+def adopt_scoped_items(
+    course: str, kept: list, origins: dict[str, str]
+) -> set[str]:
+    """Turn kept ``scoped`` items into ``full`` ones (ids unchanged).
+
+    Returns the lectures those items cite: a whole-class run adds no NEW fresh
+    items for those lectures (fresh items whose id is already in the existing
+    set are still taken, so stable graded items keep their progress), so no
+    near-duplicates pile up next to the scoped set.
+    """
+    covered = {
+        digest_file_rel(course, item.source.digest)
+        for item in kept
+        if origins.get(item.id) == "scoped"
+    }
+    for item in kept:
+        if origins.get(item.id) == "scoped":
+            origins[item.id] = "full"
+    return covered
+
+
 def merge_full_run_deck(
     fresh: FlashcardDeck,
     existing: FlashcardDeck | None,
@@ -281,9 +302,15 @@ def merge_full_run_deck(
                 continue
             kept.append(card)
     kept_ids = {card.id for card in kept}
+    covered = adopt_scoped_items(course, kept, new_origins)
     fresh_cards: list[Flashcard] = []
     for card in fresh.cards:
         if card.id in kept_ids:
+            continue
+        if (
+            card.id not in prior_ids
+            and digest_file_rel(course, card.source.digest) in covered
+        ):
             continue
         if (
             allowed_norm is not None

@@ -152,10 +152,12 @@ def test_full_generate_keeps_scoped_and_manual_drops_deleted_digest(
         heading="Unit 2",
     )
 
-    # First full run establishes a replaceable full-origin card on intro.
+    # The first whole-class run adopts the scoped intro card as a full card.
     monkeypatch.setenv("ARBOR_FAKE_MD", FAKE_FLASHCARDS_INTRO_JSON)
     _run_generate(root, "--force")
+    assert _origins(root).get(intro_scoped_id) == "full"
 
+    # A later reworded whole-class run regenerates intro like any full card.
     reworded_obj = json.loads(FAKE_FLASHCARDS_INTRO_JSON)
     reworded_obj["cards"][0]["front"] = "What is life reworded?"
     monkeypatch.setenv("ARBOR_FAKE_MD", json.dumps(reworded_obj))
@@ -165,14 +167,187 @@ def test_full_generate_keeps_scoped_and_manual_drops_deleted_digest(
     fronts = [c["front"] for c in deck["cards"]]
     assert fronts.count("What is life reworded?") == 1
     assert manual["id"] in {c["id"] for c in deck["cards"]}
-    assert intro_scoped_id in {c["id"] for c in deck["cards"]}
+    assert intro_scoped_id not in {c["id"] for c in deck["cards"]}
 
     (root / "Bio" / "digests" / "unit-2.md").unlink()
     monkeypatch.setenv("ARBOR_FAKE_MD", FAKE_FLASHCARDS_INTRO_JSON)
     _run_generate(root, "--force")
     deck2 = json.loads((root / "Bio" / "study" / "flashcards.json").read_text())
     assert manual["id"] not in {c["id"] for c in deck2["cards"]}
-    assert manual["id"] not in {c["id"] for c in deck2["cards"]}
+
+
+def _grade(root: Path, card_id: str) -> None:
+    from arbor_worker.study_progress import study_progress_grade
+
+    study_progress_grade(root, "Bio", card_id, "mastered", digest="digests/intro.md")
+
+
+def _progress_card_ids(root: Path) -> set[str]:
+    from arbor_worker.study_progress import progress_path
+
+    return set(json.loads(progress_path(root, "Bio").read_text())["cards"])
+
+
+def test_whole_class_flashcards_run_adopts_scoped_card_and_keeps_progress(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    root = build_ui_overhaul_root(tmp_path).root
+    monkeypatch.setenv("ARBOR_FAKE_MD", FAKE_FLASHCARDS_INTRO_JSON)
+    _, events = _run_generate(root, "--digests", "Bio/digests/intro.md")
+    scoped_id = next(e for e in events if e["type"] == "skill_done")["added_ids"][0]
+    _grade(root, scoped_id)
+    assert scoped_id in _progress_card_ids(root)  # written by the grade, not generate
+
+    reworded = json.loads(FAKE_FLASHCARDS_INTRO_JSON)
+    reworded["cards"][0]["front"] = "What is life, reworded?"
+    monkeypatch.setenv("ARBOR_FAKE_MD", json.dumps(reworded))
+    code, events = _run_generate(root, "--force")
+
+    assert code == 0, events[-1]
+    deck = json.loads((root / "Bio" / "study" / "flashcards.json").read_text())
+    intro_cards = [
+        c for c in deck["cards"] if c["source"]["digest"] == "digests/intro.md"
+    ]
+    assert [c["id"] for c in intro_cards] == [scoped_id]
+    assert intro_cards[0]["front"] == "What is life?"
+    assert _origins(root)[scoped_id] == "full"
+    # Progress is keyed by card id: the graded id must still be a card in the deck.
+    assert scoped_id in {c["id"] for c in deck["cards"]}
+    assert scoped_id in _progress_card_ids(root)
+    done = next(e for e in events if e["type"] == "skill_done")
+    assert scoped_id not in done["added_ids"]
+
+
+def test_whole_class_quiz_run_adopts_scoped_question(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    root = build_ui_overhaul_root(tmp_path).root
+    monkeypatch.setenv("ARBOR_FAKE_MD", FAKE_QUIZ_INTRO_JSON)
+    _, events = _run_generate_skill(root, "quiz", "--digests", "Bio/digests/intro.md")
+    scoped_id = next(e for e in events if e["type"] == "skill_done")["added_ids"][0]
+
+    reworded = json.loads(FAKE_QUIZ_INTRO_JSON)
+    reworded["questions"][0]["prompt"] = "Welcome to biology, reworded?"
+    monkeypatch.setenv("ARBOR_FAKE_MD", json.dumps(reworded))
+    code, events = _run_generate_skill(root, "quiz", "--force")
+
+    assert code == 0, events[-1]
+    assert _quiz_ids(root) == [scoped_id]
+    assert _origins(root)[scoped_id] == "full"
+    done = next(e for e in events if e["type"] == "skill_done")
+    assert scoped_id not in done["added_ids"]
+
+    # The adopted question is a full question now: a later reworded run replaces it.
+    code, _ = _run_generate_skill(root, "quiz", "--force")
+    assert code == 0
+    pack = json.loads((root / "Bio" / "study" / "quiz.json").read_text())
+    assert [q["prompt"] for q in pack["questions"]] == ["Welcome to biology, reworded?"]
+    assert scoped_id not in _quiz_ids(root)
+
+
+def _intro_cards_json(*fronts: str) -> str:
+    return json.dumps(
+        {
+            "schema_version": 1,
+            "course": "Bio",
+            "cards": [
+                {
+                    "front": front,
+                    "back": "b",
+                    "tags": [],
+                    "source": {"digest": "digests/intro.md", "heading": "Intro"},
+                }
+                for front in fronts
+            ],
+        }
+    )
+
+
+def _intro_quiz_json(*prompts: str) -> str:
+    return json.dumps(
+        {
+            "schema_version": 1,
+            "course": "Bio",
+            "questions": [
+                {
+                    "type": "multiple_choice",
+                    "prompt": prompt,
+                    "choices": ["Yes", "No", "Maybe", "Later"],
+                    "answer_index": 0,
+                    "explanation": "Intro lecture.",
+                    "source": {"digest": "digests/intro.md", "heading": "Intro"},
+                }
+                for prompt in prompts
+            ],
+        }
+    )
+
+
+def test_whole_class_flashcards_refresh_keeps_stable_full_cards_after_scoped_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    root = build_ui_overhaul_root(tmp_path).root
+    path = root / "Bio" / "study" / "flashcards.json"
+
+    def intro() -> dict[str, str]:
+        deck = json.loads(path.read_text())
+        return {
+            c["front"]: c["id"]
+            for c in deck["cards"]
+            if c["source"]["digest"] == "digests/intro.md"
+        }
+
+    monkeypatch.setenv("ARBOR_FAKE_MD", _intro_cards_json("What is life?", "What is a cell?"))
+    assert _run_generate(root, "--force")[0] == 0
+    graded_id = intro()["What is a cell?"]
+    stable_id = intro()["What is life?"]
+    _grade(root, graded_id)
+    assert graded_id in _progress_card_ids(root)
+
+    monkeypatch.setenv("ARBOR_FAKE_MD", _intro_cards_json("What is life?", "Define life."))
+    assert _run_generate(root, "--digests", "Bio/digests/intro.md")[0] == 0
+    scoped_only_id = intro()["Define life."]
+
+    monkeypatch.setenv("ARBOR_FAKE_MD", _intro_cards_json("What is life?", "What is a cell?"))
+    code, events = _run_generate(root, "--force")
+
+    assert code == 0, events[-1]
+    ids = set(intro().values())
+    assert ids == {graded_id, stable_id, scoped_only_id}
+    assert graded_id in {c["id"] for c in json.loads(path.read_text())["cards"]}
+    assert graded_id in _progress_card_ids(root)
+    assert _origins(root)[scoped_only_id] == "full"
+
+
+def test_whole_class_quiz_refresh_keeps_stable_full_questions_after_scoped_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    root = build_ui_overhaul_root(tmp_path).root
+    path = root / "Bio" / "study" / "quiz.json"
+
+    def intro() -> dict[str, str]:
+        pack = json.loads(path.read_text())
+        return {
+            q["prompt"]: q["id"]
+            for q in pack["questions"]
+            if q["source"]["digest"] == "digests/intro.md"
+        }
+
+    monkeypatch.setenv("ARBOR_FAKE_MD", _intro_quiz_json("Is life?", "Is a cell?"))
+    assert _run_generate_skill(root, "quiz", "--force")[0] == 0
+    kept = set(intro().values())
+    assert len(kept) == 2
+
+    monkeypatch.setenv("ARBOR_FAKE_MD", _intro_quiz_json("Is life?", "Define life?"))
+    assert _run_generate_skill(root, "quiz", "--digests", "Bio/digests/intro.md")[0] == 0
+    scoped_only_id = intro()["Define life?"]
+
+    monkeypatch.setenv("ARBOR_FAKE_MD", _intro_quiz_json("Is life?", "Is a cell?"))
+    code, events = _run_generate_skill(root, "quiz", "--force")
+
+    assert code == 0, events[-1]
+    assert set(intro().values()) == kept | {scoped_only_id}
+    assert _origins(root)[scoped_only_id] == "full"
 
 
 def test_digest_form_matches_full_run_ids_and_rejects_foreign_class(

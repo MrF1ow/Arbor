@@ -232,3 +232,121 @@ def test_generate_splits_oversized_input_per_digest_and_deduplicates(
         (git_repo / "Biology" / "study" / "flashcards.json").read_text()
     )
     assert len(artifact["cards"]) == 2
+
+
+# --- whole-class merge adopts a lecture's scoped cards -----------------------------
+
+_LEC_A = "digests/2026-08-15.md"
+_LEC_B = "digests/2026-08-16.md"
+
+
+def _merge_course(tmp_path: Path) -> Path:
+    course_dir = tmp_path / "Biology"
+    (course_dir / "digests").mkdir(parents=True)
+    for name in ("2026-08-15.md", "2026-08-16.md"):
+        (course_dir / "digests" / name).write_text("# Lecture\n\nBody.\n")
+    return course_dir
+
+
+def _merge(existing_cards, origins, fresh_cards, course_dir):
+    from arbor_worker.skills.flashcards import merge_full_run_deck
+
+    skill = _skill()
+    existing = skill.validate(_deck(*existing_cards))
+    fresh = skill.validate(_deck(*fresh_cards))
+    return existing, merge_full_run_deck(fresh, existing, origins, course_dir)
+
+
+def test_merge_scoped_card_suppresses_reworded_fresh_card_and_becomes_full(
+    tmp_path: Path,
+):
+    course_dir = _merge_course(tmp_path)
+    scoped = _card("What is a cell?", digest=_LEC_A)
+    existing, (merged, origins, added) = _merge(
+        [scoped],
+        {_skill().validate(_deck(scoped)).cards[0].id: "scoped"},
+        [_card("Define a cell.", digest=_LEC_A)],
+        course_dir,
+    )
+    scoped_id = existing.cards[0].id
+    assert [c.id for c in merged.cards] == [scoped_id]
+    assert origins[scoped_id] == "full"
+    assert added == []
+
+
+def test_merge_course_prefixed_scoped_citation_suppresses_unprefixed_fresh_card(
+    tmp_path: Path,
+):
+    course_dir = _merge_course(tmp_path)
+    scoped = _card("What is a cell?", digest=f"Biology/{_LEC_A}")
+    scoped_id = _skill().validate(_deck(scoped)).cards[0].id
+    _, (merged, origins, added) = _merge(
+        [scoped],
+        {scoped_id: "scoped"},
+        [_card("Define a cell.", digest=_LEC_A)],
+        course_dir,
+    )
+    assert [c.id for c in merged.cards] == [scoped_id]
+    assert origins[scoped_id] == "full"
+    assert added == []
+
+
+@pytest.mark.parametrize("origin", ["manual", "text"])
+def test_merge_manual_and_text_cards_do_not_suppress_fresh_cards(
+    tmp_path: Path, origin: str
+):
+    course_dir = _merge_course(tmp_path)
+    kept = _card("Kept note?", digest=_LEC_A)
+    kept_id = _skill().validate(_deck(kept)).cards[0].id
+    fresh = _card("Fresh card?", digest=_LEC_A)
+    fresh_id = _skill().validate(_deck(fresh)).cards[0].id
+    _, (merged, origins, added) = _merge(
+        [kept], {kept_id: origin}, [fresh], course_dir
+    )
+    assert {c.id for c in merged.cards} == {kept_id, fresh_id}
+    assert origins[kept_id] == origin
+    assert origins[fresh_id] == "full"
+    assert added == [fresh_id]
+
+
+def test_merge_scoped_card_leaves_other_lectures_fresh_cards_added(tmp_path: Path):
+    course_dir = _merge_course(tmp_path)
+    scoped = _card("What is a cell?", digest=_LEC_A)
+    scoped_id = _skill().validate(_deck(scoped)).cards[0].id
+    other = _card("What is mitosis?", digest=_LEC_B)
+    other_id = _skill().validate(_deck(other)).cards[0].id
+    _, (merged, origins, added) = _merge(
+        [scoped],
+        {scoped_id: "scoped"},
+        [_card("Define a cell.", digest=_LEC_A), other],
+        course_dir,
+    )
+    assert [c.id for c in merged.cards] == [scoped_id, other_id]
+    assert origins[scoped_id] == "full"
+    assert origins[other_id] == "full"
+    assert added == [other_id]
+
+
+def test_merge_covered_lecture_still_takes_fresh_cards_already_in_deck(
+    tmp_path: Path,
+):
+    course_dir = _merge_course(tmp_path)
+    stable = _card("What is a cell?", digest=_LEC_A)
+    scoped = _card("Define a cell.", digest=_LEC_A)
+    skill = _skill()
+    stable_id, scoped_id = (
+        c.id for c in skill.validate(_deck(stable, scoped)).cards
+    )
+    reworded = _card("Reworded cell?", digest=_LEC_A)
+    _, (merged, origins, added) = _merge(
+        [stable, scoped],
+        {scoped_id: "scoped"},
+        [stable, reworded],
+        course_dir,
+    )
+    # The stable full card keeps its id (and review progress); the scoped card is
+    # adopted; the reworded fresh card is a new near-duplicate and is dropped.
+    assert {c.id for c in merged.cards} == {stable_id, scoped_id}
+    assert origins[scoped_id] == "full"
+    assert origins[stable_id] == "full"
+    assert added == []

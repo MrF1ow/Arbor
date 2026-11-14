@@ -8,8 +8,10 @@ from arbor_worker.schemas.study.quiz import QuizPack, QuizQuestion
 from arbor_worker.skills.flashcards import (
     escape_prompt_data_content,
     KEEP_ORIGINS,
+    adopt_scoped_items,
     digest_allowed,
     digest_file_exists,
+    digest_file_rel,
     sanitize_prompt_single_line,
 )
 
@@ -89,9 +91,15 @@ def merge_full_run_pack(
                 continue
             kept.append(question)
     kept_ids = {question.id for question in kept}
+    covered = adopt_scoped_items(course, kept, new_origins)
     fresh_questions: list[QuizQuestion] = []
     for question in fresh.questions:
         if question.id in kept_ids:
+            continue
+        if (
+            question.id not in prior_ids
+            and digest_file_rel(course, question.source.digest) in covered
+        ):
             continue
         if (
             allowed_norm is not None

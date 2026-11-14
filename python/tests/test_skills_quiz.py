@@ -248,3 +248,125 @@ def test_generate_splits_oversized_input_per_digest_and_deduplicates(
     assert len(requests) == 2
     artifact = json.loads((git_repo / "Biology" / "study" / "quiz.json").read_text())
     assert len(artifact["questions"]) == 2
+
+
+# --- whole-class merge adopts a lecture's scoped questions -------------------------
+
+_LEC_A = "digests/2026-08-15.md"
+_LEC_B = "digests/2026-08-16.md"
+
+
+def _merge_course(tmp_path: Path) -> Path:
+    course_dir = tmp_path / "Biology"
+    (course_dir / "digests").mkdir(parents=True)
+    for name in ("2026-08-15.md", "2026-08-16.md"):
+        (course_dir / "digests" / name).write_text("# Lecture\n\nBody.\n")
+    return course_dir
+
+
+def _qid(prompt: str, digest: str) -> str:
+    return _skill().validate(_pack(_question(prompt, digest=digest))).questions[0].id
+
+
+def _merge(existing_questions, origins, fresh_questions, course_dir):
+    from arbor_worker.skills.quiz import merge_full_run_pack
+
+    skill = _skill()
+    existing = skill.validate(_pack(*existing_questions))
+    fresh = skill.validate(_pack(*fresh_questions))
+    return merge_full_run_pack(fresh, existing, origins, course_dir)
+
+
+def test_merge_scoped_question_suppresses_reworded_fresh_and_becomes_full(
+    tmp_path: Path,
+):
+    course_dir = _merge_course(tmp_path)
+    scoped_id = _qid("Where does glycolysis occur?", _LEC_A)
+    merged, origins, added = _merge(
+        [_question("Where does glycolysis occur?", digest=_LEC_A)],
+        {scoped_id: "scoped"},
+        [_question("Which site hosts glycolysis?", digest=_LEC_A)],
+        course_dir,
+    )
+    assert [q.id for q in merged.questions] == [scoped_id]
+    assert origins[scoped_id] == "full"
+    assert added == []
+
+
+def test_merge_course_prefixed_scoped_citation_suppresses_unprefixed_fresh(
+    tmp_path: Path,
+):
+    course_dir = _merge_course(tmp_path)
+    prefixed = f"Biology/{_LEC_A}"
+    scoped_id = _qid("Where does glycolysis occur?", prefixed)
+    merged, origins, added = _merge(
+        [_question("Where does glycolysis occur?", digest=prefixed)],
+        {scoped_id: "scoped"},
+        [_question("Which site hosts glycolysis?", digest=_LEC_A)],
+        course_dir,
+    )
+    assert [q.id for q in merged.questions] == [scoped_id]
+    assert origins[scoped_id] == "full"
+    assert added == []
+
+
+@pytest.mark.parametrize("origin", ["manual", "text"])
+def test_merge_manual_and_text_questions_do_not_suppress_fresh(
+    tmp_path: Path, origin: str
+):
+    course_dir = _merge_course(tmp_path)
+    kept_id = _qid("Kept note?", _LEC_A)
+    fresh_id = _qid("Fresh question?", _LEC_A)
+    merged, origins, added = _merge(
+        [_question("Kept note?", digest=_LEC_A)],
+        {kept_id: origin},
+        [_question("Fresh question?", digest=_LEC_A)],
+        course_dir,
+    )
+    assert {q.id for q in merged.questions} == {kept_id, fresh_id}
+    assert origins[kept_id] == origin
+    assert origins[fresh_id] == "full"
+    assert added == [fresh_id]
+
+
+def test_merge_scoped_question_leaves_other_lectures_fresh_added(tmp_path: Path):
+    course_dir = _merge_course(tmp_path)
+    scoped_id = _qid("Where does glycolysis occur?", _LEC_A)
+    other_id = _qid("What does mitosis produce?", _LEC_B)
+    merged, origins, added = _merge(
+        [_question("Where does glycolysis occur?", digest=_LEC_A)],
+        {scoped_id: "scoped"},
+        [
+            _question("Which site hosts glycolysis?", digest=_LEC_A),
+            _question("What does mitosis produce?", digest=_LEC_B),
+        ],
+        course_dir,
+    )
+    assert [q.id for q in merged.questions] == [scoped_id, other_id]
+    assert origins[scoped_id] == "full"
+    assert origins[other_id] == "full"
+    assert added == [other_id]
+
+
+def test_merge_covered_lecture_still_takes_fresh_questions_already_in_pack(
+    tmp_path: Path,
+):
+    course_dir = _merge_course(tmp_path)
+    stable_id = _qid("Where does glycolysis occur?", _LEC_A)
+    scoped_id = _qid("What makes ATP?", _LEC_A)
+    merged, origins, added = _merge(
+        [
+            _question("Where does glycolysis occur?", digest=_LEC_A),
+            _question("What makes ATP?", digest=_LEC_A),
+        ],
+        {scoped_id: "scoped"},
+        [
+            _question("Where does glycolysis occur?", digest=_LEC_A),
+            _question("Which site hosts glycolysis?", digest=_LEC_A),
+        ],
+        course_dir,
+    )
+    assert {q.id for q in merged.questions} == {stable_id, scoped_id}
+    assert origins[scoped_id] == "full"
+    assert origins[stable_id] == "full"
+    assert added == []
