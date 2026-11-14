@@ -203,7 +203,7 @@ export function WeakTopicsCard({
       ) : (
         <ul className="mt-1">
           {topics.slice(0, 4).map((topic) => (
-            <li key={`${topic.root}::${topic.digest}::${topic.heading ?? topic.label}`} className={cn(ROW, "py-2")}>
+            <li key={`${topic.root}::${topic.digest}::${topic.heading ?? ""}::${topic.label}`} className={cn(ROW, "py-2")}>
               <CourseSwatch meta={meta[topic.root]} course={topic.course} />
               <span className="min-w-0 flex-1 truncate text-small text-foreground">{topic.label}</span>
               {Number.isFinite(topic.wrong) && Number.isFinite(topic.correct) ? (

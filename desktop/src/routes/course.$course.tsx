@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { BookOpen } from "lucide-react";
 import { useQueries } from "@tanstack/react-query";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { EmptyState } from "~/components/app/empty-state";
@@ -59,7 +59,16 @@ function CourseLayout() {
       enabled: missing && fresh && canUseDesktopIpc(),
     })),
   });
-  const foundRoot = missing && fresh ? otherRoots.find((_, i) => lookups[i]?.data?.includes(course)) : undefined;
+  // The library this class page was opened in. When something else switches library while the page
+  // is still mounted (the sidebar's library header, or a cross-library link that switches before it
+  // navigates), the page is about to be left: never switch back to the class's own library then.
+  const [home, setHome] = useState<{ course: string; root: string } | null>(null);
+  if (activeRoot && home?.course !== course) {
+    setHome({ course, root: activeRoot });
+  }
+  const switchedAway = activeRoot != null && home != null && home.course === course && home.root !== activeRoot;
+  const foundRoot =
+    missing && fresh && !switchedAway ? otherRoots.find((_, i) => lookups[i]?.data?.includes(course)) : undefined;
   const searching = missing && (!fresh || (foundRoot === undefined && lookups.some((q) => q.isPending)));
   const { mutateAsync: switchRoot } = useSwitchActiveRootMutation();
   const switching = useRef<string | null>(null);
@@ -72,13 +81,15 @@ function CourseLayout() {
       return;
     }
     switching.current = foundRoot;
-    switchRoot(foundRoot).catch((error: unknown) => {
-      switching.current = null;
-      toast.error(String(error));
-    });
-  }, [foundRoot, switchRoot]);
+    switchRoot(foundRoot)
+      .then(() => setHome({ course, root: foundRoot }))
+      .catch((error: unknown) => {
+        switching.current = null;
+        toast.error(String(error));
+      });
+  }, [course, foundRoot, switchRoot]);
 
-  if (missing && (foundRoot !== undefined || searching)) {
+  if (missing && (foundRoot !== undefined || searching || switchedAway)) {
     // Looking in the other libraries, or switching to the one that has it.
     return <div className="flex min-h-0 flex-1" />;
   }
