@@ -13,7 +13,6 @@ const customSpacing = [
   "icon-sm",
   "icon",
   "palette-top",
-  "palette-list",
   "jobs-pane",
 ] as const;
 
@@ -52,7 +51,7 @@ export const twMerge = extendTailwindMerge({
       w: [{ w: [...customSpacing, ...customContainers] }],
       h: [{ h: [...customSpacing] }],
       "min-h": [{ "min-h": ["row"] }],
-      "max-h": [{ "max-h": ["palette-list", "jobs-pane"] }],
+      "max-h": [{ "max-h": ["jobs-pane"] }],
       top: [{ top: [...customSpacing] }],
       size: [{ size: ["icon-sm", "icon", "control", "control-lg"] }],
       z: [{ z: [...customZIndex] }],

@@ -119,7 +119,7 @@ describe("settings", () => {
 
   it("opens Settings on Mod+,", async () => {
     const user = userEvent.setup();
-    const { router } = await renderAppAtRoute("/course/cell-biology/notes");
+    const { router } = await renderAppAtRoute("/course/cell-biology/overview");
     await waitFor(() => {
       expect(screen.getAllByText("Course overview").length).toBeGreaterThan(0);
     });
@@ -371,7 +371,7 @@ describe("settings", () => {
 
   it("does not call check_auth when opening settings within the auth cache window", async () => {
     const providerId = fixtureSettings.provider_id;
-    const { router, queryClient } = await renderAppAtRoute("/course/cell-biology/notes");
+    const { router, queryClient } = await renderAppAtRoute("/course/cell-biology/overview");
     await waitForAuthCached(queryClient, providerId);
     clearMockIpcLog();
 
@@ -538,7 +538,7 @@ describe("settings", () => {
 
   it("does not call check_auth when opening General within the auth cache window", async () => {
     const providerId = fixtureSettings.provider_id;
-    const { router, queryClient } = await renderAppAtRoute("/course/cell-biology/notes");
+    const { router, queryClient } = await renderAppAtRoute("/course/cell-biology/overview");
     await waitForAuthCached(queryClient, providerId);
     clearMockIpcLog();
     await router.navigate({ to: "/settings/general" });

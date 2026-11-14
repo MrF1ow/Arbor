@@ -2,9 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   resolveSearchHitNavigation,
-  searchHitItemValue,
-  searchHitKindLabel,
-  searchHitMeta,
   searchHitRelativePath,
 } from "~/domain/search-hit";
 import type { SearchHit } from "~/domain/types";
@@ -19,24 +16,6 @@ const digestHit: SearchHit = {
   source_path: null,
 };
 
-describe("searchHitMeta", () => {
-  it("uses course display name, path, and page range", () => {
-    expect(searchHitMeta(digestHit)).toBe(
-      "Cell Biology · cell-biology/digests/2026-09-12-membranes.md · p.3-5",
-    );
-  });
-
-  it("omits page suffix when page_range is null", () => {
-    expect(
-      searchHitMeta({
-        ...digestHit,
-        page_range: null,
-        path: "cell-biology/course.md",
-      }),
-    ).toBe("Cell Biology · cell-biology/course.md");
-  });
-});
-
 describe("searchHitRelativePath", () => {
   it("prefixes bare filenames with the course slug", () => {
     expect(searchHitRelativePath({ ...digestHit, path: "notes.md" })).toBe(
@@ -48,22 +27,6 @@ describe("searchHitRelativePath", () => {
     expect(searchHitRelativePath(digestHit)).toBe(
       "cell-biology/digests/2026-09-12-membranes.md",
     );
-  });
-});
-
-describe("searchHitItemValue", () => {
-  it("includes course, path, and index for cmdk uniqueness", () => {
-    expect(searchHitItemValue(digestHit, 0)).toBe(
-      "cell-biology:cell-biology/digests/2026-09-12-membranes.md:0",
-    );
-    expect(searchHitItemValue(digestHit, 1)).not.toBe(searchHitItemValue(digestHit, 0));
-  });
-});
-
-describe("searchHitKindLabel", () => {
-  it("maps known kinds to display labels", () => {
-    expect(searchHitKindLabel("course_md")).toBe("Course");
-    expect(searchHitKindLabel("plan")).toBe("Plan");
   });
 });
 

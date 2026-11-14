@@ -88,7 +88,6 @@ describe("search palette", { timeout: 15000 }, () => {
       sidebarTouched: true,
       logOpen: false,
       logHeight: 200,
-      notesIndexOpen: true,
       searchSemantic: false,
       lastCourse: null,
     });
@@ -104,7 +103,7 @@ describe("search palette", { timeout: 15000 }, () => {
 
   it("anchors the palette below the header with a scrollable results list", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/notes", searchFixtures);
+    await renderAppAtRoute("/course/cell-biology/overview", searchFixtures);
     await waitForOverview();
     await openSearchPalette(user);
     const dialog = searchDialog();
@@ -118,7 +117,7 @@ describe("search palette", { timeout: 15000 }, () => {
 
   it("opens with Mod+K and closes with Escape", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/notes", searchFixtures);
+    await renderAppAtRoute("/course/cell-biology/overview", searchFixtures);
     await waitForOverview();
     await openSearchPalette(user);
     await user.keyboard("{Escape}");
@@ -129,7 +128,7 @@ describe("search palette", { timeout: 15000 }, () => {
 
   it("opens with Mod+K while an input is focused", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/notes", searchFixtures);
+    await renderAppAtRoute("/course/cell-biology/overview", searchFixtures);
     await waitForOverview();
     await user.click(screen.getByRole("button", { name: /Add class/i }));
     const input = await screen.findByLabelText(/Class name/i);
@@ -142,7 +141,7 @@ describe("search palette", { timeout: 15000 }, () => {
 
   it("opens from the top bar search field", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/notes", searchFixtures);
+    await renderAppAtRoute("/course/cell-biology/overview", searchFixtures);
     await waitForOverview();
     await user.click(screen.getByRole("button", { name: searchButtonName }));
     await waitFor(() => {
@@ -152,7 +151,7 @@ describe("search palette", { timeout: 15000 }, () => {
 
   it("debounces search_knowledge to one call per library after 250ms", async () => {
     clearMockIpcLog();
-    await renderAppAtRoute("/course/cell-biology/notes", searchFixtures);
+    await renderAppAtRoute("/course/cell-biology/overview", searchFixtures);
     await waitForOverview();
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const timedUser = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
@@ -175,7 +174,7 @@ describe("search palette", { timeout: 15000 }, () => {
 
   it("uses search_semantic when semantic is enabled and persists the preference", async () => {
     clearMockIpcLog();
-    await renderAppAtRoute("/course/cell-biology/notes", searchFixtures);
+    await renderAppAtRoute("/course/cell-biology/overview", searchFixtures);
     await waitForOverview();
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const timedUser = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
@@ -212,7 +211,7 @@ describe("search palette", { timeout: 15000 }, () => {
     );
     useUiStore.persist.rehydrate();
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/notes", searchFixtures);
+    await renderAppAtRoute("/course/cell-biology/overview", searchFixtures);
     await waitForOverview();
     await openSearchPalette(user);
     expect(screen.getByRole("switch", { name: /Semantic search/i })).toBeChecked();
@@ -220,7 +219,7 @@ describe("search palette", { timeout: 15000 }, () => {
 
   it("re-runs semantic search on toggle without retyping", async () => {
     clearMockIpcLog();
-    await renderAppAtRoute("/course/cell-biology/notes", searchFixtures);
+    await renderAppAtRoute("/course/cell-biology/overview", searchFixtures);
     await waitForOverview();
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const timedUser = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
@@ -241,7 +240,7 @@ describe("search palette", { timeout: 15000 }, () => {
 
   it("re-runs semantic search immediately when toggled inside the debounce window", async () => {
     clearMockIpcLog();
-    await renderAppAtRoute("/course/cell-biology/notes", searchFixtures);
+    await renderAppAtRoute("/course/cell-biology/overview", searchFixtures);
     await waitForOverview();
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const timedUser = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
@@ -261,7 +260,7 @@ describe("search palette", { timeout: 15000 }, () => {
     const slowPromise = new Promise((resolve) => {
       slowResolve = resolve;
     });
-    await renderAppAtRoute("/course/cell-biology/notes", {
+    await renderAppAtRoute("/course/cell-biology/overview", {
       search_knowledge: (args) => {
         const { query, root } = args as { query: string; root: string };
         if (root !== FIXTURE_ROOT_FALL) {
@@ -318,14 +317,14 @@ describe("search palette", { timeout: 15000 }, () => {
 
   it("shows empty-query copy on the notes route", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/notes", searchFixtures);
+    await renderAppAtRoute("/course/cell-biology/overview", searchFixtures);
     await waitForOverview();
     await openSearchPalette(user);
     expect(within(searchDialog()).getByText("Type to search every class")).toBeInTheDocument();
   });
 
   it("shows no-results copy for zzz", async () => {
-    await renderAppAtRoute("/course/cell-biology/notes", searchFixtures);
+    await renderAppAtRoute("/course/cell-biology/overview", searchFixtures);
     await waitForOverview();
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const timedUser = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
@@ -357,7 +356,7 @@ describe("search palette", { timeout: 15000 }, () => {
 
   it("groups hits as Digests, Cards and Concepts across every class, with a count footer", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/notes", searchFixtures);
+    await renderAppAtRoute("/course/cell-biology/overview", searchFixtures);
     await waitForOverview();
     await openSearchPalette(user);
     const dialog = within(searchDialog());
@@ -386,7 +385,7 @@ describe("search palette", { timeout: 15000 }, () => {
 
   it("counts a single result in a single class in the singular", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/notes", searchFixtures);
+    await renderAppAtRoute("/course/cell-biology/overview", searchFixtures);
     await waitForOverview();
     await openSearchPalette(user);
     await searchFor(user, "alkanes");
@@ -397,7 +396,7 @@ describe("search palette", { timeout: 15000 }, () => {
 
   it("puts the class overview, plan and other hits in an Overview group, last, with their kind in the meta", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/notes", searchFixtures);
+    await renderAppAtRoute("/course/cell-biology/overview", searchFixtures);
     await waitForOverview();
     await openSearchPalette(user);
     const dialog = within(searchDialog());
@@ -415,7 +414,7 @@ describe("search palette", { timeout: 15000 }, () => {
 
   it("renders duplicate semantic hits on the same path with distinct selection", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/notes", searchFixtures);
+    await renderAppAtRoute("/course/cell-biology/overview", searchFixtures);
     await waitForOverview();
     await openSearchPalette(user);
     await user.click(screen.getByRole("switch", { name: /Semantic search/i }));
@@ -431,7 +430,7 @@ describe("search palette", { timeout: 15000 }, () => {
 
   it("closes the palette with Mod+K from the search input", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/notes", searchFixtures);
+    await renderAppAtRoute("/course/cell-biology/overview", searchFixtures);
     await waitForOverview();
     await openSearchPalette(user);
     const input = within(searchDialog()).getByLabelText("Search digests");
@@ -444,7 +443,7 @@ describe("search palette", { timeout: 15000 }, () => {
 
   it("focuses and selects existing text when reopened", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/notes", searchFixtures);
+    await renderAppAtRoute("/course/cell-biology/overview", searchFixtures);
     await waitForOverview();
     await openSearchPalette(user);
     const input = within(searchDialog()).getByLabelText("Search digests");
@@ -462,7 +461,7 @@ describe("search palette", { timeout: 15000 }, () => {
 
   it("opens digest hits on Enter and the class overview on click, through classPath", async () => {
     const user = userEvent.setup();
-    const { router } = await renderAppAtRoute("/course/cell-biology/notes", searchFixtures);
+    const { router } = await renderAppAtRoute("/course/cell-biology/overview", searchFixtures);
     await waitForOverview();
     await openSearchPalette(user);
     await searchFor(user, "membrane");
@@ -492,7 +491,7 @@ describe("search palette", { timeout: 15000 }, () => {
 
   it("opens card hits on Practice › Cards and concept hits on the Map", async () => {
     const user = userEvent.setup();
-    const { router } = await renderAppAtRoute("/course/cell-biology/notes", searchFixtures);
+    const { router } = await renderAppAtRoute("/course/cell-biology/overview", searchFixtures);
     await waitForOverview();
     await openSearchPalette(user);
     await searchFor(user, "diffusion");
@@ -509,7 +508,7 @@ describe("search palette", { timeout: 15000 }, () => {
 
   async function openHitAndRead(query: string, name: RegExp) {
     const user = userEvent.setup();
-    const { router } = await renderAppAtRoute("/course/cell-biology/notes", searchFixtures);
+    const { router } = await renderAppAtRoute("/course/cell-biology/overview", searchFixtures);
     await waitForOverview();
     // The Cards and Map views clear their param once they have focused the item, so record every location.
     const searches: Record<string, string>[] = [];
@@ -547,7 +546,7 @@ describe("search palette", { timeout: 15000 }, () => {
 
   it("opens a hit in another library by switching to it first (Q10)", async () => {
     const user = userEvent.setup();
-    const { router } = await renderAppAtRoute("/course/cell-biology/notes", searchFixtures);
+    const { router } = await renderAppAtRoute("/course/cell-biology/overview", searchFixtures);
     await waitForOverview();
     await openSearchPalette(user);
     await searchFor(user, "diffusion");
@@ -565,7 +564,7 @@ describe("search palette", { timeout: 15000 }, () => {
 
   it("opens plan hits on the overview", async () => {
     const user = userEvent.setup();
-    const { router } = await renderAppAtRoute("/course/cell-biology/notes", searchFixtures);
+    const { router } = await renderAppAtRoute("/course/cell-biology/overview", searchFixtures);
     await waitForOverview();
     await openSearchPalette(user);
     await searchFor(user, "plan");
@@ -578,7 +577,7 @@ describe("search palette", { timeout: 15000 }, () => {
 
   it("shows a toast for unknown paths", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/notes", searchFixtures);
+    await renderAppAtRoute("/course/cell-biology/overview", searchFixtures);
     await waitForOverview();
     await openSearchPalette(user);
     await searchFor(user, "misc");
@@ -593,7 +592,7 @@ describe("search palette", { timeout: 15000 }, () => {
 
   it("switches semantic search with the Semantic chip and with Tab", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/notes", searchFixtures);
+    await renderAppAtRoute("/course/cell-biology/overview", searchFixtures);
     await waitForOverview();
     await openSearchPalette(user);
     const chip = screen.getByRole("switch", { name: /Semantic search/i });
@@ -610,7 +609,7 @@ describe("search palette", { timeout: 15000 }, () => {
 
   it("keeps the other libraries' hits when one library's search fails", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/notes", {
+    await renderAppAtRoute("/course/cell-biology/overview", {
       ...searchFixtures,
       search_knowledge: (args) => {
         if ((args as { root: string }).root === FIXTURE_ROOT_FALL) {
@@ -630,7 +629,7 @@ describe("search palette", { timeout: 15000 }, () => {
 
   it("names the library whose search failed while other libraries return hits", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/notes", {
+    await renderAppAtRoute("/course/cell-biology/overview", {
       ...searchFixtures,
       search_knowledge: (args) => {
         if ((args as { root: string }).root === FIXTURE_ROOT_FALL) {
@@ -655,7 +654,7 @@ describe("search palette", { timeout: 15000 }, () => {
 
   it("shows no failed-library notice when every library answers", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/notes", searchFixtures);
+    await renderAppAtRoute("/course/cell-biology/overview", searchFixtures);
     await waitForOverview();
     await openSearchPalette(user);
     await searchFor(user, "diffusion");
@@ -666,7 +665,7 @@ describe("search palette", { timeout: 15000 }, () => {
   });
 
   it("shows a destructive error row when search fails", async () => {
-    await renderAppAtRoute("/course/cell-biology/notes", {
+    await renderAppAtRoute("/course/cell-biology/overview", {
       search_knowledge: () => {
         throw new Error("Search backend unavailable");
       },
@@ -688,7 +687,7 @@ describe("search palette", { timeout: 15000 }, () => {
     const pending = new Promise((resolve) => {
       resolveSearch = resolve;
     });
-    await renderAppAtRoute("/course/cell-biology/notes", {
+    await renderAppAtRoute("/course/cell-biology/overview", {
       search_knowledge: () => pending,
     });
     await waitForOverview();
@@ -706,7 +705,7 @@ describe("search palette", { timeout: 15000 }, () => {
 
   it("clears query and results when the active root changes while open", async () => {
     const user = userEvent.setup();
-    const { queryClient } = await renderAppAtRoute("/course/cell-biology/notes", searchFixtures);
+    const { queryClient } = await renderAppAtRoute("/course/cell-biology/overview", searchFixtures);
     await waitForOverview();
     await openSearchPalette(user);
     const dialog = searchDialog();
@@ -730,7 +729,7 @@ describe("search palette", { timeout: 15000 }, () => {
 
   it("clears query when the active root changes after close", async () => {
     const user = userEvent.setup();
-    const { router, queryClient } = await renderAppAtRoute("/course/cell-biology/notes", searchFixtures);
+    const { router, queryClient } = await renderAppAtRoute("/course/cell-biology/overview", searchFixtures);
     await waitForOverview();
     await openSearchPalette(user);
     const dialog = searchDialog();

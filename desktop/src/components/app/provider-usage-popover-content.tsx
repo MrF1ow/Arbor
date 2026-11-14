@@ -2,16 +2,8 @@ import { Link } from "@tanstack/react-router";
 import { Gauge, RotateCw, TrendingDown, TrendingUp } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 
-import { useNow } from "~/hooks/use-now";
-
 import { IconButton } from "~/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "~/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "~/components/ui/tooltip";
-import { PROVIDER_FALLBACK } from "~/domain/provider";
 import type { LimitPace, UsageLimits, UsageWindow } from "~/domain/usage";
 import {
   formatCheckedAgo,
@@ -245,90 +237,6 @@ export function UsageLimitsBody({ limits, now }: { limits: UsageLimits; now: num
       {limits.windows.map((window) => (
         <UsageWindowRow key={window.id} window={window} now={now} />
       ))}
-    </div>
-  );
-}
-
-function OtherProviderRow({
-  providerId,
-  label,
-  popoverOpen,
-  now,
-}: {
-  providerId: string;
-  label: string;
-  popoverOpen: boolean;
-  now: number;
-}) {
-  const auth = useAuth(providerId);
-  if (!auth.data?.authenticated) {
-    return null;
-  }
-  return (
-    <Collapsible>
-      <CollapsibleTrigger className="flex w-full items-center justify-between py-1 text-xs text-muted-foreground hover:text-foreground">
-        <span>{label}</span>
-        <span className="text-muted-foreground">Show</span>
-      </CollapsibleTrigger>
-      <CollapsibleContent className="pt-2">
-        <UsagePanelBody
-          providerId={providerId}
-          providerLabel={label}
-          modelLabel="—"
-          enabled={popoverOpen}
-          refetchInterval={false}
-          now={now}
-        />
-      </CollapsibleContent>
-    </Collapsible>
-  );
-}
-
-export function ProviderUsagePopoverContent({
-  effectiveProviderId,
-  effectiveLabel,
-  modelLabel,
-  open,
-}: {
-  effectiveProviderId: string;
-  effectiveLabel: string;
-  modelLabel: string;
-  open: boolean;
-}) {
-  const now = useNow(60_000);
-  const auth = useAuth(effectiveProviderId);
-  const signedIn = auth.data?.authenticated === true;
-  const effectiveEnabled = open && signedIn;
-  const refetchInterval =
-    effectiveEnabled ? 5 * 60_000 : false;
-
-  const others = PROVIDER_FALLBACK.filter((row) => row.id !== effectiveProviderId);
-
-  return (
-    <div className="flex max-h-96 w-80 flex-col gap-3 overflow-y-auto p-3">
-      <h2 className="sr-only">{effectiveLabel}</h2>
-      <UsagePanelBody
-        providerId={effectiveProviderId}
-        providerLabel={effectiveLabel}
-        modelLabel={modelLabel}
-        enabled={effectiveEnabled}
-        refetchInterval={refetchInterval}
-        now={now}
-      />
-      <div className="border-t border-border pt-2">
-        <p className="mb-1 text-xs font-medium text-muted-foreground">Other providers</p>
-        <div className="flex flex-col gap-1">
-          {others.map((row) => (
-            <OtherProviderRow
-              key={row.id}
-              providerId={row.id}
-              label={row.label}
-              popoverOpen={open}
-              now={now}
-            />
-          ))}
-        </div>
-      </div>
     </div>
   );
 }

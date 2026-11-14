@@ -82,7 +82,7 @@ export function AskPage() {
     });
   }, [course, thread, mode, prompt, threadsQuery.isFetched, threadsQuery.data, tickedLectures, navigate]);
 
-  // Search changes stay on the current path (the old `/chat` path included) and are made against
+  // Search changes stay on the current path and are made against
   // the URL as it is now: a send moves the chat into `?thread=` before these run.
   const onSearchClear = () => {
     allowAutoSelectRef.current = false;

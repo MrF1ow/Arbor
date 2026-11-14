@@ -8,6 +8,9 @@ import { useSettings } from "~/lib/queries/settings";
 
 export type OpenClassTarget = ClassTab | { tab: "read"; digest: string };
 
+/** The params a class link can carry: the ticked lectures, plus the item a Search hit opens. */
+export type OpenClassSearch = ClassSearch & { card?: string; concept?: string; heading?: string };
+
 /**
  * Open a class view from anywhere, including a class in another library (Q10). `/course/$course`
  * only looks in the active library, so when `root` is not the active one the library is switched
@@ -22,7 +25,7 @@ export function useOpenClass() {
   const activeRoot = pickActiveRoot(settings.data);
 
   return useCallback(
-    async (root: string, course: string, to: OpenClassTarget, search?: ClassSearch) => {
+    async (root: string, course: string, to: OpenClassTarget, search?: OpenClassSearch) => {
       if (root !== activeRoot) {
         await mutateAsync(root);
       }

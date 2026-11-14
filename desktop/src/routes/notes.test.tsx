@@ -2,8 +2,6 @@ import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/re
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import overviewSource from "~/components/notes/course-overview.tsx?raw";
-import notesDigestRoute from "~/routes/course.$course.notes.$digest.tsx?raw";
-import notesIndexRoute from "~/routes/course.$course.notes.index.tsx?raw";
 import overviewRoute from "~/routes/course.$course.overview.tsx?raw";
 import readRoute from "~/routes/course.$course.read.$digest.tsx?raw";
 import { clearTauriMocks } from "~/test/mock-ipc";
@@ -221,7 +219,6 @@ describe("class workspace", { timeout: 15000 }, () => {
       sidebarTouched: true,
       logOpen: false,
       logHeight: 200,
-      notesIndexOpen: true,
       lastCourse: null,
     });
     useLectureSelectionStore.setState({ byClass: {} });
@@ -652,8 +649,8 @@ describe("class workspace", { timeout: 15000 }, () => {
       }
     });
 
-    it("both old notes routes and the new routes import the page components, not each other's route files", () => {
-      const sources = { notesIndexRoute, notesDigestRoute, overviewRoute, readRoute };
+    it("the overview and read routes import the page components, not each other's route files", () => {
+      const sources = { overviewRoute, readRoute };
       for (const [name, source] of Object.entries(sources)) {
         expect(source, name).not.toMatch(/from "~\/routes\/course\.\$course\.(overview|read)/);
       }

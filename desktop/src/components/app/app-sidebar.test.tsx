@@ -16,7 +16,6 @@ describe("app sidebar root groups", () => {
       sidebarTouched: true,
       logOpen: false,
       logHeight: 200,
-      notesIndexOpen: true,
       lastCourse: null,
     });
     vi.spyOn(window, "innerWidth", "get").mockReturnValue(1280);
@@ -29,7 +28,7 @@ describe("app sidebar root groups", () => {
   });
 
   it("uses fixed h-6 root group header buttons without h-auto", async () => {
-    await renderAppAtRoute("/course/cell-biology/notes");
+    await renderAppAtRoute("/course/cell-biology/overview");
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /Fall 2026/i })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /Shared · Study group/i })).toBeInTheDocument();
@@ -42,7 +41,7 @@ describe("app sidebar root groups", () => {
   });
 
   it("scopes the hover swap of due count and Change icon to its own row", async () => {
-    await renderAppAtRoute("/course/cell-biology/notes");
+    await renderAppAtRoute("/course/cell-biology/overview");
     await screen.findByText("Cell Biology");
     const { change, row, count } = await waitFor(() => {
       const button = screen.getAllByRole("button", { name: "Change icon" })[0]!;

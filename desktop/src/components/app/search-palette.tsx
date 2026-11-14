@@ -14,8 +14,7 @@ import { resolveSearchHitNavigation } from "~/domain/search-hit";
 import type { SearchHit } from "~/domain/types";
 import { invoke } from "~/lib/ipc";
 import { pickActiveRoot } from "~/lib/knowledge-root";
-import { useOpenClass, type OpenClassTarget } from "~/lib/open-class";
-import type { ClassSearch } from "~/lib/class-path";
+import { useOpenClass, type OpenClassSearch, type OpenClassTarget } from "~/lib/open-class";
 import { useCourseMeta } from "~/lib/queries/course-meta";
 import { qk } from "~/lib/queries/keys";
 import { useSettings } from "~/lib/queries/settings";
@@ -31,9 +30,6 @@ export type PaletteHit = SearchHit & { item_id?: string | null };
 
 /** A hit and the library it came from: the palette searches every library. */
 export type RootHit = { root: string; hit: PaletteHit };
-
-/** The search params a hit can open its class view with (`?card=`, `?concept=`, `?heading=`). */
-type HitSearch = ClassSearch & { card?: string; concept?: string; heading?: string };
 
 type GroupKey = "digests" | "cards" | "concepts" | "overview";
 
@@ -226,7 +222,7 @@ function SearchPaletteBody({
   const openHit = ({ root, hit }: RootHit) => {
     onOpenChange(false);
     let to: OpenClassTarget;
-    let searchParams: HitSearch | undefined;
+    let searchParams: OpenClassSearch | undefined;
     let notice: string | null = null;
     switch (hit.kind) {
       case "card":

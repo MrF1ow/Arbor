@@ -797,7 +797,7 @@ Goal:
 
 Collaboration.
 
-**Status:** Version 5 shipped as package `0.5.0` on 2026-10-18. Current package is `0.5.35`. Package `0.5.2` was performance and study-loop responsiveness (issue #97). Linux live run recorded (boxes C1–C6; the skill TSV run stays open, issue #70). Tag `v0.5.35`. Version 4 is closed at `v0.4.0`. Mac proof is optional.
+**Status:** Version 5 shipped as package `0.5.0` on 2026-10-18. Current package is `0.6.0`. Package `0.5.2` was performance and study-loop responsiveness (issue #97). Linux live run recorded (boxes C1–C6; the skill TSV run stays open, issue #70). `v0.6.0` (Version 6, the new UI) is tagged after its Linux live run. Version 4 is closed at `v0.4.0`. Mac proof is optional.
 
 Features
 

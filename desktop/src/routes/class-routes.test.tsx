@@ -73,10 +73,4 @@ describe("class routes", () => {
       expect(router.state.location.pathname).toBe(classHref("cell-biology", tab, digest));
     }
   });
-
-  it("the old class routes still render beside the new ones", async () => {
-    const { router } = await renderAppAtRoute("/course/cell-biology/notes");
-    await screen.findByText(/Quiz accuracy/i);
-    expect(router.state.location.pathname).toBe("/course/cell-biology/notes");
-  });
 });

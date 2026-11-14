@@ -9,10 +9,7 @@ export type WorkspaceLocation = {
   practiceTab: "cards" | "quiz" | null;
 };
 
-/**
- * Which workspace view a class path is. The old class paths (`notes`, `flashcards`, `quiz`,
- * `graph`, `chat`) stay routable until they are deleted, so they map to the same views.
- */
+/** Which workspace view a class path is. */
 export function workspaceLocation(pathname: string): WorkspaceLocation {
   const parts = pathname.split("/").filter(Boolean);
   const [, , segment, rest] = parts;
@@ -20,21 +17,11 @@ export function workspaceLocation(pathname: string): WorkspaceLocation {
   switch (segment) {
     case "read":
       return { mode: "read", digestSlug: slug, practiceTab: null };
-    case "notes":
-      return slug
-        ? { mode: "read", digestSlug: slug, practiceTab: null }
-        : { mode: "overview", digestSlug: null, practiceTab: null };
     case "map":
-    case "graph":
       return { mode: "map", digestSlug: null, practiceTab: null };
     case "practice":
       return { mode: "practice", digestSlug: null, practiceTab: rest === "quiz" ? "quiz" : "cards" };
-    case "flashcards":
-      return { mode: "practice", digestSlug: null, practiceTab: "cards" };
-    case "quiz":
-      return { mode: "practice", digestSlug: null, practiceTab: "quiz" };
     case "ask":
-    case "chat":
       return { mode: "ask", digestSlug: null, practiceTab: null };
     default:
       return { mode: "overview", digestSlug: null, practiceTab: null };

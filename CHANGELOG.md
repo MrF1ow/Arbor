@@ -2,13 +2,25 @@
 
 Package version for the worker, desktop, and Tauri app. See [Version numbering](PROJECT.md#version-numbering) in `PROJECT.md`.
 
-**Version 2** is complete at `v0.2.0`. **Version 3** at `v0.3.0`. **Version 4** at `v0.4.0`. **Version 5** at `v0.5.0`. **Version 6** completes at `v0.6.0` (UI cutover). **Current package:** `0.5.36`. **Current tag:** `v0.5.36`. All releases listed here are tagged.
+**Version 2** is complete at `v0.2.0`. **Version 3** at `v0.3.0`. **Version 4** at `v0.4.0`. **Version 5** at `v0.5.0`. **Version 6** completes at `v0.6.0` (UI cutover). **Current package:** `0.6.0`. **Current tag:** `v0.6.0` (tagged after merge, once the Linux live run of the new UI is recorded). Every earlier release listed here is tagged.
 
 **Numbering (since 2026-11-01):** tags stay below 1.0. Version N completes at `v0.N.0`, and every release on the way to the next Version bumps the patch (`v0.5.35`, `v0.5.36`, …). The UI cutover that completes Version 6 is `v0.6.0`. Before 2026-11-01 the tags ran `v1.0.0`–`v5.26.5`; each old major X became `0.X` with its releases numbered in order (`v2.1.0` → `v0.2.1`, `v5.26.5` → `v0.5.34`, and the untagged 5.26.6 → `v0.5.35`), and the early `0.1.0`/`0.2.0` became `0.0.1`/`0.0.2`. Plans and docs under `docs/` use the new numbers too; historical branch names such as `release/v3.0.0` keep their real names.
 
 ## Unreleased
 
-Nothing pending above `0.5.36`.
+Nothing pending above `0.6.0`.
+
+## 0.6.0 — 2026-11-14
+
+Git tag `v0.6.0`. **Product:** Version 6, the new desktop UI. Worker, desktop, and Tauri report `0.6.0`.
+
+- **Today is the home screen.** It shows what is due across every library: Review, the next exam, quiz accuracy, where to continue reading, and your weak topics. Drill opens a quiz on that topic's lecture, and Start review opens the cards of the class whose exam is nearest, switching library when needed. First run still greets a new install.
+- **A new shell.** A top bar holds search and a library status pill. The pill shows "Library up to date", "Updating 2 of 3" or "No Knowledge folder", and its menu runs Update knowledge, Check citations, Show log and All jobs. The sidebar lists Today and your classes with due counts. Settings opens its own page list with a Back to library link.
+- **A class workspace.** Each class has a lecture column grouped by unit, with filter chips and badges, and tabs for Overview, Read, Map, Practice and Ask. Tick lectures and a tray offers Flashcards, Quiz me, Ask about these and Show on map for just those. Overview carries the study plan, the exam date, weak topics and recommendations.
+- **Map** draws the class's concepts as a graph and can highlight the ones from the lectures you ticked. **Practice** holds Cards and Quiz, limited to the ticked lectures, and a class with no deck yet offers to generate one. When your due cards are done it offers the next class that has some.
+- **Ask** lives inside the class. Answers show their sources, and Make cards from this and Quiz me on this work from the lectures an answer cites.
+- **Jobs, Search and Settings** are rebuilt to match: Search covers every library, and Settings has General, Library & sharing, Provider & models (with your usage limits), Sync, Skills, Workers and Shortcuts pages.
+- The old layout is gone: the old class header with its Notes / Flashcards / Quiz / Graph / Chat tabs, the notes index, the action bar, and the `/notes`, `/flashcards`, `/quiz`, `/graph` and `/chat` class paths. Mock mode's chat answer now cites a lecture the class lists.
 
 ## 0.5.36 — 2026-11-01
 

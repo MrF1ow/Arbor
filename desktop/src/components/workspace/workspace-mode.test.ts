@@ -15,13 +15,6 @@ describe("workspaceLocation", () => {
     ["/course/cell-biology/practice/cards", "practice", null, "cards"],
     ["/course/cell-biology/practice/quiz", "practice", null, "quiz"],
     ["/course/cell-biology/ask", "ask", null, null],
-    // The old paths still resolve to the matching view until they are deleted.
-    ["/course/cell-biology/notes", "overview", null, null],
-    ["/course/cell-biology/notes/2026-09-12-membranes", "read", "2026-09-12-membranes", null],
-    ["/course/cell-biology/flashcards", "practice", null, "cards"],
-    ["/course/cell-biology/quiz", "practice", null, "quiz"],
-    ["/course/cell-biology/graph", "map", null, null],
-    ["/course/cell-biology/chat", "ask", null, null],
     ["/course/Cell%20Biology/read/a%20b", "read", "a b", null],
   ])("%s", (path, mode, digestSlug, practiceTab) => {
     expect(workspaceLocation(path)).toEqual({ mode, digestSlug, practiceTab });

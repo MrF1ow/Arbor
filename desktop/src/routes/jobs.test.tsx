@@ -541,7 +541,7 @@ describe("library status pill", () => {
 
   it("shows idle text from the latest job and links failed state to jobs", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime.bind(vi) });
-    const { router } = await renderAppAtRoute("/course/cell-biology/notes", {
+    const { router } = await renderAppAtRoute("/course/cell-biology/overview", {
       list_jobs: () => [
         {
           id: "job-ok-1",
@@ -592,7 +592,7 @@ describe("library status pill", () => {
 
   it("links to the latest failed job after reload when the store is idle", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime.bind(vi) });
-    const { router } = await renderAppAtRoute("/course/cell-biology/notes", {
+    const { router } = await renderAppAtRoute("/course/cell-biology/overview", {
       list_jobs: () => [
         {
           id: "job-failed-reload",
@@ -620,7 +620,7 @@ describe("library status pill", () => {
 
   it("navigates to jobs from idle pill when up to date", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime.bind(vi) });
-    const { router } = await renderAppAtRoute("/course/cell-biology/notes");
+    const { router } = await renderAppAtRoute("/course/cell-biology/overview");
     await waitFor(() => {
       expect(screen.getByText(/Library up to date ·/)).toBeInTheDocument();
     });

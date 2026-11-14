@@ -51,7 +51,6 @@ describe("welcome and library flows (PR 6)", () => {
       sidebarTouched: true,
       logOpen: false,
       logHeight: 200,
-      notesIndexOpen: true,
       lastCourse: null,
     });
     useJobStore.setState({
@@ -315,7 +314,7 @@ describe("welcome and library flows (PR 6)", () => {
   it("groups two workspace roots and switches root before navigating", async () => {
     const user = userEvent.setup();
     clearMockIpcLog();
-    const { router } = await renderAppAtRoute("/course/cell-biology/notes");
+    const { router } = await renderAppAtRoute("/course/cell-biology/overview");
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /Fall 2026/i })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /Shared · Study group/i })).toBeInTheDocument();
@@ -540,7 +539,7 @@ describe("import feedback", () => {
       .mockResolvedValue(["/tmp/new.pdf"]);
     const user = userEvent.setup();
     clearMockIpcLog();
-    await renderAppAtRoute("/course/cell-biology/notes", {
+    await renderAppAtRoute("/course/cell-biology/overview", {
       list_digests: () => [],
       plan_update: () => ({ pending: fixturePendingSources.slice(0, 1) }),
       get_knowledge_settings: () => ({
@@ -568,7 +567,7 @@ describe("import feedback", () => {
   it("Add files shows a busy spinner while import_sources runs", async () => {
     vi.spyOn(ipcModule, "openDialog").mockResolvedValue(["/tmp/new.pdf"]);
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/notes", {
+    await renderAppAtRoute("/course/cell-biology/overview", {
       list_digests: () => [],
       import_sources: () =>
         new Promise<string[]>((resolve) => {
@@ -596,7 +595,7 @@ describe("import feedback", () => {
     vi.spyOn(ipcModule, "openDialog").mockResolvedValue(["/tmp/new.pdf"]);
     const user = userEvent.setup();
     clearMockIpcLog();
-    await renderAppAtRoute("/course/cell-biology/notes", {
+    await renderAppAtRoute("/course/cell-biology/overview", {
       list_digests: () => [],
       plan_update: () => ({ pending: [] }),
       get_knowledge_settings: () => ({

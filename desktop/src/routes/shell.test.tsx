@@ -64,7 +64,6 @@ describe("app shell", () => {
       sidebarTouched: true,
       logOpen: false,
       logHeight: 200,
-      notesIndexOpen: true,
       lastCourse: null,
     });
     useUpdatePlanStore.getState().close();

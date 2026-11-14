@@ -18,7 +18,6 @@ describe("course icons UI", () => {
       sidebarTouched: true,
       logOpen: false,
       logHeight: 200,
-      notesIndexOpen: true,
       lastCourse: null,
     });
     vi.spyOn(window, "innerWidth", "get").mockReturnValue(1280);

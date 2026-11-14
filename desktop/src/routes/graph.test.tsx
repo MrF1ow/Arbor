@@ -83,7 +83,6 @@ describe("graph PR10", { timeout: 20000 }, () => {
       sidebarTouched: true,
       logOpen: false,
       logHeight: 200,
-      notesIndexOpen: true,
       lastCourse: null,
     });
     useJobStore.setState({

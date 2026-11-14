@@ -149,7 +149,6 @@ describe("chat threads", { timeout: 30000 }, () => {
       sidebarTouched: true,
       logOpen: false,
       logHeight: 200,
-      notesIndexOpen: true,
       chatThreadsOpen: true,
       lastCourse: null,
     });
@@ -176,7 +175,7 @@ describe("chat threads", { timeout: 30000 }, () => {
 
   it("Enter sends and Shift+Enter inserts a newline; streaming completes", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/chat");
+    await renderAppAtRoute("/course/cell-biology/ask");
     await waitForChatReady();
     await openNewChat(user);
     const textarea = within(screen.getByTestId("chat-view")).getByLabelText("Chat message");
@@ -297,13 +296,13 @@ describe("chat threads", { timeout: 30000 }, () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      const { router } = await renderAppAtRoute("/course/cell-biology/chat");
+      const { router } = await renderAppAtRoute("/course/cell-biology/ask");
       await waitForChatReady();
       await fillComposer("Stream me");
       await user.click(screen.getByRole("button", { name: "Send" }));
       await vi.advanceTimersByTimeAsync(35);
       await router.navigate({
-        to: "/course/$course/chat",
+        to: "/course/$course/ask",
         params: { course: "organic-chemistry-ii" },
       });
       await waitForChatShell();
@@ -322,7 +321,7 @@ describe("chat threads", { timeout: 30000 }, () => {
       const prompt =
         'Explain the weakest topic "Cytoskeleton". Stay inside this course and cite sources.';
       const { router } = await renderAppAtRoute(
-        `/course/cell-biology/chat?mode=explain&prompt=${encodeURIComponent(prompt)}`,
+        `/course/cell-biology/ask?mode=explain&prompt=${encodeURIComponent(prompt)}`,
       );
       await waitForChatReady();
       await vi.advanceTimersByTimeAsync(350);
@@ -343,7 +342,7 @@ describe("chat threads", { timeout: 30000 }, () => {
 
   it("changes mode in start_chat payload from toggle", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/chat?mode=explain");
+    await renderAppAtRoute("/course/cell-biology/ask?mode=explain");
     await waitForChatReady();
     await waitFor(() => {
       expect(
@@ -367,7 +366,7 @@ describe("chat threads", { timeout: 30000 }, () => {
   });
 
   it("?mode=quiz falls back to Ask and omits chat Quiz mode toggle", async () => {
-    await renderAppAtRoute("/course/cell-biology/chat?mode=quiz");
+    await renderAppAtRoute("/course/cell-biology/ask?mode=quiz");
     await waitForChatReady();
     expect(
       within(screen.getByTestId("chat-view")).getByRole("button", { name: modeChipLabel("Ask") }),
@@ -380,7 +379,7 @@ describe("chat threads", { timeout: 30000 }, () => {
   it("generate study artifact launches flashcard or quiz jobs", async () => {
     resetAuthRefreshForTests();
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/chat");
+    await renderAppAtRoute("/course/cell-biology/ask");
     await waitForChatReady();
     await waitFor(() => {
       expect(getMockIpcCalls().some((c) => c.cmd === "get_settings")).toBe(true);
@@ -413,7 +412,7 @@ describe("chat threads", { timeout: 30000 }, () => {
   });
 
   it("study artifact select shows human-readable labels", async () => {
-    await renderAppAtRoute("/course/cell-biology/chat");
+    await renderAppAtRoute("/course/cell-biology/ask");
     await waitForChatReady();
     expect(screen.getByRole("combobox", { name: "Study artifact type" })).toHaveTextContent(
       "Flashcards",
@@ -601,7 +600,7 @@ describe("chat threads", { timeout: 30000 }, () => {
       buildUserLine("ask", "earlier"),
     ]);
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/chat");
+    await renderAppAtRoute("/course/cell-biology/ask");
     await waitForChatShell();
     await waitFor(() => expect(screen.getByText("earlier")).toBeInTheDocument());
     await fillComposer("next");
@@ -628,7 +627,7 @@ describe("chat threads", { timeout: 30000 }, () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      await renderAppAtRoute("/course/cell-biology/chat");
+      await renderAppAtRoute("/course/cell-biology/ask");
       await waitForChatReady();
       await openNewChat(user);
       await fillComposer("Status");
@@ -653,7 +652,7 @@ describe("chat threads", { timeout: 30000 }, () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      await renderAppAtRoute("/course/cell-biology/chat");
+      await renderAppAtRoute("/course/cell-biology/ask");
       await waitForChatReady();
       await openNewChat(user);
       await fillComposer("Hold");
@@ -736,7 +735,7 @@ describe("chat threads", { timeout: 30000 }, () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-      const { router } = await renderAppAtRoute("/course/cell-biology/chat", {
+      const { router } = await renderAppAtRoute("/course/cell-biology/ask", {
         start_chat: (args?: InvokeArgs) => {
           const channelId = parseMockChannelId((args as { onEvent?: unknown }).onEvent);
           if (channelId == null) {
@@ -770,14 +769,14 @@ describe("chat threads", { timeout: 30000 }, () => {
       const sendThread = (router.state.location.search as { thread?: string }).thread;
       await vi.advanceTimersByTimeAsync(35);
       await router.navigate({
-        to: "/course/$course/chat",
+        to: "/course/$course/ask",
         params: { course: "organic-chemistry-ii" },
       });
       await waitForChatShell();
       expect(screen.queryByTestId("chat-live-answer")).not.toBeInTheDocument();
       await vi.advanceTimersByTimeAsync(500);
       await router.navigate({
-        to: "/course/$course/chat",
+        to: "/course/$course/ask",
         params: { course: "cell-biology" },
         search: sendThread ? { thread: sendThread } : undefined,
       });
@@ -800,7 +799,7 @@ describe("chat threads", { timeout: 30000 }, () => {
   });
 
   it("does not send on Enter during IME composition", async () => {
-    await renderAppAtRoute("/course/cell-biology/chat");
+    await renderAppAtRoute("/course/cell-biology/ask");
     await waitForChatReady();
     const textarea = within(screen.getByTestId("chat-view")).getByLabelText("Chat message");
     await fillComposer("こんにちは");
@@ -825,7 +824,7 @@ describe("chat threads", { timeout: 30000 }, () => {
         { digest_path: "cell-biology/course.md", heading_id: "Overview" },
       ]),
     ]);
-    const { router } = await renderAppAtRoute("/course/cell-biology/chat");
+    const { router } = await renderAppAtRoute("/course/cell-biology/ask");
     await waitForChatShell();
     await waitFor(() => {
       expect(
@@ -841,7 +840,7 @@ describe("chat threads", { timeout: 30000 }, () => {
       expect(router.state.location.searchStr).toContain("heading=Membrane+structure");
     });
     await router.navigate({
-      to: "/course/$course/chat",
+      to: "/course/$course/ask",
       params: { course: "cell-biology" },
       search: threadId ? { thread: threadId } : undefined,
     });
@@ -860,7 +859,7 @@ describe("chat threads", { timeout: 30000 }, () => {
 
   it("shows empty-state copy and unsupported banner", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/chat");
+    await renderAppAtRoute("/course/cell-biology/ask");
     await waitForChatReady();
     await openNewChat(user);
     expect(screen.getByText("Ask about Cell Biology")).toBeInTheDocument();
@@ -873,7 +872,7 @@ describe("chat threads", { timeout: 30000 }, () => {
     seedMockChatHistory(FIXTURE_ROOT_FALL, "cell-biology", [
       buildAssistantLine("ask", "Weak", false, []),
     ]);
-    await renderAppAtRoute("/course/cell-biology/chat");
+    await renderAppAtRoute("/course/cell-biology/ask");
     await waitForChatShell();
     await waitFor(() => {
       expect(screen.getByText("Not supported by this course")).toBeInTheDocument();
@@ -884,7 +883,7 @@ describe("chat threads", { timeout: 30000 }, () => {
     seedMockChatHistory(FIXTURE_ROOT_FALL, "cell-biology", [
       buildUserLine("ask", "root-a-only"),
     ]);
-    const { unmount } = await renderAppAtRoute("/course/cell-biology/chat");
+    const { unmount } = await renderAppAtRoute("/course/cell-biology/ask");
     await waitForChatShell();
     await waitFor(() => expect(screen.getByText("root-a-only")).toBeInTheDocument());
     unmount();
@@ -961,7 +960,7 @@ describe("chat threads", { timeout: 30000 }, () => {
       const prompt = encodeURIComponent(
         'Explain the weakest topic "Cytoskeleton". Stay inside this course and cite sources.',
       );
-      await renderAppAtRoute(`/course/cell-biology/chat?mode=explain&prompt=${prompt}`);
+      await renderAppAtRoute(`/course/cell-biology/ask?mode=explain&prompt=${prompt}`);
       await waitForChatReady();
       await vi.advanceTimersByTimeAsync(350);
       await waitFor(() => {
@@ -977,7 +976,7 @@ describe("chat threads", { timeout: 30000 }, () => {
     }
   });
   it("lists seeded threads newest first", async () => {
-    await renderAppAtRoute("/course/cell-biology/chat");
+    await renderAppAtRoute("/course/cell-biology/ask");
     await waitForChatReady();
     const nav = screen.getByRole("navigation", { name: "Chat threads" });
     const newest = within(nav).getByText("Explain the cytoskeleton");
@@ -989,7 +988,7 @@ describe("chat threads", { timeout: 30000 }, () => {
 
   it("new chat send creates a titled thread and sets thread in URL", async () => {
     const user = userEvent.setup();
-    const { router } = await renderAppAtRoute("/course/cell-biology/chat");
+    const { router } = await renderAppAtRoute("/course/cell-biology/ask");
     await waitForChatReady();
     await openNewChat(user);
     await fillComposer("My unique thread question");
@@ -1001,7 +1000,7 @@ describe("chat threads", { timeout: 30000 }, () => {
 
   it("delete all cancel keeps chats", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/chat");
+    await renderAppAtRoute("/course/cell-biology/ask");
     await waitForChatReady();
     await user.click(screen.getByRole("button", { name: "Delete all chats" }));
     expect(screen.getByText(/Delete all chats for Cell Biology/i)).toBeInTheDocument();
@@ -1014,7 +1013,7 @@ describe("chat threads", { timeout: 30000 }, () => {
   });
 
   it("shows No matching chats when search misses", async () => {
-    await renderAppAtRoute("/course/cell-biology/chat");
+    await renderAppAtRoute("/course/cell-biology/ask");
     await waitForChatReady();
     fireEvent.change(screen.getByLabelText("Search chats"), { target: { value: "zzznomatch" } });
     await waitFor(() => {
@@ -1024,7 +1023,7 @@ describe("chat threads", { timeout: 30000 }, () => {
 
   it("toggling Ask/Explain on a thread updates mode for the next send", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/chat");
+    await renderAppAtRoute("/course/cell-biology/ask");
     await waitForChatReady();
     await user.click(screen.getByText("Membrane structure review"));
     await user.click(screen.getByRole("button", { name: modeChipLabel("Ask") }));
@@ -1041,7 +1040,7 @@ describe("chat threads", { timeout: 30000 }, () => {
 
   it("mode chip toggles and persists on a stored thread", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/chat");
+    await renderAppAtRoute("/course/cell-biology/ask");
     await waitForChatReady();
     await user.click(screen.getByText("Membrane structure review"));
     await user.click(screen.getByRole("button", { name: modeChipLabel("Ask") }));
@@ -1064,7 +1063,7 @@ describe("chat threads", { timeout: 30000 }, () => {
 
   it("Shift+Tab in the composer toggles mode", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/chat");
+    await renderAppAtRoute("/course/cell-biology/ask");
     await waitForChatReady();
     await openNewChat(user);
     const textarea = within(screen.getByTestId("chat-view")).getByLabelText("Chat message");
@@ -1081,7 +1080,7 @@ describe("chat threads", { timeout: 30000 }, () => {
 
   it("slash /explain sends with explain mode and stripped text", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/chat");
+    await renderAppAtRoute("/course/cell-biology/ask");
     await waitForChatReady();
     await openNewChat(user);
     await fillComposer("/explain foo");
@@ -1095,7 +1094,7 @@ describe("chat threads", { timeout: 30000 }, () => {
 
   it("/ask alone switches mode without sending", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/chat?mode=explain");
+    await renderAppAtRoute("/course/cell-biology/ask?mode=explain");
     await waitForChatReady();
     await openNewChat(user);
     await fillComposer("/ask");
@@ -1111,7 +1110,7 @@ describe("chat threads", { timeout: 30000 }, () => {
 
   it("slash suggestion Enter picks without sending", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/chat");
+    await renderAppAtRoute("/course/cell-biology/ask");
     await waitForChatReady();
     await openNewChat(user);
     const view = screen.getByTestId("chat-view");
@@ -1130,7 +1129,7 @@ describe("chat threads", { timeout: 30000 }, () => {
 
   it("Escape dismisses slash suggestions without clearing the draft", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/chat");
+    await renderAppAtRoute("/course/cell-biology/ask");
     await waitForChatReady();
     await openNewChat(user);
     const view = screen.getByTestId("chat-view");
@@ -1149,7 +1148,7 @@ describe("chat threads", { timeout: 30000 }, () => {
 
   it("Shift+Enter with slash list open inserts a newline instead of picking", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/chat");
+    await renderAppAtRoute("/course/cell-biology/ask");
     await waitForChatReady();
     await openNewChat(user);
     const view = screen.getByTestId("chat-view");
@@ -1167,7 +1166,7 @@ describe("chat threads", { timeout: 30000 }, () => {
 
   it("mousedown on a slash suggestion inserts the command", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/chat");
+    await renderAppAtRoute("/course/cell-biology/ask");
     await waitForChatReady();
     await openNewChat(user);
     const view = screen.getByTestId("chat-view");
@@ -1187,7 +1186,7 @@ describe("chat threads", { timeout: 30000 }, () => {
   it("hides dictation on Linux and invokes start_dictation on Mac", async () => {
     const platformSpy = vi.spyOn(window.navigator, "platform", "get");
     platformSpy.mockReturnValue("Linux x86_64");
-    await renderAppAtRoute("/course/cell-biology/chat");
+    await renderAppAtRoute("/course/cell-biology/ask");
     await waitForChatReady();
     expect(
       within(screen.getByTestId("chat-view")).queryByRole("button", {
@@ -1203,7 +1202,7 @@ describe("chat threads", { timeout: 30000 }, () => {
 
     platformSpy.mockReturnValue("MacIntel");
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/chat");
+    await renderAppAtRoute("/course/cell-biology/ask");
     await waitForChatReady();
     await user.click(
       within(screen.getByTestId("chat-view")).getByRole("button", {
@@ -1220,7 +1219,7 @@ describe("chat threads", { timeout: 30000 }, () => {
     const platformSpy = vi.spyOn(window.navigator, "platform", "get");
     platformSpy.mockReturnValue("MacIntel");
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/chat");
+    await renderAppAtRoute("/course/cell-biology/ask");
     await waitForChatReady();
     const view = screen.getByTestId("chat-view");
     const textarea = within(view).getByRole("textbox", { name: "Chat message" });
@@ -1260,7 +1259,7 @@ describe("chat threads", { timeout: 30000 }, () => {
     const platformSpy = vi.spyOn(window.navigator, "platform", "get");
     platformSpy.mockReturnValue("MacIntel");
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/chat");
+    await renderAppAtRoute("/course/cell-biology/ask");
     await waitForChatReady();
     const view = screen.getByTestId("chat-view");
     const textarea = within(view).getByRole("textbox", { name: "Chat message" });
@@ -1315,7 +1314,7 @@ describe("chat threads", { timeout: 30000 }, () => {
   it("auto-sends prompt into a new thread through the route", async () => {
     const prompt = "Explain the weakest topic now";
     const { router } = await renderAppAtRoute(
-      `/course/cell-biology/chat?mode=explain&prompt=${encodeURIComponent(prompt)}`,
+      `/course/cell-biology/ask?mode=explain&prompt=${encodeURIComponent(prompt)}`,
     );
     await waitFor(
       () => {
@@ -1331,7 +1330,7 @@ describe("chat threads", { timeout: 30000 }, () => {
 
   it("shows signed-out status after a completed answer when sending again", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/chat");
+    await renderAppAtRoute("/course/cell-biology/ask");
     await waitForChatReady();
     await openNewChat(user);
     await fillComposer("First");
@@ -1356,7 +1355,7 @@ describe("chat threads", { timeout: 30000 }, () => {
 
   it("ignores late cached lines in start_chat history during flight", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/chat");
+    await renderAppAtRoute("/course/cell-biology/ask");
     await waitForChatReady();
     await user.click(screen.getByText("ATP and energy currency"));
     await fillComposer("Follow-up question");
@@ -1372,7 +1371,7 @@ describe("chat threads", { timeout: 30000 }, () => {
 
   it("preserves drafts per thread and clears on send", async () => {
     const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/chat");
+    await renderAppAtRoute("/course/cell-biology/ask");
     await waitForChatReady();
     await openNewChat(user);
     await fillComposer("Draft for new");
@@ -1393,7 +1392,7 @@ describe("chat threads", { timeout: 30000 }, () => {
 
   it("keeps streaming answer on the original thread when switching mid-stream", async () => {
     const user = userEvent.setup();
-    const { router } = await renderAppAtRoute("/course/cell-biology/chat", {
+    const { router } = await renderAppAtRoute("/course/cell-biology/ask", {
       start_chat: (args?: InvokeArgs) => {
         const channelId = parseMockChannelId((args as { onEvent?: unknown }).onEvent);
         if (channelId == null) {
@@ -1427,7 +1426,7 @@ describe("chat threads", { timeout: 30000 }, () => {
     await user.click(screen.getByText("Membrane structure review"));
     expect(screen.queryByTestId("chat-live-answer")).not.toBeInTheDocument();
     await router.navigate({
-      to: "/course/$course/chat",
+      to: "/course/$course/ask",
       params: { course: "cell-biology" },
       search: { thread: sendThread },
     });

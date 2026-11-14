@@ -1005,7 +1005,7 @@ export function createMockHandler(
         return { path: dest, name, kind: "shared" };
       }
       case "test_worker_connection":
-        return "arbor-worker 0.5.36 (mock)";
+        return "arbor-worker 0.6.0 (mock)";
       case "list_jobs":
         return mockJobSummariesList();
       case "get_job_events":
@@ -1093,9 +1093,15 @@ export function createMockHandler(
         }
         const chatCourse = String(payload.course ?? "cell-biology");
         const markdown = "**Mock answer** from streaming.";
+        // The answer cites a lecture the class really lists, so Make cards from this and Quiz me
+        // on this are enabled; mock mode lists the design's lectures, test mode the legacy ones.
+        const citedDigest = isMockMode()
+          ? (designDigests(chatCourse).find((d) => d.title === "Membrane transport") ??
+            designDigests(chatCourse)[0])?.path
+          : `${chatCourse}/digests/2026-09-12-membranes.md`;
         const citations = [
           {
-            digest_path: `${chatCourse}/digests/2026-09-12-membranes.md`,
+            digest_path: citedDigest ?? `${chatCourse}/digests/2026-09-12-membranes.md`,
             heading_id: "Membrane structure",
           },
         ];
