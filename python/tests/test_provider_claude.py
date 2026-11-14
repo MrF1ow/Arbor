@@ -296,6 +296,16 @@ def test_run_with_images_argument_rejection_is_cli_usage(tmp_path: Path):
     assert "requires output-format=stream-json" in str(exc.value)
 
 
+def test_run_with_images_error_event_without_result_keeps_cli_message(tmp_path: Path):
+    stream = '{"type":"system","subtype":"init"}\n{"type":"error","message":"boom"}\n'
+    prov = _provider(lambda *a, **k: _completed(1, stdout=stream, stderr=""))
+    with pytest.raises(ProviderError) as exc:
+        prov.run(_image_request(tmp_path))
+    assert "boom" in str(exc.value)
+    assert "{" not in str(exc.value)
+    assert exc.value.exit_code == 1
+
+
 def test_run_with_images_empty_stream_exit_0_is_empty_result(tmp_path: Path):
     prov = _provider(lambda *a, **k: _completed(0, stdout=""))
     with pytest.raises(ProviderError, match="claude returned empty result"):

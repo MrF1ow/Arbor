@@ -33,7 +33,7 @@ DEFAULT_CLAUDE_MODELS = [
 ]
 
 
-def _is_result_line(line: str) -> bool:
+def _is_terminal_line(line: str) -> bool:
     line = line.strip()
     if not line.startswith("{"):
         return False
@@ -41,7 +41,7 @@ def _is_result_line(line: str) -> bool:
         payload = json.loads(line)
     except json.JSONDecodeError:
         return False
-    return isinstance(payload, dict) and payload.get("type") == "result"
+    return isinstance(payload, dict) and payload.get("type") in ("result", "error")
 
 
 class ClaudeCliProvider:
@@ -186,7 +186,7 @@ class ClaudeCliProvider:
         stdout is parsed before the exit code is looked at."""
         stdout = proc.stdout or ""
         lines = stdout.splitlines()
-        if not any(_is_result_line(line) for line in lines):
+        if not any(_is_terminal_line(line) for line in lines):
             if proc.returncode != 0:
                 raise cli_process_failure(
                     "claude",

@@ -211,6 +211,7 @@ def test_secrets_are_redacted_from_the_message():
     "line",
     [
         "Error: --input-format=stream-json requires output-format=stream-json.",
+        "Error: When using --print, --output-format=stream-json requires --verbose",
         "error: unknown option '--bogus-flag'",
         "error: option '--output-format <format>' argument 'xml' is invalid. Allowed choices are text, json, stream-json.",
     ],

@@ -32,7 +32,7 @@ _AUTH = re.compile(
 # "unknown option '--x'", "option '--x <v>' argument 'y' is invalid". Each pattern
 # needs a --flag, so prose that merely says "requires" or "option" never matches.
 _CLI_USAGE = re.compile(
-    r"--[\w-]+(?:=\S*)?\s+requires\s+[\w-]+="
+    r"--[\w-]+(?:=\S*)?\s+requires\s+(?:--[\w-]+\b|[\w-]+=)"
     r"|\bunknown option\s+'--[\w-]+'"
     r"|\boption\s+'--[\w-]+[^']*'\s+argument\b",
     re.IGNORECASE,
