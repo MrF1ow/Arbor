@@ -248,6 +248,15 @@ mod tests {
     }
 
     #[test]
+    fn search_on_a_deleted_library_root_errors_and_leaves_it_absent() {
+        let root = std::env::temp_dir().join(format!("arbor-search-gone-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let err = search_documents(&root, "mitosis", 10).unwrap_err();
+        assert!(err.starts_with("Library folder not found:"), "unexpected error: {err}");
+        assert!(!root.exists(), "search must not recreate the library root");
+    }
+
+    #[test]
     fn empty_semantic_query_returns_no_hits() {
         let hits = search_semantic_documents(
             Path::new("/missing/app"),
