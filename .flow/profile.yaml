@@ -26,6 +26,7 @@ rules:                     # repo rules every delegate brief carries
   - "A PR that moves a marketplace index pin is merged with a merge commit, not squash, or the pinned commit becomes unreachable."
   - "Mac batch runs don't gate tags; the Linux live run and the macos-dmg CI job do."
 testing_skill: .agents/skills/arbor-test/SKILL.md
+design: ~/Projects/designs/Arbor/Arbor.figcraft
 risk:
   paths:
     - "python/src/arbor_worker/sync.py"
@@ -44,3 +45,4 @@ history:
   - "2026-11-08: inferred hands-off (personal repo with CI and an unprotected default branch)"
   - "2026-11-08: checks from .github/workflows/test.yml; tag auto and rules migrated from Claude memories (delegation-chain, never-invoke-claude-via-arbor, live-runs-never-touch-screen, arbor-linux-gate, release-numbering-below-1-0)"
   - "2026-11-09: testing_skill .agents/skills/arbor-test; risk.paths for git sync, secrets and providers, release and marketplace (user picked all three in /flow:setup)"
+  - "2026-11-14: design key set to the approved Arbor FigCraft file (run r20261114-b84e89 P1)"

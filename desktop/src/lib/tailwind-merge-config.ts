@@ -19,7 +19,23 @@ const customSpacing = [
 
 const customContainers = ["reading", "flashcards"] as const;
 
-const customTextSizes = ["2xs", "title", "read", "flashcard-q"] as const;
+const customTextSizes = [
+  "2xs",
+  "read",
+  "flashcard-q",
+  // Arbor text styles (`@utility text-*` in index.css)
+  "display",
+  "title",
+  "reading-title",
+  "heading",
+  "reading",
+  "body",
+  "small",
+  "caption",
+  "micro",
+  "label",
+  "kbd",
+] as const;
 
 const customZIndex = ["dropdown", "drawer", "overlay", "dialog", "floating", "toast"] as const;
 
