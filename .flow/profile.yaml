@@ -18,7 +18,7 @@ checks:
   - "cd python && timeout 900 uv run pytest"
   - "mkdir -p desktop/dist && timeout 1800 cargo test --manifest-path desktop/src-tauri/Cargo.toml"
 rules:                     # repo rules every delegate brief carries
-  - "Never run Claude through Arbor: live runs use the Grok CLI provider (grok-4.7 at ~/.grok/bin/grok). Codex is tested with fakes only."
+  - "Live runs use the Claude Code provider (the claude CLI, on the user's Claude plan); copy only ~/.claude/.credentials.json into the scratch HOME. Codex is tested with fakes only."
   - "Live runs never touch the user's screen: use a leased Xvfb display (flow-run lease <run> display), never the real one."
   - "Teardown by exact process name (pgrep -x desktop, pgrep -x Xvfb) under timeout 20; never pkill -f or kill a process group that could include your own shell."
   - "Desktop tests are mostly source greps: always run npm run build (tsc) and npm run lint too; tests passing proves little on their own."
@@ -46,3 +46,4 @@ history:
   - "2026-11-08: checks from .github/workflows/test.yml; tag auto and rules migrated from Claude memories (delegation-chain, never-invoke-claude-via-arbor, live-runs-never-touch-screen, arbor-linux-gate, release-numbering-below-1-0)"
   - "2026-11-09: testing_skill .agents/skills/arbor-test; risk.paths for git sync, secrets and providers, release and marketplace (user picked all three in /flow:setup)"
   - "2026-11-14: design key set to the approved Arbor FigCraft file (run r20261114-b84e89 P1)"
+  - "2026-11-14: live runs move from the Grok CLI to the Claude Code provider; the user is on a Claude plan and said to always run them through Claude (run r20261114-b84e89)"
