@@ -1,12 +1,14 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronLeft, ChevronRight, RotateCcw, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, RotateCcw, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
-import { EmptyState } from "~/components/app/empty-state";
+import { StudyEmpty } from "~/components/study/study-empty";
 import { StudyArtifactToolbar } from "~/components/study/study-artifact-toolbar";
 import { StudyColumn, StudyViewShell } from "~/components/study/study-layout";
 import { StudyProgressBar } from "~/components/study/study-progress-bar";
 import { StudySourceChip } from "~/components/study/study-source-chip";
+import { answeredScore, scopedSessionKey, scopeItems, scopeNoun } from "~/components/study/study-scope";
+import { useStudyScope } from "~/components/study/use-study-scope";
 import { StudyUnverifiedBadge } from "~/components/study/study-unverified-badge";
 import {
   AlertDialog,
@@ -31,10 +33,9 @@ import {
   parseQuizProgress,
   previousReview,
   selectChoice,
-  sessionScore,
   submitChoice,
 } from "~/domain/quiz";
-import { restoreQuiz, snapshotQuiz, studySessionKey } from "~/domain/study-session";
+import { restoreQuiz, snapshotQuiz } from "~/domain/study-session";
 import type { DigestInfo, QuizPack, QuizProgress, QuizReview } from "~/domain/types";
 import { useStudyJobLauncher } from "~/hooks/use-study-job-launcher";
 import { invoke } from "~/lib/ipc";
@@ -61,6 +62,7 @@ export function QuizView({
   const settings = useSettings();
   const activeRoot = pickActiveRoot(settings.data);
   const enqueueWrite = useEnqueueStudyWrite();
+  const scope = useStudyScope(course);
   const startJob = useStartQuizJobMutation(activeRoot);
   const {
     viewerBlocked,
@@ -156,6 +158,14 @@ export function QuizView({
     packQuery.dataUpdatedAt >= flushAt &&
     (progressQuery.isError || progressQuery.dataUpdatedAt >= flushAt);
 
+  // The ticked lectures scope the pack; an empty scope is the whole class.
+  const scoped = scope.digests.length > 0;
+  const scopeOpts = scoped ? { digests: scope.digests } : undefined;
+  const scopeRef = useRef<readonly string[]>([]);
+  useEffect(() => {
+    scopeRef.current = scope.digests;
+  });
+
   let parsedPack: QuizPack | null = null;
   let packLoadError = false;
   if (queriesSettled) {
@@ -164,7 +174,7 @@ export function QuizView({
       if (parsed.course !== course) {
         throw new Error("course mismatch");
       }
-      parsedPack = parsed;
+      parsedPack = { ...parsed, questions: scopeItems(course, parsed.questions, scope.digests) };
     } catch {
       packLoadError = true;
     }
@@ -192,7 +202,7 @@ export function QuizView({
       }
       let nextReview = createReview(parsedPack);
       if (activeRoot) {
-        const key = studySessionKey(activeRoot, course, "quiz");
+        const key = scopedSessionKey(activeRoot, course, "quiz", scope.digests);
         const saved = useStudySessionStore.getState().sessions[key];
         const restored = restoreQuiz(saved, parsedPack, identity);
         if (restored) {
@@ -248,11 +258,11 @@ export function QuizView({
       if (syncedPack.course !== course) {
         return;
       }
+      syncedPack = { ...syncedPack, questions: scopeItems(course, syncedPack.questions, scopeRef.current) };
     } catch {
       return;
     }
 
-    /* eslint-disable react-hooks/set-state-in-effect -- merge refreshed pack in place */
     setPack(syncedPack);
     setReview((prev) => {
       if (!prev) {
@@ -302,7 +312,6 @@ export function QuizView({
         answers: prev.answers,
       };
     });
-    /* eslint-enable react-hooks/set-state-in-effect */
   }, [
     queriesSettled,
     identity,
@@ -321,15 +330,15 @@ export function QuizView({
     if (review.questions.length === 0) {
       return;
     }
-    const key = studySessionKey(activeRoot, course, "quiz");
+    const key = scopedSessionKey(activeRoot, course, "quiz", scope.digests);
     useStudySessionStore.getState().save(key, snapshotQuiz(review, identity));
-  }, [activeRoot, course, identity, sessionIdentity, review]);
+  }, [activeRoot, course, identity, scope.digests, sessionIdentity, review]);
 
   function confirmRestart() {
     if (!pack || !activeRoot) {
       return;
     }
-    const key = studySessionKey(activeRoot, course, "quiz");
+    const key = scopedSessionKey(activeRoot, course, "quiz", scope.digests);
     useStudySessionStore.getState().clear(key);
     setReview(createReview(pack));
     setRestartOpen(false);
@@ -427,7 +436,7 @@ export function QuizView({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  const hasPack = pack !== null && review !== null;
+  const hasPack = pack !== null && review !== null && !(scoped && pack.questions.length === 0);
   const packUnavailable =
     packQuery.isError || (queriesSettled && packLoadError);
   const awaitingSettled =
@@ -459,23 +468,17 @@ export function QuizView({
     return (
       <StudyViewShell testId="quiz-view">
         <StudyColumn className="mx-auto flex w-full max-w-flashcards flex-col items-center gap-4">
-          <EmptyState
+          <StudyEmpty
             title="No quiz yet"
-            description={`No quiz yet for ${displayName}. Generate questions from your digests.`}
-            actions={
-              <div className="flex flex-col items-center gap-2">
-                {modelHint ? (
-                  <p className="text-sm text-muted-foreground">{modelHint}</p>
-                ) : null}
-                <Button
-                  disabled={jobDisabled}
-                  title={viewerBlocked ? viewerWriteReason : undefined}
-                  onClick={() => void launchStudyJob(course, false)}
-                >
-                  Generate
-                </Button>
-              </div>
+            description={
+              scoped
+                ? `No quiz yet for ${scopeNoun(scope.digests.length).these}. Generate questions from ${scopeNoun(scope.digests.length).their}.`
+                : `No quiz yet for ${displayName}. Generate questions from your digests.`
             }
+            modelHint={modelHint}
+            disabled={jobDisabled}
+            disabledReason={viewerBlocked ? viewerWriteReason : undefined}
+            onGenerate={() => void launchStudyJob(course, false, scopeOpts)}
           />
         </StudyColumn>
       </StudyViewShell>
@@ -484,7 +487,7 @@ export function QuizView({
 
   const session = review;
   const question = currentQuestion(session);
-  const score = sessionScore(session);
+  const score = answeredScore(session);
   const progressRatio = (session.index + 1) / session.questions.length;
   const failedCitationIds = failedIdsFor(citationsReport, "study/quiz.json");
   const citationReason = citationsReport?.failures.find(
@@ -504,19 +507,19 @@ export function QuizView({
           </span>
         </div>
 
-        <div className="flex w-full flex-wrap items-center gap-2">
-          <StudyArtifactToolbar
-            stale={Boolean(staleQuery.data)}
-            viewerBlocked={viewerBlocked}
-            jobDisabled={jobDisabled}
-            onRefresh={() => void launchStudyJob(course, true)}
-            modelHint={modelHint}
-          />
-          <Button type="button" variant="ghost" size="xs" onClick={() => setRestartOpen(true)}>
-            <RotateCcw className="size-icon-sm" />
-            Restart
-          </Button>
-        </div>
+        <StudyArtifactToolbar
+          stale={Boolean(staleQuery.data)}
+          viewerBlocked={viewerBlocked}
+          jobDisabled={jobDisabled}
+          onRefresh={() => void launchStudyJob(course, true)}
+          modelHint={modelHint}
+          trailing={
+            <Button type="button" variant="ghost" size="xs" onClick={() => setRestartOpen(true)}>
+              <RotateCcw className="size-icon-sm" />
+              Restart
+            </Button>
+          }
+        />
 
         <AlertDialog open={restartOpen} onOpenChange={setRestartOpen}>
           <AlertDialogContent>
@@ -574,7 +577,7 @@ export function QuizView({
             })}
           </div>
           {session.submitted ? (
-            <div className="mt-6 border-t border-dashed border-border pt-6">
+            <div className="mt-6 border-t border-border pt-6">
               <p className="font-serif text-read text-muted-foreground">{question.explanation}</p>
             </div>
           ) : null}
@@ -592,20 +595,21 @@ export function QuizView({
             variant="outline"
             onClick={() => setReview(previousReview(session))}
           >
-            <ChevronLeft className="size-icon-sm" />
+            <ArrowLeft className="size-icon-sm" />
             Previous
           </Button>
-          <Button
-            type="button"
-            size="lg"
-            disabled={session.selected === null || session.submitted}
-            onClick={() => handleSubmit()}
-          >
-            Submit
-          </Button>
+          {session.submitted ? (
+            <Button type="button" onClick={() => setReview(nextReview(session))}>
+              Next question
+            </Button>
+          ) : (
+            <Button type="button" disabled={session.selected === null} onClick={() => handleSubmit()}>
+              Submit
+            </Button>
+          )}
           <Button type="button" variant="outline" onClick={() => setReview(nextReview(session))}>
             Next
-            <ChevronRight className="size-icon-sm" />
+            <ArrowRight className="size-icon-sm" />
           </Button>
         </div>
       </StudyColumn>

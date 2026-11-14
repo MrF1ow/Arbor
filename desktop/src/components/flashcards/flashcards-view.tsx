@@ -1,12 +1,15 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, RotateCcw, Shuffle } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ArrowLeft, ArrowRight, RotateCcw, Shuffle } from "lucide-react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
-import { EmptyState } from "~/components/app/empty-state";
+import { StudyEmpty } from "~/components/study/study-empty";
 import { StudyArtifactToolbar } from "~/components/study/study-artifact-toolbar";
 import { StudyColumn, StudyViewShell } from "~/components/study/study-layout";
 import { StudyProgressBar } from "~/components/study/study-progress-bar";
 import { StudySourceChip } from "~/components/study/study-source-chip";
+import { inScope, scopedSessionKey, scopeItems, scopeNoun } from "~/components/study/study-scope";
+import { useNextReviewClass } from "~/components/study/use-next-review-class";
+import { useStudyScope } from "~/components/study/use-study-scope";
 import { StudyUnverifiedBadge } from "~/components/study/study-unverified-badge";
 import {
   AlertDialog,
@@ -43,11 +46,11 @@ import {
   parseSavedFlashcards,
   restoreFlashcards,
   snapshotFlashcards,
-  studySessionKey,
 } from "~/domain/study-session";
 import type { FlashcardDeck, FlashcardReview } from "~/domain/types";
 import type { CourseOverviewPayload, DigestInfo } from "~/domain/types";
 import { useStudyJobLauncher } from "~/hooks/use-study-job-launcher";
+import { useOpenClass } from "~/lib/open-class";
 import { invoke } from "~/lib/ipc";
 import { pickActiveRoot } from "~/lib/knowledge-root";
 import { useStartFlashcardJobMutation } from "~/lib/queries/jobs";
@@ -57,11 +60,23 @@ import { useSettings } from "~/lib/queries/settings";
 import { useStudyArtifactStale, useStudyJson } from "~/lib/queries/study";
 import { isDialogOpen, isEditableTarget } from "~/lib/shortcuts";
 import { flushStudyWrites, useEnqueueStudyWrite } from "~/lib/study-writes";
+import { classScopeKey, useLectureSelectionStore } from "~/stores/lecture-selection-store";
 import { useStudySessionStore } from "~/stores/study-session-store";
 type DeckMode = "due" | "full";
 
+const NO_SCOPE: string[] = [];
+
 function deckIdentity(deck: FlashcardDeck): string {
   return `${deck.course}:${deck.cards.map((c) => c.id).join("\0")}`;
+}
+
+/** The due ids of a scoped session are those of its own cards; unscoped, the class's due list as is. */
+function dueIdsFor(scoped: boolean, deck: FlashcardDeck, overviewDueIds: readonly string[]): string[] {
+  if (!scoped) {
+    return [...overviewDueIds];
+  }
+  const ids = new Set(deck.cards.map((c) => c.id));
+  return overviewDueIds.filter((id) => ids.has(id));
 }
 
 function sessionForMode(
@@ -121,6 +136,8 @@ export function FlashcardsView({
   const settings = useSettings();
   const activeRoot = pickActiveRoot(settings.data);
   const enqueueWrite = useEnqueueStudyWrite();
+  const scope = useStudyScope(course);
+  const openClass = useOpenClass();
   const startJob = useStartFlashcardJobMutation(activeRoot);
   const {
     viewerBlocked,
@@ -147,6 +164,7 @@ export function FlashcardsView({
   const [restartOpen, setRestartOpen] = useState(false);
 
   const focusClearPendingRef = useRef(false);
+  const scopeRef = useRef<readonly string[]>([]);
   const lastSyncedDataRef = useRef({ deck: 0, overview: 0 });
   const prevSessionIdentityRef = useRef<string | null>(null);
 
@@ -219,19 +237,35 @@ export function FlashcardsView({
     deckQuery.dataUpdatedAt >= flushAt &&
     overview.dataUpdatedAt >= flushAt;
 
-  let parsedDeck: FlashcardDeck | null = null;
-  let deckLoadError = false;
-  if (queriesSettled) {
+  const { fullDeck, deckLoadError } = useMemo(() => {
+    if (!queriesSettled) {
+      return { fullDeck: null, deckLoadError: false };
+    }
     try {
       const parsed = parseFlashcardDeck(deckQuery.data);
       if (parsed.course !== course) {
         throw new Error("course mismatch");
       }
-      parsedDeck = parsed;
+      return { fullDeck: parsed, deckLoadError: false };
     } catch {
-      deckLoadError = true;
+      return { fullDeck: null, deckLoadError: true };
     }
-  }
+  }, [queriesSettled, deckQuery.data, course]);
+
+  // The ticked lectures scope the deck. A search hit on a card of another lecture drops the scope
+  // instead, so the card it opens is not filtered out from under it.
+  const focusedCard = focusCardId ? fullDeck?.cards.find((c) => c.id === focusCardId) : undefined;
+  const focusOutsideScope =
+    focusedCard !== undefined &&
+    scope.digests.length > 0 &&
+    !inScope(course, focusedCard.source.digest, scope.digests);
+  const activeScope = focusOutsideScope ? NO_SCOPE : scope.digests;
+  const scoped = activeScope.length > 0;
+  const parsedDeck = useMemo<FlashcardDeck | null>(
+    () => (fullDeck ? { ...fullDeck, cards: scopeItems(course, fullDeck.cards, activeScope) } : null),
+    [fullDeck, course, activeScope],
+  );
+  const scopeOpts = activeScope.length > 0 ? { digests: activeScope } : undefined;
 
   const identity =
     parsedDeck && activeRoot ? `${activeRoot}|${deckIdentity(parsedDeck)}` : null;
@@ -244,7 +278,7 @@ export function FlashcardsView({
         setReview(null);
       }
     } else if (parsedDeck && identity && identity !== sessionIdentity) {
-      const dueFromOverview = [...overview.data!.due.due_ids];
+      const dueFromOverview = dueIdsFor(scoped, parsedDeck, overview.data!.due.due_ids);
       let nextMode: DeckMode;
       let nextReview: FlashcardReview;
       if (focusCardId) {
@@ -252,7 +286,7 @@ export function FlashcardsView({
         nextMode = focused.mode;
         nextReview = focused.review;
       } else if (activeRoot) {
-        const key = studySessionKey(activeRoot, course, "flashcards");
+        const key = scopedSessionKey(activeRoot, course, "flashcards", activeScope);
         const savedRaw = useStudySessionStore.getState().sessions[key];
         const parsedSaved = parseSavedFlashcards(savedRaw);
         let restored: ReturnType<typeof restoreFlashcards> = null;
@@ -282,7 +316,7 @@ export function FlashcardsView({
       setDeck(parsedDeck);
       setDeckMode(nextMode);
       setDueIds(dueFromOverview);
-      setDeckCount(overview.data!.due.deck_count);
+      setDeckCount(scoped ? parsedDeck.cards.length : overview.data!.due.deck_count);
       setReview(nextReview);
     }
   }
@@ -296,7 +330,7 @@ export function FlashcardsView({
       identity === sessionIdentity &&
       prevSessionIdentityRef.current !== sessionIdentity
     ) {
-      const dueFromOverview = [...overview.data!.due.due_ids];
+      const dueFromOverview = dueIdsFor(scoped, parsedDeck, overview.data!.due.due_ids);
       const focused = sessionWithOptionalFocus(parsedDeck, dueFromOverview, focusCardId);
       if (focused.clearFocusParam) {
         focusClearPendingRef.current = true;
@@ -308,6 +342,7 @@ export function FlashcardsView({
     }
     prevSessionIdentityRef.current = sessionIdentity;
   }, [
+    scoped,
     queriesSettled,
     deckLoadError,
     parsedDeck,
@@ -339,11 +374,11 @@ export function FlashcardsView({
       if (syncedDeck.course !== course) {
         return;
       }
+      syncedDeck = { ...syncedDeck, cards: scopeItems(course, syncedDeck.cards, scopeRef.current) };
     } catch {
       return;
     }
 
-    /* eslint-disable react-hooks/set-state-in-effect -- merge refreshed deck cards in place */
     setDeck(syncedDeck);
     setReview((prev) => {
       if (!prev) {
@@ -370,7 +405,6 @@ export function FlashcardsView({
       }
       return { ...prev, cards, index };
     });
-    /* eslint-enable react-hooks/set-state-in-effect */
   }, [
     queriesSettled,
     identity,
@@ -381,6 +415,17 @@ export function FlashcardsView({
     course,
     review,
   ]);
+
+  useEffect(() => {
+    scopeRef.current = activeScope;
+  });
+
+  const clearScope = scope.clear;
+  useEffect(() => {
+    if (focusOutsideScope) {
+      clearScope();
+    }
+  }, [focusOutsideScope, clearScope]);
 
   useEffect(() => {
     if (!focusClearPendingRef.current) {
@@ -400,17 +445,17 @@ export function FlashcardsView({
     ) {
       return;
     }
-    const key = studySessionKey(activeRoot, course, "flashcards");
+    const key = scopedSessionKey(activeRoot, course, "flashcards", activeScope);
     useStudySessionStore
       .getState()
       .save(key, snapshotFlashcards(review, deckMode, identity));
-  }, [activeRoot, course, identity, sessionIdentity, review, deckMode]);
+  }, [activeRoot, activeScope, course, identity, sessionIdentity, review, deckMode]);
 
   function confirmRestart() {
     if (!deck || !activeRoot) {
       return;
     }
-    const key = studySessionKey(activeRoot, course, "flashcards");
+    const key = scopedSessionKey(activeRoot, course, "flashcards", activeScope);
     useStudySessionStore.getState().clear(key);
     setReview(sessionForMode(deck, deckMode, dueIds));
     setRestartOpen(false);
@@ -460,7 +505,8 @@ export function FlashcardsView({
           ...old,
           due: {
             ...old.due,
-            due_ids: nextDueIds,
+            // The class-wide list: a scoped session only grades its own cards.
+            due_ids: applyGradeToDueIds(old.due.due_ids, card.id, grade),
             count,
           },
         };
@@ -537,7 +583,7 @@ export function FlashcardsView({
     return () => window.removeEventListener("keydown", onKeyDown);
   });
 
-  const hasDeck = deck !== null && review !== null;
+  const hasDeck = deck !== null && review !== null && !(scoped && deck.cards.length === 0);
   const deckUnavailable =
     deckQuery.isError ||
     (queriesSettled && deckLoadError);
@@ -552,6 +598,8 @@ export function FlashcardsView({
     (flushAt > 0 && overview.dataUpdatedAt < flushAt);
   const queriesLoading = awaitingSettled && !hasDeck && !deckUnavailable;
   const displayName = courseDisplayName(course);
+  const dueDone = hasDeck && deckMode === "due" && review.cards.length === 0 && !(scoped && deck.cards.length === 0);
+  const nextClass = useNextReviewClass(activeRoot, course, dueDone);
 
   if (queriesLoading) {
     return (
@@ -568,23 +616,17 @@ export function FlashcardsView({
     return (
       <StudyViewShell testId="flashcards-view">
         <StudyColumn className="mx-auto flex w-full max-w-flashcards flex-col items-center gap-4">
-          <EmptyState
+          <StudyEmpty
             title="No flashcards yet"
-            description={`No flashcards yet for ${displayName}. Generate a deck from your digests.`}
-            actions={
-              <div className="flex flex-col items-center gap-2">
-                {modelHint ? (
-                  <p className="text-sm text-muted-foreground">{modelHint}</p>
-                ) : null}
-                <Button
-                  disabled={jobDisabled}
-                  title={viewerBlocked ? viewerWriteReason : undefined}
-                  onClick={() => void launchStudyJob(course, false)}
-                >
-                  Generate
-                </Button>
-              </div>
+            description={
+              scoped
+                ? `No flashcards yet for ${scopeNoun(activeScope.length).these}. Generate a deck from ${scopeNoun(activeScope.length).their}.`
+                : `No flashcards yet for ${displayName}. Generate a deck from your digests.`
             }
+            modelHint={modelHint}
+            disabled={jobDisabled}
+            disabledReason={viewerBlocked ? viewerWriteReason : undefined}
+            onGenerate={() => void launchStudyJob(course, false, scopeOpts)}
           />
         </StudyColumn>
       </StudyViewShell>
@@ -669,18 +711,30 @@ export function FlashcardsView({
                 Study full deck
               </Button>
             ) : null}
+            {nextClass ? (
+              <Button
+                type="button"
+                onClick={() => {
+                  // The button promised the class's due cards: lectures ticked there earlier would scope them.
+                  useLectureSelectionStore.getState().clear(classScopeKey(nextClass.root, nextClass.course));
+                  void openClass(nextClass.root, nextClass.course, "cards");
+                }}
+              >
+                Next: {courseDisplayName(nextClass.course)} · {nextClass.due} due
+              </Button>
+            ) : null}
           </div>
         ) : (
           <>
             <div
               data-testid="flashcard-card"
-              className="flex min-h-80 w-full cursor-pointer flex-col rounded-md border border-border bg-card px-8 py-7 shadow-card"
+              className="flex min-h-90 w-full cursor-pointer flex-col rounded-md border border-border bg-card px-8 py-7 shadow-card"
               onClick={() => setReview(flipReview(session))}
             >
               <span className="font-serif text-sm italic text-faint-foreground">Question</span>
               <p className="mt-4.5 font-serif text-flashcard-q">{card!.front}</p>
               {session.flipped ? (
-                <div className="mt-4.5 border-t border-dashed border-border pt-4.5">
+                <div className="mt-4.5 border-t border-border pt-4.5">
                   <span className="font-serif text-sm italic text-faint-foreground">Answer</span>
                   <p className="mt-4.5 font-serif text-read text-muted-foreground">{card!.back}</p>
                 </div>
@@ -756,7 +810,7 @@ export function FlashcardsView({
                 variant="outline"
                 onClick={() => setReview(previousReview(session))}
               >
-                <ChevronLeft className="size-icon-sm" />
+                <ArrowLeft className="size-icon-sm" />
                 Previous
               </Button>
               {session.flipped ? (
@@ -771,7 +825,7 @@ export function FlashcardsView({
               ) : null}
               <Button type="button" variant="outline" onClick={() => setReview(nextReview(session))}>
                 Next
-                <ChevronRight className="size-icon-sm" />
+                <ArrowRight className="size-icon-sm" />
               </Button>
               <Button
                 type="button"

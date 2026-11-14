@@ -1,21 +1,13 @@
 import { Badge } from "~/components/ui/badge";
-import {
-  LazyTooltip,
-  LazyTooltipContent,
-  LazyTooltipTrigger,
-} from "~/components/ui/lazy-tooltip";
 
+/** The red "Unverified · slide 9 not found" tag: the citation check could not find the cited passage. */
 export function StudyUnverifiedBadge({ reason }: { reason?: string }) {
+  const why = reason ?? "Citation check failed";
   return (
-    <LazyTooltip>
-      <LazyTooltipTrigger
-        render={(tooltipProps) => (
-          <Badge variant="destructive" className="cursor-default" {...tooltipProps}>
-            Unverified
-          </Badge>
-        )}
-      />
-      <LazyTooltipContent>{reason ?? "Citation check failed"}</LazyTooltipContent>
-    </LazyTooltip>
+    <Badge variant="destructive" className="h-auto max-w-full cursor-default rounded-xs px-1 text-micro" title={why}>
+      <span>Unverified</span>
+      <span aria-hidden>·</span>
+      <span className="truncate">{why}</span>
+    </Badge>
   );
 }
