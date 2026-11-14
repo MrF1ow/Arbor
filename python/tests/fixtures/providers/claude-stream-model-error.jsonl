@@ -1,0 +1,3 @@
+{"type": "system", "subtype": "init", "session_id": "sess-fixture", "tools": [], "model": "claude-nonexistent-9"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "There's an issue with the selected model (claude-nonexistent-9). It may not exist or you may not have access to it."}], "model": "<synthetic>"}, "session_id": "sess-fixture"}
+{"type": "result", "subtype": "success", "is_error": true, "result": "There's an issue with the selected model (claude-nonexistent-9). It may not exist or you may not have access to it.", "stop_reason": "stop_sequence", "usage": {"input_tokens": 0, "output_tokens": 0, "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0}, "session_id": "sess-fixture", "terminal_reason": "api_error"}

@@ -28,6 +28,15 @@ _AUTH = re.compile(
     r"authentication required|not authenticated|please log in|not logged in|login required",
     re.IGNORECASE,
 )
+# The CLI refusing its own arguments: "--input-format=... requires output-format=...",
+# "unknown option '--x'", "option '--x <v>' argument 'y' is invalid". Each pattern
+# needs a --flag, so prose that merely says "requires" or "option" never matches.
+_CLI_USAGE = re.compile(
+    r"--[\w-]+(?:=\S*)?\s+requires\s+[\w-]+="
+    r"|\bunknown option\s+'--[\w-]+'"
+    r"|\boption\s+'--[\w-]+[^']*'\s+argument\b",
+    re.IGNORECASE,
+)
 _SECRETS = (
     re.compile(r"(?i)\b(authorization\s*[:=]\s*)(?:bearer\s+)?\S+"),
     re.compile(r"(?i)\b(bearer\s+)\S+"),
@@ -87,6 +96,8 @@ def classify_kind(text: str) -> str:
         return "quota"
     if _AUTH.search(joined):
         return "auth"
+    if _CLI_USAGE.search(joined):
+        return "cli_usage"
     return "unknown"
 
 
@@ -140,6 +151,11 @@ def summary_for(label: str, kind: str) -> str:
         )
     if kind == "auth":
         return f"{display} is not authenticated. Sign in and try again."
+    if kind == "cli_usage":
+        return (
+            f"{display} rejected Arbor's command-line arguments. "
+            f"Update the {label} CLI or Arbor."
+        )
     return f"{display} failed."
 
 

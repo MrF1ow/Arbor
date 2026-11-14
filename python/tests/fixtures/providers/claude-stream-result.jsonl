@@ -1,0 +1,4 @@
+{"type": "system", "subtype": "init", "session_id": "sess-fixture", "tools": [], "model": "claude-sonnet-5-5"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "Red."}], "model": "claude-sonnet-5-5"}, "session_id": "sess-fixture"}
+{"type": "rate_limit_event", "rate_limit_info": {"status": "allowed"}, "session_id": "sess-fixture"}
+{"type": "result", "subtype": "success", "is_error": false, "result": "Red.", "stop_reason": "end_turn", "usage": {"input_tokens": 2, "output_tokens": 5, "cache_creation_input_tokens": 2552, "cache_read_input_tokens": 649}, "session_id": "sess-fixture", "terminal_reason": "completed"}

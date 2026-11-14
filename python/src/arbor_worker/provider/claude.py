@@ -33,6 +33,17 @@ DEFAULT_CLAUDE_MODELS = [
 ]
 
 
+def _is_result_line(line: str) -> bool:
+    line = line.strip()
+    if not line.startswith("{"):
+        return False
+    try:
+        payload = json.loads(line)
+    except json.JSONDecodeError:
+        return False
+    return isinstance(payload, dict) and payload.get("type") == "result"
+
+
 class ClaudeCliProvider:
     name = "claude"
 
@@ -79,7 +90,9 @@ class ClaudeCliProvider:
             "--model",
             request.model_id,
             "--output-format",
-            "json",
+            # The CLI rejects --input-format stream-json unless the output is
+            # stream-json too, so page images switch both (plus --verbose).
+            "stream-json" if request.image_paths else "json",
             "--tools",
             "",
             "--no-session-persistence",
@@ -88,8 +101,7 @@ class ClaudeCliProvider:
             "--strict-mcp-config",
         ]
         if request.image_paths:
-            argv.append("--input-format")
-            argv.append("stream-json")
+            argv.extend(["--verbose", "--input-format", "stream-json"])
         if request.system is not None:
             argv.extend(["--system-prompt", request.system])
         return argv
@@ -100,6 +112,8 @@ class ClaudeCliProvider:
         argv[idx + 1] = "stream-json"
         insert_at = idx + 2
         for flag in ("--verbose", "--include-partial-messages"):
+            if flag in argv:
+                continue
             argv.insert(insert_at, flag)
             insert_at += 1
         return argv
@@ -142,6 +156,8 @@ class ClaudeCliProvider:
             cwd=request.cwd,
             env=env,
         )
+        if request.image_paths:
+            return self._result_from_stream(proc)
         if proc.returncode != 0:
             raise cli_process_failure(
                 "claude",
@@ -164,6 +180,22 @@ class ClaudeCliProvider:
         usage: dict[str, int] = {}
         record_usage(usage, payload.get("usage"), "input_tokens", "output_tokens")
         return ProviderResult(markdown=result, **usage_tokens(usage))
+
+    def _result_from_stream(self, proc) -> ProviderResult:
+        """Read a stream-json run. The CLI exits 1 on an is_error result, so
+        stdout is parsed before the exit code is looked at."""
+        stdout = proc.stdout or ""
+        lines = stdout.splitlines()
+        if not any(_is_result_line(line) for line in lines):
+            if proc.returncode != 0:
+                raise cli_process_failure(
+                    "claude",
+                    proc.returncode,
+                    proc.stderr or stdout,
+                )
+        usage: dict[str, int] = {}
+        markdown = iter_stream_json(lines, lambda _text: None, label="claude", usage=usage)
+        return ProviderResult(markdown=markdown, **usage_tokens(usage))
 
     def stream(self, request: ProviderRequest, on_delta: DeltaFn) -> ProviderResult:
         if self._guard_active():
