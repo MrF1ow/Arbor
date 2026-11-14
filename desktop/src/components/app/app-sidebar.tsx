@@ -194,6 +194,25 @@ function LibrarySidebar() {
     }
   };
 
+  /**
+   * A library group header switches the active library. Every class route only looks in the active
+   * library, so a class open in the old one would turn into "Class not found": land on Today instead.
+   */
+  const onLibrarySelect = async (root: string) => {
+    if (root === activeRoot) {
+      return;
+    }
+    try {
+      await switchRoot.mutateAsync(root);
+      void navigate({ to: "/" });
+      if (isMobile) {
+        setOpen(false);
+      }
+    } catch (error) {
+      toast.error(String(error));
+    }
+  };
+
   const onCreateClass = async () => {
     const name = className.trim();
     if (!name) {
@@ -221,7 +240,7 @@ function LibrarySidebar() {
         label="Today"
         to="/"
         count={due.known && due.total > 0 ? `${due.total} due` : null}
-        active={pathname === "/"}
+        active={pathname === "/" || pathname === "/welcome"}
         className="font-semibold"
         onSelect={() => {
           if (isMobile) {
@@ -240,9 +259,12 @@ function LibrarySidebar() {
           activeCourse={activeCourse}
           dueByClass={due.byClass}
           onCourseSelect={onCourseSelect}
-          onRootSelect={(root) => void switchRoot.mutateAsync(root).catch((e) => toast.error(String(e)))}
+          onRootSelect={(root) => void onLibrarySelect(root)}
         />
       ))}
+      {settings.isSuccess && roots.length === 0 ? (
+        <p className="h-6 px-2 text-label font-semibold leading-6 text-faint-foreground">My library</p>
+      ) : null}
       {addingClass ? (
         <div className="space-y-1 px-1 py-2">
           <Input

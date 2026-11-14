@@ -1,7 +1,8 @@
-import { cleanup, screen, waitFor } from "@testing-library/react";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clearTauriMocks } from "~/test/mock-ipc";
 
+import { fixtureSettings } from "~/test/fixtures/data";
 import { renderAppAtRoute } from "~/test/render";
 import { useUiStore } from "~/stores/ui-store";
 
@@ -60,5 +61,20 @@ describe("app sidebar root groups", () => {
     expect(count.className).toContain("group-hover/nav-row:hidden");
     expect(count.className).toContain("group-focus-within/nav-row:hidden");
     expect(count.className).not.toMatch(/(^|\s)group-(hover|focus-within):/);
+  });
+
+  it("with no library, labels the + Add class row with a My library group like First run's design frame", async () => {
+    await renderAppAtRoute("/", {
+      get_settings: () => ({
+        ...fixtureSettings,
+        knowledge_root: null,
+        active_root: null,
+        knowledge_roots: [],
+      }),
+    });
+    const sidebar = await screen.findByRole("complementary");
+    const label = await within(sidebar).findByText("My library");
+    const add = within(sidebar).getByRole("button", { name: "+ Add class" });
+    expect(label.compareDocumentPosition(add) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

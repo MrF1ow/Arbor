@@ -1,10 +1,11 @@
-import { act, cleanup, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { clearTauriMocks } from "~/test/mock-ipc";
 
 import { UpdateReviewDialog } from "~/components/app/update-review-dialog";
 import { DESKTOP_ONLY_WELCOME_COPY } from "~/domain/tauri";
+import type { Settings } from "~/domain/types";
 import * as ipcModule from "~/lib/ipc";
 import * as tauriModule from "~/domain/tauri";
 import {
@@ -72,7 +73,7 @@ describe("welcome and library flows (PR 6)", () => {
     vi.restoreAllMocks();
   });
 
-  it("renders brand marks with empty alt and theme swap classes on welcome and sidebar", async () => {
+  it("renders brand marks with empty alt and theme swap classes in the top bar", async () => {
     const { router } = await renderAppAtRoute("/welcome", {
       get_settings: () => ({
         ...fixtureSettings,
@@ -84,12 +85,77 @@ describe("welcome and library flows (PR 6)", () => {
     await waitFor(() => {
       expect(router.state.location.pathname).toBe("/welcome");
     });
-    const imgs = document.querySelectorAll('img[alt=""]');
-    expect(imgs.length).toBeGreaterThanOrEqual(4);
-    const lightMarks = document.querySelectorAll('img.dark\\:hidden[alt=""]');
-    const darkMarks = document.querySelectorAll('img.hidden.dark\\:block[alt=""]');
-    expect(lightMarks.length).toBeGreaterThanOrEqual(2);
-    expect(darkMarks.length).toBeGreaterThanOrEqual(2);
+    expect(document.querySelectorAll('img[alt=""]').length).toBeGreaterThanOrEqual(2);
+    expect(document.querySelectorAll('img.dark\\:hidden[alt=""]').length).toBeGreaterThanOrEqual(1);
+    expect(document.querySelectorAll('img.hidden.dark\\:block[alt=""]').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("First run lists the three steps, and + Add class waits for a folder", async () => {
+    await renderAppAtRoute("/welcome", {
+      get_settings: () => ({
+        ...fixtureSettings,
+        knowledge_root: null,
+        active_root: null,
+        knowledge_roots: [],
+      }),
+    });
+    expect(await screen.findByRole("heading", { name: "Welcome to Arbor" })).toBeInTheDocument();
+    for (const step of ["Choose a Knowledge folder", "Add a class and its lectures", "Update knowledge"]) {
+      expect(screen.getByRole("heading", { name: step })).toBeInTheDocument();
+    }
+    expect(screen.getByText("Needs a signed-in provider")).toBeInTheDocument();
+    expect(within(screen.getByTestId("first-run")).getByRole("button", { name: "+ Add class" })).toBeDisabled();
+  });
+
+  it("Join a shared library opens the join dialog from First run, and a join reaches the library", async () => {
+    const user = userEvent.setup();
+    const JOINED = "/mock/knowledge/joined-lib";
+    vi.spyOn(ipcModule, "openDialog").mockResolvedValue(JOINED);
+    let settings: Settings = {
+      ...fixtureSettings,
+      knowledge_root: null,
+      active_root: null,
+      knowledge_roots: [],
+    };
+    const { router } = await renderAppAtRoute("/", {
+      get_settings: () => settings,
+      save_settings: (args) => {
+        settings = (args as { settings: Settings }).settings;
+        return null;
+      },
+    });
+    await user.click(await screen.findByRole("button", { name: "Join a shared library" }));
+    // It stays on First run: the join dialog opens in place instead of a settings page with no Join button.
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Join a library")).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/");
+
+    await user.type(within(dialog).getByRole("textbox", { name: "Library URL" }), "git@host:team/notes.git");
+    await user.click(within(dialog).getByRole("button", { name: "Choose folder…" }));
+    await waitFor(() => {
+      expect(within(dialog).getByRole("textbox", { name: "Folder" })).toHaveValue(JOINED);
+    });
+    await user.click(within(dialog).getByRole("button", { name: "Join" }));
+
+    await waitFor(() => {
+      expect(getMockIpcLog()).toContain("join_library");
+    });
+    const joinCall = getMockIpcCalls().find((c) => c.cmd === "join_library");
+    expect(joinCall?.args).toMatchObject({ url: "git@host:team/notes.git", dest: JOINED });
+    await waitFor(() => {
+      expect(settings.knowledge_roots).toEqual([{ path: JOINED, kind: "shared", name: "Joined library" }]);
+    });
+    // The library now exists, so / is Today and the dialog is gone.
+    expect(await screen.findByTestId("today-page")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("first-run")).not.toBeInTheDocument();
+  });
+
+  it("shows one Toggle Sidebar button, the top bar's, when the sidebar is closed", async () => {
+    useUiStore.setState({ sidebarOpen: false, sidebarTouched: true });
+    await renderAppAtRoute("/welcome");
+    await screen.findByTestId("welcome-choose-folder");
+    expect(screen.getAllByRole("button", { name: "Toggle Sidebar" })).toHaveLength(1);
   });
 
   it("choose folder runs init_knowledge_repo, save_settings, init_arbor_db, start_folder_watch in order", async () => {
@@ -203,7 +269,7 @@ describe("welcome and library flows (PR 6)", () => {
     expect(new Set(providers)).toEqual(new Set(["grok"]));
   });
 
-  it("shows add-class step when the new root has zero courses", async () => {
+  it("shows the add-class form in step 2 when the new root has zero courses", async () => {
     vi.spyOn(ipcModule, "openDialog").mockResolvedValue(NEW_ROOT);
     await renderAppAtRoute("/welcome", {
       get_settings: () => ({
@@ -217,7 +283,21 @@ describe("welcome and library flows (PR 6)", () => {
     const user = userEvent.setup();
     await user.click(await screen.findByTestId("welcome-choose-folder"));
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: /Add your first class/i })).toBeInTheDocument();
+      expect(screen.getByRole("textbox", { name: "Class name" })).toBeInTheDocument();
+    });
+    expect(screen.getByRole("heading", { name: "Add a class and its lectures" })).toBeInTheDocument();
+  });
+
+  it("creates the first class from step 2 and opens its overview", async () => {
+    const user = userEvent.setup();
+    const { router } = await renderAppAtRoute(`/welcome?addClass=true&root=${encodeURIComponent(NEW_ROOT)}`, {
+      list_courses: () => [],
+      create_course: () => "biology-101",
+    });
+    await user.type(await screen.findByRole("textbox", { name: "Class name" }), "Biology 101");
+    await user.click(screen.getByRole("button", { name: "Create class" }));
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe("/course/biology-101/overview");
     });
   });
 

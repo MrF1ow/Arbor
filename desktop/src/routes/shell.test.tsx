@@ -90,17 +90,18 @@ describe("app shell", () => {
     vi.restoreAllMocks();
   });
 
-  it("redirects / to last course notes when lastCourse is set", async () => {
+  it("opens Today at / instead of redirecting to the last class, with the Today row current", async () => {
     useUiStore.setState({
       lastCourse: { root: FIXTURE_ROOT_FALL, course: "organic-chemistry-ii" },
     });
     const { router } = await renderAppAtRoute("/");
-    await waitFor(() => {
-      expect(router.state.location.pathname).toContain("/course/organic-chemistry-ii/notes");
-    });
+    expect(await screen.findByTestId("today-page")).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/");
+    const sidebar = await screen.findByRole("complementary");
+    expect(within(sidebar).getByRole("link", { name: /Today/ })).toHaveAttribute("aria-current", "page");
   });
 
-  it("redirects / to welcome when there is no knowledge root", async () => {
+  it("shows First run at / when there is no knowledge root, and keeps the Today row current", async () => {
     const { router } = await renderAppAtRoute("/", {
       get_settings: () => ({
         ...fixtureSettings,
@@ -109,9 +110,45 @@ describe("app shell", () => {
         knowledge_roots: [],
       }),
     });
-    await waitFor(() => {
-      expect(router.state.location.pathname).toBe("/welcome");
+    expect(await screen.findByRole("heading", { name: "Welcome to Arbor" })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/");
+    const sidebar = await screen.findByRole("complementary");
+    expect(within(sidebar).getByRole("link", { name: /Today/ })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("lands on Today when a library header is clicked inside a class, instead of Class not found", async () => {
+    const user = userEvent.setup();
+    const { router } = await renderAppAtRoute("/course/cell-biology/overview");
+    await waitForCourseOverview();
+    const sidebar = await screen.findByRole("complementary");
+    // "Class not found" can flash between the library switch and the navigation, so watch for it
+    // from the click on instead of checking once after Today has rendered.
+    let sawClassNotFound = false;
+    const observer = new MutationObserver(() => {
+      sawClassNotFound ||= screen.queryByText("Class not found") !== null;
     });
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+    try {
+      await user.click(await within(sidebar).findByRole("button", { name: /Shared · Study group/ }));
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe("/");
+      });
+      expect(await screen.findByTestId("today-page")).toBeInTheDocument();
+    } finally {
+      observer.disconnect();
+    }
+    expect(sawClassNotFound).toBe(false);
+    expect(screen.queryByText("Class not found")).not.toBeInTheDocument();
+    expect(within(sidebar).getByRole("link", { name: /Today/ })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("stays where it is when the header of the active library is clicked", async () => {
+    const user = userEvent.setup();
+    const { router } = await renderAppAtRoute("/course/cell-biology/overview");
+    await waitForCourseOverview();
+    const sidebar = await screen.findByRole("complementary");
+    await user.click(await within(sidebar).findByRole("button", { name: /Fall 2026/ }));
+    expect(router.state.location.pathname).toBe("/course/cell-biology/overview");
   });
 
   it("opens a class on its overview and sets lastCourse from the sidebar", async () => {
