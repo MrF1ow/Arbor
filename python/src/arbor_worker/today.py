@@ -27,17 +27,29 @@ _RESERVED_TOP_LEVEL = frozenset(
 
 
 def list_knowledge_courses(root: Path) -> list[str]:
-    """Top-level course folders, matching Rust ``list_courses`` skip rules."""
+    """Top-level class folders Today covers: a subset of the sidebar's classes.
+
+    Shared rule with Rust ``list_courses`` (the sidebar): real directories only
+    (a symlink is never a class, broken or not), no hidden or internal names.
+    Today-only exclusions: the ``Chat`` and ``Local`` folders (the sidebar still
+    lists them), names ``validate_course_name`` rejects, and names that are not
+    valid UTF-8 (Rust lossy-converts them, so they cannot match; they would also
+    break JSON output).
+    """
     if not root.is_dir():
         return []
     courses: list[str] = []
     for child in root.iterdir():
-        if not child.is_dir():
+        if child.is_symlink() or not child.is_dir():
             continue
         name = child.name
         if not name or name.startswith("."):
             continue
         if name.casefold() in _RESERVED_TOP_LEVEL:
+            continue
+        try:
+            name.encode("utf-8")
+        except UnicodeEncodeError:
             continue
         try:
             validate_course_name(name)
