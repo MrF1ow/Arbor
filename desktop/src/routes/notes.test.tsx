@@ -1134,6 +1134,75 @@ describe("class workspace", { timeout: 15000 }, () => {
       scrollIntoView.mockRestore();
     });
 
+    const courseMdFixture = (courseMd: string) => ({
+      ...workspaceFixtures,
+      read_markdown: (args: unknown) => {
+        const path = String((args as { relativePath?: string }).relativePath ?? "");
+        if (path.endsWith("/course.md")) {
+          return courseMd;
+        }
+        if (path.endsWith("study/plan.md")) {
+          return "";
+        }
+        return "# Digest\n\nBody.\n";
+      },
+    });
+
+    it("a digest link in Course notes opens that digest in Read (one-digest course.md)", async () => {
+      const { router } = await renderAppAtRoute(
+        `/course/${COURSE}/overview`,
+        courseMdFixture("See [2026-10-08-membrane-transport.md](digests/2026-10-08-membrane-transport.md).\n"),
+      );
+      await waitForOverview();
+      const link = await screen.findByRole("link", { name: "2026-10-08-membrane-transport.md" });
+      // fireEvent.click returns false when the default (the webview following `digests/…md`) was prevented.
+      expect(fireEvent.click(link)).toBe(false);
+      await waitFor(() =>
+        expect(router.state.location.pathname).toBe(`/course/${COURSE}/read/2026-10-08-membrane-transport`),
+      );
+    });
+
+    it("each digest link in a two-digest Course notes roll-up opens its own digest in Read", async () => {
+      const { router } = await renderAppAtRoute(
+        `/course/${COURSE}/overview`,
+        courseMdFixture(
+          "## Digests\n\n- [2026-09-02-cell-theory.md](digests/2026-09-02-cell-theory.md)\n- [2026-10-01-lipid-bilayers.md](digests/2026-10-01-lipid-bilayers.md)\n",
+        ),
+      );
+      await waitForOverview();
+      expect(fireEvent.click(await screen.findByRole("link", { name: "2026-09-02-cell-theory.md" }))).toBe(false);
+      await waitFor(() => expect(router.state.location.pathname).toBe(`/course/${COURSE}/read/2026-09-02-cell-theory`));
+      await router.navigate({ to: "/course/$course/overview", params: { course: COURSE } });
+      await waitForOverview();
+      expect(fireEvent.click(await screen.findByRole("link", { name: "2026-10-01-lipid-bilayers.md" }))).toBe(false);
+      await waitFor(() => expect(router.state.location.pathname).toBe(`/course/${COURSE}/read/2026-10-01-lipid-bilayers`));
+    });
+
+    it("an external link in Course notes is left to the browser: no move to Read, default not prevented", async () => {
+      const { router } = await renderAppAtRoute(
+        `/course/${COURSE}/overview`,
+        courseMdFixture("Read [the syllabus](https://example.edu/syllabus) first.\n"),
+      );
+      await waitForOverview();
+      const link = await screen.findByRole("link", { name: "the syllabus" });
+      const notPrevented = fireEvent.click(link);
+      expect(notPrevented).toBe(true);
+      expect(router.state.location.pathname).toBe(`/course/${COURSE}/overview`);
+    });
+
+    it("an in-page # link in Course notes is left alone: no move to Read, default not prevented", async () => {
+      const { router } = await renderAppAtRoute(
+        `/course/${COURSE}/overview`,
+        courseMdFixture("Jump to [the topics](#syllabus-topics).\n"),
+      );
+      await waitForOverview();
+      const link = await screen.findByRole("link", { name: "the topics" });
+      expect(link.getAttribute("href")).toBe("#syllabus-topics");
+      const notPrevented = fireEvent.click(link);
+      expect(notPrevented).toBe(true);
+      expect(router.state.location.pathname).toBe(`/course/${COURSE}/overview`);
+    });
+
     it("a Recommended Read item takes its note from the reading state, not 'never read' (F80)", async () => {
       await renderAppAtRoute(`/course/${COURSE}/overview`, {
         ...workspaceFixtures,

@@ -13,7 +13,7 @@ import { Skeleton } from "~/components/ui/skeleton";
 import { courseDisplayName } from "~/domain/course";
 import { toCourseDigest, type ReadingEntry } from "~/domain/lectures";
 import { VIEWER_WRITE_REASON, viewerBlocksWrite } from "~/domain/library-role";
-import { headingId, renderMarkdown } from "~/domain/markdown";
+import { arborDigestTarget, headingId, renderMarkdown } from "~/domain/markdown";
 import { daysUntil, resolveDigestSlug } from "~/domain/notes";
 import { PROVIDER_FALLBACK, signedOutJobMessage } from "~/domain/provider";
 import type { CourseOverviewPayload, DigestInfo, StudyRecommendItem } from "~/domain/types";
@@ -221,6 +221,26 @@ export function CourseOverview({
   const openDigest = (digestRef: string, heading?: string | null) => {
     const slug = resolveDigestSlug(digestRef, digests);
     void navigate({ ...classPath(course, "read", slug), search: heading ? { heading } : {} });
+  };
+
+  // A digest link in the rendered course.md carries a relative `digests/…md` href that the webview
+  // would follow to an unknown route; open it in Read instead. Any other click is left alone.
+  const onCourseNotesClick = (event: React.MouseEvent<HTMLElement>) => {
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+    const anchor = target.closest("a[data-arbor-digest]");
+    if (!(anchor instanceof HTMLAnchorElement)) {
+      return;
+    }
+    const href = anchor.getAttribute("href");
+    const digestTarget = href ? arborDigestTarget(href) : null;
+    if (!digestTarget) {
+      return;
+    }
+    event.preventDefault();
+    openDigest(digestTarget);
   };
 
   const drill = (digestRef: string) => {
@@ -491,7 +511,11 @@ export function CourseOverview({
             Course notes
           </button>
           {courseNotesOpen ? (
-            <div className="prose-arbor mt-3" dangerouslySetInnerHTML={{ __html: courseNotesHtml }} />
+            <div
+              className="prose-arbor mt-3"
+              onClick={onCourseNotesClick}
+              dangerouslySetInnerHTML={{ __html: courseNotesHtml }}
+            />
           ) : null}
         </section>
       ) : null}
