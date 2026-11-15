@@ -162,6 +162,19 @@ function useSwitchToUrlRoot(activeRoot: string | null, settings: ReturnType<type
   return switching;
 }
 
+/** Whether `pathname` is a view of class `course` (`/course/<course>/...`). */
+function isClassPath(pathname: string, course: string): boolean {
+  const segment = pathname.split("/")[2];
+  if (pathname.split("/")[1] !== "course" || segment === undefined) {
+    return false;
+  }
+  try {
+    return decodeURIComponent(segment) === course;
+  } catch {
+    return segment === course;
+  }
+}
+
 function CourseLayout() {
   const { course } = Route.useParams();
   const { root: urlRoot } = Route.useSearch();
@@ -172,9 +185,14 @@ function CourseLayout() {
   const { mutateAsync: switchRoot } = useSwitchActiveRootMutation();
   // The class does not render, and so cannot save anything, until the active library is the URL's.
   const switchingToUrlRoot = useSwitchToUrlRoot(activeRoot, settings.data);
+  // The router's current location is already the next one while a navigation is pending (Today's
+  // route chunk may still be loading after the sidebar's library header switched): a class page the
+  // router has left records no library of its own and looks in no other library, or it would switch
+  // the app back to a class the user has just left.
+  const leaving = !useRouterState({ select: (s) => isClassPath(s.location.pathname, course) });
 
   useEffect(() => {
-    if (!activeRoot || !course || switchingToUrlRoot) {
+    if (!activeRoot || !course || switchingToUrlRoot || leaving) {
       return;
     }
     const list = courses.data;
@@ -184,10 +202,10 @@ function CourseLayout() {
     if (list.includes(course)) {
       setLastCourse({ root: activeRoot, course });
     }
-  }, [activeRoot, course, courses.data, setLastCourse, switchingToUrlRoot]);
+  }, [activeRoot, course, courses.data, setLastCourse, switchingToUrlRoot, leaving]);
 
   const exists = (courses.data ?? []).includes(course);
-  const missing = courses.isSuccess && !exists && !switchingToUrlRoot;
+  const missing = courses.isSuccess && !exists && !switchingToUrlRoot && !leaving;
   // A list that is being refetched may just lack a class that was created a moment ago ("+ Add
   // class" navigates before the refetch lands): look in the other libraries, and switch to one,
   // only once the active library's own list is fresh and still lacks the class.
@@ -212,7 +230,7 @@ function CourseLayout() {
   // The same class name in another library (Back across two libraries) is another class page.
   const homeKey = `${course}\n${urlRoot ?? ""}`;
   const [home, setHome] = useState<{ key: string; root: string } | null>(null);
-  if (activeRoot && !switchingToUrlRoot && home?.key !== homeKey) {
+  if (activeRoot && !switchingToUrlRoot && !leaving && home?.key !== homeKey) {
     setHome({ key: homeKey, root: activeRoot });
   }
   const switchedAway = activeRoot != null && home != null && home.key === homeKey && home.root !== activeRoot;
@@ -258,7 +276,7 @@ function CourseLayout() {
       });
   }, [course, homeKey, urlRoot, foundRoot, switchRoot, router, navigate]);
 
-  if (switchingToUrlRoot) {
+  if (switchingToUrlRoot || leaving) {
     // Switching to the library this URL names: nothing renders against the old one meanwhile.
     return <div className="flex min-h-0 flex-1" />;
   }

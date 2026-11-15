@@ -170,8 +170,11 @@ async function finishSwitch(queryClient: QueryClient, root: string, run: SwitchR
       "The folder watch did not answer in time.",
     );
   } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    toast.warning(`Switched library, but could not start watching its folder for changes: ${reason}`);
+    // A switch abandoned meanwhile (the tests reset the queue) has no one left to tell.
+    if (!run.abandoned) {
+      const reason = error instanceof Error ? error.message : String(error);
+      toast.warning(`Switched library, but could not start watching its folder for changes: ${reason}`);
+    }
   }
   if (run.abandoned) {
     return;
