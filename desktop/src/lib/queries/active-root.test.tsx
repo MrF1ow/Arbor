@@ -1,6 +1,7 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { toast } from "sonner";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { clearTauriMocks } from "~/test/mock-ipc";
 
 import { createAppQueryClient } from "~/lib/query-client";
@@ -23,6 +24,7 @@ function later<T>(value: T, ms = 10): Promise<T> {
 
 describe("active root mutations", () => {
   afterEach(() => {
+    vi.restoreAllMocks();
     clearTauriMocks();
   });
 
@@ -228,6 +230,145 @@ describe("active root mutations", () => {
       await later(null, 500);
     });
     expect(saves).toEqual([]);
+  });
+
+  it("a switch whose location the user has left by the time it reaches the head of the queue changes nothing", async () => {
+    let backend = fixtureSettings;
+    let wanted = true;
+    const saves: string[] = [];
+    installMockIpc({
+      get_settings: () => later(backend),
+      save_settings: (args) => {
+        const next = (args as { settings: typeof fixtureSettings }).settings;
+        saves.push(next.active_root ?? "");
+        // The user leaves for another page while this switch is saving.
+        wanted = false;
+        return later(null, 100).then(() => {
+          backend = next;
+          return null;
+        });
+      },
+      start_folder_watch: () => later(null),
+    });
+    const client = createAppQueryClient();
+    client.setQueryData(qk.settings(), fixtureSettings);
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(
+      () => ({ switchRoot: useSwitchActiveRootMutation(), pending: usePendingActiveRootSwitch() }),
+      { wrapper },
+    );
+    let behind: Promise<unknown> = Promise.resolve();
+    let third: Promise<unknown> = Promise.resolve();
+    await act(async () => {
+      const first = result.current.switchRoot.mutateAsync(FIXTURE_ROOT_SHARED);
+      // Wanted when asked for; no longer wanted once it is its turn: back to the library the first
+      // switch is leaving, for a page the user has already left.
+      behind = result.current.switchRoot.mutateAsync({ root: FIXTURE_ROOT_FALL, stillWanted: () => wanted });
+      // A switch queued behind it with no check (the sidebar's) still runs.
+      third = result.current.switchRoot.mutateAsync(FIXTURE_ROOT_SHARED);
+      await Promise.all([first, behind, third]);
+    });
+    expect(saves).toEqual([FIXTURE_ROOT_SHARED]);
+    expect(backend.active_root).toBe(FIXTURE_ROOT_SHARED);
+    expect(result.current.pending).toBeNull();
+  });
+
+  it("a switch that is still wanted when it reaches the head of the queue runs", async () => {
+    let backend = fixtureSettings;
+    installMockIpc({
+      get_settings: () => later(backend),
+      save_settings: (args) => {
+        backend = (args as { settings: typeof fixtureSettings }).settings;
+        return later(null);
+      },
+      start_folder_watch: () => later(null),
+    });
+    const client = createAppQueryClient();
+    client.setQueryData(qk.settings(), fixtureSettings);
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useSwitchActiveRootMutation(), { wrapper });
+    await result.current.mutateAsync({ root: FIXTURE_ROOT_SHARED, stillWanted: () => true });
+    expect(backend.active_root).toBe(FIXTURE_ROOT_SHARED);
+  });
+
+  for (const mode of ["never answers", "rejects"] as const) {
+    it(`a switch whose save landed resolves when the folder watch ${mode}, and the queue moves on`, async () => {
+      setActiveRootSwitchTimeoutForTests(100);
+      const errorToast = vi.spyOn(toast, "error");
+      vi.spyOn(toast, "warning").mockImplementation(() => "");
+      let backend = fixtureSettings;
+      let watches = 0;
+      installMockIpc({
+        get_settings: () => later(backend),
+        save_settings: (args) => {
+          backend = (args as { settings: typeof fixtureSettings }).settings;
+          return later(null);
+        },
+        start_folder_watch: () => {
+          watches += 1;
+          if (watches > 1) {
+            return later(null);
+          }
+          return mode === "rejects"
+            ? later(null).then(() => Promise.reject(new Error("watch failed")))
+            : new Promise<never>(() => undefined);
+        },
+      });
+      const client = createAppQueryClient();
+      client.setQueryData(qk.settings(), fixtureSettings);
+      const wrapper = ({ children }: { children: React.ReactNode }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      );
+      const { result } = renderHook(
+        () => ({ switchRoot: useSwitchActiveRootMutation(), pending: usePendingActiveRootSwitch() }),
+        { wrapper },
+      );
+      // Bounded waits: a wedged queue must fail this test, not hang it.
+      const outcome = (promise: Promise<unknown>) =>
+        Promise.race([promise.then(() => "resolved", (error: unknown) => String(error)), later("still pending", 1500)]);
+      await act(async () => {
+        const landed = result.current.switchRoot.mutateAsync(FIXTURE_ROOT_SHARED);
+        const next = result.current.switchRoot.mutateAsync(FIXTURE_ROOT_FALL);
+        expect(await outcome(landed)).toBe("resolved");
+        expect(await outcome(next)).toBe("resolved");
+      });
+      expect(backend.active_root).toBe(FIXTURE_ROOT_FALL);
+      expect(result.current.pending).toBeNull();
+      expect(errorToast).not.toHaveBeenCalled();
+      expect(toast.warning).toHaveBeenCalledTimes(1);
+      expect(String(vi.mocked(toast.warning).mock.calls[0]?.[0])).toMatch(/folder/i);
+    });
+  }
+
+  it("a switch whose save landed resolves when the settings refresh after it never answers", async () => {
+    setActiveRootSwitchTimeoutForTests(100);
+    let backend = fixtureSettings;
+    let landed = false;
+    installMockIpc({
+      get_settings: () => (landed ? new Promise<never>(() => undefined) : later(backend)),
+      save_settings: (args) => {
+        backend = (args as { settings: typeof fixtureSettings }).settings;
+        landed = true;
+        return later(null);
+      },
+      start_folder_watch: () => later(null),
+    });
+    const client = createAppQueryClient();
+    client.setQueryData(qk.settings(), fixtureSettings);
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useSwitchActiveRootMutation(), { wrapper });
+    const outcome = (promise: Promise<unknown>) =>
+      Promise.race([promise.then(() => "resolved", (error: unknown) => String(error)), later("still pending", 1500)]);
+    await act(async () => {
+      expect(await outcome(result.current.mutateAsync(FIXTURE_ROOT_SHARED))).toBe("resolved");
+    });
+    expect(backend.active_root).toBe(FIXTURE_ROOT_SHARED);
   });
 
   it("useActivateKnowledgeRootMutation continues when init_knowledge_repo fails", async () => {

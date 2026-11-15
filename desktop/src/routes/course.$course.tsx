@@ -40,6 +40,19 @@ export const Route = createFileRoute("/course/$course")({
   component: CourseLayout,
 });
 
+/** The router's key for a location: what tells two visits to the same URL apart. */
+function locationKeyOf(location: { href: string; state: { __TSR_key?: unknown; key?: unknown } }): string {
+  return String(location.state.__TSR_key ?? location.state.key ?? location.href);
+}
+
+/**
+ * Whether the router is on the location with this key right now. Read from the history, which
+ * moves the moment a navigation starts, not from the router state, which follows once it has run.
+ */
+function isRouterAt(router: ReturnType<typeof useRouter>, key: string): boolean {
+  return locationKeyOf(router.history.location) === key;
+}
+
 /**
  * The library the URL names, when it is a configured library: switch to it once per location (the
  * router's history key) unless it is already the active library with no switch queued or running,
@@ -53,6 +66,12 @@ export const Route = createFileRoute("/course/$course")({
  * by a quick Forward is the case: the Forward's library is the Back's pending target and, once the
  * Back's save has flipped the cache, the "active" one. A redundant switch costs a settings read: a
  * switch to the library already active does nothing.
+ *
+ * That switch is only for this location, so the queue asks, when the switch's turn comes, whether
+ * the router is still on it ({@link isRouterAt}): a location the user has already left (the
+ * sidebar's library header switched, then went to Today, while a Ctrl+2 queued one behind it) must
+ * not switch back to its library. A location that is left while its switch still runs is a new
+ * location that decided for itself.
  *
  * Key, pathname and `root` are all read from the router's current location, which is already the
  * next one while a navigation is pending (`Route.useSearch()` is still the old match's). The
@@ -68,7 +87,7 @@ function useSwitchToUrlRoot(activeRoot: string | null, settings: ReturnType<type
   const navigate = useNavigate();
   const pendingRoot = usePendingActiveRootSwitch();
   const locationKey = useRouterState({
-    select: (s) => String(s.location.state.__TSR_key ?? s.location.state.key ?? s.location.href),
+    select: (s) => locationKeyOf(s.location),
   });
   const underClass = useRouterState({ select: (s) => s.location.pathname.startsWith("/course/") });
   const locationRoot = useRouterState({ select: (s) => classSearchFrom(s.location.search).root });
@@ -117,7 +136,7 @@ function useSwitchToUrlRoot(activeRoot: string | null, settings: ReturnType<type
       return;
     }
     startedSwitch.current = targetKey;
-    switchRoot(targetRoot).catch((error: unknown) => {
+    switchRoot({ root: targetRoot, stillWanted: () => isRouterAt(router, targetKey) }).catch((error: unknown) => {
       // Fall back to the active library. Only this location's own target: a newer location may
       // have a switch of its own queued.
       setSwitchTo((current) => (current?.key === targetKey ? null : current));
@@ -128,8 +147,7 @@ function useSwitchToUrlRoot(activeRoot: string | null, settings: ReturnType<type
       // still on this location.
       void whenNoActiveRootSwitchPending().then(() => {
         const nowActive = pickActiveRoot(queryClient.getQueryData<Settings>(qk.settings()));
-        const { location } = router.state;
-        const stillHere = String(location.state.__TSR_key ?? location.state.key ?? location.href) === targetKey;
+        const stillHere = locationKeyOf(router.state.location) === targetKey;
         if (stillHere && nowActive && nowActive !== targetRoot) {
           void navigate({
             to: ".",

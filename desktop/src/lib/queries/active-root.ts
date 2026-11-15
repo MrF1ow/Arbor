@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useSyncExternalStore } from "react";
+import { toast } from "sonner";
 
 import type { Settings } from "~/domain/types";
 import { pickActiveRoot } from "~/lib/knowledge-root";
@@ -23,6 +24,17 @@ import { resetJobStoreForRootSwitch } from "~/stores/job-store";
  * session, so each is bounded: past {@link SWITCH_TIMEOUT_MS} it fails (the caller's error toast)
  * and the queue moves on. The late answer, if one ever comes, finds the switch abandoned and stops
  * before it changes anything.
+ *
+ * A switch commits when its save lands. The bound and the abandon cover only the steps up to and
+ * including the save (the settings read, the study-writes flush, the save): until then the outcome
+ * is unknown, so a timeout is a failure. After it the library has switched, so what follows (the
+ * folder watch, the settings refresh) is best effort: each is bounded so it cannot hold the queue,
+ * and a failure of either is a folder-watch problem at most, never a failed switch (which would
+ * leave a class page blank on the old library's URL while the app is on the new one).
+ *
+ * A switch can carry a `stillWanted` check, asked when its turn comes and before it reads settings:
+ * a class page queues one for its own location, and a location the router has already left (the
+ * sidebar's library header switched, then went to Today) has no use for it, so it changes nothing.
  */
 let switchChain: Promise<unknown> = Promise.resolve();
 /** How many switches are queued or running. */
@@ -36,6 +48,9 @@ const SWITCH_TIMEOUT_MS = 15_000;
 let switchTimeoutMs = SWITCH_TIMEOUT_MS;
 /** Bumped by the test reset: a switch from before it must not touch the queue's counters. */
 let queueEpoch = 0;
+
+/** A library to switch to; with `stillWanted`, only if that still returns true once the switch's turn comes. */
+export type SwitchRequest = string | { root: string; stillWanted?: () => boolean };
 
 /** One queued switch. `abandoned` once it timed out (or the tests reset the queue): it does nothing more. */
 type SwitchRun = { abandoned: boolean; epoch: number };
@@ -100,16 +115,20 @@ function boundedBy<T>(work: Promise<T>, ms: number, message: string, onTimeout?:
   });
 }
 
-async function switchActiveRoot(queryClient: QueryClient, root: string, run: SwitchRun) {
+/**
+ * Everything up to and including the save: the part whose outcome decides whether the switch
+ * happened. Resolves `true` when it saved, `false` when the backend was already on `root`.
+ */
+async function commitSwitch(queryClient: QueryClient, root: string, run: SwitchRun): Promise<boolean> {
   // Checked after every await, before the next step changes anything.
-  const stillWanted = () => {
+  const stillRunning = () => {
     if (run.abandoned) {
       throw new Error("Library switch abandoned");
     }
   };
-  stillWanted();
+  stillRunning();
   const settings = await invoke<Settings>("get_settings");
-  stillWanted();
+  stillRunning();
   if (pickActiveRoot(settings) === root) {
     // Already the backend's library. The cache may still say another one (an earlier switch's save
     // failed after its optimistic update): make it agree, or a page waiting for this library to be
@@ -117,10 +136,10 @@ async function switchActiveRoot(queryClient: QueryClient, root: string, run: Swi
     if (pickActiveRoot(queryClient.getQueryData<Settings>(qk.settings())) !== root) {
       queryClient.setQueryData(qk.settings(), settings);
     }
-    return;
+    return false;
   }
   await flushStudyWritesForRootSwitch(3000);
-  stillWanted();
+  stillRunning();
   resetJobStoreForRootSwitch();
   const next: Settings = {
     ...settings,
@@ -128,17 +147,57 @@ async function switchActiveRoot(queryClient: QueryClient, root: string, run: Swi
     knowledge_root: root,
   };
   await saveSettingsSerialized(queryClient, () => {
-    stillWanted();
+    stillRunning();
     return next;
   });
-  stillWanted();
-  await invoke("start_folder_watch", { root });
-  stillWanted();
-  // TODO(PR 11): clear chat transcript state when the active root changes.
-  await queryClient.invalidateQueries({ queryKey: qk.settings() });
+  stillRunning();
+  return true;
 }
 
-function enqueueSwitch(queryClient: QueryClient, root: string): Promise<void> {
+/**
+ * What follows a save that landed: watch the new library's folder and refresh the settings. The
+ * switch has already succeeded, so neither may fail it: each is bounded (so the queue moves on) and
+ * a failed or slow folder watch is reported as that, not as a failed switch.
+ */
+async function finishSwitch(queryClient: QueryClient, root: string, run: SwitchRun, limit: number) {
+  if (run.abandoned) {
+    return;
+  }
+  try {
+    await boundedBy(
+      invoke("start_folder_watch", { root }),
+      limit,
+      "The folder watch did not answer in time.",
+    );
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    toast.warning(`Switched library, but could not start watching its folder for changes: ${reason}`);
+  }
+  if (run.abandoned) {
+    return;
+  }
+  // TODO(PR 11): clear chat transcript state when the active root changes.
+  await boundedBy(
+    queryClient.invalidateQueries({ queryKey: qk.settings() }),
+    limit,
+    "The settings refresh did not answer in time.",
+  ).catch(() => undefined);
+}
+
+/**
+ * Whether a switch is still wanted now that its turn has come. Asked a turn late: the switch ahead
+ * of it has just landed, and whoever asked for that one reacts to it in microtasks (the sidebar's
+ * library header navigates to Today), so only after they have run does the router say where the
+ * user is.
+ */
+async function isStillWanted(run: SwitchRun, stillWanted: () => boolean): Promise<boolean> {
+  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  return !run.abandoned && stillWanted();
+}
+
+function enqueueSwitch(queryClient: QueryClient, request: SwitchRequest): Promise<void> {
+  const root = typeof request === "string" ? request : request.root;
+  const stillWanted = typeof request === "string" ? undefined : request.stillWanted;
   const run: SwitchRun = { abandoned: false, epoch: queueEpoch };
   liveRuns.add(run);
   queuedSwitches += 1;
@@ -148,17 +207,26 @@ function enqueueSwitch(queryClient: QueryClient, root: string): Promise<void> {
     const limit = switchTimeoutMs;
     const timedOut = "Switching library timed out: the app did not get an answer in time. Try again.";
     try {
-      await boundedBy(switchActiveRoot(queryClient, root, run), limit, timedOut, () => {
-        run.abandoned = true;
-      });
-    } catch (error) {
-      // The save updates the cache before the backend has it, and a failed save is never rolled
-      // back: refetch, so the cache says the library the backend is really on before the caller
-      // decides what to show. A refetch that never answers must not hold the queue either.
-      await boundedBy(queryClient.invalidateQueries({ queryKey: qk.settings() }), limit, timedOut).catch(
-        () => undefined,
-      );
-      throw error;
+      if (stillWanted && !(await isStillWanted(run, stillWanted))) {
+        return;
+      }
+      let saved: boolean;
+      try {
+        saved = await boundedBy(commitSwitch(queryClient, root, run), limit, timedOut, () => {
+          run.abandoned = true;
+        });
+      } catch (error) {
+        // The save updates the cache before the backend has it, and a failed save is never rolled
+        // back: refetch, so the cache says the library the backend is really on before the caller
+        // decides what to show. A refetch that never answers must not hold the queue either.
+        await boundedBy(queryClient.invalidateQueries({ queryKey: qk.settings() }), limit, timedOut).catch(
+          () => undefined,
+        );
+        throw error;
+      }
+      if (saved) {
+        await finishSwitch(queryClient, root, run, limit);
+      }
     } finally {
       liveRuns.delete(run);
       // A switch from before a test reset has no count of its own to give back.
@@ -200,7 +268,7 @@ export function usePendingActiveRootSwitch(): string | null {
 export function useSwitchActiveRootMutation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (root: string) => enqueueSwitch(queryClient, root),
+    mutationFn: (request: SwitchRequest) => enqueueSwitch(queryClient, request),
   });
 }
 

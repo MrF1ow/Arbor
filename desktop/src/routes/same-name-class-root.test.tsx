@@ -1,6 +1,8 @@
 import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { toast } from "sonner";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { setActiveRootSwitchTimeoutForTests } from "~/lib/queries/active-root";
 import { clearTauriMocks } from "~/test/mock-ipc";
 import { getMockIpcCalls } from "~/test/mock-handlers";
 import { FIXTURE_ROOT_FALL, FIXTURE_ROOT_SHARED, fixtureSettings } from "~/test/fixtures/data";
@@ -604,4 +606,124 @@ describe("a failed or overlapped library switch never leaves the URL and the lib
       clearTauriMocks();
     }
   }, 20000);
+
+  // A location's own switch only matters while the router is still on that location (diff council
+  // round 2, C4): the page it was queued for is gone once the app has left it.
+  it("a class tab opened while the sidebar header's switch is pending is not switched back to once the header has landed on Today", async () => {
+    const user = userEvent.setup();
+    const app = sameNameFixtures(undefined, { save: 400 });
+    const { router } = await renderAppAtRoute(urlOf(FIXTURE_ROOT_FALL), app.fixtures);
+    const sidebar = await screen.findByRole("complementary");
+    await screen.findByLabelText("Exam date");
+    await user.click(within(sidebar).getByRole("button", { name: /Shared · Study group/i }));
+    // The header's switch to SHARED is saving; Ctrl+2 opens a new location (keeping ?root=FALL).
+    await sleep(100);
+    await user.keyboard("{Control>}2{/Control}");
+    await waitFor(() => expect(router.state.location.pathname).toBe("/"), { timeout: 8000 });
+    // Long enough for a switch back to FALL (the save takes 400ms) to start and land.
+    await sleep(1500);
+    expect(router.state.location.pathname).toBe("/");
+    expect(app.state.current.active_root).toBe(FIXTURE_ROOT_SHARED);
+    expect(app.saves).toEqual([FIXTURE_ROOT_SHARED]);
+  }, 30000);
+});
+
+// A switch commits when its save lands (diff council round 2, C6): what runs after the save (the
+// folder watch, the settings refresh) can be slow or fail without turning a switch that took effect
+// into a failed one, which would leave the class page blank on the old library's URL.
+describe("a library switch whose save landed is a success (council round 2)", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    useUiStore.persist.clearStorage();
+    setActiveRootSwitchTimeoutForTests(400);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    cleanup();
+    clearTauriMocks();
+  });
+
+  /** The page names the library the app is now on and renders its class, with no failure toast. */
+  async function expectSwitchSucceeded(
+    router: AppRouter,
+    app: { state: { current: { active_root?: string | null } } },
+    errorToast: { mock: { calls: unknown[][] } },
+  ) {
+    await settle(router);
+    await sleep(1500);
+    await settle(router);
+    const urlRoot = (router.state.location.search as { root?: string }).root;
+    expect(app.state.current.active_root).toBe(FIXTURE_ROOT_SHARED);
+    expect(urlRoot).toBe(FIXTURE_ROOT_SHARED);
+    expect(screen.queryByLabelText("Exam date")).not.toBeNull();
+    expect(errorToast.mock.calls.map((c) => String(c[0]))).toEqual([]);
+  }
+
+  it("the settings refresh after the save runs past the timeout: the sidebar row still opens the class in the new library", async () => {
+    const errorToast = vi.spyOn(toast, "error");
+    const app = sameNameFixtures();
+    // Fast until the save lands, then every settings read is slower than the timeout.
+    const fixtures = {
+      ...app.fixtures,
+      get_settings: () =>
+        app.state.current.active_root === FIXTURE_ROOT_SHARED
+          ? later(app.state.current, 900)
+          : app.fixtures.get_settings(),
+    };
+    const { router } = await renderAppAtRoute(urlOf(FIXTURE_ROOT_FALL), fixtures);
+    const sidebar = await screen.findByRole("complementary");
+    const rows = () => within(sidebar).getAllByRole("button", { name: /cell.?biology/i });
+    await waitFor(() => expect(rows()).toHaveLength(2));
+    await screen.findByLabelText("Exam date");
+    fireEvent.click(rows()[1]!);
+    await waitFor(() => expect(app.state.current.active_root).toBe(FIXTURE_ROOT_SHARED));
+    await expectSwitchSucceeded(router, app, errorToast);
+  }, 30000);
+
+  for (const mode of ["never answers", "rejects"] as const) {
+    it(`the folder watch ${mode} after the save: the sidebar row still opens the class in the new library`, async () => {
+      const errorToast = vi.spyOn(toast, "error");
+      const app = sameNameFixtures();
+      let armed = false;
+      const fixtures = {
+        ...app.fixtures,
+        start_folder_watch: () => {
+          if (!armed) {
+            return later(null);
+          }
+          return mode === "rejects"
+            ? later(null).then(() => Promise.reject(new Error("watch failed")))
+            : new Promise<never>(() => undefined);
+        },
+      };
+      const { router } = await renderAppAtRoute(urlOf(FIXTURE_ROOT_FALL), fixtures);
+      const sidebar = await screen.findByRole("complementary");
+      const rows = () => within(sidebar).getAllByRole("button", { name: /cell.?biology/i });
+      await waitFor(() => expect(rows()).toHaveLength(2));
+      await screen.findByLabelText("Exam date");
+      armed = true;
+      fireEvent.click(rows()[1]!);
+      await waitFor(() => expect(app.state.current.active_root).toBe(FIXTURE_ROOT_SHARED));
+      await expectSwitchSucceeded(router, app, errorToast);
+    }, 30000);
+  }
+
+  it("the folder watch never answers after the save: the sidebar's library header still lands on Today in the new library", async () => {
+    const errorToast = vi.spyOn(toast, "error");
+    const app = sameNameFixtures();
+    let armed = false;
+    const fixtures = {
+      ...app.fixtures,
+      start_folder_watch: () => (armed ? new Promise<never>(() => undefined) : later(null)),
+    };
+    const { router } = await renderAppAtRoute(urlOf(FIXTURE_ROOT_FALL), fixtures);
+    const sidebar = await screen.findByRole("complementary");
+    await screen.findByLabelText("Exam date");
+    armed = true;
+    fireEvent.click(within(sidebar).getByRole("button", { name: /Shared · Study group/i }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/"), { timeout: 8000 });
+    await settle(router);
+    expect(app.state.current.active_root).toBe(FIXTURE_ROOT_SHARED);
+    expect(errorToast.mock.calls.map((c) => String(c[0]))).toEqual([]);
+  }, 30000);
 });
