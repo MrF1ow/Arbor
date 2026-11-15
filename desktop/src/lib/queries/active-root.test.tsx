@@ -1,10 +1,11 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { clearTauriMocks } from "~/test/mock-ipc";
 
 import { createAppQueryClient } from "~/lib/query-client";
 import {
+  setActiveRootSwitchTimeoutForTests,
   useActivateKnowledgeRootMutation,
   usePendingActiveRootSwitch,
   useSwitchActiveRootMutation,
@@ -155,6 +156,80 @@ describe("active root mutations", () => {
     expect(result.current.pending).toBeNull();
   });
 
+  it("a switch whose IPC never settles times out, and the switch queued behind it still lands", async () => {
+    setActiveRootSwitchTimeoutForTests(100);
+    let backend = fixtureSettings;
+    let reads = 0;
+    installMockIpc({
+      // The first read never answers: a backend call that is stuck.
+      get_settings: () => {
+        reads += 1;
+        return reads === 1 ? new Promise<never>(() => undefined) : later(backend);
+      },
+      save_settings: (args) => {
+        backend = (args as { settings: typeof fixtureSettings }).settings;
+        return later(null);
+      },
+      start_folder_watch: () => later(null),
+    });
+    const client = createAppQueryClient();
+    client.setQueryData(qk.settings(), fixtureSettings);
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(
+      () => ({ switchRoot: useSwitchActiveRootMutation(), pending: usePendingActiveRootSwitch() }),
+      { wrapper },
+    );
+    // Bounded waits: a wedged queue must fail this test, not hang it.
+    const outcome = (promise: Promise<unknown>) =>
+      Promise.race([promise.then(() => "resolved", (error: unknown) => String(error)), later("still pending", 1500)]);
+
+    let stuck: Promise<unknown> = Promise.resolve();
+    let next: Promise<unknown> = Promise.resolve();
+    await act(async () => {
+      stuck = result.current.switchRoot.mutateAsync(FIXTURE_ROOT_SHARED);
+      next = result.current.switchRoot.mutateAsync(FIXTURE_ROOT_SHARED);
+      expect(await outcome(stuck)).toMatch(/timed out/i);
+      expect(await outcome(next)).toBe("resolved");
+    });
+    expect(backend.active_root).toBe(FIXTURE_ROOT_SHARED);
+    expect(result.current.pending).toBeNull();
+  });
+
+  it("a timed-out switch that wakes up later saves nothing", async () => {
+    setActiveRootSwitchTimeoutForTests(100);
+    let reads = 0;
+    const saves: string[] = [];
+    installMockIpc({
+      // The first read answers only after the switch has timed out, with the library still active.
+      get_settings: () => {
+        reads += 1;
+        return later(fixtureSettings, reads === 1 ? 400 : 10);
+      },
+      save_settings: (args) => {
+        saves.push((args as { settings: typeof fixtureSettings }).settings.active_root ?? "");
+        return later(null);
+      },
+      start_folder_watch: () => later(null),
+    });
+    const client = createAppQueryClient();
+    client.setQueryData(qk.settings(), fixtureSettings);
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(() => useSwitchActiveRootMutation(), { wrapper });
+    await act(async () => {
+      const stuck = result.current.mutateAsync(FIXTURE_ROOT_SHARED).catch(() => undefined);
+      // The newest request is the library that is already active: nothing to save.
+      const next = result.current.mutateAsync(FIXTURE_ROOT_FALL);
+      await Promise.race([Promise.all([stuck, next]), later(null, 1500)]);
+      // The abandoned read answers now; it must not go on to switch to SHARED.
+      await later(null, 500);
+    });
+    expect(saves).toEqual([]);
+  });
+
   it("useActivateKnowledgeRootMutation continues when init_knowledge_repo fails", async () => {
     clearMockIpcLog();
     installMockIpc({
@@ -183,5 +258,46 @@ describe("active root mutations", () => {
     const saveCall = getMockIpcCalls().find((c) => c.cmd === "save_settings");
     const settings = (saveCall?.args as { settings?: { active_root?: string } })?.settings;
     expect(settings?.active_root).toBe("/mock/new-root");
+  });
+});
+
+describe("the switch queue does not leak from one test into the next", () => {
+  // The queue is module state. The two tests below must stay in this order: the first ends with a
+  // switch still reading settings, and what makes the second start clean is the reset that
+  // `src/test/setup.ts` runs after every test.
+  it("(ends with a switch still reading settings)", async () => {
+    installMockIpc({
+      get_settings: () => later(fixtureSettings, 150),
+      save_settings: () => later(null),
+      start_folder_watch: () => later(null),
+    });
+    const client = createAppQueryClient();
+    client.setQueryData(qk.settings(), fixtureSettings);
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const { result } = renderHook(
+      () => ({ switchRoot: useSwitchActiveRootMutation(), pending: usePendingActiveRootSwitch() }),
+      { wrapper },
+    );
+    void result.current.switchRoot.mutateAsync(FIXTURE_ROOT_SHARED).catch(() => undefined);
+    await waitFor(() => expect(result.current.pending).toBe(FIXTURE_ROOT_SHARED));
+  });
+
+  it("starts with no switch pending, and the previous test's switch saves nothing", async () => {
+    const saves: string[] = [];
+    installMockIpc({
+      get_settings: () => later(fixtureSettings),
+      save_settings: (args) => {
+        saves.push((args as { settings: typeof fixtureSettings }).settings.active_root ?? "");
+        return later(null);
+      },
+      start_folder_watch: () => later(null),
+    });
+    const { result } = renderHook(() => usePendingActiveRootSwitch());
+    expect(result.current).toBeNull();
+    await later(null, 400);
+    expect(saves).toEqual([]);
+    expect(result.current).toBeNull();
   });
 });

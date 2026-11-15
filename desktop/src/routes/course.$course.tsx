@@ -41,16 +41,18 @@ export const Route = createFileRoute("/course/$course")({
 });
 
 /**
- * The library the URL names, when it is a configured library other than the one the app is on or
- * is already switching to: switch to it once per location (the router's history key), and report
- * `true` until the active library is it, and for as long as any library switch is queued or
- * running, so the class page never renders, and so never saves anything, for a library the URL
- * does not name.
+ * The library the URL names, when it is a configured library: switch to it once per location (the
+ * router's history key) unless it is already the active library with no switch queued or running,
+ * and report `true` until the active library is it, and for as long as any library switch is
+ * queued or running, so the class page never renders, and so never saves anything, for a library
+ * the URL does not name.
  *
- * "The one the app is on" is where the library will end up: the newest queued switch's target if
- * one is queued, else the active library. Back followed by a quick Forward must compare the
- * Forward's library with the Back's switch still in flight, not with the library that is active
- * only until that switch lands.
+ * A location queues a switch of its own whenever any switch is pending, even one heading to the
+ * very library its URL names: that switch can still fail (the save after its cache flip), and only
+ * a location's own switch comes back to the location on failure to rewrite its URL. Back followed
+ * by a quick Forward is the case: the Forward's library is the Back's pending target and, once the
+ * Back's save has flipped the cache, the "active" one. A redundant switch costs a settings read: a
+ * switch to the library already active does nothing.
  *
  * Key, pathname and `root` are all read from the router's current location, which is already the
  * next one while a navigation is pending (`Route.useSearch()` is still the old match's). The
@@ -79,12 +81,12 @@ function useSwitchToUrlRoot(activeRoot: string | null, settings: ReturnType<type
   let target = switchTo;
   if (settings && seenKey !== locationKey) {
     const configured = settings.knowledge_roots?.some((entry) => entry.path === urlRoot) ?? false;
-    // Queue a switch of this location's own whenever the URL's library is not where the app will end
-    // up OR not the active one: a switch already heading there (another location's, or the sidebar's)
-    // can still fail, and only a location's own switch comes back to it on failure. A redundant one
-    // costs a settings read: a switch to the library already active does nothing.
-    const endsUpOn = pendingRoot ?? activeRoot;
-    const differs = urlRoot !== endsUpOn || urlRoot !== activeRoot;
+    // Queue a switch of this location's own whenever any switch is pending or the URL's library is
+    // not the active one. A switch already heading to the URL's library (another location's, or the
+    // sidebar's) can still fail, even after the optimistic cache flip made the library look active,
+    // and only a location's own switch comes back to it on failure. A redundant one costs a settings
+    // read: a switch to the library already active does nothing.
+    const differs = pendingRoot !== null || urlRoot !== activeRoot;
     target = urlRoot && configured && differs ? { key: locationKey, root: urlRoot } : null;
     setSeenKey(locationKey);
     setSwitchTo(target);

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useNavigate, useParams } from "@tanstack/react-router";
+import { useNavigate, useParams, useRouterState } from "@tanstack/react-router";
 import { ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { useState } from "react";
@@ -19,9 +19,11 @@ import { canUseDesktopIpc } from "~/domain/tauri";
 import { remainingPercent, type UsageLimits } from "~/domain/usage";
 import { useNow } from "~/hooks/use-now";
 import { fetchAuthStatus } from "~/lib/auth-refresh";
+import { classSearchFrom } from "~/lib/class-path";
 import { invoke } from "~/lib/ipc";
 import { pickActiveRoot } from "~/lib/knowledge-root";
 import { useChooseKnowledgeFolder } from "~/lib/hooks/use-choose-knowledge-folder";
+import { usePendingActiveRootSwitch } from "~/lib/queries/active-root";
 import { useAuth } from "~/lib/queries/auth";
 import { useEffectiveProvider } from "~/lib/queries/effective-provider";
 import {
@@ -68,6 +70,21 @@ function useMenuCourse(root: string | null): { course: string | null; inClass: b
     return { course: lastCourse.course, inClass: false };
   }
   return { course: list[0] ?? null, inClass: false };
+}
+
+/**
+ * True while the class page in the URL is waiting for its library: a library switch is queued or
+ * running, or the location's `?root=` names a configured library other than the active one. The
+ * URL's class is then not the active library's class even when that library has one of the same
+ * name, so nothing class-scoped may start from the menu: it would write to the wrong library.
+ */
+function useClassPageWaitsForLibrary(activeRoot: string | null, roots: { path: string }[]): boolean {
+  const pending = usePendingActiveRootSwitch();
+  const urlRoot = useRouterState({
+    select: (s) => (s.location.pathname.startsWith("/course/") ? classSearchFrom(s.location.search).root : undefined),
+  });
+  const mismatch = urlRoot !== undefined && roots.some((entry) => entry.path === urlRoot) && urlRoot !== activeRoot;
+  return pending !== null || mismatch;
 }
 
 /** The log shortcut as the menu hints it: Command-backtick on a Mac, "Ctrl+`" elsewhere. */
@@ -118,7 +135,10 @@ export function LibraryStatusPill() {
   const role = library.data?.present === true ? library.data.role : null;
   const viewerBlocked = viewerBlocksWrite(role);
   const effective = useEffectiveProvider(activeRoot);
-  const { course, inClass } = useMenuCourse(activeRoot);
+  const { course: menuCourse, inClass } = useMenuCourse(activeRoot);
+  // No class to run on while the class page waits for its library (see the hook).
+  const waitingForLibrary = useClassPageWaitsForLibrary(activeRoot, roots);
+  const course = waitingForLibrary ? null : menuCourse;
   const providerLine = useProviderLine(activeRoot);
   const { chooseFolder, desktopIpc } = useChooseKnowledgeFolder();
   const [open, setOpen] = useState(false);
@@ -302,7 +322,7 @@ export function LibraryStatusPill() {
         <DropdownMenuItem
           className={ITEM}
           disabled={writeDisabled || !course}
-          title={viewerBlocked ? VIEWER_WRITE_REASON : undefined}
+          title={viewerBlocked ? VIEWER_WRITE_REASON : waitingForLibrary ? "Switching library…" : undefined}
           onClick={() => void onCitations()}
         >
           Check citations

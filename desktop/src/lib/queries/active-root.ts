@@ -18,6 +18,11 @@ import { resetJobStoreForRootSwitch } from "~/stores/job-store";
  * library as already active, and do nothing: the active library ends up the first one's while the
  * URL names the second's. Chaining them makes each read settings only after the one before it has
  * saved and refreshed them.
+ *
+ * A switch whose backend call never answers must not hold the ones behind it for the rest of the
+ * session, so each is bounded: past {@link SWITCH_TIMEOUT_MS} it fails (the caller's error toast)
+ * and the queue moves on. The late answer, if one ever comes, finds the switch abandoned and stops
+ * before it changes anything.
  */
 let switchChain: Promise<unknown> = Promise.resolve();
 /** How many switches are queued or running. */
@@ -25,6 +30,38 @@ let queuedSwitches = 0;
 /** The library the newest queued switch is for; `null` once every switch has landed. */
 let lastRequestedRoot: string | null = null;
 const pendingListeners = new Set<() => void>();
+
+/** How long one switch may take, flushing study writes included, before the queue gives up on it. */
+const SWITCH_TIMEOUT_MS = 15_000;
+let switchTimeoutMs = SWITCH_TIMEOUT_MS;
+/** Bumped by the test reset: a switch from before it must not touch the queue's counters. */
+let queueEpoch = 0;
+
+/** One queued switch. `abandoned` once it timed out (or the tests reset the queue): it does nothing more. */
+type SwitchRun = { abandoned: boolean; epoch: number };
+const liveRuns = new Set<SwitchRun>();
+
+/** Test hook: how long a switch may take before it is given up on; `null` restores the default. */
+export function setActiveRootSwitchTimeoutForTests(ms: number | null) {
+  switchTimeoutMs = ms ?? SWITCH_TIMEOUT_MS;
+}
+
+/**
+ * Test hook: forget every queued switch and abandon the ones still running, so one that is in
+ * flight when a test ends neither holds the next test's switches back nor saves into its mocks.
+ */
+export function resetActiveRootSwitchQueueForTests() {
+  queueEpoch += 1;
+  for (const run of liveRuns) {
+    run.abandoned = true;
+  }
+  liveRuns.clear();
+  switchChain = Promise.resolve();
+  queuedSwitches = 0;
+  lastRequestedRoot = null;
+  switchTimeoutMs = SWITCH_TIMEOUT_MS;
+  notifyPendingSwitch();
+}
 
 function notifyPendingSwitch() {
   for (const listener of pendingListeners) {
@@ -43,8 +80,36 @@ function readPendingSwitch() {
   return lastRequestedRoot;
 }
 
-async function switchActiveRoot(queryClient: QueryClient, root: string) {
+/** `work`'s result, or a rejection with `message` once `ms` have passed without one. */
+function boundedBy<T>(work: Promise<T>, ms: number, message: string, onTimeout?: () => void): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      onTimeout?.();
+      reject(new Error(message));
+    }, ms);
+    work.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
+async function switchActiveRoot(queryClient: QueryClient, root: string, run: SwitchRun) {
+  // Checked after every await, before the next step changes anything.
+  const stillWanted = () => {
+    if (run.abandoned) {
+      throw new Error("Library switch abandoned");
+    }
+  };
+  stillWanted();
   const settings = await invoke<Settings>("get_settings");
+  stillWanted();
   if (pickActiveRoot(settings) === root) {
     // Already the backend's library. The cache may still say another one (an earlier switch's save
     // failed after its optimistic update): make it agree, or a page waiting for this library to be
@@ -55,43 +120,61 @@ async function switchActiveRoot(queryClient: QueryClient, root: string) {
     return;
   }
   await flushStudyWritesForRootSwitch(3000);
+  stillWanted();
   resetJobStoreForRootSwitch();
   const next: Settings = {
     ...settings,
     active_root: root,
     knowledge_root: root,
   };
-  await saveSettingsSerialized(queryClient, () => next);
+  await saveSettingsSerialized(queryClient, () => {
+    stillWanted();
+    return next;
+  });
+  stillWanted();
   await invoke("start_folder_watch", { root });
+  stillWanted();
   // TODO(PR 11): clear chat transcript state when the active root changes.
   await queryClient.invalidateQueries({ queryKey: qk.settings() });
 }
 
 function enqueueSwitch(queryClient: QueryClient, root: string): Promise<void> {
+  const run: SwitchRun = { abandoned: false, epoch: queueEpoch };
+  liveRuns.add(run);
   queuedSwitches += 1;
   lastRequestedRoot = root;
   notifyPendingSwitch();
-  const run = switchChain.then(async () => {
+  const queued = switchChain.then(async () => {
+    const limit = switchTimeoutMs;
+    const timedOut = "Switching library timed out: the app did not get an answer in time. Try again.";
     try {
-      await switchActiveRoot(queryClient, root);
+      await boundedBy(switchActiveRoot(queryClient, root, run), limit, timedOut, () => {
+        run.abandoned = true;
+      });
     } catch (error) {
       // The save updates the cache before the backend has it, and a failed save is never rolled
       // back: refetch, so the cache says the library the backend is really on before the caller
-      // decides what to show.
-      await queryClient.invalidateQueries({ queryKey: qk.settings() }).catch(() => undefined);
+      // decides what to show. A refetch that never answers must not hold the queue either.
+      await boundedBy(queryClient.invalidateQueries({ queryKey: qk.settings() }), limit, timedOut).catch(
+        () => undefined,
+      );
       throw error;
     } finally {
-      // Before the caller's promise settles, so whatever it does next sees no switch pending.
-      queuedSwitches -= 1;
-      if (queuedSwitches === 0) {
-        lastRequestedRoot = null;
+      liveRuns.delete(run);
+      // A switch from before a test reset has no count of its own to give back.
+      if (run.epoch === queueEpoch) {
+        // Before the caller's promise settles, so whatever it does next sees no switch pending.
+        queuedSwitches -= 1;
+        if (queuedSwitches === 0) {
+          lastRequestedRoot = null;
+        }
+        notifyPendingSwitch();
       }
-      notifyPendingSwitch();
     }
   });
   // A failed switch must not stop the ones queued behind it.
-  switchChain = run.catch(() => undefined);
-  return run;
+  switchChain = queued.catch(() => undefined);
+  return queued;
 }
 
 /**

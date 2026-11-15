@@ -520,6 +520,77 @@ describe("a failed or overlapped library switch never leaves the URL and the lib
     expect(router.state.location.pathname).toBe("/");
     expect(state.current.active_root).toBe(FIXTURE_ROOT_FALL);
   });
+  it("Back twice, the first Back's switch failing at its save after the cache already shows its library: the class still renders, under the library the backend has", async () => {
+    const user = userEvent.setup();
+    const app = sameNameFixtures(undefined, { save: 400 });
+    // History: FALL cell-biology -> FALL organic-chemistry-ii -> SHARED cell-biology.
+    const { router } = await renderAppAtRoute(urlOf(FIXTURE_ROOT_FALL), app.fixtures);
+    await screen.findByLabelText("Exam date");
+    await settle(router);
+    await router.navigate({
+      to: "/course/$course/overview",
+      params: { course: "organic-chemistry-ii" },
+      search: { root: FIXTURE_ROOT_FALL },
+    });
+    await settle(router);
+    const sidebar = await screen.findByRole("complementary");
+    const rows = () => within(sidebar).getAllByRole("button", { name: /cell.?biology/i });
+    await waitFor(() => expect(rows()).toHaveLength(2));
+    await user.click(rows()[1]!);
+    await waitFor(() => expect(app.state.current.active_root).toBe(FIXTURE_ROOT_SHARED), { timeout: 3000 });
+    await screen.findByLabelText("Exam date");
+    await settle(router);
+
+    app.state.failSaves = 1;
+    router.history.back();
+    await waitFor(() => expect(router.state.location.pathname).toBe("/course/organic-chemistry-ii/overview"));
+    // The first Back's switch has read settings and flipped the cache to FALL; its save is in flight.
+    await sleep(120);
+    // This Back's URL names FALL too, the library that switch is heading to and the cache shows. Only
+    // a switch of this location's own comes back to it when that one then fails at the save.
+    router.history.back();
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/course/${CLASS}/overview`));
+
+    // Not blank forever: the class renders, and the URL names the library the backend really has.
+    await screen.findByLabelText("Exam date", {}, { timeout: 8000 });
+    await settle(router);
+    const urlRoot = (router.state.location.search as { root?: string }).root;
+    expect(urlRoot).toBe(app.state.current.active_root);
+    expect(await writeExamDate("2027-12-11")).toMatchObject({ root: urlRoot, course: CLASS });
+  }, 30000);
+
+  it("the top-bar pill's Check citations starts no job on another library's same-named class while the page waits for its own library", async () => {
+    const user = userEvent.setup();
+    const { router, state } = await openAThenB(undefined, { get: 600 });
+
+    // Back to FALL's class: the URL names FALL, the backend is still on SHARED, and SHARED has a class
+    // of the same name. The page is blank until the switch lands.
+    router.history.back();
+    await waitFor(() => expect(router.state.location.search).toMatchObject({ root: FIXTURE_ROOT_FALL }));
+    expect(state.current.active_root).toBe(FIXTURE_ROOT_SHARED);
+    expect(screen.queryByLabelText("Exam date")).toBeNull();
+
+    const studyJobs = () => getMockIpcCalls().filter((c) => c.cmd === "start_study_job");
+    const before = studyJobs().length;
+    await user.click(screen.getByTestId("library-status-pill"));
+    const item = await screen.findByRole("menuitem", { name: /Check citations/i });
+    await user.click(item);
+    await sleep(200);
+    // No job at all, or one for the library the URL names: never SHARED's cell-biology.
+    for (const call of studyJobs().slice(before)) {
+      expect(call.args).toMatchObject({ root: FIXTURE_ROOT_FALL });
+    }
+
+    // Once the switch has landed the item works again, on the library the URL names.
+    await settle(router);
+    await screen.findByLabelText("Exam date");
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByTestId("library-status-pill"));
+    await user.click(await screen.findByRole("menuitem", { name: /Check citations/i }));
+    await waitFor(() => expect(studyJobs().length).toBeGreaterThan(before));
+    expect(studyJobs().at(-1)?.args).toMatchObject({ root: FIXTURE_ROOT_FALL, course: CLASS });
+  }, 30000);
+
   it("the other-libraries lookup whose switch keeps failing tries once, for a ?root= URL and for one without", async () => {
     for (const url of [urlOf(FIXTURE_ROOT_FALL), `/course/${CLASS}/overview`]) {
       const app = sameNameFixtures({ fall: ["organic-chemistry-ii"], shared: [CLASS] });
