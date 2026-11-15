@@ -5,6 +5,7 @@ import {
   jobKindLabel,
   jobScopeLabel,
   jobStartedLabel,
+  jobStampMs,
   jobStatusCounts,
   jobTitle,
   relativeTime,
@@ -35,6 +36,21 @@ describe("jobKindLabel", () => {
   });
 });
 
+describe("jobStampMs", () => {
+  it("reads a digits-only stamp as epoch seconds, not milliseconds", () => {
+    expect(jobStampMs("1794709451")).toBe(1794709451000);
+    expect(jobStampMs(" 1794709451 ")).toBe(1794709451000);
+  });
+
+  it("reads an ISO stamp as before", () => {
+    expect(jobStampMs("2026-10-20T12:00:00Z")).toBe(NOW);
+  });
+
+  it("is NaN for an unreadable stamp", () => {
+    expect(jobStampMs("not a date")).toBeNaN();
+  });
+});
+
 describe("relativeTime", () => {
   it("formats minutes ago", () => {
     expect(relativeTime("2026-10-20T11:55:00Z", NOW)).toBe("5 min ago");
@@ -46,6 +62,11 @@ describe("relativeTime", () => {
 });
 
 describe("formatDuration", () => {
+  it("measures between epoch-second stamps", () => {
+    expect(formatDuration("1794709451", "1794709511")).toBe("1 min");
+    expect(formatDuration("1794709451", "1794709496")).toBe("45s");
+  });
+
   it("returns running when unfinished", () => {
     expect(formatDuration("2026-10-20T11:00:00Z", null)).toBe("running");
   });
@@ -153,6 +174,11 @@ describe("jobTitle", () => {
 });
 
 describe("jobStartedLabel", () => {
+  it("reads an epoch-second stamp as seconds", () => {
+    const startedAt = new Date(2026, 9, 19, 12, 0).getTime() / 1000;
+    expect(jobStartedLabel(String(startedAt), new Date(2026, 9, 20, 15, 0).getTime())).toBe("Yesterday");
+  });
+
   const now = new Date(2026, 9, 20, 15, 30).getTime();
 
   it("shows the time of day for a job started today", () => {
