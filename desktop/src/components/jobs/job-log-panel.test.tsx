@@ -29,6 +29,21 @@ describe("buildLogLines", () => {
     expect(lines[0]!.text).toBe("stored");
   });
 
+  it("prefixes an epoch-second stamp with the same time as its ISO twin", () => {
+    const iso = "2026-10-20T10:00:00Z";
+    const epoch = String(Date.parse(iso) / 1000);
+    const fromIso = buildLogLines([{ line: "stored", created_at: iso }], [], "job-1");
+    const fromEpoch = buildLogLines([{ line: "stored", created_at: epoch }], [], "job-1");
+    expect(fromEpoch[0]!.prefix).not.toBe("");
+    expect(fromEpoch[0]!.prefix).not.toContain("Invalid");
+    expect(fromEpoch[0]!.prefix).toBe(fromIso[0]!.prefix);
+  });
+
+  it("gives an unreadable stamp an empty prefix, not Invalid Date", () => {
+    const lines = buildLogLines([{ line: "stored", created_at: "garbage" }], [], "job-1");
+    expect(lines[0]!.prefix).toBe("");
+  });
+
   it("appends live tail after DB rows without duplicating shared text", () => {
     const events = [{ line: "stored", created_at: "2026-10-20T10:00:00Z" }];
     const lines = buildLogLines(events, ["fresh"], "job-1");
