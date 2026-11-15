@@ -20,7 +20,7 @@ cd desktop && npm install && npm run tauri dev
 |---|-----|-----------|
 | 1 | Ingest PDF/PPTX/DOCX, commit | Dated digests written, git commit created, job history shows success |
 | 2 | Long digest + chunking | >25-page PDF digests; Notes pane scrolls to the end |
-| 3 | `course.md` | One-digest index link opens the digest in Notes; two digests roll up |
+| 3 | `course.md` | One-digest index link opens the digest in Notes; two digests roll up (a synthesized `course.md` with no digest links by design; each digest opens from the lecture list) |
 | 4 | Markdown | Tables, nested lists, emphasis, code, links render; no closing `arbor-pages` text |
 | 5 | Search | FTS hit opens from overlay; semantic search returns the right lecture (turn on Settings → General → Embed after Update and run an update first: v0.6 has no manual Embed button and semantic search shows a bare "No results" without `.arbor/vectors.sqlite`) |
 | 6 | Watch | Dropping a file into the course folder lands in review |
@@ -178,6 +178,28 @@ Notes:
 - The update review follows a symlinked class folder: with `Main/Linkedclass → LibB/Tidewater`, Update knowledge listed `Linkedclass/libb-lecture.pdf` and would digest LibB's file into a class that Today and the sidebar hide (`02-review.png`). `courses.discover_sources` uses `is_dir()`, which follows links. The symlink was moved aside for A2's "1 of 1".
 - The pill reads "Library up to date · 1794709451": `jobs.finished_at` is epoch seconds and `compactAgo` gets it raw.
 - WebKitGTK date inputs under Xvfb: typed digits and Tab do not reach the field while the calendar popup is open or the docked inspector has focus. Close the inspector, pick the day in the popup, press Escape, then Enter to save.
+
+### 2026-11-15 — v0.6.0 re-run (Claude provider)
+
+Re-run of the boxes that failed above, on main `4b9ad28` (PR #145 pill time, #146 Course notes links, #147 chat timestamps), package `0.6.0`. Same setup as the first run: private Xvfb `:91` (1600x1000) inside `dbus-run-session`, `GDK_BACKEND=x11`, `WAYLAND_DISPLAY`, `HYPRLAND_INSTANCE_SIGNATURE`, `CLAUDECODE` and every other `CLAUDE_*` variable unset, `claude` 2.1.325 (mise install symlinked first on `PATH`, `MISE_TRUSTED_CONFIG_PATHS` set), model `claude-sonnet-5-5`. Fresh scratch HOME (only `.credentials.json`, mode 600), XDG, `GIT_CONFIG_GLOBAL` and Knowledge root `Main` under `/home/flow/.local/state/flow/runs/r20261114-0580d2/scratch/rerun/` (`$S` below), settings pre-seeded in `$S/xdg/config/com.arbor.app/settings.json`. Class `Tidewater` built in this run from the first run's fixtures `tide-lecture1.pdf` and `tide-lecture2.pdf` (3 pages each) through Update knowledge. Before launch, `.arbor/users/live@arbor.test/chat/Tidewater/index.json` was seeded with one thread `t-20261110T090000Z-a1b2c3` stamped `2026-11-10T09:00:00Z.123` (plus its `.jsonl`). Nothing under the root was edited after launch. Pre-check last line: `{"type":"result","subtype":"success","is_error":false,"result":"ok",…}`. Real `~/.config/com.arbor.app/settings.json` stayed `87c2bcd705df9bebaa657bb89c3010e4cc90069b71f568af35a52d8883a2759b` before and after. No `hyprctl dispatch`, no input to the real outputs.
+
+| # | Result | Evidence |
+|---|--------|----------|
+| R3 (row 3) | Pass | One digest: job `job-18e81c43fcad3fe3` (`provider: claude`, `prepare ok pdf_images`), commit `027c721 digest: Tidewater`, `course.md` = `See [2026-11-15.md](digests/2026-11-15.md).` + Overview. Overview → Course notes (`04-class.png`) → click `2026-11-15.md` opened that digest in Read, "Tidewater Ecology: Tides, Zonation, Sediment" (`05-R3-one-link.png`), not Today. Two digests: job `job-18e81c4ed6202546`, commit `4270370` added `digests/2026-11-15T0406.md`, and `course.md` became a synthesized roll-up covering both lectures (`11-overview2.png`). The synthesized roll-up has no digest links by design: `course_synthesis.py` writes the `See [...]` index only for one digest and a per-digest link list (`build_course_toc`) only when synthesis fails. Each digest opens from the lecture list (`12-digest2.png`). |
+| T1 | Pass | New chat, "What burrow density do fiddler crabs reach in the Corvel low marsh?" → "…reaches 140 per square metre [1][2]." with chips `Course overview · tidewater` and `Fiddler Crabs in Tidewater Ecology · important-details · p. 1-3` (`T1-poll-12.png`). The page chip opened Read on that digest at Important Details (`16-T1-chip.png`). No "Something went wrong" in any of the 13 T1 frames, nor in any later frame (tesseract on every screenshot). |
+| T2 | Pass | "What is the average water salinity of the Corvel estuary…?" → "The sources do not give the average water salinity…", banner "Not supported by this course" (`T2-poll-12.png`). |
+| T3 | Pass | Mode chip → Explain (a chat write; thread row turned "Explain · now", no crash, `18-mode.png`). "Explain step by step why the Corvel marsh is keeping pace with sea level rise." → five steps from 4.2 vs 3.1 mm/yr, and says the sources do not link crab burrowing to accretion (`T3-poll-16.png`). v0.6 has no chat quiz mode. "Quiz me on this" is disabled on answers that cite only `course.md` ("Needs a lecture…"); on the T1 answer it ran job `job-18e81ca2010b9109` and committed `2cee414 study: Tidewater quiz from chat` (`study/quiz.json`, `origins.json`). |
+| T4 | Pass | Killed `desktop` by PID; `tauri dev` and Vite exited; relaunched. The thread list showed "Explain · 3 min ago" and "Seeded old-stamp thread · Ask · Tue", and the transcript was intact (`25-T4-history.png`). The seeded thread opened (`27-hover-seeded.png`). New → send created a third thread "Ask · now" with a cited answer (`T4-new-poll-10.png`). Row menu → Delete → confirm removed the seeded thread from `index.json` and deleted its `.jsonl` (`29-menu.png`, `30-delete-dialog.png`, `31-deleted.png`). Final `index.json`: `2026-11-15T04:07:30.797Z`, `2026-11-15T04:10:22.476Z`, `2026-11-15T04:13:27.562Z`, `2026-11-15T04:13:29.655Z`. All parse as RFC 3339; `grep -c 'Z\.'` = 0. |
+| Heal | Pass | Seeded `2026-11-10T09:00:00Z.123` listed as "Ask · Tue" (2026-11-10 is a Tuesday) under This week and opened (`13-ask.png`). On disk it stayed `Z.123` until the first write: the T1 send rewrote it to `"created_at":"2026-11-10T09:00:00.123Z","updated_at":"2026-11-10T09:00:00.123Z"`. |
+| P | Pass | Pill "Library up to date · just now" right after each job (`03-updating.png`), then "· 1m ago" (`T1-poll-12.png`), "· 3m ago" (`T2-poll-12.png`), "· 4m ago", "· 5m ago" (`21-top.png`), and "· 2m ago" after the restart. Never a raw number; `jobs.finished_at` is still epoch seconds (`1794715537`). |
+| S | Pass | Settings sha256 above, mtime unchanged (2026-10-17). Real `~/.claude/projects` has no directory or transcript for the scratch root; all CLI state went to the scratch HOME. |
+
+Overall: **PASS**. Row 3 and T1–T4 pass with no hand edits after launch, and both regressions from the first run are fixed.
+
+Notes:
+
+- Follow-up answers re-cite only this turn's sources. The T2 answer stored "my earlier answer cited , but only source [1] was provided": the model saw its T1 answer's `[2]` with one source this turn, and the app stripped the unknown `[2]`. The text reads oddly but nothing is wrong.
+- `$S/shots/` holds every screenshot named above.
 
 ## Folder picker under Xvfb
 
