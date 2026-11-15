@@ -205,6 +205,25 @@ describe("welcome and library flows (PR 6)", () => {
     });
   });
 
+  it("choosing a folder that has a class opens it with ?root= naming that folder", async () => {
+    vi.spyOn(ipcModule, "openDialog").mockResolvedValue(NEW_ROOT);
+    const { router } = await renderAppAtRoute("/welcome", {
+      get_settings: () => ({
+        ...fixtureSettings,
+        knowledge_root: null,
+        active_root: null,
+        knowledge_roots: [],
+      }),
+      list_courses: (args) => (String((args as { root?: string }).root) === NEW_ROOT ? ["cell-biology"] : []),
+    });
+    const user = userEvent.setup();
+    await user.click(await screen.findByTestId("welcome-choose-folder"));
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe("/course/cell-biology/overview");
+    });
+    expect(router.state.location.search).toMatchObject({ root: NEW_ROOT });
+  });
+
   it("does not duplicate an existing knowledge root entry", async () => {
     vi.spyOn(ipcModule, "openDialog").mockResolvedValue(FIXTURE_ROOT_FALL);
     clearMockIpcLog();

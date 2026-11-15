@@ -1,11 +1,18 @@
 /** The class views a link can open. */
 export type ClassTab = "overview" | "read" | "map" | "cards" | "quiz" | "ask";
 
-/** Search params every class route accepts: the ticked lectures, so Drill and Today links can set a scope. */
-export type ClassSearch = { lectures?: string };
+/**
+ * Search params every class route accepts: the ticked lectures, so Drill and Today links can set a
+ * scope, and `root`, the library the class belongs to (two libraries can each have a class of the
+ * same name, so the URL has to say which one it means).
+ */
+export type ClassSearch = { lectures?: string; root?: string };
 
 export function classSearchFrom(search: Record<string, unknown>): ClassSearch {
-  return { lectures: typeof search.lectures === "string" && search.lectures ? search.lectures : undefined };
+  return {
+    lectures: typeof search.lectures === "string" && search.lectures ? search.lectures : undefined,
+    root: typeof search.root === "string" && search.root ? search.root : undefined,
+  };
 }
 
 export type ClassLink =
@@ -41,12 +48,13 @@ export function classPath(course: string, tab: ClassTab, digest?: string): Class
   }
 }
 
-/** The concrete pathname for a class tab, for hrefs and assertions. */
-export function classHref(course: string, tab: ClassTab, digest?: string): string {
+/** The concrete path for a class tab, for hrefs and assertions; `?root=` is appended when the library is given. */
+export function classHref(course: string, tab: ClassTab, digest?: string, root?: string): string {
   const link = classPath(course, tab, digest);
-  return link.to.replace(/\$(\w+)/g, (_, key: string) =>
+  const path = link.to.replace(/\$(\w+)/g, (_, key: string) =>
     encodeURIComponent((link.params as Record<string, string>)[key]!),
   );
+  return root ? `${path}?root=${encodeURIComponent(root)}` : path;
 }
 
 /** `?lectures=` carries course-prefixed digest paths, each URI-encoded and comma-joined. */

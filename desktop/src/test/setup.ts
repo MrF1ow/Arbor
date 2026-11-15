@@ -51,6 +51,11 @@ if (typeof window.matchMedia !== "function") {
 }
 
 afterEach(async () => {
+  // A library switch still in flight when a test ends must not hold the next test's switches back,
+  // or save into its mocks. Imported here, not at the top: its modules build the persisted UI store,
+  // which must find the localStorage shim above, and a test file's own mocks must come first.
+  const { resetActiveRootSwitchQueueForTests } = await import("~/lib/queries/active-root");
+  resetActiveRootSwitchQueueForTests();
   await cleanupTestQueryClients();
   cleanup();
   vi.clearAllTimers();

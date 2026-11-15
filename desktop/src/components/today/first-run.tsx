@@ -87,7 +87,7 @@ export function FirstRun({ addClass = false, root }: { addClass?: boolean; root?
       const slug = await createCourse.mutateAsync(name);
       setClassName("");
       setClassError(null);
-      void navigate(classPath(slug, "overview"));
+      void navigate({ ...classPath(slug, "overview"), search: { root: classRoot } });
     } catch (error) {
       setClassError(String(error));
     }

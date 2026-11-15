@@ -14,7 +14,8 @@ export type OpenClassSearch = ClassSearch & { card?: string; concept?: string; h
 /**
  * Open a class view from anywhere, including a class in another library (Q10). `/course/$course`
  * only looks in the active library, so when `root` is not the active one the library is switched
- * first, exactly as the sidebar does, and then the route is opened. Today, Search, Jobs and
+ * first, exactly as the sidebar does, and then the route is opened with `?root=` naming the
+ * library, so the URL says which of two same-named classes it means. Today, Search, Jobs and
  * Start review use this for every class link.
  */
 export function useOpenClass() {
@@ -30,7 +31,7 @@ export function useOpenClass() {
         await mutateAsync(root);
       }
       const link = typeof to === "string" ? classPath(course, to) : classPath(course, to.tab, to.digest);
-      await navigate({ ...link, search: search ?? {} });
+      await navigate({ ...link, search: { ...search, root } });
     },
     [activeRoot, mutateAsync, navigate],
   );

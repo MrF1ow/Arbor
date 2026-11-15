@@ -48,7 +48,7 @@ describe("useOpenClass", () => {
     await waitFor(() => {
       expect(router.state.location.pathname).toBe("/course/collab-notes/practice/quiz");
     });
-    expect(router.state.location.search).toEqual({ lectures: "x" });
+    expect(router.state.location.search).toEqual({ lectures: "x", root: FIXTURE_ROOT_SHARED });
   });
 
   it("opens a digest on the read tab", async () => {
