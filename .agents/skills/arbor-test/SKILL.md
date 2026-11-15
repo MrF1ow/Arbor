@@ -9,7 +9,7 @@ watches:
   - python/pyproject.toml
   - .github/workflows/test.yml
   - docs/superpowers/plans/2026-10-17-roadmap-completion/linux-live-run.md
-updated: "41885667d7406cef7be259e188b006c627d45a00"
+updated: "e03da7b67566b78ce55dda1f0f6f21eadd284abc"
 ---
 
 # Run, test and verify Arbor
