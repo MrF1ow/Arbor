@@ -1,5 +1,5 @@
 import { runningJobStatusLabel } from "~/domain/job-labels";
-import { jobKindLabel } from "~/domain/jobs";
+import { jobKindLabel, jobStampMs } from "~/domain/jobs";
 import type { JobProgress, JobStoreStatus } from "~/stores/job-store";
 
 export type LibraryStatusVariant = "idle" | "running" | "failed" | "none";
@@ -42,10 +42,10 @@ export type LibraryStatusInput = {
 };
 
 /** "2h ago": the design's short relative time (`relativeTime` in domain/jobs spells it out). */
-export function compactAgo(iso: string, nowMs: number): string {
-  const then = new Date(iso).getTime();
+export function compactAgo(stamp: string, nowMs: number): string {
+  const then = jobStampMs(stamp);
   if (Number.isNaN(then)) {
-    return iso;
+    return stamp;
   }
   const seconds = Math.floor(Math.max(0, nowMs - then) / 1000);
   if (seconds < 60) {

@@ -32,6 +32,14 @@ describe("compactAgo", () => {
   it("keeps an unreadable stamp as is", () => {
     expect(compactAgo("yesterday-ish", NOW)).toBe("yesterday-ish");
   });
+
+  it("reads the worker's epoch-second stamp as seconds", () => {
+    expect(compactAgo(String(Math.floor(NOW / 1000) - 120), NOW)).toBe("2m ago");
+  });
+
+  it("says just now for a stamp in the future", () => {
+    expect(compactAgo(String(Math.floor(NOW / 1000) + 3600), NOW)).toBe("just now");
+  });
 });
 
 describe("libraryStatus", () => {
@@ -56,6 +64,16 @@ describe("libraryStatus", () => {
       }),
     );
     expect(status).toEqual({ variant: "idle", label: "Library up to date · 2h ago" });
+  });
+
+  it("shows the age of a job the worker stamped in epoch seconds", () => {
+    const finished = String(Math.floor(NOW / 1000) - 120);
+    const status = libraryStatus(
+      input({
+        latestJob: { id: "j1", status: "succeeded", started_at: String(Math.floor(NOW / 1000) - 180), finished_at: finished },
+      }),
+    );
+    expect(status).toEqual({ variant: "idle", label: "Library up to date · 2m ago" });
   });
 
   it("says up to date without an age before any job ran", () => {
