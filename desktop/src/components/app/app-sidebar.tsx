@@ -15,7 +15,7 @@ import { VIEWER_WRITE_REASON, viewerBlocksWrite, type LibraryRole } from "~/doma
 import type { KnowledgeRootEntry } from "~/domain/types";
 import { classPath } from "~/lib/class-path";
 import { pickActiveRoot } from "~/lib/knowledge-root";
-import { useSwitchActiveRootMutation } from "~/lib/queries/active-root";
+import { usePendingActiveRootSwitch, useSwitchActiveRootMutation } from "~/lib/queries/active-root";
 import { useCourseMeta } from "~/lib/queries/course-meta";
 import { useCreateCourseMutation, useCourses, useLibrary } from "~/lib/queries/library";
 import { useSettings } from "~/lib/queries/settings";
@@ -174,6 +174,7 @@ function LibrarySidebar() {
   const activeRoot = pickActiveRoot(settings.data);
   const roots = settings.data?.knowledge_roots ?? [];
   const switchRoot = useSwitchActiveRootMutation();
+  const pendingRoot = usePendingActiveRootSwitch();
   const createCourse = useCreateCourseMutation(activeRoot);
   const due = useDueCounts();
   const [addingClass, setAddingClass] = useState(false);
@@ -185,7 +186,7 @@ function LibrarySidebar() {
       if (root !== activeRoot) {
         await switchRoot.mutateAsync(root);
       }
-      void navigate(classPath(course, "overview"));
+      void navigate({ ...classPath(course, "overview"), search: { root } });
       if (isMobile) {
         setOpen(false);
       }
@@ -199,7 +200,10 @@ function LibrarySidebar() {
    * library, so a class open in the old one would turn into "Class not found": land on Today instead.
    */
   const onLibrarySelect = async (root: string) => {
-    if (root === activeRoot) {
+    // Nothing to do only when that library is active and no switch is in flight. A switch still in
+    // flight (browser Back into another library's class) may move the app elsewhere, or fail: queue
+    // this one behind it and land on Today (a switch to the library already active does nothing).
+    if (root === activeRoot && pendingRoot === null) {
       return;
     }
     try {
@@ -228,7 +232,7 @@ function LibrarySidebar() {
       setClassName("");
       setClassError(null);
       setAddingClass(false);
-      void navigate(classPath(slug, "overview"));
+      void navigate({ ...classPath(slug, "overview"), search: { root: activeRoot } });
     } catch (error) {
       setClassError(String(error));
     }

@@ -38,7 +38,7 @@ export function useChooseKnowledgeFolder() {
         queryFn: () => fetchCourses(root),
       });
       if (courses[0]) {
-        void navigate(classPath(courses[0], "overview"));
+        void navigate({ ...classPath(courses[0], "overview"), search: { root } });
         return;
       }
       void navigate({ to: "/welcome", search: { addClass: true, root } });

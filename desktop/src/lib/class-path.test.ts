@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { classHref, classPath, lecturesFromSearch, lecturesToSearch } from "~/lib/class-path";
+import { classHref, classPath, classSearchFrom, lecturesFromSearch, lecturesToSearch } from "~/lib/class-path";
 
 describe("classPath", () => {
   it("gives the I7 route for every tab", () => {
@@ -30,6 +30,19 @@ describe("classHref", () => {
   it("is the concrete pathname, encoded", () => {
     expect(classHref("Cell Biology", "cards")).toBe("/course/Cell%20Biology/practice/cards");
     expect(classHref("Cell Biology", "read", "a")).toBe("/course/Cell%20Biology/read/a");
+  });
+
+  it("appends the library as an encoded ?root= when given", () => {
+    expect(classHref("cell-biology", "overview", undefined, "/mock/knowledge/fall 2026")).toBe(
+      "/course/cell-biology/overview?root=%2Fmock%2Fknowledge%2Ffall%202026",
+    );
+  });
+});
+
+describe("classSearchFrom", () => {
+  it("keeps a non-empty root and lectures, and drops anything else", () => {
+    expect(classSearchFrom({ root: "/a", lectures: "x" })).toEqual({ root: "/a", lectures: "x" });
+    expect(classSearchFrom({ root: "", lectures: 3 })).toEqual({ root: undefined, lectures: undefined });
   });
 });
 
