@@ -20,9 +20,9 @@ cd desktop && npm install && npm run tauri dev
 |---|-----|-----------|
 | 1 | Ingest PDF/PPTX/DOCX, commit | Dated digests written, git commit created, job history shows success |
 | 2 | Long digest + chunking | >25-page PDF digests; Notes pane scrolls to the end |
-| 3 | `course.md` | One-digest index link opens the digest in Notes; two digests roll up |
+| 3 | `course.md` | One-digest index link opens the digest in Notes; two digests roll up (a synthesized `course.md` with no digest links by design; each digest opens from the lecture list) |
 | 4 | Markdown | Tables, nested lists, emphasis, code, links render; no closing `arbor-pages` text |
-| 5 | Search | FTS hit opens from overlay; semantic search returns the right lecture |
+| 5 | Search | FTS hit opens from overlay; semantic search returns the right lecture (turn on Settings → General → Embed after Update and run an update first: v0.6 has no manual Embed button and semantic search shows a bare "No results" without `.arbor/vectors.sqlite`) |
 | 6 | Watch | Dropping a file into the course folder lands in review |
 | 7 | Flashcards | Generate, flip, Again / Wrong / Mastered persist |
 | 8 | Quiz | Generate, submit, session score `N / M correct` |
@@ -31,7 +31,7 @@ cd desktop && npm install && npm run tauri dev
 | 11 | Classes | Add class works; reserved name (`study`) shows the error |
 | 12 | Notifications | Desktop notification on job end (Linux notification daemon) |
 | 13 | OCR | Scanned PDF yields text (Tesseract installed) |
-| 14 | Packaged build | `npm run tauri build` on Linux produces an AppImage/deb that launches without the repo or `uv` (sidecar proof, Linux equivalent of the Finder box) |
+| 14 | Packaged build | `bash scripts/bundle-worker.sh`, then `cd desktop && NO_STRIP=1 npx tauri build --bundles appimage,deb --config src-tauri/tauri.bundle.json` produces an AppImage/deb that launches without the repo or `uv` (sidecar proof, Linux equivalent of the Finder box). Plain `npm run tauri build` bundles no worker at all |
 | 15 | Auth states | Claude signed out (a scratch `HOME` with no `.credentials.json`) → badge shows not signed in and jobs refuse with the provider's message ("Not logged in · Please run /login") |
 
 ## Version 4 script (`v0.4.0`)
@@ -123,6 +123,83 @@ Setup: bare remote `/tmp/arbor-v5/remote.git`. Clone A `owner-a@arbor.test` (own
 | C4 | Install, confirm, and uninstall passed. Run blocked | Browse of the local index listed Anki export. Install wrote `$XDG_DATA_HOME/arbor/skills/anki-export/429d15dc…` and the status said Installed (`c4-installed.png`). Confirm permissions persisted the grant (`c4-confirmed.png`). Run opened Select Folder. Ctrl+L accepted `/tmp/arbor-v5/export` (`c4-picker-ctrll.png`). Open, Cancel, Escape, and Alt+O did not dismiss the dialog (issue #70). The export directory stayed empty. Uninstall removed the skill directory and the grant (`C4-uninstalled.png`). Not marked Live run. |
 | C5 | Pass | Owner A set `member-b@arbor.test` to viewer and saved (`5410923`). B pulled. Update knowledge is disabled and the course shows the viewer reason (`C5-viewer-disabled.png`). `arbor-worker append-card` on B exited 1 with `Viewers cannot run write jobs or push…`. The deck stayed one card. |
 | C6 | Pass, with a marker caveat | Confirm on `remote-lamp.pdf` started `job-18dfaa64594062fc`. The private sshd on 127.0.0.1:22222 accepted the throwaway key. The remote tree is `/tmp/arbor-v5/ssh-work/0b0f395f328ef743/`, and its page images contain `REMOTEWORKERTOKEN`. Local commit `66a1e28` is `digest: RemoteLab`. The digest states the 590-nanometer sodium lamp (`C6-after-job.png`). Grok did not copy the literal marker into the digest. `~/.ssh` before and after match (sha256 and mtime of every entry). System sshd pid 1060 was untouched. |
+
+### 2026-11-15 — v0.6.0 (Claude provider)
+
+main `4188566` (PRs #140–#144 merged), package `0.6.0`. Private Xvfb `:91` (1600x1000) inside `dbus-run-session`, `GDK_BACKEND=x11`, `WAYLAND_DISPLAY`, `HYPRLAND_INSTANCE_SIGNATURE`, `CLAUDECODE` and every other `CLAUDE_*` variable unset. Claude Code provider (`claude` 2.1.325, mise install symlinked first on `PATH`, `MISE_TRUSTED_CONFIG_PATHS` set), model `claude-sonnet-5-5` for every job. Scratch HOME (only `.credentials.json` copied, mode 600), XDG and `GIT_CONFIG_GLOBAL` under `~/.local/state/flow/runs/r20261114-0580d2/scratch/live-run/` (`$S` below), libraries pre-seeded in `$S/xdg/config/com.arbor.app/settings.json`. Three libraries: `Main` (Tidewater, Glaciology, later Botany), `LibB` (a second Tidewater), `LibC` (Scratchclass, deleted for B3). Fixtures generated in `$S/fixtures` (multi-page PDFs with per-page marker tokens, a 28-page PDF, a text PPTX, an image-only PPTX, a DOCX, a scanned PDF). Pre-check last line: `{"type":"result","subtype":"success","is_error":false,"result":"ok",…}`. Real `~/.config/com.arbor.app/settings.json` stayed `87c2bcd705df9bebaa657bb89c3010e4cc90069b71f568af35a52d8883a2759b` before and after. No `hyprctl dispatch`, no input to the real outputs.
+
+v0.6.0 Proof and the five fixes:
+
+| # | Result | Evidence |
+|---|--------|----------|
+| A1 | Pass | `/` showed Today with Glaciology and Tidewater (and the LibB/LibC classes) (`$S/shots/00-launch.png`). |
+| A2 | Pass | Pill menu → Update knowledge → Confirm. Pill read "Updating 1 of 1 · generate" (`05-updating.png`). Job `job-18e816baf586f59c` (claude, `prepare ok pdf_images`), commit `2d68a29 digest: Tidewater`. |
+| A3 | Pass | Ticked Fiddler Crabs, Practice → Generate: job `job-18e816ef0082aeda` `{"digests":["Tidewater/digests/2026-11-15T0225.md"]}`, commit `135687f` (`study/flashcards.json` + `origins.json`); all 20 cards cite that digest. |
+| A4 | Pass | Glaciology lecture with no cards: New in the class column (`21-glac.png`), Unread after a partial scroll (`22-partial.png`), "63% read" on Today (`23-today-partial.png`), no badge and gone from Continue reading after reading to the end (`24-end.png`, `25-today-read.png`). |
+| A5 | Pass | settings.json sha256 identical (above). Real `~/.claude` has no project or JSON file mentioning this run; all CLI state went to the scratch HOMEs. |
+| B1 | Pass | PDF through Claude with page images (`pdf_images`, A2 and job `job-18e816c68b745a33`); image-only PPTX → `pptx_images_fallback`, job `job-18e816e3115576b1`, commit `8be4657`, digest has `PPTXIMAGETOKEN`, 2,310 m, 4.1 m. |
+| B2 | Pass | Main Tidewater, then LibB Tidewater (`?root=…/LibB`, `29-hash-B-crop.png`). Back → active `Main`, `?root=…/Main` (`31-back.png`); exam 2026-12-05 → `Main/.arbor/courses.json`, commit `bc4a77a`, LibB untouched. Forward → active `LibB`, `?root=…/LibB` (`39-forward.png`); exam 2026-12-19 → LibB only, commit `a5495ad`. |
+| B3 | Pass | `rm -rf roots/LibC`, typed "salt"/"Kessel": palette shows "Couldn't search LibC" plus the other libraries' hits (`48-b3-search.png`, `49-fts.png`); `roots/LibC` was not recreated. |
+| B4 | Pass | Scoped Generate (A3), graded fc_bb62b082 Mastered, fc_4005ee87 Wrong, fc_949efdb7 Again, then whole-class Refresh from digests: job `job-18e816fb158d0cfc`, commit `ccc974b`. All 20 scoped ids kept, 0 new Fiddler cards (41 = 20 + 15 + 6), origins all `full`, `progress.json` byte-identical. |
+| B5 | Pass | Symlink `Main/Linkedclass → LibB/Tidewater`: on neither Today nor the sidebar (`00-launch.png`, `46-b5-today.png`); 10 clicks on every Today entry, none showed "Class not found" (`47-b5-click1..10.png`, OCR). |
+
+Runbook rows (v3, v4) through Claude:
+
+| # | Result | Evidence |
+|---|--------|----------|
+| 1 | Pass, DOCX/PPTX caveat | Job `job-18e816c68b745a33` (PDF ×3 `pdf_images`, DOCX `docx_text`, PPTX `pptx_text`), commit `b3548f1 digest: Glaciology, Tidewater`. Text PPTX digest omitted the slide marker tokens but kept every fact (model omission). |
+| 2 | Pass | `glacier-long.pdf` chunks 1–25 and 26–28 then synthesis; digest states H26 182 m/yr, H28 196 m/yr. Notes scrolled to the end (`24-end.png`). |
+| 3 | Fail (regression) | Main `course.md` rolls up four digests. LibB's one-digest index link `2026-11-15.md` does not open the digest: the click navigates the webview to Today (`62-course-link.png`, `63-after1.png`). Course notes on the new overview are `dangerouslySetInnerHTML` with no `data-arbor-digest` click handler. |
+| 4 | Partial | Nested lists and inline code render, no closing `arbor-pages` text (`22-partial.png`, `24-end.png`). Claude wrote no table or emphasis, so those stay unproven. |
+| 5 | Pass, caveat | FTS hit opened the Kessel digest (`50-fts-open.png`). Semantic needed Embed after Update (embed job `job-18e81789c7341fb2`); "beach hoppers shredding kelp" put the Wrack Lines digest second and it opened (`59-semantic.png`, `60-semantic-open.png`). The hashed n-gram embedder ranked a fiddler-crab chunk first. |
+| 6 | Pass | Six files copied into class folders while the app ran showed up in review (`07-review6.png`). |
+| 7 | Pass | Flip, Mastered/Wrong/Again persisted to `.arbor/users/live@arbor.test/Tidewater/progress.json` (`15-graded.png`). |
+| 8 | Pass | Quiz job `job-18e81702ffc210ff`, commit `19ba6dc`; Submit showed `1 / 1 correct` (`20-quiz-submit.png`). |
+| 9 | Pass | Concepts job `job-18e817b43047bbe4`, commit `6a5eac2`, 16 concepts; Read in digest opened Tidal Frame with concept chips (`65-graph.png`, `66-graph-nav.png`). |
+| 10 | Fail (not a regression) | Diagrams job `job-18e817bd8c685f9a` succeeded with no figure (fixtures have none). Check citations `job-18e817c173528c6c`, commit `3135831`: 26 failures "claim not in digest", including honest cards such as fc_4005ee87 "They aerate the sediment." against "Fiddler crab burrows aerate marsh sediment." The matcher is unchanged since v3.0; Claude's terse backs miss it. |
+| 11 | Pass | Reserved `study` shows the error (`70-crop.png`); `Botany` created in the active library (Main). |
+| 12 | Pass | 9 `Notify` calls ("Arbor update finished", "succeeded") on the private bus (`$S/logs/notifications-1.log`). |
+| 13 | Pass | Scanned PDF digest contains `OCRERRATICTOKEN` and the 140 km / 1,800 t facts. |
+| 14 | Fail (not a regression), sidecar works | Deb built (`Arbor_0.6.0_amd64.deb`); AppImage fails in linuxdeploy (`Could not find dependency: libavif-8a7f9d56.so.16.4.2` from the PyInstaller onedir). The deb installs the worker at `usr/lib/Arbor/arbor-worker/`, which `sidecar_candidates` never checks, so the extracted app shows "worker project not found" (`103-deb.png`). With the onedir copied beside `desktop`, PATH = git/sh/bash/tesseract + `claude` only, cwd `/tmp`: Today loads and the worker process is the sidecar (`104-deb-sidecar.png`). |
+| 15 | Pass, caveat | Scratch HOME without `.credentials.json`: pill "Claude · not signed in" (`96-signedout-pill.png`); Generate created no job and logged "Claude is not authenticated: {raw `claude auth status` JSON}" in the hidden log only (`100-signedout-log.png`). The CLI itself returns `Not logged in · Please run /login`. |
+| T1 | Fail (regression) | Answer "about 1,800 tonnes … 140 kilometres [1][3][9]" with page chips; the chip opened the Kessel digest at Important Details (`76-T1-chip.png`). But the first message crashed the whole app: "date value is not finite in DateTimeFormat format()" (`73-T1.png`). `chat_threads.rs` writes `2026-11-15T02:44:14Z.858`; the new thread list formats it with `Intl`. Every later chat write (send, mode toggle) crashed again; the run continued by rewriting `index.json` to `….858Z` and reloading. |
+| T2 | Pass, crash | "The sources do not say anything about tungsten…", banner "Not supported by this course" (`77-T2.png`). |
+| T3 | Pass, crash | Explain stayed in the course with citations (`80-T3-explain.png`). v0.6 has no chat quiz mode; Quiz me on this wrote quiz `10a75ec study: Glaciology quiz from chat`. |
+| T4 | Pass, crash | History survived a full restart (`84-T4-history.png`); New opened an empty chat; Delete all chats removed `chat/Glaciology` (`85-clear-dialog.png`, `86-cleared.png`). |
+| T5 | Pass | After chatting, `git status` was only `?? .arbor/settings.json`; chat lives under the ignored `.arbor/users/*/chat/`. |
+| T6 | Pass | Due today 40, weak topic Key Concepts after Wrong/Again grades, study plan commit `06fa9e7` (rendered only after leaving and reopening the overview), make card from selection saved `fc_f2ff9d46` with page `1-3`, commit `92d9565`. |
+| T7 | Pass, caveat | Signed-out chat send showed "Claude is not authenticated: {…raw JSON…}" above the composer (`102-T7-send.png`). |
+| C1–C6 | Not run, out of scope | No provider change since v0.5. |
+
+Overall: **FAIL**. Every A and B box passed. Row 3 and the chat crash (T1–T4) are v0.6.0 regressions.
+
+Notes:
+
+- The update review follows a symlinked class folder: with `Main/Linkedclass → LibB/Tidewater`, Update knowledge listed `Linkedclass/libb-lecture.pdf` and would digest LibB's file into a class that Today and the sidebar hide (`02-review.png`). `courses.discover_sources` uses `is_dir()`, which follows links. The symlink was moved aside for A2's "1 of 1".
+- The pill reads "Library up to date · 1794709451": `jobs.finished_at` is epoch seconds and `compactAgo` gets it raw.
+- WebKitGTK date inputs under Xvfb: typed digits and Tab do not reach the field while the calendar popup is open or the docked inspector has focus. Close the inspector, pick the day in the popup, press Escape, then Enter to save.
+
+### 2026-11-15 — v0.6.0 re-run (Claude provider)
+
+Re-run of the boxes that failed above, on main `4b9ad28` (PR #145 pill time, #146 Course notes links, #147 chat timestamps), package `0.6.0`. Same setup as the first run: private Xvfb `:91` (1600x1000) inside `dbus-run-session`, `GDK_BACKEND=x11`, `WAYLAND_DISPLAY`, `HYPRLAND_INSTANCE_SIGNATURE`, `CLAUDECODE` and every other `CLAUDE_*` variable unset, `claude` 2.1.325 (mise install symlinked first on `PATH`, `MISE_TRUSTED_CONFIG_PATHS` set), model `claude-sonnet-5-5`. Fresh scratch HOME (only `.credentials.json`, mode 600), XDG, `GIT_CONFIG_GLOBAL` and Knowledge root `Main` under `~/.local/state/flow/runs/r20261114-0580d2/scratch/rerun/` (`$S` below), settings pre-seeded in `$S/xdg/config/com.arbor.app/settings.json`. Class `Tidewater` built in this run from the first run's fixtures `tide-lecture1.pdf` and `tide-lecture2.pdf` (3 pages each) through Update knowledge. Before launch, `.arbor/users/live@arbor.test/chat/Tidewater/index.json` was seeded with one thread `t-20261110T090000Z-a1b2c3` stamped `2026-11-10T09:00:00Z.123` (plus its `.jsonl`). Nothing under the root was edited after launch. Pre-check last line: `{"type":"result","subtype":"success","is_error":false,"result":"ok",…}`. Real `~/.config/com.arbor.app/settings.json` stayed `87c2bcd705df9bebaa657bb89c3010e4cc90069b71f568af35a52d8883a2759b` before and after. No `hyprctl dispatch`, no input to the real outputs.
+
+| # | Result | Evidence |
+|---|--------|----------|
+| R3 (row 3) | Pass | One digest: job `job-18e81c43fcad3fe3` (`provider: claude`, `prepare ok pdf_images`), commit `027c721 digest: Tidewater`, `course.md` = `See [2026-11-15.md](digests/2026-11-15.md).` + Overview. Overview → Course notes (`04-class.png`) → click `2026-11-15.md` opened that digest in Read, "Tidewater Ecology: Tides, Zonation, Sediment" (`05-R3-one-link.png`), not Today. Two digests: job `job-18e81c4ed6202546`, commit `4270370` added `digests/2026-11-15T0406.md`, and `course.md` became a synthesized roll-up covering both lectures (`11-overview2.png`). The synthesized roll-up has no digest links by design: `course_synthesis.py` writes the `See [...]` index only for one digest and a per-digest link list (`build_course_toc`) only when synthesis fails. Each digest opens from the lecture list (`12-digest2.png`). |
+| T1 | Pass | New chat, "What burrow density do fiddler crabs reach in the Corvel low marsh?" → "…reaches 140 per square metre [1][2]." with chips `Course overview · tidewater` and `Fiddler Crabs in Tidewater Ecology · important-details · p. 1-3` (`T1-poll-12.png`). The page chip opened Read on that digest at Important Details (`16-T1-chip.png`). No "Something went wrong" in any of the 13 T1 frames, nor in any later frame (tesseract on every screenshot). |
+| T2 | Pass | "What is the average water salinity of the Corvel estuary…?" → "The sources do not give the average water salinity…", banner "Not supported by this course" (`T2-poll-12.png`). |
+| T3 | Pass | Mode chip → Explain (a chat write; thread row turned "Explain · now", no crash, `18-mode.png`). "Explain step by step why the Corvel marsh is keeping pace with sea level rise." → five steps from 4.2 vs 3.1 mm/yr, and says the sources do not link crab burrowing to accretion (`T3-poll-16.png`). v0.6 has no chat quiz mode. "Quiz me on this" is disabled on answers that cite only `course.md` ("Needs a lecture…"); on the T1 answer it ran job `job-18e81ca2010b9109` and committed `2cee414 study: Tidewater quiz from chat` (`study/quiz.json`, `origins.json`). |
+| T4 | Pass | Killed `desktop` by PID; `tauri dev` and Vite exited; relaunched. The thread list showed "Explain · 3 min ago" and "Seeded old-stamp thread · Ask · Tue", and the transcript was intact (`25-T4-history.png`). The seeded thread opened (`27-hover-seeded.png`). New → send created a third thread "Ask · now" with a cited answer (`T4-new-poll-10.png`). Row menu → Delete → confirm removed the seeded thread from `index.json` and deleted its `.jsonl` (`29-menu.png`, `30-delete-dialog.png`, `31-deleted.png`). Final `index.json`: `2026-11-15T04:07:30.797Z`, `2026-11-15T04:10:22.476Z`, `2026-11-15T04:13:27.562Z`, `2026-11-15T04:13:29.655Z`. All parse as RFC 3339; `grep -c 'Z\.'` = 0. |
+| Heal | Pass | Seeded `2026-11-10T09:00:00Z.123` listed as "Ask · Tue" (2026-11-10 is a Tuesday) under This week and opened (`13-ask.png`). On disk it stayed `Z.123` until the first write: the T1 send rewrote it to `"created_at":"2026-11-10T09:00:00.123Z","updated_at":"2026-11-10T09:00:00.123Z"`. |
+| P | Pass | Pill "Library up to date · just now" right after each job (`03-updating.png`), then "· 1m ago" (`T1-poll-12.png`), "· 3m ago" (`T2-poll-12.png`), "· 4m ago", "· 5m ago" (`21-top.png`), and "· 2m ago" after the restart. Never a raw number; `jobs.finished_at` is still epoch seconds (`1794715537`). |
+| S | Pass | Settings sha256 above, mtime unchanged (2026-10-17). Real `~/.claude/projects` has no directory or transcript for the scratch root; all CLI state went to the scratch HOME. |
+
+Overall: **PASS**. Row 3 and T1–T4 pass with no hand edits after launch, and both regressions from the first run are fixed.
+
+Notes:
+
+- Follow-up answers re-cite only this turn's sources. The T2 answer stored "my earlier answer cited , but only source [1] was provided": the model saw its T1 answer's `[2]` with one source this turn, and the app stripped the unknown `[2]`. The text reads oddly but nothing is wrong.
+- `$S/shots/` holds every screenshot named above.
 
 ## Folder picker under Xvfb
 
