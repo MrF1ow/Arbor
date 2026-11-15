@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { IconButton } from "~/components/ui/button";
 import { Kbd } from "~/components/ui/kbd";
 import { Spinner } from "~/components/ui/spinner";
-import { jobTitle } from "~/domain/jobs";
+import { jobStampMs, jobTitle } from "~/domain/jobs";
 import type { JobEventRow, JobSummary } from "~/domain/types";
 import { useStickToBottomScroll } from "~/hooks/use-stick-to-bottom-scroll";
 import { modShortcut } from "~/lib/shortcuts";
@@ -37,6 +37,22 @@ export function liveTailFromStore(storeLines: string[], cursor: number): string[
   return storeLines.slice(Math.max(0, cursor));
 }
 
+/** The time-of-day prefix for a stored event; empty when the stamp is missing or unreadable. */
+function eventTimePrefix(stamp: string | null | undefined): string {
+  if (!stamp) {
+    return "";
+  }
+  const ms = jobStampMs(stamp);
+  if (Number.isNaN(ms)) {
+    return "";
+  }
+  return new Date(ms).toLocaleTimeString(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
 export function buildLogLines(
   events: JobEventRow[],
   liveTail: string[],
@@ -44,13 +60,7 @@ export function buildLogLines(
 ): LogLine[] {
   const fromDb = events.map((row, index) => ({
     key: `${jobId}-db-${index}`,
-    prefix: row.created_at
-      ? new Date(row.created_at).toLocaleTimeString(undefined, {
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-        })
-      : "",
+    prefix: eventTimePrefix(row.created_at),
     text: row.line,
   }));
   const fromLive = liveTail.map((line, index) => ({

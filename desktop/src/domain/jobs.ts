@@ -34,10 +34,23 @@ export function jobKindLabel(triggerKind: string, skill?: string | null): string
   return titleCaseKind(triggerKind);
 }
 
-export function relativeTime(iso: string, nowMs: number): string {
-  const then = new Date(iso).getTime();
+/**
+ * A job stamp as epoch milliseconds. The worker writes `started_at`/`finished_at` as epoch
+ * seconds in a decimal string ("1794709451", `now_stamp` in jobs.rs); older rows and fixtures
+ * hold ISO strings. NaN when the stamp is neither.
+ */
+export function jobStampMs(stamp: string): number {
+  const trimmed = stamp.trim();
+  if (/^\d+$/.test(trimmed)) {
+    return Number(trimmed) * 1000;
+  }
+  return new Date(stamp).getTime();
+}
+
+export function relativeTime(stamp: string, nowMs: number): string {
+  const then = jobStampMs(stamp);
   if (Number.isNaN(then)) {
-    return iso;
+    return stamp;
   }
   const diffMs = Math.max(0, nowMs - then);
   const seconds = Math.floor(diffMs / 1000);
@@ -60,8 +73,8 @@ export function formatDuration(startedAt: string, finishedAt: string | null): st
   if (!finishedAt) {
     return "running";
   }
-  const start = new Date(startedAt).getTime();
-  const end = new Date(finishedAt).getTime();
+  const start = jobStampMs(startedAt);
+  const end = jobStampMs(finishedAt);
   if (Number.isNaN(start) || Number.isNaN(end) || end < start) {
     return "—";
   }
@@ -76,12 +89,12 @@ export function formatDuration(startedAt: string, finishedAt: string | null): st
   return `${minutes} min`;
 }
 
-export function formatJobTimestamp(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) {
-    return iso;
+export function formatJobTimestamp(stamp: string): string {
+  const ms = jobStampMs(stamp);
+  if (Number.isNaN(ms)) {
+    return stamp;
   }
-  return date.toLocaleString(undefined, {
+  return new Date(ms).toLocaleString(undefined, {
     dateStyle: "medium",
     timeStyle: "short",
   });
@@ -110,11 +123,12 @@ export function jobTitle(triggerKind: string, skill?: string | null): string {
 }
 
 /** The Started column: the time of day for today, "Yesterday", else the date ("Oct 3"). */
-export function jobStartedLabel(iso: string, nowMs: number): string {
-  const started = new Date(iso);
-  if (Number.isNaN(started.getTime())) {
-    return iso;
+export function jobStartedLabel(stamp: string, nowMs: number): string {
+  const startedMs = jobStampMs(stamp);
+  if (Number.isNaN(startedMs)) {
+    return stamp;
   }
+  const started = new Date(startedMs);
   const dayStart = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
   const daysAgo = Math.round((dayStart(new Date(nowMs)) - dayStart(started)) / 86_400_000);
   if (daysAgo <= 0) {
