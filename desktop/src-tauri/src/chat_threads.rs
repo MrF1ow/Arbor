@@ -127,7 +127,29 @@ fn random_hex6() -> String {
 }
 
 fn utc_now_rfc3339() -> String {
-    Utc::now().format("%Y-%m-%dT%H:%M:%SZ%.3f").to_string()
+    Utc::now().format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string()
+}
+
+/// Threads saved since 2026-10-22 carry `YYYY-MM-DDTHH:MM:SSZ.fff`, which is not RFC 3339.
+/// Rewrite that form to `YYYY-MM-DDTHH:MM:SS.fffZ`; anything else is returned unchanged.
+fn normalize_stamp(ts: &str) -> String {
+    const HEAD_LEN: usize = "YYYY-MM-DDTHH:MM:SS".len();
+    if ts.is_ascii() && ts.len() > HEAD_LEN + 2 {
+        let (head, rest) = ts.split_at(HEAD_LEN);
+        if let Some(digits) = rest.strip_prefix("Z.") {
+            let b = head.as_bytes();
+            let shaped = b.iter().enumerate().all(|(i, c)| match i {
+                4 | 7 => *c == b'-',
+                10 => *c == b'T',
+                13 | 16 => *c == b':',
+                _ => c.is_ascii_digit(),
+            });
+            if shaped && digits.bytes().all(|c| c.is_ascii_digit()) {
+                return format!("{head}.{digits}Z");
+            }
+        }
+    }
+    ts.to_string()
 }
 
 fn sort_threads(threads: &mut [ThreadMeta]) {
@@ -265,7 +287,12 @@ fn read_index_file(path: &Path) -> Result<ChatIndex, String> {
         });
     }
     let bytes = fs::read(path).map_err(|e| e.to_string())?;
-    serde_json::from_slice(&bytes).map_err(|e| e.to_string())
+    let mut index: ChatIndex = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+    for thread in &mut index.threads {
+        thread.created_at = normalize_stamp(&thread.created_at);
+        thread.updated_at = normalize_stamp(&thread.updated_at);
+    }
+    Ok(index)
 }
 
 fn write_index_atomic(dir: &Path, index: &ChatIndex) -> Result<(), String> {
@@ -721,6 +748,123 @@ mod tests {
 
     fn block_on_cmd<T>(future: impl std::future::Future<Output = T>) -> T {
         tauri::async_runtime::block_on(future)
+    }
+
+    #[test]
+    fn utc_now_rfc3339_parses_as_rfc3339() {
+        let stamp = utc_now_rfc3339();
+        assert!(
+            chrono::DateTime::parse_from_rfc3339(&stamp).is_ok(),
+            "not RFC 3339: {stamp}"
+        );
+        assert!(stamp.ends_with('Z'), "{stamp}");
+    }
+
+    #[test]
+    fn normalize_stamp_rewrites_only_the_old_form() {
+        assert_eq!(
+            normalize_stamp("2026-11-15T02:44:14Z.858"),
+            "2026-11-15T02:44:14.858Z"
+        );
+        assert_eq!(
+            normalize_stamp("2026-11-15T02:44:14Z.85"),
+            "2026-11-15T02:44:14.85Z"
+        );
+        assert_eq!(
+            normalize_stamp("2026-11-15T02:44:14Z.858123"),
+            "2026-11-15T02:44:14.858123Z"
+        );
+        assert_eq!(
+            normalize_stamp("2026-11-15T02:44:14.858Z"),
+            "2026-11-15T02:44:14.858Z"
+        );
+        assert_eq!(
+            normalize_stamp("2026-11-15T02:44:14Z"),
+            "2026-11-15T02:44:14Z"
+        );
+        assert_eq!(normalize_stamp("garbage"), "garbage");
+        assert_eq!(normalize_stamp("2026-11-15T02:44:14Z."), "2026-11-15T02:44:14Z.");
+        assert_eq!(
+            normalize_stamp("2026-11-15T02:44:14Z.8x"),
+            "2026-11-15T02:44:14Z.8x"
+        );
+        assert_eq!(normalize_stamp(""), "");
+    }
+
+    #[test]
+    fn list_heals_old_stamps_and_orders_by_real_time() {
+        let _guard = IsolatedGitIdentityGuard::with_empty_identity();
+        let root = temp_root("heal-stamps");
+        let root_string = root.to_string_lossy().into_owned();
+        let course_dir = chat_course_dir(&root_string, "Biology").unwrap();
+        fs::create_dir_all(&course_dir).unwrap();
+        // Old and good forms are mixed on purpose: a plain string compare would put every
+        // "…SSZ.fff" stamp after every "…SS.fffZ" one, so this order needs normalising first.
+        let index = serde_json::json!({
+            "version": 1,
+            "threads": [
+                {"id": "t-20261115T020000Z-aaaaaa", "title": "oldest-bad", "mode": "ask",
+                 "created_at": "2026-11-15T02:00:00Z.100", "updated_at": "2026-11-15T02:00:00Z.100"},
+                {"id": "t-20261115T020500Z-bbbbbb", "title": "newest-good", "mode": "ask",
+                 "created_at": "2026-11-15T02:05:00.000Z", "updated_at": "2026-11-15T02:05:00.000Z"},
+                {"id": "t-20261115T020300Z-cccccc", "title": "middle-bad", "mode": "explain",
+                 "created_at": "2026-11-15T02:03:00Z.500", "updated_at": "2026-11-15T02:03:00Z.500"},
+                {"id": "t-20261115T020100Z-dddddd", "title": "second-oldest-good", "mode": "ask",
+                 "created_at": "2026-11-15T02:01:00.250Z", "updated_at": "2026-11-15T02:01:00.250Z"},
+            ],
+        });
+        fs::write(course_dir.join("index.json"), serde_json::to_vec(&index).unwrap()).unwrap();
+
+        let listed = block_on_cmd(list_chat_threads(root_string, "Biology".into())).unwrap();
+        let titles: Vec<&str> = listed.iter().map(|t| t.title.as_str()).collect();
+        assert_eq!(
+            titles,
+            ["newest-good", "middle-bad", "second-oldest-good", "oldest-bad"]
+        );
+        for t in &listed {
+            assert!(
+                chrono::DateTime::parse_from_rfc3339(&t.created_at).is_ok(),
+                "created_at: {}",
+                t.created_at
+            );
+            assert!(
+                chrono::DateTime::parse_from_rfc3339(&t.updated_at).is_ok(),
+                "updated_at: {}",
+                t.updated_at
+            );
+        }
+        assert_eq!(listed[1].updated_at, "2026-11-15T02:03:00.500Z");
+        // The read path is read-only: the bad stamps stay on disk until the next write.
+        let on_disk = fs::read_to_string(course_dir.join("index.json")).unwrap();
+        assert!(on_disk.contains("Z.500"));
+    }
+
+    #[test]
+    fn writes_save_the_good_form_over_old_stamps() {
+        let _guard = IsolatedGitIdentityGuard::with_empty_identity();
+        let root = temp_root("rewrite-stamps");
+        let root_string = root.to_string_lossy().into_owned();
+        let course_dir = chat_course_dir(&root_string, "Biology").unwrap();
+        fs::create_dir_all(&course_dir).unwrap();
+        let index = serde_json::json!({
+            "version": 1,
+            "threads": [
+                {"id": "t-20261115T020000Z-aaaaaa", "title": "old", "mode": "ask",
+                 "created_at": "2026-11-15T02:00:00Z.100", "updated_at": "2026-11-15T02:00:00Z.100"},
+            ],
+        });
+        fs::write(course_dir.join("index.json"), serde_json::to_vec(&index).unwrap()).unwrap();
+
+        block_on_cmd(create_chat_thread(
+            root_string.clone(),
+            "Biology".into(),
+            "ask".into(),
+        ))
+        .unwrap();
+
+        let on_disk = fs::read_to_string(course_dir.join("index.json")).unwrap();
+        assert!(!on_disk.contains("Z."), "{on_disk}");
+        assert!(on_disk.contains("2026-11-15T02:00:00.100Z"), "{on_disk}");
     }
 
     #[test]
