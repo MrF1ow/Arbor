@@ -158,6 +158,21 @@ function JobResult({ job }: { job: JobSummary }) {
   if (job.status === "succeeded") {
     return <span>{formatDuration(job.started_at, job.finished_at)}</span>;
   }
+  if (job.status === "cancelled" && job.error_summary) {
+    // A job Arbor ended on its own (it closed before the job finished) says why.
+    return (
+      <LazyTooltip>
+        <LazyTooltipTrigger
+          render={(tooltipProps) => (
+            <span {...tooltipProps} className="block truncate text-muted-foreground">
+              {job.error_summary}
+            </span>
+          )}
+        />
+        <LazyTooltipContent className="max-w-sm">{job.error_summary}</LazyTooltipContent>
+      </LazyTooltip>
+    );
+  }
   return <span>—</span>;
 }
 

@@ -238,8 +238,17 @@ fn process_path() -> OsString {
 /// Env vars a coding-agent terminal sets. The Python worker refuses to run the
 /// Claude provider when it sees them (it assumes a nested session), so a
 /// desktop app launched from a Claude Code terminal must not pass them on.
-pub(crate) const AGENT_ENV_VARS: [&str; 3] =
-    ["CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_SSE_PORT"];
+pub(crate) const AGENT_ENV_VARS: [&str; 7] = [
+    "CLAUDECODE",
+    "CLAUDE_CODE_ENTRYPOINT",
+    "CLAUDE_CODE_SSE_PORT",
+    // Session plumbing of the Claude Code process that launched Arbor: a worker's
+    // own `claude` call must not write into that session or reach its socket.
+    "CLAUDE_CODE_SESSION_ID",
+    "CLAUDE_CODE_CHILD_NOTES_DIR",
+    "CLAUDE_CODE_MESSAGING_SOCKET",
+    "CLAUDE_CODE_MESSAGING_TOKEN",
+];
 
 /// Remove the agent env vars from a Command that launches the Python worker.
 /// Every worker spawn site calls this once; the worker's own guard is
@@ -1589,7 +1598,15 @@ mod tests {
         }
         assert_eq!(
             AGENT_ENV_VARS,
-            ["CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_SSE_PORT"]
+            [
+                "CLAUDECODE",
+                "CLAUDE_CODE_ENTRYPOINT",
+                "CLAUDE_CODE_SSE_PORT",
+                "CLAUDE_CODE_SESSION_ID",
+                "CLAUDE_CODE_CHILD_NOTES_DIR",
+                "CLAUDE_CODE_MESSAGING_SOCKET",
+                "CLAUDE_CODE_MESSAGING_TOKEN",
+            ]
         );
     }
 

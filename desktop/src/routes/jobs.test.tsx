@@ -334,6 +334,22 @@ describe("jobs table", () => {
     return rendered;
   }
 
+  it("says why Arbor ended a job it found still running", async () => {
+    await renderAppAtRoute("/jobs", {
+      ...fixtures,
+      list_jobs: () => [
+        job("job-run", "running"),
+        job("job-stale", "cancelled", { error_summary: "Arbor closed before this job finished" }),
+        job("job-off", "cancelled"),
+      ],
+    });
+    const stale = await within(jobsView()).findByTestId("job-row-job-stale");
+    expect(within(stale).getByText("Arbor closed before this job finished")).toBeInTheDocument();
+    expect(
+      within(within(jobsView()).getByTestId("job-row-job-off")).queryByText(/Arbor closed/),
+    ).not.toBeInTheDocument();
+  });
+
   const rowIds = () =>
     within(jobsView())
       .getAllByTestId(/^job-row-/)
