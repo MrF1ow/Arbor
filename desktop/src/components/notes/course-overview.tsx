@@ -1,14 +1,15 @@
 import { useNavigate } from "@tanstack/react-router";
-import { ChevronRight } from "lucide-react";
+import { CalendarDays, ChevronRight } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { formatExamDate, reviewMinutes, daysLeftLabel, accuracyCaption, accuracyPercent } from "~/components/today/today-model";
 import { resetClassDeck } from "~/components/study/reset-class-deck";
 import { PreviewBarRight } from "~/components/workspace/preview-bar";
-import { isCommittableExamDate, useExamDateField } from "~/components/workspace/use-exam-date";
+import { parseExamDate, toExamDate, useExamDateField } from "~/components/workspace/use-exam-date";
 import { Button } from "~/components/ui/button";
 import { Checkbox } from "~/components/ui/checkbox";
-import { Input } from "~/components/ui/input";
+import { Calendar } from "~/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "~/components/ui/popover";
 import { Skeleton } from "~/components/ui/skeleton";
 import { courseDisplayName } from "~/domain/course";
 import { toCourseDigest, type ReadingEntry } from "~/domain/lectures";
@@ -214,9 +215,9 @@ export function CourseOverview({
   const quizPercent = quizThisWeek ? accuracyPercent(quizThisWeek) : null;
   const daysLeft = examDate ? daysUntil(examDate, new Date()) : null;
   const examValue = exam.value;
-  // The plan request carries a date only when the field holds one it would save: a draft the field
-  // rejects (`0002-…`) never goes out, the saved date does.
-  const planExamDate = examValue.trim() === "" || isCommittableExamDate(examValue) ? examValue.trim() || null : exam.saved || null;
+  // The plan request carries the exam date only when it is a real calendar date: an old malformed
+  // value in courses.json (`0002-11-04`, `2026-02-30`) never goes out.
+  const planExamDate = examValue && parseExamDate(examValue) ? examValue : null;
 
   const openDigest = (digestRef: string, heading?: string | null) => {
     const slug = resolveDigestSlug(digestRef, digests);
@@ -351,7 +352,7 @@ export function CourseOverview({
                   type="button"
                   size="xs"
                   variant="ghost"
-                  disabled={viewerBlocked || planBusy || studyPlanMutation.isPending || exam.invalid}
+                  disabled={viewerBlocked || planBusy || studyPlanMutation.isPending}
                   title={viewerBlocked ? VIEWER_WRITE_REASON : undefined}
                   onClick={() => void onGeneratePlan()}
                 >
@@ -381,28 +382,17 @@ export function CourseOverview({
           ) : (
             <p className="text-small text-muted-foreground">No study plan yet.</p>
           )}
-          <label className="mt-4 flex items-center gap-2 text-caption text-muted-foreground">
+          <div className="mt-4 flex items-center gap-2 text-caption text-muted-foreground">
             <span>Exam date</span>
-            <Input
-              type="date"
-              aria-label="Exam date"
+            <ExamDatePicker
               value={examValue}
               disabled={viewerBlocked}
-              title={viewerBlocked ? VIEWER_WRITE_REASON : undefined}
-              aria-invalid={exam.invalid || undefined}
-              onChange={(event) => exam.onChange(event.target.value, event.target.validity.badInput)}
-              onBlur={exam.onBlur}
-              onKeyDown={exam.onKeyDown}
-              className="w-40"
+              onPick={exam.commit}
             />
-          </label>
-          {exam.invalid ? (
+          </div>
+          {exam.error ? (
             <p role="alert" className="mt-2 text-small text-destructive">
-              Enter a full date with a four-digit year between 1900 and 2100.
-            </p>
-          ) : exam.error ? (
-            <p role="alert" className="mt-2 text-small text-destructive">
-              Could not save the exam date. Click away or press Enter to try again.
+              Could not save the exam date. Pick the date again to try again.
             </p>
           ) : null}
           {planStatusText ? <p className="mt-2 text-small text-muted-foreground">{planStatusText}</p> : null}
@@ -520,5 +510,77 @@ export function CourseOverview({
         </section>
       ) : null}
     </div>
+  );
+}
+
+const EXAM_START_MONTH = new Date(1900, 0, 1);
+const EXAM_END_MONTH = new Date(2100, 11, 1);
+
+function formatExamDateLong(date: Date): string {
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+/**
+ * The exam date: a button reading the date (or "No exam date") that opens Arbor's own calendar,
+ * the same on every platform (a native date input opens a GTK popup that traps focus on Linux).
+ * Picking a day saves it and closes; Clear saves `""`; Escape and a click outside close without saving.
+ */
+export function ExamDatePicker({
+  value,
+  disabled,
+  onPick,
+}: {
+  /** The exam date as `YYYY-MM-DD`, or `""` when none. */
+  value: string;
+  disabled: boolean;
+  /** Called with `YYYY-MM-DD` for a picked day, or `""` for Clear. */
+  onPick: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = parseExamDate(value);
+  const label = selected ? formatExamDateLong(selected) : "No exam date";
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        render={
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={disabled}
+            title={disabled ? VIEWER_WRITE_REASON : undefined}
+            aria-label="Exam date"
+            className={cn("min-w-40 justify-start", !selected && "text-muted-foreground")}
+          />
+        }
+      >
+        <CalendarDays aria-hidden="true" />
+        {label}
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-auto gap-2">
+        <Calendar
+          mode="single"
+          required
+          selected={selected}
+          defaultMonth={selected ?? new Date()}
+          startMonth={EXAM_START_MONTH}
+          endMonth={EXAM_END_MONTH}
+          onSelect={(day) => {
+            onPick(toExamDate(day));
+            setOpen(false);
+          }}
+        />
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={value === ""}
+          onClick={() => {
+            onPick("");
+            setOpen(false);
+          }}
+        >
+          Clear
+        </Button>
+      </PopoverContent>
+    </Popover>
   );
 }

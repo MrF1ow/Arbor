@@ -104,11 +104,22 @@ async function openAThenB(
   return { ...app, router, user, sidebar };
 }
 
+/** Pick `value` (`YYYY-MM-DD`) in the exam date calendar: open it, page to the month, click the day. */
 async function writeExamDate(value: string) {
   const before = getMockIpcCalls().filter((c) => c.cmd === "set_course_meta").length;
-  const input = await screen.findByLabelText("Exam date");
-  fireEvent.change(input, { target: { value } });
-  fireEvent.blur(input);
+  const user = userEvent.setup();
+  const [year, month, day] = value.split("-").map(Number) as [number, number, number];
+  const target = new Date(year, month - 1, day);
+  const monthLabel = target.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  await user.click(await screen.findByLabelText("Exam date"));
+  const grid = await screen.findByRole("grid");
+  for (let i = 0; i < 60 && !screen.queryByText(monthLabel); i += 1) {
+    await user.click(screen.getByRole("button", { name: /next month/i }));
+  }
+  const dayName = target.toLocaleDateString("en-US", { month: "long" }) + ` ${day}`;
+  await user.click(
+    within(grid).getByRole("button", { name: new RegExp(`${dayName}(st|nd|rd|th), ${year}`) }),
+  );
   await waitFor(() =>
     expect(getMockIpcCalls().filter((c) => c.cmd === "set_course_meta").length).toBe(before + 1),
   );
