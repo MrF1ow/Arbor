@@ -37,14 +37,20 @@ const LECTURES = [
   { title: "Cell signalling", date: "2026-10-13", unit: "Membranes", slug: "cell-signalling" },
   { title: "Cell cycle", date: "2026-10-27", unit: "Division", slug: "cell-cycle" },
   { title: "Apoptosis", date: "2026-11-03", unit: "Division", slug: "apoptosis" },
-].map((l) => ({ ...l, file: `${l.date}-${l.slug}.md` }));
+// The source file names carry an order prefix (01-, 02-), the way a real class's files do:
+// lectures list in source order, which is the order the test expects within each unit.
+].map((l, i) => ({
+  ...l,
+  file: `${l.date}-${l.slug}.md`,
+  source: `${String(i + 1).padStart(2, "0")}-${l.slug}`,
+}));
 
 const digestInfos = LECTURES.map((l) => ({
   title: l.title,
   date: l.date,
   path: `${COURSE}/digests/${l.file}`,
   unit: l.unit,
-  source_path: `${COURSE}/${l.unit}/${l.slug}.pdf`,
+  source_path: `${COURSE}/${l.unit}/${l.source}.pdf`,
 })).sort((a, b) => b.path.localeCompare(a.path));
 
 const stat = (
@@ -1414,8 +1420,8 @@ describe("class workspace", { timeout: 15000 }, () => {
       await renderAppAtRoute(READ, workspaceFixtures);
       await waitForDigestArticle();
       expect(screen.getByRole("heading", { level: 1, name: "Membrane transport" })).toBeInTheDocument();
-      expect(screen.getByText("membrane-transport.pdf")).toBeInTheDocument();
-      expect(screen.getByTestId("preview-bar-right")).toHaveTextContent("membrane-transport.pdf · cites 10 pages");
+      expect(screen.getByText("04-membrane-transport.pdf")).toBeInTheDocument();
+      expect(screen.getByTestId("preview-bar-right")).toHaveTextContent("04-membrane-transport.pdf · cites 10 pages");
     });
 
     it("scrolling a digest calls write_reading_state with how far it was read", async () => {
@@ -1617,8 +1623,8 @@ describe("class workspace", { timeout: 15000 }, () => {
       await renderAppAtRoute(READ, workspaceFixtures);
       await waitForDigestArticle();
       const bar = await screen.findByTestId("preview-bar-right");
-      expect(bar).toHaveTextContent("membrane-transport.pdf");
-      expect(bar).toHaveTextContent("membrane-transport.pdf · cites 10 pages");
+      expect(bar).toHaveTextContent("04-membrane-transport.pdf");
+      expect(bar).toHaveTextContent("04-membrane-transport.pdf · cites 10 pages");
     });
 
     it("scrolls the digest to its heading search param", async () => {

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildLectureRows,
+  naturalCompare,
   countLectures,
   filterLectures,
   scopeLabel,
@@ -253,4 +254,171 @@ describe("a class whose folder name ends in digests (C41)", () => {
       expect(toCourseDigest(course, "digests/2026-09-01-a.md")).toBe(path);
     });
   }
+});
+
+/** A digest whose stem is `T<hhmm>[-N]`, the way the worker names same-minute digests. */
+function sourced(stem: string, source: string | null, unit: string | null = null): DigestInfo {
+  const parts = /^(\d{4}-\d{2}-\d{2})T(\d{2})(\d{2})/.exec(stem)!;
+  return {
+    title: stem,
+    date: `${parts[1]}T${parts[2]}:${parts[3]}`,
+    path: `${COURSE}/digests/${stem}.md`,
+    unit,
+    source_path: source === null ? null : `${COURSE}/${source}`,
+  };
+}
+
+const order = (rows: ReturnType<typeof buildLectureRows>, unit?: string) =>
+  (unit ? rows.find((g) => g.unit === unit)! : rows[0]!).lectures.map((l) =>
+    l.digest.replace(`${COURSE}/digests/`, "").replace(".md", ""),
+  );
+
+describe("naturalCompare", () => {
+  it("compares digit runs as numbers and ignores case", () => {
+    expect(naturalCompare("09-a.pdf", "10-a.pdf")).toBeLessThan(0);
+    expect(naturalCompare("Lecture 2.pdf", "lecture 10.pdf")).toBeLessThan(0);
+    expect(naturalCompare("lecture 10.pdf", "Lecture 2.pdf")).toBeGreaterThan(0);
+    expect(naturalCompare("Notes.pdf", "notes.PDF")).toBe(0);
+    expect(naturalCompare("alpha.pdf", "beta.pdf")).toBeLessThan(0);
+  });
+});
+
+describe("lectures in source order (Q5, Q26, Q32)", () => {
+  // The real Gastroenterology class: source 02 was digested into `T2228-2`, source 01 into `T2228`.
+  const gastro: DigestInfo[] = [
+    ["2026-11-18T2228", "01-esophageal-disorders.pdf"],
+    ["2026-11-18T2228-2", "02-peptic-ulcer-disease-gastritis-zes.pdf"],
+    ["2026-11-18T2229", "03-emesis-blood-and-guts.pdf"],
+    ["2026-11-18T2230", "04-biliary-diseases.pdf"],
+    ["2026-11-18T2231", "05-liver-disease-and-etoh.pdf"],
+    ["2026-11-18T2232", "06-jaundice-and-hepatitis.pdf"],
+    ["2026-11-18T2233", "07-pancreatitis-and-pancreatic-cancer.pdf"],
+    ["2026-11-18T2233-2", "08-absorption-and-malabsorption.pdf"],
+    ["2026-11-18T2234", "09-colon-polyps-and-colorectal-cancer.pdf"],
+    ["2026-11-18T2235", "10-anorectal-disease.pdf"],
+    ["2026-11-18T2236", "11-diverticulitis-appendicitis-sbo-etc.pdf"],
+    ["2026-11-18T2237", "12-chrons-ulcerative-colitis-celiac-disease.pdf"],
+  ].map(([stem, source]) => ({
+    title: source!,
+    date: `${stem!.slice(0, 10)}T${stem!.slice(11, 13)}:${stem!.slice(13, 15)}`,
+    path: `${COURSE}/digests/${stem}.md`,
+    unit: null,
+    source_path: `${COURSE}/${source}`,
+  }));
+
+  it("lists same-minute digests in source order: Esophageal before Peptic Ulcer", () => {
+    const rows = buildLectureRows(COURSE, [...gastro].reverse(), {}, {});
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.lectures.map((l) => l.title)).toEqual(gastro.map((d) => d.title));
+    expect(rows[0]!.lectures[0]!.title).toBe("01-esophageal-disorders.pdf");
+  });
+
+  it("orders two digests of one source T1015 < T1015-2 < T1015-10", () => {
+    const input = [
+      sourced("2026-11-18T1015-10", "Unit/a.pdf"),
+      sourced("2026-11-18T1015-2", "Unit/a.pdf"),
+      sourced("2026-11-18T1015", "Unit/a.pdf"),
+    ];
+    expect(order(buildLectureRows(COURSE, input, {}, {}))).toEqual([
+      "2026-11-18T1015",
+      "2026-11-18T1015-2",
+      "2026-11-18T1015-10",
+    ]);
+  });
+
+  it("puts 10-… after 09-… (natural sort, not text sort)", () => {
+    const input = [
+      sourced("2026-11-18T1002", "10-late.pdf"),
+      sourced("2026-11-18T1001", "09-early.pdf"),
+      sourced("2026-11-18T1000", "9-x.pdf"),
+    ];
+    expect(buildLectureRows(COURSE, input, {}, {})[0]!.lectures.map((l) => l.title)).toEqual([
+      "2026-11-18T1001",
+      "2026-11-18T1000",
+      "2026-11-18T1002",
+    ]);
+  });
+
+  it("orders mixed-case names with and without numbers", () => {
+    const input = [
+      sourced("2026-11-18T1003", "lecture 10.pdf"),
+      sourced("2026-11-18T1002", "Lecture 2.pdf"),
+      sourced("2026-11-18T1001", "Intro.pdf"),
+    ];
+    expect(buildLectureRows(COURSE, input, {}, {})[0]!.lectures.map((l) => l.title)).toEqual([
+      "2026-11-18T1001",
+      "2026-11-18T1002",
+      "2026-11-18T1003",
+    ]);
+  });
+
+  it("falls back to date, then stem with the -N suffix, without a source_path", () => {
+    const input = [
+      sourced("2026-11-18T2228-10", null),
+      sourced("2026-11-18T2228-2", null),
+      sourced("2026-11-18T2228", null),
+      sourced("2026-11-18T2200", null),
+    ];
+    expect(order(buildLectureRows(COURSE, input, {}, {}))).toEqual([
+      "2026-11-18T2200",
+      "2026-11-18T2228",
+      "2026-11-18T2228-2",
+      "2026-11-18T2228-10",
+    ]);
+  });
+
+  it("reads a date-only stem as a whole, not as base 2026-09 suffix 13", () => {
+    // The worker writes `2026-09-12` for a day's first digest, then `2026-09-12T1015[-N]`.
+    const stems = ["2026-09-12", "2026-09-12T1015", "2026-09-12T1015-2", "2026-09-13"];
+    const row = (stem: string, source: string | null): DigestInfo => ({
+      title: stem,
+      date: stem.length === 10 ? stem : `${stem.slice(0, 10)}T${stem.slice(11, 13)}:${stem.slice(13, 15)}`,
+      path: `${COURSE}/digests/${stem}.md`,
+      unit: null,
+      source_path: source === null ? null : `${COURSE}/a.pdf`,
+    });
+    for (const source of ["shared", null]) {
+      const input = [...stems].reverse().map((stem) => row(stem, source));
+      expect(order(buildLectureRows(COURSE, input, {}, {}))).toEqual(stems);
+    }
+  });
+
+  it("gives one order for all 6 permutations of a mixed 3-row input", () => {
+    // B has a source, A and C do not: a comparator that mixed the two keys would cycle here.
+    const a = sourced("2026-11-18T1000", null);
+    const b = sourced("2026-11-18T0900", "02-b.pdf");
+    const c = sourced("2026-11-18T1100", null);
+    const perms = [
+      [a, b, c],
+      [a, c, b],
+      [b, a, c],
+      [b, c, a],
+      [c, a, b],
+      [c, b, a],
+    ];
+    const results = perms.map((p) => order(buildLectureRows(COURSE, p, {}, {})));
+    for (const result of results) {
+      expect(result).toEqual(["2026-11-18T0900", "2026-11-18T1000", "2026-11-18T1100"]);
+    }
+  });
+
+  it("keeps unit order by the newest lecture date for date-only units", () => {
+    const input = [
+      sourced("2026-11-01T1000", null, "Old"),
+      sourced("2026-11-20T1000", null, "New"),
+      sourced("2026-11-10T1000", null, "Mid"),
+    ];
+    expect(buildLectureRows(COURSE, input, {}, {}).map((g) => g.unit)).toEqual(["New", "Mid", "Old"]);
+  });
+
+  it("orders units by their max lecture date even when source order puts an older lecture last", () => {
+    const input = [
+      sourced("2026-11-20T1000", "01-a.pdf", "Fresh"),
+      sourced("2026-11-01T1000", "02-b.pdf", "Fresh"),
+      sourced("2026-11-10T1000", "01-c.pdf", "Mid"),
+    ];
+    const rows = buildLectureRows(COURSE, input, {}, {});
+    expect(rows.map((g) => g.unit)).toEqual(["Fresh", "Mid"]);
+    expect(rows[0]!.lectures.map((l) => l.title)).toEqual(["2026-11-20T1000", "2026-11-01T1000"]);
+  });
 });

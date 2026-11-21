@@ -81,8 +81,76 @@ function badgeFor(
 }
 
 /**
+ * Case-insensitive compare that reads digit runs as numbers, so `09-x` < `10-x` and
+ * `Lecture 2` < `lecture 10`. Returns 0 for names that differ only in case or leading zeros.
+ */
+export function naturalCompare(a: string, b: string): number {
+  // Splitting on a capturing group puts text at even indices and digit runs at odd ones.
+  const left = a.toLowerCase().split(/(\d+)/);
+  const right = b.toLowerCase().split(/(\d+)/);
+  for (let i = 0; i < Math.min(left.length, right.length); i++) {
+    const x = left[i]!;
+    const y = right[i]!;
+    if (i % 2 === 1) {
+      const nx = x.replace(/^0+(?=\d)/, "");
+      const ny = y.replace(/^0+(?=\d)/, "");
+      if (nx.length !== ny.length) {
+        return nx.length - ny.length;
+      }
+      if (nx !== ny) {
+        return nx < ny ? -1 : 1;
+      }
+    } else if (x !== y) {
+      return x < y ? -1 : 1;
+    }
+  }
+  return left.length - right.length;
+}
+
+/**
+ * `[base, n]` of a digest path's stem: a `-N` after a `THHMM` stamp is a number, no suffix reads
+ * as 1. The worker writes `YYYY-MM-DD`, `YYYY-MM-DDTHHMM` and `YYYY-MM-DDTHHMM-N`, so the
+ * date-only stem `2026-09-13` has no suffix.
+ */
+function stemKey(path: string): [string, number] {
+  const name = path.slice(path.lastIndexOf("/") + 1).replace(/\.md$/, "");
+  const match = /^(.*T\d{4})-(\d+)$/.exec(name);
+  return match ? [match[1]!, Number(match[2])] : [name, 1];
+}
+
+function compareStems(a: string, b: string): number {
+  const [baseA, nA] = stemKey(a);
+  const [baseB, nB] = stemKey(b);
+  if (baseA !== baseB) {
+    return baseA < baseB ? -1 : 1;
+  }
+  return nA - nB || (a < b ? -1 : a > b ? 1 : 0);
+}
+
+/**
+ * One total order for a unit's lectures: rows with a `source_path` first, in natural order of
+ * that path (then the stem rule for digests of one source); then rows without one, by date
+ * then the stem rule. Never compares a source key with a date key, so it cannot cycle.
+ */
+function compareLectures(a: DigestInfo, b: DigestInfo): number {
+  const hasA = Boolean(a.source_path);
+  const hasB = Boolean(b.source_path);
+  if (hasA !== hasB) {
+    return hasA ? -1 : 1;
+  }
+  if (hasA) {
+    const bySource = naturalCompare(a.source_path!, b.source_path!);
+    if (bySource !== 0) {
+      return bySource;
+    }
+    return compareStems(a.path, b.path);
+  }
+  return a.date < b.date ? -1 : a.date > b.date ? 1 : compareStems(a.path, b.path);
+}
+
+/**
  * Lecture column rows: lectures grouped by unit, newest unit first (by its newest digest
- * date), lectures within a unit in date order, no lecture numbers (Q16). Lectures with no
+ * date), lectures within a unit in source-file order (Q5), no lecture numbers (Q16). Lectures with no
  * unit go under "Lectures". `stats` is keyed by any digest path form; `reading` by the
  * course-prefixed path.
  */
@@ -96,7 +164,7 @@ export function buildLectureRows(
   for (const [key, row] of Object.entries(stats)) {
     statsByDigest.set(toCourseDigest(course, key), row);
   }
-  const units = new Map<string, LectureRow[]>();
+  const units = new Map<string, { info: DigestInfo; lecture: LectureRow }[]>();
   for (const info of digests) {
     const digest = toCourseDigest(course, info.path);
     const row = statsByDigest.get(digest);
@@ -114,17 +182,19 @@ export function buildLectureRows(
     const unit = info.unit?.trim() || NO_UNIT_LABEL;
     const list = units.get(unit);
     if (list) {
-      list.push(lecture);
+      list.push({ info, lecture });
     } else {
-      units.set(unit, [lecture]);
+      units.set(unit, [{ info, lecture }]);
     }
   }
   const groups: UnitRows[] = [];
-  for (const [unit, lectures] of units) {
-    lectures.sort((a, b) => a.date.localeCompare(b.date) || a.digest.localeCompare(b.digest));
-    groups.push({ unit, lectures });
+  for (const [unit, entries] of units) {
+    entries.sort((a, b) => compareLectures(a.info, b.info));
+    groups.push({ unit, lectures: entries.map((entry) => entry.lecture) });
   }
-  const newest = (group: UnitRows) => group.lectures[group.lectures.length - 1]!.date;
+  // Newest by the max date in the group, not the last row's: source order need not be date order.
+  const newest = (group: UnitRows) =>
+    group.lectures.reduce((max, lecture) => (lecture.date > max ? lecture.date : max), "");
   groups.sort((a, b) => newest(b).localeCompare(newest(a)) || a.unit.localeCompare(b.unit));
   return groups;
 }
