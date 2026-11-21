@@ -1,12 +1,13 @@
 use crate::worker::{
     default_python_dir, kill_worker_tree, packaged_sidecar, parse_worker_json_output,
-    process_path_for_spawn, resolve_worker_argv, run_worker_json, uv_project_missing_error,
+    process_path_for_spawn, resolve_worker_argv, run_worker_json, worker_command,
+    uv_project_missing_error,
 };
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
-use std::process::{Child, ChildStdin, Command, Stdio};
+use std::process::{Child, ChildStdin, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -134,7 +135,7 @@ fn spawn_server(app_dir: &Path) -> Result<Server, String> {
     if let Some(err) = uv_project_missing_error(&argv) {
         return Err(err);
     }
-    let mut command = Command::new(&argv[0]);
+    let mut command = worker_command(&argv[0]);
     command
         .args(&argv[1..])
         .env("PATH", process_path_for_spawn())
@@ -376,6 +377,7 @@ enum RequestOutcome {
 
 #[cfg(test)]
 mod tests {
+    use std::process::Command;
     use super::*;
     use std::fs;
     use std::io::Write;

@@ -2050,7 +2050,7 @@ pub async fn start_chat(
                 .iter()
                 .map(|(key, value)| (key.as_str(), value.as_str()))
                 .collect();
-            let mut command = Command::new(&argv[0]);
+            let mut command = worker::worker_command(&argv[0]);
             command
                 .args(&argv[1..])
                 .env("PATH", worker::process_path_for_spawn())
