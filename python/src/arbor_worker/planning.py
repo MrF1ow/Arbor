@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from arbor_worker.alignment import AlignmentStatus, PageRange, align_fingerprints
 from arbor_worker.course_manifest import CourseManifest
-from arbor_worker.courses import discover_sources
+from arbor_worker.courses import IGNORED_DIR_NAMES, discover_sources
 from arbor_worker.errors import PlanError
 from arbor_worker.hashing import hash_file
 from arbor_worker.page_fingerprints import fingerprint_source
@@ -27,6 +27,9 @@ class PendingSource:
 @dataclass(frozen=True)
 class UpdatePlan:
     pending: list[PendingSource]
+    # Courses whose notebook a cancel left unbuilt: Update rebuilds each one
+    # even when no source changed (see CourseManifest.synthesis_pending).
+    synthesis_pending: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -85,7 +88,27 @@ def build_plan(root: Path, settings: WorkerSettings) -> UpdatePlan:
             )
         )
 
-    return UpdatePlan(pending=pending)
+    return UpdatePlan(
+        pending=pending,
+        synthesis_pending=_synthesis_pending_courses(root, settings),
+    )
+
+
+def _synthesis_pending_courses(root: Path, settings: WorkerSettings) -> list[str]:
+    """Courses flagged synthesis_pending that still have a digest to build from.
+
+    Found by scanning the course folders, not the sources: a course whose
+    sources were deleted after digesting has none left to discover.
+    """
+    skip = IGNORED_DIR_NAMES | {settings.cache_dir_name, settings.digests_dirname}
+    flagged: list[str] = []
+    for course in sorted(p for p in root.iterdir() if p.is_dir()):
+        if course.name in skip or not (course / CourseManifest.FILENAME).is_file():
+            continue
+        manifest = CourseManifest.load(course)
+        if manifest.synthesis_pending() and manifest.read_digests():
+            flagged.append(course.name)
+    return flagged
 
 
 def plan_to_dict(plan: UpdatePlan) -> dict:
@@ -96,8 +119,11 @@ def plan_to_dict(plan: UpdatePlan) -> dict:
     ``changed``, ``ambiguous``, or ``identical``). Empty ``suggested_ranges``
     with ``changed`` is truncation/delete-only — not a full-file ingest hint.
     Blank/empty selection ranges still mean ingest-all except for that case.
+    ``synthesis_pending`` names the courses whose notebook a cancel left unbuilt;
+    Update rebuilds them even when ``pending`` is empty.
     """
     return {
+        "synthesis_pending": list(plan.synthesis_pending),
         "pending": [
             {
                 "path": p.path,

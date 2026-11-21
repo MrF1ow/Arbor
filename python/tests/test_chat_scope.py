@@ -380,3 +380,77 @@ def test_focus_without_digests_no_course_summary(scoped_root: Path) -> None:
     paths = [c.digest_path for c in result.retrieved]
     assert "Bio/course.md" not in paths
     assert result.retrieved[0].text == "Passage text."
+
+
+# ---- A scoped ask always places text from the ticked lectures (plan Q16, C3) ----
+
+_NO_MATCH_QUESTIONS = [
+    "summarize this",
+    "give me the key takeaways",
+    "quiz me",
+    "what should I memorize?",
+    "what are the main points",
+]
+
+
+@pytest.mark.parametrize("question", _NO_MATCH_QUESTIONS)
+def test_scoped_ask_places_the_lecture_when_no_question_word_matches(
+    scoped_root: Path, question: str
+) -> None:
+    digest = "Bio/digests/intro.md"
+    result = answer(
+        scoped_root, "Bio", [], question, "ask", RecordingFake(), "fake-model",
+        digests=[digest],
+    )
+    assert [c.digest_path for c in result.retrieved] == [digest]
+    assert "Welcome to biology." in result.retrieved[0].text
+
+
+def test_scoped_fallback_places_the_first_h2_section_of_every_ticked_lecture(
+    scoped_root: Path,
+) -> None:
+    long_body = "word " * 1_500  # 7,500 chars, well over CHUNK_CAP
+    (scoped_root / "Bio" / "digests" / "unit-2.md").write_text(
+        "# Unit 2\n\nPreamble line.\n\n## Metabolism\n" + long_body + "\n## Later\nNever first.\n"
+    )
+    index_course(scoped_root, "Bio")
+    ticked = ["Bio/digests/intro.md", "Bio/digests/unit-2.md"]
+    result = answer(
+        scoped_root, "Bio", [], "quiz me", "ask", RecordingFake(), "fake-model",
+        digests=ticked,
+    )
+    by_path = {c.digest_path: c for c in result.retrieved}
+    assert sorted(by_path) == sorted(ticked)
+    unit = by_path["Bio/digests/unit-2.md"]
+    assert unit.heading == "Metabolism"
+    assert len(unit.text) == 3_000 and unit.truncated is True
+    assert "Never first." not in unit.text
+
+
+def test_scoped_fallback_only_fills_lectures_the_search_did_not_hit(
+    scoped_root: Path,
+) -> None:
+    ticked = ["Bio/digests/intro.md", "Bio/digests/unit-2.md"]
+    result = answer(
+        scoped_root, "Bio", [], "enzymes", "ask", RecordingFake(), "fake-model",
+        digests=ticked,
+    )
+    paths = [c.digest_path for c in result.retrieved]
+    assert paths == ["Bio/digests/unit-2.md", "Bio/digests/intro.md"]
+
+
+def test_scoped_fallback_stays_inside_the_budget(scoped_root: Path) -> None:
+    ticked = ["Bio/digests/intro.md", "Bio/digests/unit-2.md"]
+    result = answer(
+        scoped_root, "Bio", [], "quiz me", "ask", RecordingFake(), "fake-model",
+        digests=ticked, budget_chars=40,
+    )
+    assert result.retrieved
+    assert sum(len(c.text) for c in result.retrieved) <= 40
+
+
+def test_unscoped_ask_gets_no_fallback_lectures(scoped_root: Path) -> None:
+    result = answer(
+        scoped_root, "Bio", [], "summarize this", "ask", RecordingFake(), "fake-model",
+    )
+    assert [c.digest_path for c in result.retrieved] == ["Bio/course.md"]

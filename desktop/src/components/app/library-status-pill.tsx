@@ -31,6 +31,7 @@ import {
   useJobs,
   usePlanUpdateMutation,
   useStartCitationJobMutation,
+  useStartUpdateMutation,
 } from "~/lib/queries/jobs";
 import { qk } from "~/lib/queries/keys";
 import { useCourses, useLibrary } from "~/lib/queries/library";
@@ -159,6 +160,7 @@ export function LibraryStatusPill() {
   const planUpdate = usePlanUpdateMutation(activeRoot);
   const cancelUpdate = useCancelUpdateMutation();
   const startCitations = useStartCitationJobMutation(activeRoot);
+  const startUpdate = useStartUpdateMutation(activeRoot);
   const pendingFiles = useQuery({
     queryKey: qk.planUpdate(activeRoot ?? ""),
     enabled: open && Boolean(activeRoot) && !viewerBlocked,
@@ -214,6 +216,22 @@ export function LibraryStatusPill() {
       }
       const plan = await planUpdate.mutateAsync();
       if (plan.pending.length === 0) {
+        if ((plan.synthesis_pending ?? []).length > 0) {
+          // No file to review, only a class notebook a cancel left unbuilt: the review dialog
+          // lists files, so start the update itself, as its Confirm would, with no selections.
+          if (!effective.modelId) {
+            appendLog("Select a model in Settings.");
+            return;
+          }
+          const jobId = await startUpdate.mutateAsync({
+            model: effective.modelId,
+            provider: providerId,
+            selections: [],
+            trigger: "manual",
+          });
+          appendLog(`Job ${jobId} started.`);
+          return;
+        }
         appendLog("Nothing to process — everything is up to date.");
         return;
       }

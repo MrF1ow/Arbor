@@ -318,7 +318,7 @@ def run_update(
         return RunResult(0, 0, 0, None, [])
 
     selected = [sel for sel in selected if sel.ranges]
-    if not selected:
+    if not selected and not plan.synthesis_pending:
         emitter.nothing_to_process()
         emitter.run_done(processed=0, failed=0, skipped=0)
         return RunResult(0, 0, 0, None, [])
@@ -332,11 +332,15 @@ def run_update(
     cancelled = False
 
     total_sources = len(selected)
-    emitter.planned(total=total_sources)
+    if selected:
+        emitter.planned(total=total_sources)
 
     by_course: dict[str, list[SelectedSource]] = {}
     for sel in selected:
         by_course.setdefault(sel.course, []).append(sel)
+    # A course whose notebook a cancel skipped is rebuilt even with no source to digest.
+    for course_rel in plan.synthesis_pending:
+        by_course.setdefault(course_rel, [])
 
     source_index = 0
     for course_rel, course_sels in by_course.items():
@@ -382,6 +386,10 @@ def run_update(
                 emitter.cancelled(after_sources=len(outcomes))
                 break
             except Exception as e:
+                # A failed source leaves nothing behind, like a cancelled one:
+                # its files, its manifest records and git all match the failure,
+                # so the next Update retries it from the start.
+                undo.rollback()
                 failed += 1
                 emitter.source_failed(
                     course_dir=course_rel,
@@ -423,16 +431,22 @@ def run_update(
                 SourceOutcome(course_rel, sel.path, True, digest_file=digest_rels[-1])
             )
 
-        if not new_digests:
+        redo_only = not new_digests
+        if redo_only and not manifest.synthesis_pending():
             emitter.course_done(course_dir=course_rel, digests=0)
             continue
 
         if not cancelled and _cancel_requested(cancel_file):
             cancelled = True
             emitter.cancelled(after_sources=len(outcomes))
+        if redo_only and cancelled:
+            # Nothing new was digested and the notebook is still owed: no change to save.
+            emitter.course_done(course_dir=course_rel, digests=0)
+            continue
 
         # A cancelled run never synthesises: the finished digests are saved and
-        # committed, and an existing course.md stays as it was (Q23).
+        # committed, and an existing course.md stays as it was (Q23). The manifest
+        # records that the notebook is owed, so the next Update builds it.
         synthesis_ok = not cancelled
         course_markdown: str | None = None
         if not cancelled:
@@ -465,6 +479,17 @@ def run_update(
                     **provider_failure_event_fields(e),
                 )
                 course_markdown = build_course_toc(course_rel, manifest.read_digests())
+                if redo_only and (course_abs / settings.course_file_name).exists():
+                    # Nothing new to list: the old notebook beats a bare digest list.
+                    course_markdown = None
+
+        if cancelled:
+            manifest.set_synthesis_pending(True)
+        elif synthesis_ok:
+            manifest.set_synthesis_pending(False)
+        if redo_only and course_markdown is None and not synthesis_ok:
+            emitter.course_done(course_dir=course_rel, digests=0)
+            continue
 
         manifest.save()
         for digest_rel in new_digests:

@@ -145,3 +145,41 @@ def test_record_with_page_markers_version(tmp_path: Path):
     m.save()
     again = CourseManifest.load(tmp_path)
     assert again.records()[0]["page_markers_version"] == 1
+
+
+# ---- synthesis_pending: a cancel skipped the course notebook (council C4) ----
+
+
+def test_manifest_without_the_flag_loads_as_not_pending_and_saves_unchanged(tmp_path: Path):
+    old = {"version": 1, "records": [json.loads(json.dumps(_record().__dict__))]}
+    (tmp_path / "arbor-course.json").write_text(json.dumps(old, indent=2) + "\n")
+
+    m = CourseManifest.load(tmp_path)
+
+    assert m.synthesis_pending() is False
+    m.set_synthesis_pending(False)
+    m.save()
+    assert json.loads((tmp_path / "arbor-course.json").read_text()) == old
+
+
+def test_synthesis_pending_round_trips_and_clears(tmp_path: Path):
+    m = CourseManifest.load(tmp_path)
+    m.set_synthesis_pending(True)
+    m.save()
+
+    again = CourseManifest.load(tmp_path)
+    assert again.synthesis_pending() is True
+    assert json.loads((tmp_path / "arbor-course.json").read_text())["synthesis_pending"] is True
+
+    again.set_synthesis_pending(False)
+    again.save()
+    assert "synthesis_pending" not in json.loads((tmp_path / "arbor-course.json").read_text())
+    assert CourseManifest.load(tmp_path).synthesis_pending() is False
+
+
+def test_restore_puts_the_flag_back_with_the_rest_of_the_manifest(tmp_path: Path):
+    m = CourseManifest.load(tmp_path)
+    snap = m.snapshot()
+    m.set_synthesis_pending(True)
+    m.restore(snap)
+    assert m.synthesis_pending() is False

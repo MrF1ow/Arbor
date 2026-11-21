@@ -690,6 +690,83 @@ def test_window_ties_go_to_more_hits_then_earlier_start():
     assert window.count("alpha") == 2
 
 
+def _reference_window_start(text: str, terms: list[str], idf: dict[str, float]) -> int:
+    """The selection rule written the slow, obvious way (amended Q31), as the oracle."""
+    from arbor_worker.chat import CHUNK_CAP, _term_pattern
+
+    hits = [
+        (m.start(), m.end(), term)
+        for term in terms
+        for m in _term_pattern(term).finditer(text)
+    ]
+    if not hits:
+        return 0
+    last = max(0, len(text) - CHUNK_CAP)
+    candidates = sorted(
+        {
+            min(max(start, 0), last)
+            for pos, _, _ in hits
+            for start in (pos, pos - CHUNK_CAP // 3)
+        }
+    )
+    best_key, best_start = None, 0
+    for start in candidates:
+        inside = [t for pos, end, t in hits if pos >= start and end <= start + CHUNK_CAP]
+        key = (sum(idf.get(t, 0.0) for t in set(inside)), len(inside))
+        if best_key is None or key > best_key:
+            best_key, best_start = key, start
+    return best_start
+
+
+def test_window_start_matches_the_plain_rule_on_random_sections():
+    import random
+
+    from arbor_worker.chat import _window_start
+
+    rng = random.Random(20261120)
+    vocab = ["cell", "cells", "ms", "crohns", "colitis", "ulcerative", "tell", "zebra"]
+    idf = {"cell": 0.5, "cells": 1.0, "ms": 3.0, "crohns": 2.0,
+           "colitis": 1.5, "ulcerative": 2.5, "tell": 0.25, "zebra": 4.0}
+    for _ in range(60):
+        pieces = []
+        for _ in range(rng.randint(40, 900)):
+            roll = rng.random()
+            if roll < 0.15:
+                pieces.append(rng.choice(vocab))
+            elif roll < 0.2:
+                pieces.append(rng.choice(["Crohn's", "MS", "Cells", "colitis."]))
+            else:
+                pieces.append("filler" * rng.randint(1, 4))
+        text = " ".join(pieces)
+        terms = rng.sample(vocab, rng.randint(1, 5))
+        assert _window_start(text, terms, idf) == _reference_window_start(text, terms, idf), (
+            text[:80], terms,
+        )
+
+
+def test_window_over_a_huge_section_with_thousands_of_hits_is_fast():
+    import time
+
+    from arbor_worker.chat import CHUNK_CAP, _window_text
+
+    # 5,100 hits of a common term, 25 characters apart, and one rare word in the middle.
+    unit = "common " + "x" * 17 + " "
+    text = unit * 5_100
+    mid = len(text) // 2
+    text = text[:mid] + "quokka " + text[mid:]
+    assert len(text) > 127_000
+    terms = ["common", "quokka"]
+    idf = {"common": 0.1, "quokka": 5.0}
+
+    started = time.perf_counter()
+    window = _window_text(text, terms, idf)
+    elapsed = time.perf_counter() - started
+
+    assert elapsed < 0.3
+    assert len(window) == CHUNK_CAP
+    assert "quokka" in window
+
+
 def test_best_h2_section_does_not_count_short_terms_inside_words():
     from arbor_worker.chat import _best_h2_section
 

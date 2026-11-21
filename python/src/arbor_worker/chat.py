@@ -312,6 +312,13 @@ def _term_pattern(term: str) -> re.Pattern[str]:
 
 
 def _window_start(text: str, terms: list[str], idf: dict[str, float]) -> int:
+    """Start of the CHUNK_CAP window with the most rare-term weight.
+
+    Candidates are each hit's start and that start minus CHUNK_CAP // 3, clamped
+    to the section. A window scores the idf sum of the distinct terms with a
+    whole hit inside it; ties go to more hits, then the earlier start. One sweep
+    over the sorted hits, so the work is linear in the hits, not hits squared.
+    """
     hits: list[tuple[int, int, str]] = []
     for term in terms:
         for match in _term_pattern(term).finditer(text):
@@ -326,13 +333,33 @@ def _window_start(text: str, terms: list[str], idf: dict[str, float]) -> int:
             for start in (pos, pos - CHUNK_CAP // 3)
         }
     )
+    ordered_terms = list(dict.fromkeys(terms))
+    by_start = sorted(range(len(hits)), key=lambda i: hits[i][0])
+    by_end = sorted(range(len(hits)), key=lambda i: hits[i][1])
+    inside = [False] * len(hits)
+    per_term = dict.fromkeys(ordered_terms, 0)
+    count = 0
+    next_start = next_end = 0
     best_key: tuple[float, int] | None = None
     best_start = 0
     for start in candidates:
-        inside = [
-            term for pos, end, term in hits if pos >= start and end <= start + CHUNK_CAP
-        ]
-        key = (sum(idf.get(t, 0.0) for t in set(inside)), len(inside))
+        # A hit enters once its end fits the window, and only if it begins in it.
+        while next_end < len(by_end) and hits[by_end[next_end]][1] <= start + CHUNK_CAP:
+            i = by_end[next_end]
+            next_end += 1
+            if hits[i][0] >= start:
+                inside[i] = True
+                per_term[hits[i][2]] += 1
+                count += 1
+        # A hit leaves once the window starts past it.
+        while next_start < len(by_start) and hits[by_start[next_start]][0] < start:
+            i = by_start[next_start]
+            next_start += 1
+            if inside[i]:
+                inside[i] = False
+                per_term[hits[i][2]] -= 1
+                count -= 1
+        key = (sum(idf.get(t, 0.0) for t in ordered_terms if per_term[t]), count)
         if best_key is None or key > best_key:
             best_key, best_start = key, start
     return best_start
@@ -437,6 +464,51 @@ def _fts_chunks(
                 source_file=_source_file(course_dir, digest_path, course),
                 text=hit["text"],
                 truncated=hit["truncated"],
+            )
+        )
+    return chunks
+
+
+def _opening_section(markdown: str) -> tuple[str, str, int]:
+    """The first H2 section with a body, else the top of the document: (text, heading, offset)."""
+    for match in _HEADING_LINE.finditer(markdown):
+        if len(match.group(1)) != 2:
+            continue
+        end = len(markdown)
+        for later in _HEADING_LINE.finditer(markdown, match.end()):
+            if len(later.group(1)) <= 2:
+                end = later.start()
+                break
+        body = markdown[match.end() : end].strip()
+        if body:
+            return body, match.group(2).strip(), match.start()
+    return _h1_section(markdown)
+
+
+def _opening_chunks(
+    root: Path, course: str, digest_paths: list[str]
+) -> list[SourceChunk]:
+    """The first CHUNK_CAP window of each digest, for lectures the question's words missed."""
+    course_dir = root / course
+    chunks: list[SourceChunk] = []
+    for digest_path in digest_paths:
+        abs_path = root / digest_path
+        if not abs_path.is_file():
+            continue
+        markdown = abs_path.read_text(encoding="utf-8", errors="replace")
+        section, heading, offset = _opening_section(markdown)
+        text = section[:CHUNK_CAP]
+        if not text:
+            continue
+        chunks.append(
+            SourceChunk(
+                digest_path=digest_path,
+                heading_id=heading_id(heading),
+                heading=heading,
+                page_range=_page_range_at_offset(markdown, offset),
+                source_file=_source_file(course_dir, digest_path, course),
+                text=text,
+                truncated=len(text) < len(section),
             )
         )
     return chunks
@@ -700,6 +772,12 @@ def answer(
     elif summary is not None:
         candidates.append(summary)
     candidates.extend(fts)
+    if digests:
+        # A scoped ask always places text from the ticked lectures: one the
+        # question's words never hit still contributes its opening (plan Q16).
+        covered = {chunk.digest_path for chunk in candidates}
+        uncovered = [path for path in dict.fromkeys(digests) if path not in covered]
+        candidates.extend(_opening_chunks(root, course, uncovered))
 
     placed = _apply_budget(candidates, budget_chars, pin_first=pin_first)
     placed = [

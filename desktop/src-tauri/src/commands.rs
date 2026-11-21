@@ -2101,6 +2101,13 @@ pub async fn start_chat(
 #[cfg(test)]
 mod tests {
     #[test]
+    fn a_remote_update_with_no_files_is_refused_before_a_job_starts() {
+        assert!(super::remote_update_needs_files(true, 0).is_err());
+        assert!(super::remote_update_needs_files(true, 2).is_ok());
+        assert!(super::remote_update_needs_files(false, 0).is_ok());
+    }
+
+    #[test]
     fn append_card_blocked_only_during_a_remote_job() {
         assert!(super::append_card_blocked(true, true).is_some());
         assert!(super::append_card_blocked(true, false).is_none());
@@ -3457,6 +3464,18 @@ pub async fn get_job_events(root: String, job_id: String) -> Result<Vec<jobs::Jo
     .await
 }
 
+/// An Update with no files only rebuilds class notebooks a cancel left unbuilt. A remote
+/// worker syncs the classes named by the selected files, so it has nothing to sync and
+/// could not bring a rebuilt notebook back: that case runs on this computer only.
+fn remote_update_needs_files(remote: bool, selections: usize) -> Result<(), String> {
+    if remote && selections == 0 {
+        return Err("A class notebook left unbuilt by a cancelled Update is rebuilt on this computer. \
+Set this library's worker to This computer in Settings → Workers, or add a file to process."
+            .to_string());
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn start_update(
     app: tauri::AppHandle,
@@ -3469,6 +3488,7 @@ pub async fn start_update(
     spawn_blocking_cmd(move || {
         let settings = settings::load(&app);
         let transport = settings::transport_for_root(&settings, &root)?;
+        remote_update_needs_files(matches!(transport, WorkerTransport::Ssh { .. }), selections.len())?;
         let provider_id = default_provider_id(provider);
         let label = settings::provider_label(&provider_id);
         let auth = cached_auth(&app, &transport, &provider_id, false)?;

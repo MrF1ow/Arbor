@@ -107,6 +107,11 @@ export interface PendingSource {
 
 export interface UpdatePlan {
   pending: PendingSource[];
+  /**
+   * Classes whose notebook a cancelled update left unbuilt. Update rebuilds each one even with no
+   * file to process. Absent from plans written by an older worker.
+   */
+  synthesis_pending?: string[];
 }
 
 export interface Selection {
