@@ -304,3 +304,13 @@ def test_plan_ignores_the_flag_on_a_course_with_no_digests_left(tmp_path: Path):
 
 def test_plan_without_any_flag_has_an_empty_synthesis_list(tmp_path: Path):
     assert plan_to_dict(build_plan(tmp_path, _fast_settings()))["synthesis_pending"] == []
+
+
+def test_plan_skips_a_class_whose_manifest_cannot_be_read(tmp_path: Path) -> None:
+    gone = tmp_path / "Gone"
+    (gone / "digests").mkdir(parents=True)
+    (gone / "digests" / "2026-01-01.md").write_text("# Old\n")
+    (gone / "arbor-course.json").write_text("<<<<<<< HEAD\n{}\n")
+    plan = build_plan(tmp_path, WorkerSettings())
+    assert plan.pending == []
+    assert plan.synthesis_pending == []

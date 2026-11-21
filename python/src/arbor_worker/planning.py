@@ -105,8 +105,14 @@ def _synthesis_pending_courses(root: Path, settings: WorkerSettings) -> list[str
     for course in sorted(p for p in root.iterdir() if p.is_dir()):
         if course.name in skip or not (course / CourseManifest.FILENAME).is_file():
             continue
-        manifest = CourseManifest.load(course)
-        if manifest.synthesis_pending() and manifest.read_digests():
+        try:
+            manifest = CourseManifest.load(course)
+            pending = manifest.synthesis_pending() and bool(manifest.read_digests())
+        except (OSError, ValueError, AttributeError, TypeError):
+            # An unreadable manifest (e.g. merge-conflict markers) in a class with no
+            # sources left must not break planning for the whole library.
+            continue
+        if pending:
             flagged.append(course.name)
     return flagged
 
