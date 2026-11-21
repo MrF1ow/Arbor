@@ -469,8 +469,9 @@ def _fts_chunks(
     return chunks
 
 
-def _opening_section(markdown: str) -> tuple[str, str, int]:
-    """The first H2 section with a body, else the top of the document: (text, heading, offset)."""
+def _sections_in_order(markdown: str) -> list[tuple[str, str, int]]:
+    """Every H2 section with a body, in document order, else the top of the document."""
+    sections: list[tuple[str, str, int]] = []
     for match in _HEADING_LINE.finditer(markdown):
         if len(match.group(1)) != 2:
             continue
@@ -481,14 +482,15 @@ def _opening_section(markdown: str) -> tuple[str, str, int]:
                 break
         body = markdown[match.end() : end].strip()
         if body:
-            return body, match.group(2).strip(), match.start()
-    return _h1_section(markdown)
+            sections.append((body, match.group(2).strip(), match.start()))
+    return sections or [_h1_section(markdown)]
 
 
 def _opening_chunks(
-    root: Path, course: str, digest_paths: list[str]
+    root: Path, course: str, digest_paths: list[str], share: int
 ) -> list[SourceChunk]:
-    """The first CHUNK_CAP window of each digest, for lectures the question's words missed."""
+    """A ticked lecture the question's words missed: its sections in order, each cut to
+    CHUNK_CAP, until it has placed `share` chars (its even part of the budget)."""
     course_dir = root / course
     chunks: list[SourceChunk] = []
     for digest_path in digest_paths:
@@ -496,21 +498,25 @@ def _opening_chunks(
         if not abs_path.is_file():
             continue
         markdown = abs_path.read_text(encoding="utf-8", errors="replace")
-        section, heading, offset = _opening_section(markdown)
-        text = section[:CHUNK_CAP]
-        if not text:
-            continue
-        chunks.append(
-            SourceChunk(
-                digest_path=digest_path,
-                heading_id=heading_id(heading),
-                heading=heading,
-                page_range=_page_range_at_offset(markdown, offset),
-                source_file=_source_file(course_dir, digest_path, course),
-                text=text,
-                truncated=len(text) < len(section),
+        used = 0
+        for section, heading, offset in _sections_in_order(markdown):
+            if used >= share:
+                break
+            text = section[: min(CHUNK_CAP, share - used)]
+            if not text:
+                continue
+            used += len(text)
+            chunks.append(
+                SourceChunk(
+                    digest_path=digest_path,
+                    heading_id=heading_id(heading),
+                    heading=heading,
+                    page_range=_page_range_at_offset(markdown, offset),
+                    source_file=_source_file(course_dir, digest_path, course),
+                    text=text,
+                    truncated=len(text) < len(section),
+                )
             )
-        )
     return chunks
 
 
@@ -777,7 +783,8 @@ def answer(
         # question's words never hit still contributes its opening (plan Q16).
         covered = {chunk.digest_path for chunk in candidates}
         uncovered = [path for path in dict.fromkeys(digests) if path not in covered]
-        candidates.extend(_opening_chunks(root, course, uncovered))
+        share = budget_chars // max(1, len(dict.fromkeys(digests)))
+        candidates.extend(_opening_chunks(root, course, uncovered, share))
 
     placed = _apply_budget(candidates, budget_chars, pin_first=pin_first)
     placed = [

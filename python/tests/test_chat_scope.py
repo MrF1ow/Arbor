@@ -406,12 +406,12 @@ def test_scoped_ask_places_the_lecture_when_no_question_word_matches(
     assert "Welcome to biology." in result.retrieved[0].text
 
 
-def test_scoped_fallback_places_the_first_h2_section_of_every_ticked_lecture(
+def test_scoped_fallback_places_every_ticked_lecture_sections_in_order(
     scoped_root: Path,
 ) -> None:
     long_body = "word " * 1_500  # 7,500 chars, well over CHUNK_CAP
     (scoped_root / "Bio" / "digests" / "unit-2.md").write_text(
-        "# Unit 2\n\nPreamble line.\n\n## Metabolism\n" + long_body + "\n## Later\nNever first.\n"
+        "# Unit 2\n\nPreamble line.\n\n## Metabolism\n" + long_body + "\n## Later\nComes second.\n"
     )
     index_course(scoped_root, "Bio")
     ticked = ["Bio/digests/intro.md", "Bio/digests/unit-2.md"]
@@ -419,12 +419,32 @@ def test_scoped_fallback_places_the_first_h2_section_of_every_ticked_lecture(
         scoped_root, "Bio", [], "quiz me", "ask", RecordingFake(), "fake-model",
         digests=ticked,
     )
-    by_path = {c.digest_path: c for c in result.retrieved}
-    assert sorted(by_path) == sorted(ticked)
-    unit = by_path["Bio/digests/unit-2.md"]
-    assert unit.heading == "Metabolism"
-    assert len(unit.text) == 3_000 and unit.truncated is True
-    assert "Never first." not in unit.text
+    assert {c.digest_path for c in result.retrieved} == set(ticked)
+    unit = [c for c in result.retrieved if c.digest_path == "Bio/digests/unit-2.md"]
+    assert [c.heading for c in unit] == ["Metabolism", "Later"]
+    assert len(unit[0].text) == 3_000 and unit[0].truncated is True
+    assert unit[1].text == "Comes second."
+
+
+def test_scoped_fallback_places_more_than_a_short_overview(scoped_root: Path) -> None:
+    # Real digests open with a short Overview; the lecture's body follows in later sections.
+    (scoped_root / "Bio" / "digests" / "renal.md").write_text(
+        "# Glomerulopathies\n\n"
+        "## Overview\n" + "Short overview of the lecture. " * 16 + "\n\n"
+        "## Key Concepts\n" + "Podocyte effacement and proteinuria. " * 35 + "\n\n"
+        "## Important Details\n" + "Steroids are first line in children. " * 170 + "\n\n"
+        "## Questions to Review\n" + "What distinguishes nephritic from nephrotic? " * 16 + "\n"
+    )
+    index_course(scoped_root, "Bio")
+    result = answer(
+        scoped_root, "Bio", [], "quiz me", "ask", RecordingFake(), "fake-model",
+        digests=["Bio/digests/renal.md"],
+    )
+    placed = "".join(c.text for c in result.retrieved)
+    assert [c.heading for c in result.retrieved][:3] == ["Overview", "Key Concepts", "Important Details"]
+    assert "Steroids are first line in children." in placed
+    assert len(placed) > 4_000
+    assert len(placed) <= 12_000
 
 
 def test_scoped_fallback_only_fills_lectures_the_search_did_not_hit(
