@@ -8,8 +8,6 @@ from pathlib import Path
 import pytest
 
 from arbor_worker import cli
-from arbor_worker.embed import embed_root, search_chunks
-from arbor_worker.embedder.hashed import HashedNgramEmbedder
 from arbor_worker.indexer import open_db
 from arbor_worker import sync as sync_mod
 from arbor_worker.sync import (
@@ -248,43 +246,48 @@ def test_migrate_derived_files_untracks_and_commits(tmp_path: Path):
     assert subject == "chore: ignore derived Arbor files"
 
 
-def test_rebuild_embeddings_creates_db_on_first_pull(tmp_path: Path):
+def _indexed_bodies(root: Path, term: str) -> list[str]:
+    conn = open_db(root)
+    try:
+        rows = conn.execute(
+            "select body from search_index where search_index match ?",
+            (f'"{term}"',),
+        ).fetchall()
+    finally:
+        conn.close()
+    return [row[0] for row in rows]
+
+
+def test_reindex_after_first_pull_builds_the_index_without_vectors(tmp_path: Path):
     bare, a, b = _bare_and_clones(tmp_path)
     path = Path("Biology/digests/leaf.md")
-    unique_term = "FirstPullEmbedTerm99"
+    unique_term = "FirstPullIndexTerm99"
     (a / path).parent.mkdir(parents=True)
     (a / path).write_text(f"# T\n\n{unique_term}\n")
     _commit_all(a, "digest on A")
     sync_root(a)
-    vectors = b / ".arbor" / "vectors.sqlite"
-    assert not vectors.is_file()
     report = sync_root(b)
     assert report.ok
-    assert vectors.is_file()
-    hits = search_chunks(b, unique_term, limit=5, embedder=HashedNgramEmbedder())
-    assert hits
-    assert any(unique_term in str(h.get("snippet", "")) for h in hits)
+    assert any(unique_term in body for body in _indexed_bodies(b, unique_term))
+    assert not (b / ".arbor" / "vectors.sqlite").exists()
 
 
-def test_rebuild_embeddings_after_upstream_digest_change(tmp_path: Path):
+def test_reindex_after_upstream_digest_change(tmp_path: Path):
     bare, a, b = _bare_and_clones(tmp_path)
     path = Path("Biology/digests/leaf.md")
-    new_term = "EmbeddingRebuildTerm88"
+    new_term = "IndexRebuildTerm88"
     (b / path).parent.mkdir(parents=True)
     (b / path).write_text(f"# T\n\n{new_term}\n")
     _commit_all(b, "digest")
     sync_root(b)
     sync_root(a)
-    embed_root(b, HashedNgramEmbedder())
     updated = f"{new_term} updated on A"
     (a / path).write_text(f"# T\n\n{updated}\n")
     _commit_all(a, "change digest")
     sync_root(a)
     report = sync_root(b)
     assert report.ok and report.action == "integrated"
-    hits = search_chunks(b, updated, limit=5, embedder=HashedNgramEmbedder())
-    assert hits
-    assert any(updated in str(h.get("snippet", "")) for h in hits)
+    assert any(updated in body for body in _indexed_bodies(b, new_term))
 
 
 def test_set_remote_rejects_embedded_password(tmp_path: Path):

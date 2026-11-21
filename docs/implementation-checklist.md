@@ -89,7 +89,7 @@ Package `0.3.0`, tagged `v0.3.0`. The 2026-10-17 Linux live run is recorded. Tab
 | Flashcards generate / flip / Again / Wrong / Mastered | [x] | [x] | [x] | [ ] |
 | Quiz generate / submit / session answers | [x] | [x] | [x] | [ ] |
 | Source chips → heading scroll | [x] | [x] | [x] | [ ] |
-| Local embeddings + semantic search | [x] | [x] | [x] | [ ] |
+| Local embeddings + semantic search (later removed; search is full-text only) | [x] | [x] | [x] | [ ] |
 | Concepts, graph-lite, figure merge, citation badges | [x] | [x] | [x] | [ ] |
 | Add class, add files, theme, hide `_arbor_cache`, H1 digest titles | [x] | [x] | [x] | [ ] |
 | Nested/ordered lists, bold, italic, inline code in Notes | [x] | [x] | [ ] | [ ] |

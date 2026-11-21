@@ -43,7 +43,6 @@ describe("library mutations", () => {
       get_knowledge_settings: () => ({
         delete_sources_after_digest: false,
         auto_update: false,
-        auto_embed: false,
         watch_enabled: true,
         auto_generate: { flashcards: false, quiz: false },
         sync_after_commit: false,

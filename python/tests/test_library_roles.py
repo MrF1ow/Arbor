@@ -456,21 +456,6 @@ def test_viewer_read_commands_no_denial(
         viewer,
         with_library=_library_doc(owner="owner@test.local", viewer=viewer),
     )
-    code, out, err = _run_cli(
-        [
-            "embed-search",
-            "--root",
-            str(root),
-            "--query",
-            "cells",
-            "--provider",
-            "hashed",
-        ]
-    )
-    assert code == 0
-    combined = out + err
-    assert VIEWER_WRITE_DENIED not in combined
-
     code, out, err = _run_cli(["library-show", "--root", str(root)])
     assert code == 0
     combined = out + err

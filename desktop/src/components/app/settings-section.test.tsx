@@ -8,9 +8,9 @@ import { Switch } from "~/components/ui/switch";
 describe("SettingRow", () => {
   it("associates switch control with label for accessibility", () => {
     render(
-      <SettingRow label="Auto-embed" description="Watch incoming PDFs." control={<Switch />} />,
+      <SettingRow label="Auto-update" description="Watch incoming PDFs." control={<Switch />} />,
     );
-    expect(screen.getByRole("switch", { name: "Auto-embed" })).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "Auto-update" })).toBeInTheDocument();
   });
 
   it("does not let the row label override a button accessible name", () => {

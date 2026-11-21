@@ -22,7 +22,7 @@ const hit = (
   item_id?: string,
 ): SearchHit & { item_id?: string } => ({ course, kind, title, snippet, path, page_range, source_path: null, ...(item_id ? { item_id } : {}) });
 
-/** What each library's `search_knowledge` and `search_semantic` hold: the palette asks every library. */
+/** What each library's `search_knowledge` holds: the palette asks every library. */
 const HITS_BY_ROOT: Record<string, (SearchHit & { item_id?: string })[]> = {
   [FIXTURE_ROOT_FALL]: [
     hit("cell-biology", "digest", "Cell membranes", "Phospholipid bilayer and membrane proteins.", "cell-biology/digests/2026-09-12-membranes.md", "3-5"),
@@ -53,7 +53,7 @@ function searchByRoot(args: unknown): (SearchHit & { item_id?: string })[] {
   );
 }
 
-const searchFixtures = { search_knowledge: searchByRoot, search_semantic: searchByRoot };
+const searchFixtures = { search_knowledge: searchByRoot };
 
 async function waitForOverview() {
   await waitFor(() => {
@@ -88,7 +88,6 @@ describe("search palette", { timeout: 15000 }, () => {
       sidebarTouched: true,
       logOpen: false,
       logHeight: 200,
-      searchSemantic: false,
       lastCourse: null,
     });
     vi.spyOn(window, "innerWidth", "get").mockReturnValue(1280);
@@ -172,36 +171,27 @@ describe("search palette", { timeout: 15000 }, () => {
     });
   });
 
-  it("uses search_semantic when semantic is enabled and persists the preference", async () => {
+  it("has no Semantic chip, no Tab hint, and Tab does not search another way", async () => {
     clearMockIpcLog();
+    const user = userEvent.setup();
     await renderAppAtRoute("/course/cell-biology/overview", searchFixtures);
     await waitForOverview();
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    const timedUser = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    await openSearchPalette(timedUser);
-    await timedUser.click(screen.getByRole("switch", { name: /Semantic search/i }));
-    expect(useUiStore.getState().searchSemantic).toBe(true);
-    await timedUser.type(within(searchDialog()).getByLabelText("Search digests"), "cell");
-    await vi.advanceTimersByTimeAsync(250);
+    await openSearchPalette(user);
+    const dialog = searchDialog();
+    expect(within(dialog).queryByRole("switch")).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(/semantic/i)).not.toBeInTheDocument();
+    expect(within(dialog).getByText("move · Enter opens")).toBeInTheDocument();
+    await user.type(within(dialog).getByLabelText("Search digests"), "membrane");
     await waitFor(() => {
-      const calls = getMockIpcCalls().filter((c) => c.cmd === "search_semantic");
-      expect(calls).toHaveLength(2);
-      expect(calls.map((c) => c.args)).toEqual(
-        expect.arrayContaining([
-          { root: FIXTURE_ROOT_FALL, query: "cell", limit: 20 },
-          { root: FIXTURE_ROOT_SHARED, query: "cell", limit: 20 },
-        ]),
-      );
+      expect(within(dialog).getByText("Cell membranes")).toBeInTheDocument();
     });
-    await timedUser.keyboard("{Escape}");
-    await waitFor(() => {
-      expect(screen.queryByLabelText("Search digests")).not.toBeInTheDocument();
-    });
-    await openSearchPalette(timedUser);
-    expect(useUiStore.getState().searchSemantic).toBe(true);
+    await user.keyboard("{Tab}");
+    expect(getMockIpcCalls().every((c) => c.cmd !== "search_semantic")).toBe(true);
+    expect(getMockIpcCalls().some((c) => c.cmd === "search_knowledge")).toBe(true);
   });
 
-  it("restores searchSemantic from localStorage", async () => {
+  it("ignores a searchSemantic left in old storage", async () => {
+    clearMockIpcLog();
     localStorage.setItem(
       "arbor.ui",
       JSON.stringify({
@@ -214,45 +204,12 @@ describe("search palette", { timeout: 15000 }, () => {
     await renderAppAtRoute("/course/cell-biology/overview", searchFixtures);
     await waitForOverview();
     await openSearchPalette(user);
-    expect(screen.getByRole("switch", { name: /Semantic search/i })).toBeChecked();
-  });
-
-  it("re-runs semantic search on toggle without retyping", async () => {
-    clearMockIpcLog();
-    await renderAppAtRoute("/course/cell-biology/overview", searchFixtures);
-    await waitForOverview();
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    const timedUser = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    await openSearchPalette(timedUser);
-    await timedUser.type(within(searchDialog()).getByLabelText("Search digests"), "membrane");
-    await vi.advanceTimersByTimeAsync(250);
+    expect(within(searchDialog()).queryByRole("switch")).not.toBeInTheDocument();
+    await user.type(within(searchDialog()).getByLabelText("Search digests"), "membrane");
     await waitFor(() => {
-      expect(getMockIpcCalls().filter((c) => c.cmd === "search_knowledge").length).toBeGreaterThan(
-        0,
-      );
+      expect(getMockIpcCalls().some((c) => c.cmd === "search_knowledge")).toBe(true);
     });
-    clearMockIpcLog();
-    await timedUser.click(screen.getByRole("switch", { name: /Semantic search/i }));
-    await waitFor(() => {
-      expect(getMockIpcCalls().some((c) => c.cmd === "search_semantic")).toBe(true);
-    });
-  });
-
-  it("re-runs semantic search immediately when toggled inside the debounce window", async () => {
-    clearMockIpcLog();
-    await renderAppAtRoute("/course/cell-biology/overview", searchFixtures);
-    await waitForOverview();
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    const timedUser = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    await openSearchPalette(timedUser);
-    await timedUser.type(within(searchDialog()).getByLabelText("Search digests"), "membrane");
-    await vi.advanceTimersByTimeAsync(100);
-    await timedUser.click(screen.getByRole("switch", { name: /Semantic search/i }));
-    await waitFor(() => {
-      const calls = getMockIpcCalls().filter((c) => c.cmd === "search_semantic");
-      expect(calls.length).toBeGreaterThan(0);
-      expect(calls.at(-1)?.args).toMatchObject({ query: "membrane", limit: 20 });
-    });
+    expect(getMockIpcCalls().some((c) => c.cmd === "search_semantic")).toBe(false);
   });
 
   it("ignores stale search responses when a newer query completes first", async () => {
@@ -426,7 +383,7 @@ describe("search palette", { timeout: 15000 }, () => {
       "Does facilitated diffusion require ATP?Cell Biology · cardNo. It moves solutes down their gradient.",
       "Facilitated diffusionCell Biology · conceptLinked to carrier proteins, passive transport",
     ]);
-    expect(dialog.getByText("move · Enter opens · Tab toggles semantic")).toBeInTheDocument();
+    expect(dialog.getByText("move · Enter opens")).toBeInTheDocument();
   });
 
   it("counts a single result in a single class in the singular", async () => {
@@ -458,12 +415,11 @@ describe("search palette", { timeout: 15000 }, () => {
     expect(headings).toEqual(["Digests", "Cards", "Concepts", "Overview"]);
   });
 
-  it("renders duplicate semantic hits on the same path with distinct selection", async () => {
+  it("renders hits on the same path with distinct selection", async () => {
     const user = userEvent.setup();
     await renderAppAtRoute("/course/cell-biology/overview", searchFixtures);
     await waitForOverview();
     await openSearchPalette(user);
-    await user.click(screen.getByRole("switch", { name: /Semantic search/i }));
     const dialog = searchDialog();
     await user.type(within(dialog).getByLabelText("Search digests"), "membrane");
     await waitFor(() => {
@@ -634,23 +590,6 @@ describe("search palette", { timeout: 15000 }, () => {
       },
       { timeout: 5000 },
     );
-  });
-
-  it("switches semantic search with the Semantic chip and with Tab", async () => {
-    const user = userEvent.setup();
-    await renderAppAtRoute("/course/cell-biology/overview", searchFixtures);
-    await waitForOverview();
-    await openSearchPalette(user);
-    const chip = screen.getByRole("switch", { name: /Semantic search/i });
-    expect(chip).not.toBeChecked();
-    await user.click(chip);
-    expect(chip).toBeChecked();
-    await user.click(within(searchDialog()).getByLabelText("Search digests"));
-    await user.keyboard("{Tab}");
-    expect(chip).not.toBeChecked();
-    await user.keyboard("{Tab}");
-    expect(chip).toBeChecked();
-    expect(useUiStore.getState().searchSemantic).toBe(true);
   });
 
   it("keeps the other libraries' hits when one library's search fails", async () => {

@@ -164,7 +164,6 @@ Responsibilities:
 * Markdown generation
 * Knowledge extraction
 * Skill execution
-* Embeddings
 * Flashcards
 * Quiz generation
 
@@ -667,7 +666,7 @@ Goal:
 
 A study app a student would download, with local memory and a concept graph an AI can query.
 
-The shell is the storefront. Flashcards and quiz are the study loop. Embeddings, concepts, cross-document links, and a graph-lite view are the memory a later tutor (Version 4) will use instead of rereading every digest. Diagram analysis and citation checks ground that memory in the notes the student already has.
+The shell is the storefront. Flashcards and quiz are the study loop. Concepts, cross-document links, and a graph-lite view are the memory a later tutor (Version 4) will use instead of rereading every digest. Diagram analysis and citation checks ground that memory in the notes the student already has.
 
 **Status:** Shipped as package **0.3.0** (2026-10-17). The Linux live run is recorded on the [implementation checklist](docs/implementation-checklist.md) and in [`linux-live-run.md`](docs/superpowers/plans/2026-10-17-roadmap-completion/linux-live-run.md). The git tag is not cut in this commit. Tables and emphasis were not proven in a live digest. Do not renumber waves 1–8; they shipped in `0.2.2`. Later `2.x` tags, starting with `0.2.4`, are the slices in [`docs/superpowers/plans/2026-10-17-roadmap-completion/overview.md`](docs/superpowers/plans/2026-10-17-roadmap-completion/overview.md).
 
@@ -690,7 +689,7 @@ Shipped in 0.2.2 (PRs #36–#41, #47, #50, #51)
 * Flip then Again / Wrong / Mastered (progress `correct` / `wrong` written from the UI)
 * Quiz session answers that do not double-count on Previous/Next
 * Source chips scroll to the cited heading
-* Local hashed embeddings and semantic search
+* Local hashed embeddings and semantic search (later removed: search is full-text only and Ask retrieves by ranked full-text match)
 * Concepts, cross-document links, graph-lite UI
 * Diagram figures merged into the graph
 * Local citation checks and Unverified badges

@@ -117,7 +117,6 @@ export interface Selection {
 export interface KnowledgeSettings {
   delete_sources_after_digest: boolean;
   auto_update: boolean;
-  auto_embed: boolean;
   watch_enabled: boolean;
   auto_generate: {
     flashcards: boolean;
@@ -310,7 +309,7 @@ export interface JobFinished {
   job_id: string;
   status: string;
   summary: string | null;
-  operation: "update" | "generate" | "embed";
+  operation: "update" | "generate";
   root: string;
 }
 
@@ -348,8 +347,6 @@ export interface WorkerEvent {
   ranges?: [number, number][];
   digest?: string;
   digests?: number;
-  embedded?: number;
-  chunks?: number;
   digest_count?: number;
   sources?: number;
   /** `planned.total` and `source_started.total`: sources in the run. */

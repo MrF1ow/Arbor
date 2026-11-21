@@ -13,7 +13,6 @@ interface UiState {
   logOpen: boolean;
   logHeight: number;
   chatThreadsOpen: boolean;
-  searchSemantic: boolean;
   lastCourse: LastCourse | null;
   setAppearance: (appearance: Appearance) => void;
   setSidebarOpen: (open: boolean) => void;
@@ -23,7 +22,6 @@ interface UiState {
   toggleLog: () => void;
   setLogHeight: (height: number) => void;
   setChatThreadsOpen: (open: boolean) => void;
-  setSearchSemantic: (semantic: boolean) => void;
   setLastCourse: (last: LastCourse | null) => void;
 }
 
@@ -36,7 +34,6 @@ export const useUiStore = create<UiState>()(
       logOpen: false,
       logHeight: 200,
       chatThreadsOpen: true,
-      searchSemantic: false,
       lastCourse: null,
       setAppearance: (appearance) => set({ appearance }),
       setSidebarOpen: (sidebarOpen) => set({ sidebarOpen }),
@@ -47,7 +44,6 @@ export const useUiStore = create<UiState>()(
       toggleLog: () => set((s) => ({ logOpen: !s.logOpen })),
       setLogHeight: (logHeight) => set({ logHeight }),
       setChatThreadsOpen: (chatThreadsOpen) => set({ chatThreadsOpen }),
-      setSearchSemantic: (searchSemantic) => set({ searchSemantic }),
       setLastCourse: (lastCourse) => set({ lastCourse }),
     }),
     {
@@ -59,7 +55,6 @@ export const useUiStore = create<UiState>()(
         logOpen: state.logOpen,
         logHeight: state.logHeight,
         chatThreadsOpen: state.chatThreadsOpen,
-        searchSemantic: state.searchSemantic,
         lastCourse: state.lastCourse,
       }),
       merge: (persisted, current) => {

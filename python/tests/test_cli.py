@@ -33,9 +33,9 @@ def test_subcommands_registered():
         "update",
         "plan-update",
         "generate",
-        "embed",
-        "embed-search",
     }.issubset(choices)
+    assert "embed" not in choices
+    assert "embed-search" not in choices
 
 
 def test_list_models_default(tmp_path):

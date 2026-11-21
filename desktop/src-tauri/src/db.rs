@@ -9,6 +9,28 @@ pub fn db_path(knowledge_root: &Path) -> PathBuf {
     arbor_dir(knowledge_root).join("arbor.db")
 }
 
+/// The retired semantic index and its SQLite sidecar files, relative to `.arbor/`.
+const STALE_VECTOR_FILES: [&str; 4] = [
+    "vectors.sqlite",
+    "vectors.sqlite-wal",
+    "vectors.sqlite-shm",
+    "vectors.sqlite-journal",
+];
+
+/// Delete the old semantic index when a library opens. Errors are logged and
+/// ignored; nothing but those exact files is touched.
+pub fn remove_stale_vector_index(knowledge_root: &Path) {
+    let dir = arbor_dir(knowledge_root);
+    for name in STALE_VECTOR_FILES {
+        let path = dir.join(name);
+        match std::fs::remove_file(&path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => eprintln!("could not remove {}: {error}", path.display()),
+        }
+    }
+}
+
 pub fn open(knowledge_root: &Path) -> Result<Connection, String> {
     // The library root is the user's folder: never recreate it. A deleted
     // library must surface as an error, not come back as an empty folder.
@@ -71,6 +93,32 @@ fn init_schema(conn: &Connection) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn remove_stale_vector_index_deletes_only_the_vector_files() {
+        let root = std::env::temp_dir().join(format!("arbor-db-vectors-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let dir = arbor_dir(&root);
+        std::fs::create_dir_all(&dir).unwrap();
+        for name in STALE_VECTOR_FILES {
+            std::fs::write(dir.join(name), b"old").unwrap();
+        }
+        std::fs::write(dir.join("vectors.sqlite.bak"), b"keep").unwrap();
+        std::fs::write(dir.join("settings.json"), b"{}").unwrap();
+        open(&root).unwrap();
+
+        remove_stale_vector_index(&root);
+
+        for name in STALE_VECTOR_FILES {
+            assert!(!dir.join(name).exists(), "{name} should be gone");
+        }
+        assert!(dir.join("vectors.sqlite.bak").is_file());
+        assert!(dir.join("settings.json").is_file());
+        assert!(db_path(&root).is_file());
+        // A second call with nothing left is harmless.
+        remove_stale_vector_index(&root);
+        let _ = std::fs::remove_dir_all(&root);
+    }
 
     #[test]
     fn open_creates_db_under_arbor_dir() {

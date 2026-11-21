@@ -915,20 +915,6 @@ pub fn generate_sub_args(
     sub_args
 }
 
-pub fn embed_sub_args(root: &str, force: bool) -> Vec<String> {
-    let mut args = vec![
-        "embed".to_string(),
-        "--root".to_string(),
-        root.to_string(),
-        "--provider".to_string(),
-        "hashed".to_string(),
-    ];
-    if force {
-        args.push("--force".to_string());
-    }
-    args
-}
-
 #[cfg(feature = "desktop-runtime")]
 pub fn spawn_update_stream(
     app: tauri::AppHandle,
@@ -1014,32 +1000,6 @@ pub fn spawn_generate_stream(
         Some(effective_provider_id(&provider_id).to_string()),
         env_pairs,
         from_text_file,
-    );
-}
-
-#[cfg(feature = "desktop-runtime")]
-pub fn spawn_embed_stream(
-    app: tauri::AppHandle,
-    app_dir: PathBuf,
-    root: String,
-    force: bool,
-    job_id: String,
-) {
-    let sub_args = embed_sub_args(&root, force);
-    let settings = crate::settings::load(&app);
-    let store = crate::secrets::OsSecretStore;
-    let env_pairs = crate::secrets::worker_env_for_provider_id("hashed", &store, &settings);
-    spawn_worker_stream(
-        app,
-        app_dir,
-        root,
-        sub_args,
-        job_id,
-        "embed",
-        "Provider".to_string(),
-        None,
-        env_pairs,
-        None,
     );
 }
 
@@ -2032,29 +1992,6 @@ mod tests {
         assert!(!args.contains(&"codex".to_string()));
         assert!(args.contains(&"--model".to_string()));
         assert!(args.contains(&"grok-4.7".to_string()));
-    }
-
-    #[test]
-    fn embed_args_use_the_hashed_provider() {
-        assert_eq!(
-            embed_sub_args("/Knowledge", false),
-            vec!["embed", "--root", "/Knowledge", "--provider", "hashed",]
-        );
-    }
-
-    #[test]
-    fn forced_embed_args_include_force() {
-        assert_eq!(
-            embed_sub_args("/Knowledge", true),
-            vec![
-                "embed",
-                "--root",
-                "/Knowledge",
-                "--provider",
-                "hashed",
-                "--force",
-            ]
-        );
     }
 
     #[test]

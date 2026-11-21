@@ -1,4 +1,5 @@
 use crate::auth_cache;
+use crate::db;
 use crate::usage_cache;
 use crate::jobs::{self, JobTrigger, SharedCoordinator};
 use crate::search::{self, SearchHit};
@@ -776,7 +777,10 @@ pub struct KnowledgeSettings {
     pub delete_sources_after_digest: bool,
     #[serde(default)]
     pub auto_update: bool,
-    #[serde(default)]
+    /// Retired setting. Old settings.json files still carry it, so it is read
+    /// and dropped; it is never written back.
+    #[serde(default, skip_serializing)]
+    #[allow(dead_code)]
     pub auto_embed: bool,
     #[serde(default = "default_true")]
     pub watch_enabled: bool,
@@ -2244,6 +2248,17 @@ mod tests {
     }
 
     #[test]
+    fn old_settings_with_auto_embed_still_load_and_drop_the_key() {
+        let old: KnowledgeSettings =
+            serde_json::from_str(r#"{"auto_embed": true, "auto_update": true}"#).unwrap();
+        assert!(old.auto_embed);
+        assert!(old.auto_update);
+        let written = serde_json::to_value(&old).unwrap();
+        assert!(written.get("auto_embed").is_none());
+        assert_eq!(written["auto_update"], true);
+    }
+
+    #[test]
     fn empty_json_matches_struct_default() {
         let empty: KnowledgeSettings = serde_json::from_str("{}").unwrap();
         let default = KnowledgeSettings::default();
@@ -3382,42 +3397,6 @@ pub async fn search_knowledge(
 }
 
 #[tauri::command]
-pub async fn search_semantic(
-    app: tauri::AppHandle,
-    root: String,
-    query: String,
-    limit: Option<u32>,
-) -> Result<Vec<SearchHit>, String> {
-    spawn_blocking_cmd(move || {
-        let limit_value = limit.unwrap_or(25).to_string();
-        let sub_args = [
-            "embed-search",
-            "--root",
-            root.as_str(),
-            "--query",
-            query.as_str(),
-            "--limit",
-            limit_value.as_str(),
-            "--provider",
-            "hashed",
-        ];
-        let pairs = worker_env_pairs(&app, &sub_args);
-        let refs: Vec<(&str, &str)> = pairs
-            .iter()
-            .map(|(key, value)| (key.as_str(), value.as_str()))
-            .collect();
-        search::search_semantic_documents(
-            &repo_dir(&app),
-            Path::new(&root),
-            &query,
-            limit.unwrap_or(25),
-            &refs,
-        )
-    })
-    .await
-}
-
-#[tauri::command]
 pub async fn reindex_knowledge(app: tauri::AppHandle, root: String) -> Result<serde_json::Value, String> {
     spawn_blocking_cmd(move || {
         run_worker_json_app(&app, &["reindex", "--root", &root])
@@ -3438,7 +3417,9 @@ pub async fn start_folder_watch(app: tauri::AppHandle, root: String) -> Result<(
 #[tauri::command]
 pub async fn init_arbor_db(root: String) -> Result<(), String> {
     spawn_blocking_cmd_unit(move || {
-        jobs::ensure_db(Path::new(&root))
+        jobs::ensure_db(Path::new(&root))?;
+        db::remove_stale_vector_index(Path::new(&root));
+        Ok(())
     })
     .await
 }
@@ -3802,46 +3783,6 @@ pub async fn start_study_job(
             }
         }
         post_begin.disarm();
-        Ok(job_id)
-    })
-    .await
-}
-
-#[tauri::command]
-pub async fn start_embed_job(
-    app: tauri::AppHandle,
-    root: String,
-    force: Option<bool>,
-) -> Result<String, String> {
-    spawn_blocking_cmd(move || {
-        let force = force.unwrap_or(false);
-        let plan_json = serde_json::to_string(&serde_json::json!({
-            "op": "embed",
-            "force": force,
-        }))
-        .map_err(|error| error.to_string())?;
-        let knowledge_root = Path::new(&root);
-        let job_id = jobs::create_job(knowledge_root, JobTrigger::Manual, "hashed", &plan_json)?;
-
-        {
-            let mut guard = app
-                .state::<SharedCoordinator>()
-                .inner()
-                .lock()
-                .map_err(|error| error.to_string())?;
-            if let Err(error) = guard.try_begin(&job_id, &root) {
-                let _ = jobs::finish_job(
-                    knowledge_root,
-                    &job_id,
-                    jobs::JobStatus::Failed,
-                    -1,
-                    Some(error.clone()),
-                );
-                return Err(error);
-            }
-        }
-
-        worker::spawn_embed_stream(app.clone(), repo_dir(&app), root, force, job_id.clone());
         Ok(job_id)
     })
     .await

@@ -213,37 +213,6 @@ fn strip_inline(line: &str) -> String {
     out
 }
 
-#[cfg(feature = "desktop-runtime")]
-pub fn search_semantic_documents(
-    app_dir: &Path,
-    knowledge_root: &Path,
-    query: &str,
-    limit: u32,
-    extra_env: &[(&str, &str)],
-) -> Result<Vec<SearchHit>, String> {
-    if query.trim().is_empty() {
-        return Ok(Vec::new());
-    }
-    let root = knowledge_root.to_string_lossy().into_owned();
-    let limit = limit.to_string();
-    let value = crate::worker::run_worker_json(
-        app_dir,
-        &[
-            "embed-search",
-            "--root",
-            &root,
-            "--query",
-            query,
-            "--limit",
-            &limit,
-            "--provider",
-            "hashed",
-        ],
-        extra_env,
-    )?;
-    serde_json::from_value(value).map_err(|error| error.to_string())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -545,19 +514,5 @@ mod tests {
         assert_eq!(plain_snippet("x | y"), "x y");
         // Plain text without those shapes is untouched.
         assert_eq!(plain_snippet("a - b -- c"), "a - b -- c");
-    }
-
-    #[test]
-    fn empty_semantic_query_returns_no_hits() {
-        let hits = search_semantic_documents(
-            Path::new("/missing/app"),
-            Path::new("/missing/knowledge"),
-            "   ",
-            10,
-            &[],
-        )
-        .unwrap();
-
-        assert!(hits.is_empty());
     }
 }

@@ -32,7 +32,6 @@ class WorkerSettings:
     pdf_chunk_concurrency: int = 2
     delete_sources_after_digest: bool = False
     auto_update: bool = False
-    auto_embed: bool = False
     watch_enabled: bool = True
     sync_after_commit: bool = False
     auto_generate: AutoGenerate = field(default_factory=AutoGenerate)
@@ -87,7 +86,6 @@ def load_settings(root: Path) -> WorkerSettings:
         provider=str(data.get("provider", "codex")),
         delete_sources_after_digest=bool(data.get("delete_sources_after_digest", False)),
         auto_update=bool(data.get("auto_update", False)),
-        auto_embed=bool(data.get("auto_embed", False)),
         watch_enabled=bool(data.get("watch_enabled", True)),
         sync_after_commit=bool(data.get("sync_after_commit", False)),
         auto_generate=AutoGenerate(

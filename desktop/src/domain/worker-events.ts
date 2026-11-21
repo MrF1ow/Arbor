@@ -66,18 +66,6 @@ export function formatWorkerEvent(ev: WorkerEvent, providerLabel = "Provider"): 
     case "course_done":
       line = `  ${ev.course_dir ?? ""}: ${ev.digests ?? 0} new digest(s)`;
       break;
-    case "embed_started":
-      line = "Embedding digests…";
-      step = "embed";
-      break;
-    case "embed_done":
-      line = `Embedded ${ev.embedded ?? 0} digest(s) into ${ev.chunks ?? 0} chunk(s); skipped ${ev.skipped ?? 0}.`;
-      status = "done";
-      break;
-    case "embed_failed":
-      line = `Embedding failed: ${ev.message ?? ""}`;
-      status = "failed";
-      break;
     case "stage":
       line = `   ${ev.stage ?? ""}: ${ev.status ?? ""}${ev.detail ? ` — ${ev.detail}` : ""}`;
       step = ev.stage ?? null;

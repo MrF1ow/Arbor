@@ -72,7 +72,6 @@ def test_course_defaults():
     s = default_settings()
     assert s.delete_sources_after_digest is False
     assert s.auto_update is False
-    assert s.auto_embed is False
     assert s.watch_enabled is True
     assert s.auto_generate.flashcards is False
     assert s.auto_generate.quiz is False
@@ -136,10 +135,14 @@ def test_load_settings_reads_nested_quiz_auto_generate(tmp_path):
     assert s.auto_generate.flashcards is False
 
 
-def test_load_settings_reads_auto_embed(tmp_path):
+def test_load_settings_ignores_retired_auto_embed_key(tmp_path):
     from arbor_worker.settings import load_settings
 
     (tmp_path / ".arbor").mkdir()
-    (tmp_path / ".arbor" / "settings.json").write_text('{"auto_embed": true}')
+    (tmp_path / ".arbor" / "settings.json").write_text(
+        '{"auto_embed": true, "auto_update": true}'
+    )
 
-    assert load_settings(tmp_path).auto_embed is True
+    settings = load_settings(tmp_path)
+    assert settings.auto_update is True
+    assert not hasattr(settings, "auto_embed")
