@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Literal, Mapping, Sequence
@@ -87,6 +88,7 @@ def apply_digest_action(
     prep: PrepareResult,
     existing_markdown: str | None = None,
     cwd: Path | None = None,
+    cancel_check: Callable[[], bool] | None = None,
 ) -> str:
     cwd = Path(".") if cwd is None else Path(cwd)
     if action.kind in ("create", "regenerate"):
@@ -97,6 +99,7 @@ def apply_digest_action(
             source_name=source_name,
             prep=prep,
             cwd=cwd,
+            cancel_check=cancel_check,
         )
     if existing_markdown is None:
         raise DigestError("patch requires existing digest markdown")
@@ -108,6 +111,7 @@ def apply_digest_action(
         source_name=source_name,
         prep=prep,
         cwd=cwd,
+        cancel_check=cancel_check,
     )
 
 
@@ -119,6 +123,7 @@ def _generate_marked_digest(
     source_name: str,
     prep: PrepareResult,
     cwd: Path,
+    cancel_check: Callable[[], bool] | None = None,
 ) -> str:
     result = _run_provider(
         page_range,
@@ -127,6 +132,7 @@ def _generate_marked_digest(
         source_name=source_name,
         prep=prep,
         cwd=cwd,
+        cancel_check=cancel_check,
     )
     markdown = strip_preamble_before_heading(result.markdown)
     validate_digest(markdown, page_range=_to_marker_range(page_range))
@@ -142,6 +148,7 @@ def _apply_patch(
     source_name: str,
     prep: PrepareResult,
     cwd: Path,
+    cancel_check: Callable[[], bool] | None = None,
 ) -> str:
     parsed = parse_page_markers(existing_markdown)
     if parsed.status != "ok" or not parsed.spans:
@@ -165,6 +172,7 @@ def _apply_patch(
             source_name=source_name,
             prep=prep,
             cwd=cwd,
+            cancel_check=cancel_check,
         ).markdown
         generated = strip_preamble_before_heading(generated)
         validate_digest(generated, page_range=_to_marker_range(block))
@@ -186,6 +194,7 @@ def _run_provider(
     source_name: str,
     prep: PrepareResult,
     cwd: Path,
+    cancel_check: Callable[[], bool] | None = None,
 ):
     window_prep = prep
     if prep.text is None and prep.image_paths:
@@ -205,6 +214,7 @@ def _run_provider(
             model_id=model_id,
             image_paths=[p.resolve() for p in window_prep.image_paths],
             cwd=cwd,
+            cancel_check=cancel_check,
         )
     )
 

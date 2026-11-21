@@ -3,9 +3,10 @@ from pathlib import Path
 
 import pytest
 
-from arbor_worker.chunk_generate import ChunkedResult, chunked_generate
+from arbor_worker.chunk_generate import ChunkCancelled, ChunkedResult, chunked_generate
 from arbor_worker.page_markers import PageRange, parse_page_markers
 from arbor_worker.errors import ChunkGenerateError, SynthesisError
+from arbor_worker.provider.errors import ProviderCancelled
 from arbor_worker.events import EventEmitter, parse_lines
 from arbor_worker.provider.base import Model, ProviderRequest, ProviderResult
 
@@ -147,7 +148,7 @@ def test_cancel_stops_new_chunks(tmp_path: Path):
     em, buf = _emitter()
 
     # Cancel immediately: no chunk should be submitted, run stops incomplete.
-    with pytest.raises(ChunkGenerateError):
+    with pytest.raises(ChunkCancelled):
         chunked_generate(
             prov, source_name="source.pdf", image_paths=images, model_id="m",
             cwd=tmp_path, cache_dir=cache, chunk_size=2, concurrency=1,
@@ -173,7 +174,7 @@ def test_cancel_before_synthesis(tmp_path: Path):
 
     prov2 = SeqProvider()
     em2, buf2 = _emitter()
-    with pytest.raises(ChunkGenerateError, match="cancelled or stopped"):
+    with pytest.raises(ChunkCancelled, match="cancelled or stopped"):
         chunked_generate(
             prov2, source_name="source.pdf", image_paths=images, model_id="m",
             cwd=tmp_path, cache_dir=cache, chunk_size=2, concurrency=1,
@@ -253,3 +254,76 @@ def test_chunk_prompt_requires_markers_for_first_window(tmp_path: Path):
     assert "<!-- arbor-pages:1-2 -->" in first_prompt
     assert "<!-- /arbor-pages:1-2 -->" in first_prompt
 
+
+
+def test_chunk_cancelled_is_a_chunk_generate_error():
+    assert issubclass(ChunkCancelled, ChunkGenerateError)
+
+
+def test_chunk_requests_carry_the_cancel_check(tmp_path: Path):
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    images = _imgs(tmp_path, 5)
+    prov = SeqProvider()
+
+    def flag():
+        return False
+
+    chunked_generate(
+        prov, source_name="source.pdf", image_paths=images, model_id="m",
+        cwd=tmp_path, cache_dir=cache, chunk_size=2, concurrency=1,
+        emitter=_emitter()[0], course_dir="Bio/L1", cancel_requested=flag,
+    )
+
+    assert len(prov.calls) == 4  # 3 chunks + synthesis
+    assert all(call.cancel_check is flag for call in prov.calls)
+
+
+class CancelledOnCall(SeqProvider):
+    def __init__(self, cancel_on: int):
+        super().__init__()
+        self.cancel_on = cancel_on
+
+    def run(self, request):
+        self.calls.append(request)
+        if len(self.calls) == self.cancel_on:
+            raise ProviderCancelled()
+        return ProviderResult(markdown=self.markdown)
+
+
+def test_cancelled_provider_call_is_not_a_chunk_failure(tmp_path: Path):
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    images = _imgs(tmp_path, 6)  # 3 chunks of 2
+    prov = CancelledOnCall(cancel_on=2)
+    em, buf = _emitter()
+
+    with pytest.raises(ChunkCancelled):
+        chunked_generate(
+            prov, source_name="source.pdf", image_paths=images, model_id="m",
+            cwd=tmp_path, cache_dir=cache, chunk_size=2, concurrency=1,
+            emitter=em, course_dir="Bio/L1", cancel_requested=lambda: False,
+        )
+
+    types = [e["type"] for e in parse_lines(buf.getvalue())]
+    assert "chunk_failed" not in types
+    assert types.count("chunk_done") == 1
+    assert len(prov.calls) == 2  # chunk 3 was never started
+    assert (cache / "chunk-0001.md").is_file()  # the finished chunk stays cached
+
+
+def test_cancelled_synthesis_call_propagates_unwrapped(tmp_path: Path):
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    images = _imgs(tmp_path, 4)  # 2 chunks, then the synthesis call
+    prov = CancelledOnCall(cancel_on=3)
+    em, buf = _emitter()
+
+    with pytest.raises(ProviderCancelled):
+        chunked_generate(
+            prov, source_name="source.pdf", image_paths=images, model_id="m",
+            cwd=tmp_path, cache_dir=cache, chunk_size=2, concurrency=1,
+            emitter=em, course_dir="Bio/L1", cancel_requested=lambda: False,
+        )
+
+    assert "synthesis_failed" not in [e["type"] for e in parse_lines(buf.getvalue())]

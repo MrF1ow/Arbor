@@ -6,8 +6,17 @@ import threading
 from collections.abc import Callable, Iterable
 from typing import Any
 
+from arbor_worker.provider import cancel as _cancel
 from arbor_worker.provider.base import DeltaFn, ProviderError
-from arbor_worker.provider.errors import cli_process_failure
+from arbor_worker.provider.errors import ProviderCancelled, cli_process_failure
+
+
+def _exited(proc, timeout: float) -> bool:
+    try:
+        proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return False
+    return proc.poll() is not None
 
 
 def run_popen_stream(
@@ -20,6 +29,7 @@ def run_popen_stream(
     on_delta: DeltaFn,
     parse_stdout: Callable[[Iterable[str], DeltaFn], str],
     label: str,
+    cancel_check: Callable[[], bool] | None = None,
 ) -> str:
     proc = popen(
         argv,
@@ -52,6 +62,23 @@ def run_popen_stream(
 
     stdin_writer = threading.Thread(target=write_stdin, daemon=True)
     stdin_writer.start()
+
+    # With a cancel_check, a watcher stops the process (terminate, then kill) once it
+    # turns true; stdout then ends and the read below raises ProviderCancelled.
+    cancelled = threading.Event()
+    watching = threading.Event()
+
+    def watch_for_cancel() -> None:
+        assert cancel_check is not None
+        while not watching.wait(_cancel.POLL_INTERVAL):
+            if cancel_check():
+                cancelled.set()
+                _cancel.stop_process(proc, lambda timeout: _exited(proc, timeout))
+                return
+
+    if cancel_check is not None:
+        threading.Thread(target=watch_for_cancel, daemon=True).start()
+
     parse_error: ProviderError | None = None
     result = ""
     try:
@@ -60,6 +87,12 @@ def run_popen_stream(
             result = parse_stdout(proc.stdout, on_delta)
         except ProviderError as exc:
             parse_error = exc
+        except Exception:
+            if cancelled.is_set():
+                raise ProviderCancelled() from None
+            raise
+        if cancelled.is_set():
+            raise ProviderCancelled()
         close_stdout = getattr(proc.stdout, "close", None)
         if callable(close_stdout):
             close_stdout()
@@ -76,6 +109,7 @@ def run_popen_stream(
             raise cli_process_failure(label, code, stderr)
         return result
     finally:
+        watching.set()
         if proc.poll() is None:
             proc.kill()
             proc.wait()

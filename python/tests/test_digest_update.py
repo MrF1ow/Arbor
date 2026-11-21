@@ -393,3 +393,40 @@ def test_digest_action_is_discriminated_union():
     assert regen.kind == "regenerate"
     assert create.digest_file is None
     assert isinstance(patch.page_range, PageRange)
+
+
+def _flag():
+    return False
+
+
+def test_create_and_regenerate_requests_carry_the_cancel_check():
+    for kind, digest_file in (("create", None), ("regenerate", "digests/2026-08-12.md")):
+        provider = FakeProvider(_marked(1, 10, "Fresh"))
+        prep = PrepareResult("pdf_images", image_paths=_page_images(10))
+        apply_digest_action(
+            DigestAction(kind, PageRange(1, 10), digest_file=digest_file),
+            provider=provider,
+            model_id="fake-model",
+            source_name="mega.pdf",
+            prep=prep,
+            cwd=Path("."),
+            cancel_check=_flag,
+        )
+        assert provider.calls[0].cancel_check is _flag
+
+
+def test_patch_request_carries_the_cancel_check():
+    provider = FakeProvider(_marked(4, 5, "Patched"))
+    prep = PrepareResult("pdf_images", image_paths=_page_images(10))
+    apply_digest_action(
+        DigestAction("patch", PageRange(4, 5), digest_file="digests/2026-08-12.md"),
+        provider=provider,
+        model_id="fake-model",
+        source_name="mega.pdf",
+        prep=prep,
+        existing_markdown=_coverage_digest(),
+        cwd=Path("."),
+        cancel_check=_flag,
+    )
+    assert provider.calls
+    assert all(call.cancel_check is _flag for call in provider.calls)

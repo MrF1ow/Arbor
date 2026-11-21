@@ -134,11 +134,26 @@ pub struct JobEventRow {
 
 pub struct JobCoordinator {
     active: Option<(String, String)>,
+    /// When this app process started, in epoch seconds. Rows `running` from before
+    /// it belong to a process that is gone; see `reconcile_stale_jobs`.
+    app_started_at: i64,
 }
 
 impl JobCoordinator {
     pub fn new() -> Self {
-        Self { active: None }
+        Self {
+            active: None,
+            app_started_at: now_secs(),
+        }
+    }
+
+    pub fn app_started_at(&self) -> i64 {
+        self.app_started_at
+    }
+
+    /// The id of the job holding the slot, if any.
+    pub fn active_job_id(&self) -> Option<&str> {
+        self.active.as_ref().map(|(id, _)| id.as_str())
     }
 
     pub fn try_begin(&mut self, job_id: &str, knowledge_root: &str) -> Result<(), String> {
@@ -167,12 +182,15 @@ impl JobCoordinator {
     }
 }
 
-fn now_stamp() -> String {
+fn now_secs() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
-        .as_secs()
-        .to_string()
+        .as_secs() as i64
+}
+
+fn now_stamp() -> String {
+    now_secs().to_string()
 }
 
 pub fn new_job_id() -> String {
@@ -244,6 +262,83 @@ pub fn finish_job(
     )
     .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+/// Shown as the error of a job whose app closed before the job finished.
+pub const ARBOR_CLOSED_SUMMARY: &str = "Arbor closed before this job finished";
+
+fn has_cancelled_event(conn: &Connection, job_id: &str) -> bool {
+    let Ok(mut stmt) = conn
+        .prepare("SELECT line FROM job_events WHERE job_id = ?1 AND line LIKE '%cancelled%'")
+    else {
+        return false;
+    };
+    let Ok(rows) = stmt.query_map(params![job_id], |row| row.get::<_, String>(0)) else {
+        return false;
+    };
+    let found = rows.flatten().any(|line| {
+        serde_json::from_str::<serde_json::Value>(&line)
+            .ok()
+            .and_then(|value| value.get("type").and_then(|t| t.as_str()).map(str::to_string))
+            .as_deref()
+            == Some("cancelled")
+    });
+    found
+}
+
+/// End every `running` row left by an app that closed: those started before this
+/// process (`app_started_at`, epoch seconds) other than the active job. A row whose
+/// events include `cancelled` ends Cancelled, any other Failed, both with
+/// "Arbor closed before this job finished". Returns how many rows it ended.
+pub fn reconcile_stale_jobs(
+    conn: &Connection,
+    active_job_id: Option<&str>,
+    app_started_at: i64,
+) -> usize {
+    let stale: Vec<String> = match conn
+        .prepare(
+            "SELECT id FROM jobs WHERE status = 'running' AND CAST(started_at AS INTEGER) < ?1",
+        )
+        .and_then(|mut stmt| {
+            stmt.query_map(params![app_started_at], |row| row.get::<_, String>(0))
+                .map(|rows| rows.flatten().collect())
+        }) {
+        Ok(ids) => ids,
+        Err(error) => {
+            eprintln!("could not look for stale jobs: {error}");
+            return 0;
+        }
+    };
+    let mut ended = 0;
+    for id in stale {
+        if active_job_id == Some(id.as_str()) {
+            continue;
+        }
+        let status = if has_cancelled_event(conn, &id) {
+            JobStatus::Cancelled
+        } else {
+            JobStatus::Failed
+        };
+        match conn.execute(
+            "UPDATE jobs SET status = ?1, finished_at = ?2, error_summary = ?3
+             WHERE id = ?4 AND status = 'running'",
+            params![status.as_str(), now_stamp(), ARBOR_CLOSED_SUMMARY, id],
+        ) {
+            Ok(changed) => ended += changed,
+            Err(error) => eprintln!("could not end stale job {id}: {error}"),
+        }
+    }
+    ended
+}
+
+/// `reconcile_stale_jobs` for one library, opened by root.
+pub fn reconcile_library(
+    knowledge_root: &Path,
+    active_job_id: Option<&str>,
+    app_started_at: i64,
+) -> Result<usize, String> {
+    let conn = db::open(knowledge_root)?;
+    Ok(reconcile_stale_jobs(&conn, active_job_id, app_started_at))
 }
 
 pub fn list_jobs(knowledge_root: &Path, limit: u32) -> Result<Vec<JobSummary>, String> {
@@ -563,6 +658,143 @@ mod tests {
         assert_eq!(jobs[0].skill.as_deref(), Some("flashcards"));
         assert_eq!(JobTrigger::from_arg(Some("study")), JobTrigger::Study);
         let _ = fs::remove_dir_all(&root);
+    }
+
+    /// A job row as left behind by an app that closed: `running`, started at `started_at`.
+    fn stale_job(root: &Path, started_at: &str, events: &[&str]) -> String {
+        let id = create_job(root, JobTrigger::Manual, "m", r#"{"selections":[]}"#).unwrap();
+        db::open(root)
+            .unwrap()
+            .execute(
+                "UPDATE jobs SET started_at = ?1 WHERE id = ?2",
+                params![started_at, id],
+            )
+            .unwrap();
+        for line in events {
+            append_event(root, &id, line).unwrap();
+        }
+        id
+    }
+
+    fn job_by_id(root: &Path, id: &str) -> JobSummary {
+        list_jobs(root, 50)
+            .unwrap()
+            .into_iter()
+            .find(|job| job.id == id)
+            .unwrap()
+    }
+
+    #[test]
+    fn reconcile_ends_a_stale_running_job_with_a_cancelled_event_as_cancelled() {
+        let root = temp_root("reconcile-cancelled");
+        let id = stale_job(
+            &root,
+            "1000",
+            &[
+                r#"{"type":"run_started"}"#,
+                r#"{"type":"cancelled","after_sources":1}"#,
+                r#"{"type":"course_synthesis_started"}"#,
+            ],
+        );
+        let conn = db::open(&root).unwrap();
+
+        assert_eq!(reconcile_stale_jobs(&conn, None, 2000), 1);
+
+        let job = job_by_id(&root, &id);
+        assert_eq!(job.status, "cancelled");
+        assert_eq!(
+            job.error_summary.as_deref(),
+            Some("Arbor closed before this job finished")
+        );
+        assert!(job.finished_at.is_some());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn reconcile_ends_a_stale_running_job_without_a_cancelled_event_as_failed() {
+        let root = temp_root("reconcile-failed");
+        let plain = stale_job(&root, "1000", &[r#"{"type":"run_started"}"#]);
+        let no_events = stale_job(&root, "1500", &[]);
+        let mentions = stale_job(
+            &root,
+            "1600",
+            &[r#"{"type":"warning","message":"the word cancelled is only text here"}"#],
+        );
+        let conn = db::open(&root).unwrap();
+
+        assert_eq!(reconcile_stale_jobs(&conn, None, 2000), 3);
+
+        for id in [plain, no_events, mentions] {
+            let job = job_by_id(&root, &id);
+            assert_eq!(job.status, "failed");
+            assert_eq!(
+                job.error_summary.as_deref(),
+                Some("Arbor closed before this job finished")
+            );
+            assert!(job.finished_at.is_some());
+        }
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn reconcile_leaves_the_active_job_and_newer_rows_and_finished_rows_alone() {
+        let root = temp_root("reconcile-untouched");
+        let active = stale_job(&root, "1000", &[r#"{"type":"run_started"}"#]);
+        let newer = stale_job(&root, "2000", &[]);
+        let later = stale_job(&root, "2500", &[]);
+        let done = stale_job(&root, "900", &[]);
+        finish_job(&root, &done, JobStatus::Succeeded, 0, None).unwrap();
+        let conn = db::open(&root).unwrap();
+
+        assert_eq!(reconcile_stale_jobs(&conn, Some(&active), 2000), 0);
+
+        for id in [&active, &newer, &later] {
+            let job = job_by_id(&root, id);
+            assert_eq!(job.status, "running", "{id}");
+            assert_eq!(job.finished_at, None);
+        }
+        assert_eq!(job_by_id(&root, &done).status, "succeeded");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn reconcile_runs_once_and_does_not_rewrite_a_row_it_already_ended() {
+        let root = temp_root("reconcile-once");
+        let id = stale_job(&root, "1000", &[]);
+        let conn = db::open(&root).unwrap();
+
+        assert_eq!(reconcile_stale_jobs(&conn, None, 2000), 1);
+        let first = job_by_id(&root, &id);
+        assert_eq!(reconcile_stale_jobs(&conn, None, 2000), 0);
+
+        assert_eq!(job_by_id(&root, &id).finished_at, first.finished_at);
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn reconcile_library_ends_stale_rows_for_one_library_root() {
+        let root = temp_root("reconcile-library");
+        let id = stale_job(&root, "1000", &[r#"{"type":"cancelled"}"#]);
+
+        assert_eq!(reconcile_library(&root, None, 2000).unwrap(), 1);
+
+        assert_eq!(job_by_id(&root, &id).status, "cancelled");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn coordinator_reports_its_active_job_id_and_start_time() {
+        let mut c = JobCoordinator::new();
+        assert_eq!(c.active_job_id(), None);
+        c.try_begin("job-1", "/k").unwrap();
+        assert_eq!(c.active_job_id(), Some("job-1"));
+        c.finish("job-1");
+        assert_eq!(c.active_job_id(), None);
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        assert!(c.app_started_at() <= now && c.app_started_at() > now - 60);
     }
 
     #[test]

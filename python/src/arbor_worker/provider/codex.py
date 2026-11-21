@@ -14,16 +14,25 @@ from arbor_worker.provider.base import (
     ProviderResult,
     ProviderStatus,
 )
+from arbor_worker.provider.cancel import run_cli_cancellable
 from arbor_worker.provider.errors import cli_process_failure
 
 
 class CodexCliProvider:
     name = "codex"
 
-    def __init__(self, models: list[Model], runner=subprocess.run, which=shutil.which):
+    def __init__(
+        self,
+        models: list[Model],
+        runner=subprocess.run,
+        which=shutil.which,
+        popen=subprocess.Popen,
+    ):
+        # `runner` runs run() and check_codex_auth; `popen` runs a cancellable run().
         self._models = models
         self._runner = runner
         self._which = which
+        self._popen = popen
 
     def status(self) -> ProviderStatus:
         res = check_codex_auth(runner=self._runner, which=self._which)
@@ -58,13 +67,23 @@ class CodexCliProvider:
             stdin_prompt = request.prompt
             if request.system is not None:
                 stdin_prompt = f"{request.system}\n\n{request.prompt}"
-            proc = self._runner(
-                argv,
-                input=stdin_prompt,
-                capture_output=True,
-                text=True,
-                env=env,
-            )
+            if request.cancel_check is not None:
+                proc = run_cli_cancellable(
+                    self._popen,
+                    argv,
+                    input=stdin_prompt,
+                    cwd=None,
+                    env=env,
+                    cancel_check=request.cancel_check,
+                )
+            else:
+                proc = self._runner(
+                    argv,
+                    input=stdin_prompt,
+                    capture_output=True,
+                    text=True,
+                    env=env,
+                )
             if proc.returncode != 0:
                 raise cli_process_failure(
                     "codex",

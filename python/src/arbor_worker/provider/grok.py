@@ -20,6 +20,7 @@ from arbor_worker.provider.base import (
     usage_tokens,
     record_usage,
 )
+from arbor_worker.provider.cancel import run_cli_cancellable
 from arbor_worker.provider.cli_stream import run_popen_stream
 from arbor_worker.provider.errors import cli_process_failure, message_failure
 from arbor_worker.provider.stream_json import iter_stream_json
@@ -197,12 +198,22 @@ class GrokCliProvider:
                 prompt_path = Path(tmp.name)
         try:
             argv = self.build_argv(request, prompt_file=prompt_path)
-            proc = self._runner(
-                argv,
-                capture_output=True,
-                text=True,
-                env=env,
-            )
+            if request.cancel_check is not None:
+                proc = run_cli_cancellable(
+                    self._popen,
+                    argv,
+                    input=None,
+                    cwd=None,
+                    env=env,
+                    cancel_check=request.cancel_check,
+                )
+            else:
+                proc = self._runner(
+                    argv,
+                    capture_output=True,
+                    text=True,
+                    env=env,
+                )
         finally:
             prompt_path.unlink(missing_ok=True)
         if proc.returncode != 0:
@@ -276,6 +287,7 @@ class GrokCliProvider:
                 on_delta=on_delta,
                 parse_stdout=parse_stdout,
                 label="grok",
+                cancel_check=request.cancel_check,
             )
         finally:
             prompt_path.unlink(missing_ok=True)

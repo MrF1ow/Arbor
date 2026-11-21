@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -55,6 +56,13 @@ class CourseManifest:
     def save(self) -> None:
         self.course_dir.mkdir(parents=True, exist_ok=True)
         self.path.write_text(json.dumps(self.data, indent=2) + "\n")
+
+    def snapshot(self) -> dict:
+        """A deep copy of the manifest data, for restore() after a cancelled source."""
+        return copy.deepcopy(self.data)
+
+    def restore(self, snapshot: dict) -> None:
+        self.data = copy.deepcopy(snapshot)
 
     def records(self) -> list[dict]:
         return list(self.data.get("records", []))

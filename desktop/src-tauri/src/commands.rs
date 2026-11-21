@@ -3425,8 +3425,25 @@ pub async fn init_arbor_db(root: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn list_jobs(root: String, limit: Option<u32>) -> Result<Vec<jobs::JobSummary>, String> {
+pub async fn list_jobs(
+    app: tauri::AppHandle,
+    root: String,
+    limit: Option<u32>,
+) -> Result<Vec<jobs::JobSummary>, String> {
     spawn_blocking_cmd(move || {
+        // Rows still `running` from an app that closed are ended here, under the
+        // coordinator lock so a job being started cannot be mistaken for one of them.
+        {
+            let coordinator = app.state::<SharedCoordinator>();
+            let guard = coordinator.inner().lock().map_err(|e| e.to_string())?;
+            if let Err(error) = jobs::reconcile_library(
+                Path::new(&root),
+                guard.active_job_id(),
+                guard.app_started_at(),
+            ) {
+                eprintln!("could not end stale jobs: {error}");
+            }
+        }
         jobs::list_jobs(Path::new(&root), limit.unwrap_or(20))
     })
     .await

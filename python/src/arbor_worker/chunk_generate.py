@@ -17,7 +17,11 @@ from arbor_worker.digest import (
 from arbor_worker.errors import ChunkGenerateError, SynthesisError
 from arbor_worker.page_markers import PageRange
 from arbor_worker.provider.base import CliProvider, ProviderRequest
-from arbor_worker.provider.errors import provider_failure_event_fields
+from arbor_worker.provider.errors import ProviderCancelled, provider_failure_event_fields
+
+
+class ChunkCancelled(ChunkGenerateError):
+    """Chunk generation stopped because the user cancelled, not because it failed."""
 
 
 @dataclass(frozen=True)
@@ -28,7 +32,9 @@ class ChunkedResult:
     page_ranges: list[str]
 
 
-def _run_one_chunk(provider, plan: ChunkPlan, *, source_name, total_pages, model_id, cwd) -> str:
+def _run_one_chunk(
+    provider, plan: ChunkPlan, *, source_name, total_pages, model_id, cwd, cancel_check=None
+) -> str:
     prompt = build_chunk_prompt(
         source_name=source_name,
         page_start=plan.page_start,
@@ -41,6 +47,7 @@ def _run_one_chunk(provider, plan: ChunkPlan, *, source_name, total_pages, model
         model_id=model_id,
         image_paths=[p.resolve() for p in plan.image_paths],
         cwd=cwd,
+        cancel_check=cancel_check,
     )
     result = provider.run(request)
     markdown = strip_preamble_before_heading(result.markdown)
@@ -81,6 +88,7 @@ def chunked_generate(
     failed_error: str | None = None
     failed_cause: BaseException | None = None
     stopped = False
+    cancelled_in_flight = False
 
     with ThreadPoolExecutor(max_workers=max(1, concurrency)) as pool:
         while True:
@@ -102,7 +110,7 @@ def chunked_generate(
                 fut = pool.submit(
                     _run_one_chunk, provider, plan,
                     source_name=source_name, total_pages=total_pages,
-                    model_id=model_id, cwd=cwd,
+                    model_id=model_id, cwd=cwd, cancel_check=cancel_requested,
                 )
                 fut_plan[fut] = plan
 
@@ -114,6 +122,11 @@ def chunked_generate(
                 plan = fut_plan.pop(fut)
                 try:
                     markdown = fut.result()
+                except ProviderCancelled:
+                    # The user stopped this call: not a failure, and nothing to record.
+                    cancelled_in_flight = True
+                    stopped = True
+                    continue
                 except Exception as e:  # provider or validation failure
                     failed_error = str(e)
                     if failed_cause is None:
@@ -139,10 +152,10 @@ def chunked_generate(
 
     if failed_error is not None:
         raise ChunkGenerateError(f"Chunk generation failed: {failed_error}") from failed_cause
-    if not manifest.all_ok():
-        raise ChunkGenerateError("Chunk generation incomplete (cancelled or stopped)")
+    if cancelled_in_flight or not manifest.all_ok():
+        raise ChunkCancelled("Chunk generation incomplete (cancelled or stopped)")
     if cancel_requested():
-        raise ChunkGenerateError("Chunk generation incomplete (cancelled or stopped)")
+        raise ChunkCancelled("Chunk generation incomplete (cancelled or stopped)")
 
     emitter.synthesis_started(course_dir=course_dir, chunk_count=len(plans))
     manifest.set_synthesis("pending")
@@ -155,10 +168,17 @@ def chunked_generate(
     )
     try:
         result = provider.run(
-            ProviderRequest(prompt=synth_prompt, model_id=model_id, cwd=cwd)
+            ProviderRequest(
+                prompt=synth_prompt,
+                model_id=model_id,
+                cwd=cwd,
+                cancel_check=cancel_requested,
+            )
         )
         markdown = strip_preamble_before_heading(result.markdown)
         validate_digest(markdown, page_range=window)
+    except ProviderCancelled:
+        raise
     except Exception as e:
         manifest.set_synthesis("failed", str(e))
         emitter.synthesis_failed(

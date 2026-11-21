@@ -50,6 +50,9 @@ class ProviderRequest:
     image_paths: list[Path] = field(default_factory=list)
     cwd: Path = field(default_factory=lambda: Path("."))
     system: str | None = None
+    # Polled while the call runs; true means stop now and raise ProviderCancelled.
+    # Only Update jobs set it; chat and study calls leave it None.
+    cancel_check: Callable[[], bool] | None = None
 
 
 @dataclass(frozen=True)

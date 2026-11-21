@@ -9,6 +9,7 @@ from arbor_worker.course_synthesis import (
     synthesize_course,
 )
 from arbor_worker.errors import CourseSynthesisError
+from arbor_worker.provider.errors import ProviderCancelled
 from arbor_worker.provider.fake import FakeProvider
 
 GOOD_MD = (
@@ -110,3 +111,37 @@ def test_synthesize_accepts_unmarked_course_markdown(tmp_path: Path):
     )
     assert out.startswith("# Biology")
     assert "arbor-pages" not in out
+
+
+def test_synthesize_passes_the_cancel_check_to_the_request(tmp_path: Path):
+    prov = FakeProvider(GOOD_MD)
+
+    def flag():
+        return False
+
+    synthesize_course(
+        prov,
+        course_name="Biology",
+        digests=[("2026-08-12.md", "first")],
+        model_id="m",
+        cwd=tmp_path,
+        cancel_check=flag,
+    )
+
+    assert prov.calls[0].cancel_check is flag
+
+
+def test_cancelled_synthesis_is_not_wrapped_as_a_synthesis_error(tmp_path: Path):
+    class Cancelling(FakeProvider):
+        def run(self, request):
+            raise ProviderCancelled()
+
+    with pytest.raises(ProviderCancelled):
+        synthesize_course(
+            Cancelling(GOOD_MD),
+            course_name="Biology",
+            digests=[("2026-08-12.md", "first")],
+            model_id="m",
+            cwd=tmp_path,
+            cancel_check=lambda: True,
+        )

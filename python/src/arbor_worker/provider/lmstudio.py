@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 
+from arbor_worker.provider.cancel import call_cancellable
+from arbor_worker.provider.errors import ProviderCancelled
 from arbor_worker.provider.base import (
     DeltaFn,
     Model,
@@ -155,9 +157,12 @@ class LmStudioProvider:
         body_bytes = chat_completions_json_body(request)
         headers = self._auth_headers()
         try:
-            status, resp_body = self._transport(
-                "POST", url, headers, body_bytes, _RUN_TIMEOUT
+            status, resp_body = call_cancellable(
+                lambda: self._transport("POST", url, headers, body_bytes, _RUN_TIMEOUT),
+                request.cancel_check,
             )
+        except ProviderCancelled:
+            raise
         except ConnectionRefusedError:
             raise ProviderError(f"LM Studio is not running at {self._base}")
         except TimeoutError:
