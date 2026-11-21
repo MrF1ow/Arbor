@@ -238,16 +238,24 @@ fn process_path() -> OsString {
 /// Env vars a coding-agent terminal sets. The Python worker refuses to run the
 /// Claude provider when it sees them (it assumes a nested session), so a
 /// desktop app launched from a Claude Code terminal must not pass them on.
-pub(crate) const AGENT_ENV_VARS: [&str; 7] = [
+pub(crate) const AGENT_ENV_VARS: [&str; 14] = [
     "CLAUDECODE",
     "CLAUDE_CODE_ENTRYPOINT",
     "CLAUDE_CODE_SSE_PORT",
     // Session plumbing of the Claude Code process that launched Arbor: a worker's
-    // own `claude` call must not write into that session or reach its socket.
+    // own `claude` call must not write into that session, reach its socket, or take
+    // on its settings (such as its reasoning effort).
     "CLAUDE_CODE_SESSION_ID",
     "CLAUDE_CODE_CHILD_NOTES_DIR",
     "CLAUDE_CODE_MESSAGING_SOCKET",
     "CLAUDE_CODE_MESSAGING_TOKEN",
+    "CLAUDE_CODE_CHILD_SESSION",
+    "CLAUDE_CODE_SESSION_ATTENDED",
+    "CLAUDE_CODE_EXECPATH",
+    "CLAUDE_EFFORT",
+    "CLAUDE_PID",
+    "CLAUDE_AGENT_SDK_VERSION",
+    "AI_AGENT",
 ];
 
 /// Remove the agent env vars from a Command that launches the Python worker.
@@ -1606,6 +1614,13 @@ mod tests {
                 "CLAUDE_CODE_CHILD_NOTES_DIR",
                 "CLAUDE_CODE_MESSAGING_SOCKET",
                 "CLAUDE_CODE_MESSAGING_TOKEN",
+                "CLAUDE_CODE_CHILD_SESSION",
+                "CLAUDE_CODE_SESSION_ATTENDED",
+                "CLAUDE_CODE_EXECPATH",
+                "CLAUDE_EFFORT",
+                "CLAUDE_PID",
+                "CLAUDE_AGENT_SDK_VERSION",
+                "AI_AGENT",
             ]
         );
     }
