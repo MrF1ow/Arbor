@@ -336,6 +336,52 @@ describe("search palette", { timeout: 15000 }, () => {
     });
   });
 
+  it("says no note contains a multi-word phrase and points to Ask", async () => {
+    await renderAppAtRoute("/course/cell-biology/overview", searchFixtures);
+    await waitForOverview();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const timedUser = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await openSearchPalette(timedUser);
+    await timedUser.type(within(searchDialog()).getByLabelText("Search digests"), '  kidney   "protein" kids ');
+    await vi.advanceTimersByTimeAsync(250);
+    await waitFor(() => {
+      expect(within(searchDialog()).getByText('No notes contain "kidney protein kids"')).toBeInTheDocument();
+    });
+    expect(within(searchDialog()).getByText("Ask your class a question instead.")).toBeInTheDocument();
+    expect(within(searchDialog()).queryByText("No results")).not.toBeInTheDocument();
+  });
+
+  it("keeps No results for a one-word query with no hits", async () => {
+    await renderAppAtRoute("/course/cell-biology/overview", searchFixtures);
+    await waitForOverview();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const timedUser = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await openSearchPalette(timedUser);
+    await timedUser.type(within(searchDialog()).getByLabelText("Search digests"), "zzz");
+    await vi.advanceTimersByTimeAsync(250);
+    await waitFor(() => {
+      expect(within(searchDialog()).getByText("No results")).toBeInTheDocument();
+    });
+    expect(within(searchDialog()).queryByText("Ask your class a question instead.")).not.toBeInTheDocument();
+  });
+
+  it("renders a multi-word hit with its class name and the result count", async () => {
+    await renderAppAtRoute("/course/cell-biology/overview", searchFixtures);
+    await waitForOverview();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const timedUser = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await openSearchPalette(timedUser);
+    await timedUser.type(within(searchDialog()).getByLabelText("Search digests"), "facilitated diffusion");
+    await vi.advanceTimersByTimeAsync(250);
+    const dialog = within(searchDialog());
+    await waitFor(() => {
+      expect(dialog.getByText("Does facilitated diffusion require ATP?")).toBeInTheDocument();
+    });
+    expect(dialog.getAllByText(/Cell Biology/).length).toBeGreaterThan(0);
+    expect(dialog.queryByText(/No notes contain/)).not.toBeInTheDocument();
+    expect(dialog.getByText(/results? in \d+ class/)).toBeInTheDocument();
+  });
+
   it("shows no-root copy on welcome without an active library", async () => {
     const user = userEvent.setup();
     await renderAppAtRoute("/welcome", {

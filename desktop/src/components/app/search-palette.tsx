@@ -109,6 +109,11 @@ function SearchHitRow({ entry }: { entry: RootHit }) {
   );
 }
 
+/** The phrase the full-text search looks for: quotes dropped, whitespace collapsed (as the Rust side does). */
+function searchPhrase(query: string): string {
+  return query.replaceAll('"', "").split(/\s+/).filter(Boolean).join(" ");
+}
+
 /** One search per library, in parallel; the active library's hits come first. */
 function useSearchAll(roots: string[], query: string, semantic: boolean) {
   const trimmed = query.trim();
@@ -273,12 +278,15 @@ function SearchPaletteBody({
   });
   const showFailedNotice = typed && hits.length > 0 && failedLibraries.length > 0;
 
+  const phrase = searchPhrase(debouncedQuery);
+  const phraseMissed = !searchSemantic && phrase.includes(" ");
+
   const ordered = groups.flatMap((group) => group.hits);
 
   return (
     <CommandPrimitive
       shouldFilter={false}
-      className="flex flex-col text-popover-foreground"
+      className="flex min-w-0 flex-col text-popover-foreground"
       onKeyDown={(event) => {
         if (event.key === "Tab" && !event.shiftKey) {
           event.preventDefault();
@@ -317,7 +325,15 @@ function SearchPaletteBody({
             {search.error instanceof Error ? search.error.message : String(search.error)}
           </p>
         ) : null}
-        {showNoResults ? <p className="py-6 text-center text-caption text-muted-foreground">No results</p> : null}
+        {showNoResults && phraseMissed ? (
+          <div className="flex flex-col gap-1 px-3 py-6 text-center text-caption text-muted-foreground">
+            <p className="break-words">{`No notes contain "${phrase}"`}</p>
+            <p>Ask your class a question instead.</p>
+          </div>
+        ) : null}
+        {showNoResults && !phraseMissed ? (
+          <p className="py-6 text-center text-caption text-muted-foreground">No results</p>
+        ) : null}
         {showFailedNotice ? (
           <p role="status" className="px-3 py-1.5 text-caption text-muted-foreground">
             Couldn&apos;t search {failedLibraries.join(", ")}
