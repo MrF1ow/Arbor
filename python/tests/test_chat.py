@@ -17,8 +17,6 @@ from arbor_worker.chat import (
     answer,
     heading_id,
 )
-from arbor_worker.embed import embed_root
-from arbor_worker.embedder.hashed import HashedNgramEmbedder
 from arbor_worker.events import EventEmitter, parse_lines
 from arbor_worker.indexer import index_course
 from arbor_worker.provider.base import ProviderError, ProviderRequest, ProviderResult
@@ -88,7 +86,6 @@ def _build_course(root: Path, *, injection: str | None = None) -> None:
 
 
 def _index(root: Path) -> None:
-    embed_root(root, HashedNgramEmbedder())
     index_course(root, "Biology")
 
 
@@ -277,9 +274,7 @@ def test_read_only_course_and_arbor(biology_root: Path):
     course_dir = biology_root / "Biology"
     before_course = _course_tree_hash(course_dir)
     db = biology_root / ".arbor" / "arbor.db"
-    vectors = biology_root / ".arbor" / "vectors.sqlite"
     db_before = db.read_bytes()
-    vec_before = vectors.read_bytes()
 
     fake = RecordingFake("Ok [1].\n\nsupported: true")
     answer(biology_root, "Biology", [], "overview?", "ask", fake, "fake-model")
@@ -287,7 +282,6 @@ def test_read_only_course_and_arbor(biology_root: Path):
     assert _course_tree_hash(course_dir) == before_course
     assert not (biology_root / ".arbor" / "chat").exists()
     assert db.read_bytes() == db_before
-    assert vectors.read_bytes() == vec_before
 
 
 def test_mode_system_sentences():
@@ -474,3 +468,273 @@ def test_streaming_exception_emits_error(biology_root: Path, monkeypatch):
     assert code == 1
     events = parse_lines(out.getvalue())
     assert any(event["type"] == "error" for event in events)
+
+
+def _build_cardiology(root: Path, *, digest_body: str) -> None:
+    course = root / "Cardiology"
+    (course / "digests").mkdir(parents=True)
+    # Larger than the whole 12,000-char Ask budget, and it mentions the question words.
+    overview = "\n\n".join(
+        f"Murmur overview paragraph {i}: murmurs are graded and described by timing."
+        for i in range(400)
+    )
+    assert len(overview) > 12_000
+    (course / "course.md").write_text(f"# Cardiology\n\n{overview}\n")
+    (course / "digests" / "2026-11-18.md").write_text(digest_body)
+    (course / "digests" / "2026-11-17.md").write_text(
+        "# Lipids\n\n## Statins\n\nStatins lower LDL cholesterol.\n"
+    )
+    index_course(root, "Cardiology")
+
+
+def _ask(root: Path, course: str, question: str, **kwargs):
+    buf = io.StringIO()
+    result = answer(
+        root,
+        course,
+        [],
+        question,
+        "ask",
+        RecordingFake("An answer [2].\n\nsupported: true"),
+        "fake-model",
+        emitter=EventEmitter(buf),
+        **kwargs,
+    )
+    retrieved = next(
+        e for e in parse_lines(buf.getvalue()) if e["type"] == "chat_retrieved"
+    )
+    return result, retrieved
+
+
+def test_ask_places_digest_when_course_overview_exceeds_budget(tmp_path: Path):
+    root = tmp_path / "Knowledge"
+    root.mkdir()
+    _build_cardiology(
+        root,
+        digest_body=(
+            "# Valvular Heart Disease\n\n## Murmurs\n\n"
+            "Valsalva softens the AS murmur but increases the HCM murmur.\n"
+        ),
+    )
+    result, retrieved = _ask(
+        root, "Cardiology", "which murmur gets louder with valsalva and why?"
+    )
+    paths = [chunk["digest_path"] for chunk in retrieved["chunks"]]
+    assert paths[0] == "Cardiology/course.md"
+    assert "Cardiology/digests/2026-11-18.md" in paths
+    assert retrieved["lecture_count"] >= 1
+    summary = retrieved["chunks"][0]
+    assert summary["chars"] <= 2000
+    digest_chunk = next(
+        c for c in result.retrieved if c.digest_path == "Cardiology/digests/2026-11-18.md"
+    )
+    assert "Valsalva softens the AS murmur" in digest_chunk.text
+
+
+def test_chunk_window_keeps_rare_phrase_after_common_term(tmp_path: Path):
+    root = tmp_path / "Knowledge"
+    root.mkdir()
+    filler = "disease course is variable and disease burden differs. " * 120
+    assert len(filler) > 6000
+    _build_cardiology(
+        root,
+        digest_body=(
+            "# Nephrology\n\n## Glomerular\n\n"
+            f"{filler}\n\nFirst-line for minimal change: oral prednisone ZEBRAFACT.\n"
+        ),
+    )
+    # A second, unrelated lecture that is full of the common word only.
+    (root / "Cardiology" / "digests" / "2026-11-19.md").write_text(
+        "# Misc\n\n## Other\n\n" + "disease " * 50 + "\n"
+    )
+    index_course(root, "Cardiology")
+    result, _ = _ask(
+        root, "Cardiology", "what is the disease first-line for minimal change zebrafact?"
+    )
+    chunk = next(
+        c for c in result.retrieved if c.digest_path == "Cardiology/digests/2026-11-18.md"
+    )
+    assert len(chunk.text) <= 3000
+    assert "ZEBRAFACT" in chunk.text
+
+
+def test_stopword_only_question_returns_summary(tmp_path: Path):
+    root = tmp_path / "Knowledge"
+    root.mkdir()
+    _build_cardiology(root, digest_body="# V\n\n## Murmurs\n\nValsalva text.\n")
+    result, retrieved = _ask(root, "Cardiology", "what is it?")
+    assert retrieved["chunks"][0]["digest_path"] == "Cardiology/course.md"
+    assert result.retrieved
+
+
+def test_chat_terms_drops_stopwords_dedupes_and_falls_back():
+    from arbor_worker.chat import _chat_terms, _fts_query
+
+    assert _chat_terms("Which murmur gets louder with Valsalva, and why? Murmur!") == [
+        "murmur",
+        "gets",
+        "louder",
+        "valsalva",
+    ]
+    assert _chat_terms("what is it?") == ["what", "is", "it"]
+    assert _fts_query("which murmur and valsalva?") == '"murmur" OR "valsalva"'
+    assert _fts_query("?!") is None
+
+
+def test_very_common_term_does_not_crowd_out_the_rare_term(tmp_path: Path):
+    root = tmp_path / "Knowledge"
+    root.mkdir()
+    _build_cardiology(
+        root,
+        digest_body="# Valvular\n\n## Murmurs\n\nValsalva increases the HCM murmur.\n",
+    )
+    for i in range(10):
+        (root / "Cardiology" / "digests" / f"2026-12-{i + 1:02d}.md").write_text(
+            f"# Topic {i}\n\n## Notes\n\n" + "disease disease disease " * 40 + "\n"
+        )
+    index_course(root, "Cardiology")
+    _, retrieved = _ask(root, "Cardiology", "which disease has a valsalva murmur?")
+    paths = [chunk["digest_path"] for chunk in retrieved["chunks"]]
+    assert "Cardiology/digests/2026-11-18.md" in paths
+
+
+def _idf(**weights: float) -> dict[str, float]:
+    return dict(weights)
+
+
+def test_window_spans_crohns_and_ulcerative_colitis_after_ischemic_colitis():
+    from arbor_worker.chat import CHUNK_CAP, _window_text
+
+    ibs = "IBS is a functional bowel disorder with abdominal pain and altered habit. "
+    text = (
+        "Ischemic colitis presents with sudden pain and bloody stool.\n\n"
+        + ibs * 24
+        + "\n\n### Crohn's disease\n\nCrohn's disease is transmural and skips segments. "
+        + "Fistulae and strictures are common in Crohn's disease.\n\n"
+        + "Fiber and hydration are the mainstay of therapy for patients. " * 38
+        + "\n\n### Ulcerative Colitis\n\nUlcerative Colitis is mucosal and continuous.\n\n"
+        + ibs * 40
+    )
+    crohn_at = text.index("Crohn's disease is transmural")
+    uc_at = text.index("Ulcerative Colitis is mucosal")
+    assert uc_at - crohn_at < CHUNK_CAP - 200
+    assert uc_at > CHUNK_CAP
+    terms = ["crohns", "ulcerative", "colitis", "tell"]
+    idf = _idf(crohns=3.0, ulcerative=2.5, colitis=1.0, tell=0.1)
+    window = _window_text(text, terms, idf)
+    assert len(window) == CHUNK_CAP
+    assert "Crohn" in window
+    assert "Ulcerative Colitis" in window
+
+
+def test_window_does_not_match_short_terms_inside_other_words():
+    from arbor_worker.chat import _window_text
+
+    text = (
+        "Migraine management: many medications. Flares recur with symptoms and "
+        "mass effect under stress. " * 3
+        + "x" * 3100
+        + "\n\nMS flares: relapsing demyelination. ANSWERMS\n"
+    )
+    assert len(text) > 3232
+    window = _window_text(text, ["ms", "flares"], {"ms": 3.0, "flares": 1.0})
+    assert "ANSWERMS" in window
+    for term in ("mass", "stress"):
+        w = _window_text(
+            "unrelated filler. " * 300 + "The ma and stre words. " + "z" * 3100 + f" {term} here",
+            [term],
+            {term: 1.0},
+        )
+        assert f" {term} here" in w
+
+
+def test_term_pattern_matches_inflections_only():
+    from arbor_worker.chat import _term_pattern
+
+    crohns = _term_pattern("crohns")
+    for word in ("Crohn", "Crohn's", "Crohns", "crohn’s"):
+        assert crohns.search(f"in {word} disease"), word
+    assert _term_pattern("colitis").search("Ulcerative Colitis is")
+    ms = _term_pattern("ms")
+    assert ms.search("relapsing MS flares")
+    assert not ms.search("symptoms and many medications")
+    assert not _term_pattern("mass").search("ma massage")
+    assert _term_pattern("mass").search("a mass lesion")
+    assert not _term_pattern("stress").search("stre and strewn")
+
+
+def test_window_is_full_length_when_hits_sit_at_section_end():
+    from arbor_worker.chat import CHUNK_CAP, _window_text
+
+    text = "filler words here. " * 700
+    text = text[: 13_227 - len(" zebrafact")] + " zebrafact"
+    assert len(text) == 13_227
+    window = _window_text(text, ["zebrafact"], {"zebrafact": 2.0})
+    assert len(window) == CHUNK_CAP
+    assert window.endswith("zebrafact")
+
+
+def test_window_without_hits_starts_at_section_start():
+    from arbor_worker.chat import CHUNK_CAP, _window_text
+
+    text = "abc " * 2000
+    assert _window_text(text, ["nothing"], {"nothing": 1.0}) == text[:CHUNK_CAP]
+
+
+def test_window_ties_go_to_more_hits_then_earlier_start():
+    from arbor_worker.chat import _window_text
+
+    pad = "." * 5000
+    text = "alpha " + pad + " alpha alpha " + pad + " alpha"
+    window = _window_text(text, ["alpha"], {"alpha": 1.0})
+    assert window.count("alpha") == 2
+
+
+def test_best_h2_section_does_not_count_short_terms_inside_words():
+    from arbor_worker.chat import _best_h2_section
+
+    markdown = (
+        "# Lecture\n\n## Symptoms\n\n"
+        "symptoms symptoms symptoms of many medications.\n\n"
+        "## Multiple sclerosis\n\nMS is demyelinating. MS flares.\n"
+    )
+    _, title, _ = _best_h2_section(markdown, ["ms"])
+    assert title == "Multiple sclerosis"
+
+
+def test_chunk_cut_by_window_is_marked_truncated(tmp_path: Path):
+    root = tmp_path / "Knowledge"
+    root.mkdir()
+    filler = "disease course is variable and disease burden differs. " * 120
+    _build_cardiology(
+        root,
+        digest_body=(
+            "# Nephrology\n\n## Glomerular\n\n"
+            f"{filler}\n\nFirst-line for minimal change: oral prednisone ZEBRAFACT.\n"
+            "\n\n## Short\n\nzebrafact short note.\n"
+        ),
+    )
+    result, retrieved = _ask(root, "Cardiology", "what is zebrafact first-line?")
+    chunk = next(
+        c for c in result.retrieved if c.digest_path == "Cardiology/digests/2026-11-18.md"
+    )
+    assert len(chunk.text) <= 3000
+    assert chunk.truncated is True
+    emitted = next(
+        c for c in retrieved["chunks"] if c["digest_path"] == "Cardiology/digests/2026-11-18.md"
+    )
+    assert emitted["truncated"] is True
+
+
+def test_uncut_chunk_is_not_marked_truncated(tmp_path: Path):
+    root = tmp_path / "Knowledge"
+    root.mkdir()
+    _build_cardiology(
+        root,
+        digest_body="# V\n\n## Murmurs\n\nValsalva increases the HCM murmur.\n",
+    )
+    result, _ = _ask(root, "Cardiology", "valsalva murmur?")
+    chunk = next(
+        c for c in result.retrieved if c.digest_path == "Cardiology/digests/2026-11-18.md"
+    )
+    assert chunk.truncated is False

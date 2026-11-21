@@ -9,8 +9,6 @@ import pytest
 
 from arbor_worker import cli
 from arbor_worker.chat import answer, parse_chat_focus
-from arbor_worker.embed import embed_root
-from arbor_worker.embedder.hashed import HashedNgramEmbedder
 from arbor_worker.events import EventEmitter, parse_lines
 from arbor_worker.indexer import index_course
 from arbor_worker.provider.fake import FakeProvider
@@ -24,7 +22,6 @@ class RecordingFake(FakeProvider):
 
 def _index_bio(root: Path) -> None:
     (root / "Bio" / "course.md").write_text("# Bio\n\nCourse overview for scoped chat.\n")
-    embed_root(root, HashedNgramEmbedder())
     index_course(root, "Bio")
     index_course(root, "Chem")
 
