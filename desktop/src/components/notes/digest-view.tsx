@@ -16,12 +16,13 @@ import {
   pageForSelectionNode,
 } from "~/domain/notes";
 import { arborDigestTarget, headingId } from "~/domain/markdown";
+import { READ_FRACTION } from "~/domain/reading";
 import type { DigestInfo } from "~/domain/types";
 import { pickActiveRoot } from "~/lib/knowledge-root";
 import { useDigestStats } from "~/lib/queries/class-stats";
 import { useLibrary } from "~/lib/queries/library";
 import { useRenderedMarkdown } from "~/lib/queries/notes";
-import { useWriteReadingState } from "~/lib/queries/reading-state";
+import { useReadingState, useWriteReadingState } from "~/lib/queries/reading-state";
 import { useSettings } from "~/lib/queries/settings";
 import { useAppendCardMutation, useStudyJson } from "~/lib/queries/study";
 import { useSelectionStore } from "~/stores/selection-store";
@@ -93,11 +94,14 @@ export function DigestView({
   const viewerBlocked = viewerBlocksWrite(role);
   const appendCard = useAppendCardMutation(activeRoot, course);
   const setAskFocus = useSelectionStore((s) => s.setAskFocus);
+  const reading = useReadingState(activeRoot);
   const { write: writeReading } = useWriteReadingState(activeRoot);
 
   const articleRef = useRef<HTMLElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const dialogOpenRef = useRef(false);
+  /** The digest whose opening position is settled, so resuming runs once per open. */
+  const positionedRef = useRef<string | null>(null);
   const [snapshot, setSnapshot] = useState<SelectionSnapshot | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogMounted, setDialogMounted] = useState(false);
@@ -170,15 +174,12 @@ export function DigestView({
     return () => document.removeEventListener("selectionchange", onSelectionChange);
   }, [digestSlug, digestMeta]);
 
+  // A link to a section scrolls to it.
   useEffect(() => {
     const pane = scrollRef.current;
     const article = articleRef.current;
-    if (!pane || !article) {
-      return;
-    }
     const id = heading ? headingId(heading) : "";
-    if (!id) {
-      pane.scrollTo(0, 0);
+    if (!pane || !article || !id) {
       return;
     }
     const target = article.querySelector(`#${CSS.escape(id)}`);
@@ -188,6 +189,24 @@ export function DigestView({
     }
     pane.scrollTo(0, 0);
   }, [heading, html, digestSlug]);
+
+  // With no section link, an unfinished lecture reopens where it was left (a read or never-opened
+  // one starts at the top). It waits for the reading state, runs once per open, and never writes:
+  // the store keeps the furthest fraction.
+  const readingLoaded = reading.data !== undefined;
+  const savedFraction = reading.data?.[digestPath]?.fraction;
+  useEffect(() => {
+    const pane = scrollRef.current;
+    if (heading || html === undefined || !readingLoaded || !pane || positionedRef.current === digestPath) {
+      return;
+    }
+    positionedRef.current = digestPath;
+    if (savedFraction !== undefined && savedFraction > 0 && savedFraction < READ_FRACTION) {
+      pane.scrollTo(0, Math.max(0, savedFraction * pane.scrollHeight - pane.clientHeight));
+    } else {
+      pane.scrollTo(0, 0);
+    }
+  }, [heading, html, digestPath, readingLoaded, savedFraction]);
 
   let conceptNodes: ReturnType<typeof nodesForDigest> = [];
   if (conceptsJson.data) {
