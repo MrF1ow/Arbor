@@ -68,15 +68,6 @@ class EventEmitter:
     def citation_failed(self, **f):
         return self.emit("citation_failed", **f)
 
-    def embed_started(self, **f):
-        return self.emit("embed_started", **f)
-
-    def embed_done(self, **f):
-        return self.emit("embed_done", **f)
-
-    def embed_failed(self, **f):
-        return self.emit("embed_failed", **f)
-
     def course_synthesis_started(self, **f):
         return self.emit("course_synthesis_started", **f)
 

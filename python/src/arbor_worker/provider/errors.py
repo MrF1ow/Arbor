@@ -52,6 +52,17 @@ _PREFIX = {
 }
 
 
+class ProviderCancelled(ProviderError):
+    """The caller's `cancel_check` turned true while a provider call was running.
+
+    Not a failure of the provider: callers that cancel on purpose catch it before
+    their generic error handling, and everyone else sees a ProviderError.
+    """
+
+    def __init__(self, message: str = "provider call cancelled") -> None:
+        super().__init__(message, kind="cancelled")
+
+
 def display_name(label: str) -> str:
     if label in _DISPLAY:
         return _DISPLAY[label]

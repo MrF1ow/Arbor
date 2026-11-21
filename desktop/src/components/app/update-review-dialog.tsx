@@ -235,7 +235,10 @@ function UpdateReviewDialogForm({
     viewerBlocked || hasErrors || !effective.modelId || startUpdate.isPending;
 
   return (
-    <DialogContent className="max-w-2xl" showCloseButton={false}>
+    <DialogContent
+      className="max-h-dialog-tall max-w-2xl grid-rows-[auto_minmax(0,1fr)_auto]"
+      showCloseButton={false}
+    >
       <DialogHeader>
         <DialogTitle>Files to process</DialogTitle>
         <DialogDescription>
@@ -243,78 +246,80 @@ function UpdateReviewDialogForm({
           <code>40-55, 120-122</code>. Leave blank for the whole file.
         </DialogDescription>
       </DialogHeader>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="w-1/2">File</TableHead>
-            <TableHead className="w-16">Pages</TableHead>
-            <TableHead>Ranges</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {pending.map((p, index) => {
-            const note = alignmentNote(p);
-            const ambiguous = p.alignment_status === "ambiguous";
-            const inputId = `${formId}-range-${index}`;
-            const errorId = `${inputId}-error`;
-            const fieldError = errors[p.path];
-            const { relative, fileName, directory } = filePathDisplay(p.path, activeRoot);
-            return (
-              <TableRow key={p.path}>
-                <TableCell className="w-1/2 min-w-0">
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <span className="block min-w-0">
-                          <span className="block truncate text-sm font-medium">{fileName}</span>
-                          {directory ? (
-                            <span className="block truncate text-2xs text-faint-foreground">
-                              {directory}
-                            </span>
-                          ) : null}
-                        </span>
-                      }
-                    />
-                    <TooltipContent>{p.path}</TooltipContent>
-                  </Tooltip>
-                </TableCell>
-                <TableCell className="text-muted-foreground">{p.page_count}</TableCell>
-                <TableCell>
-                  <Field data-invalid={Boolean(fieldError)}>
-                    <Input
-                      id={inputId}
-                      ref={(el) => {
-                        inputRefs.current[index] = el;
-                      }}
-                      value={rangeValues[p.path] ?? ""}
-                      placeholder="all"
-                      aria-label={`Ranges for ${relative}`}
-                      aria-invalid={Boolean(fieldError)}
-                      aria-describedby={fieldError ? errorId : undefined}
-                      onChange={(e) => onRangeChange(p.path, p.page_count, e.target.value)}
-                      onBlur={onBlurValidate}
-                      onKeyDown={(e) => onRangeKeyDown(index, e)}
-                    />
-                    {fieldError ? (
-                      <FieldError id={errorId}>{fieldError}</FieldError>
-                    ) : null}
-                    {note ? (
-                      <p
-                        className={cn(
-                          "text-xs",
-                          ambiguous ? "text-destructive" : "text-faint-foreground",
-                        )}
-                      >
-                        {note}
-                      </p>
-                    ) : null}
-                  </Field>
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
+      <div className="min-h-0 overflow-y-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-1/2">File</TableHead>
+              <TableHead className="w-16">Pages</TableHead>
+              <TableHead>Ranges</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {pending.map((p, index) => {
+              const note = alignmentNote(p);
+              const ambiguous = p.alignment_status === "ambiguous";
+              const inputId = `${formId}-range-${index}`;
+              const errorId = `${inputId}-error`;
+              const fieldError = errors[p.path];
+              const { relative, fileName, directory } = filePathDisplay(p.path, activeRoot);
+              return (
+                <TableRow key={p.path}>
+                  <TableCell className="w-1/2 min-w-0">
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <span className="block min-w-0">
+                            <span className="block truncate text-sm font-medium">{fileName}</span>
+                            {directory ? (
+                              <span className="block truncate text-2xs text-faint-foreground">
+                                {directory}
+                              </span>
+                            ) : null}
+                          </span>
+                        }
+                      />
+                      <TooltipContent>{p.path}</TooltipContent>
+                    </Tooltip>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{p.page_count}</TableCell>
+                  <TableCell>
+                    <Field data-invalid={Boolean(fieldError)}>
+                      <Input
+                        id={inputId}
+                        ref={(el) => {
+                          inputRefs.current[index] = el;
+                        }}
+                        value={rangeValues[p.path] ?? ""}
+                        placeholder="all"
+                        aria-label={`Ranges for ${relative}`}
+                        aria-invalid={Boolean(fieldError)}
+                        aria-describedby={fieldError ? errorId : undefined}
+                        onChange={(e) => onRangeChange(p.path, p.page_count, e.target.value)}
+                        onBlur={onBlurValidate}
+                        onKeyDown={(e) => onRangeKeyDown(index, e)}
+                      />
+                      {fieldError ? (
+                        <FieldError id={errorId}>{fieldError}</FieldError>
+                      ) : null}
+                      {note ? (
+                        <p
+                          className={cn(
+                            "text-xs",
+                            ambiguous ? "text-destructive" : "text-faint-foreground",
+                          )}
+                        >
+                          {note}
+                        </p>
+                      ) : null}
+                    </Field>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
       <DialogFooter>
         <Button variant="outline" onClick={onCancel}>
           Cancel

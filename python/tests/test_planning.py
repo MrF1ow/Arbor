@@ -255,3 +255,62 @@ def test_unknown_selection_path_raises(tmp_path: Path, make_pdf):
     plan = build_plan(tmp_path, default_settings())
     with pytest.raises(PlanError):
         apply_selections(plan, {"Biology/missing.pdf": [PageRange(1, 1)]})
+
+
+# ---- courses whose notebook synthesis a cancel skipped (council C4) ----
+
+
+def _course_with_digest(root: Path, name: str, *, pending: bool, digest: bool = True) -> None:
+    course = root / name
+    (course / "digests").mkdir(parents=True)
+    if digest:
+        (course / "digests" / "2026-11-20.md").write_text("# Lecture\n## Overview\nBody.\n")
+    m = CourseManifest.load(course)
+    m.record(
+        DigestRecord(
+            source_path=f"{name}/a.pdf",
+            source_hash="h",
+            page_count=1,
+            start_page=1,
+            end_page=1,
+            digest_file="digests/2026-11-20.md",
+            model_id="m",
+            processing_path="pdf_images",
+            generate_mode="single",
+            chunk_count=None,
+            digested_at="2026-11-20T00:00:00+00:00",
+        )
+    )
+    m.set_synthesis_pending(pending)
+    m.save()
+
+
+def test_plan_lists_courses_whose_synthesis_is_pending_even_without_sources(tmp_path: Path):
+    _course_with_digest(tmp_path, "Bio", pending=True)
+    _course_with_digest(tmp_path, "Chem", pending=False)
+
+    plan = build_plan(tmp_path, _fast_settings())
+
+    assert plan.pending == []
+    assert plan.synthesis_pending == ["Bio"]
+    assert plan_to_dict(plan)["synthesis_pending"] == ["Bio"]
+
+
+def test_plan_ignores_the_flag_on_a_course_with_no_digests_left(tmp_path: Path):
+    _course_with_digest(tmp_path, "Bio", pending=True, digest=False)
+
+    assert build_plan(tmp_path, _fast_settings()).synthesis_pending == []
+
+
+def test_plan_without_any_flag_has_an_empty_synthesis_list(tmp_path: Path):
+    assert plan_to_dict(build_plan(tmp_path, _fast_settings()))["synthesis_pending"] == []
+
+
+def test_plan_skips_a_class_whose_manifest_cannot_be_read(tmp_path: Path) -> None:
+    gone = tmp_path / "Gone"
+    (gone / "digests").mkdir(parents=True)
+    (gone / "digests" / "2026-01-01.md").write_text("# Old\n")
+    (gone / "arbor-course.json").write_text("<<<<<<< HEAD\n{}\n")
+    plan = build_plan(tmp_path, WorkerSettings())
+    assert plan.pending == []
+    assert plan.synthesis_pending == []

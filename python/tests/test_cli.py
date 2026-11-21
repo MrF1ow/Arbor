@@ -33,9 +33,9 @@ def test_subcommands_registered():
         "update",
         "plan-update",
         "generate",
-        "embed",
-        "embed-search",
     }.issubset(choices)
+    assert "embed" not in choices
+    assert "embed-search" not in choices
 
 
 def test_list_models_default(tmp_path):
@@ -108,6 +108,46 @@ def test_plan_update_lists_pending_sources(tmp_path):
     assert "suggested_start_page" not in data["pending"][0]
 
 
+def test_plan_update_names_courses_whose_notebook_a_cancel_left_unbuilt(tmp_path):
+    from arbor_worker.course_manifest import CourseManifest
+
+    root = tmp_path / "K"
+    course = root / "Cardiology"
+    (course / "digests").mkdir(parents=True)
+    (course / "digests" / "2026-11-20.md").write_text("# Lecture\n## Overview\nBody.\n")
+    manifest = CourseManifest.load(course)
+    manifest.record(
+        _digest_record_for_cli("Cardiology/a.pdf", "digests/2026-11-20.md")
+    )
+    manifest.set_synthesis_pending(True)
+    manifest.save()
+
+    code, out, _ = run(["plan-update", "--root", str(root)])
+
+    assert code == 0
+    data = _json.loads(out)
+    assert data["pending"] == []
+    assert data["synthesis_pending"] == ["Cardiology"]
+
+
+def _digest_record_for_cli(source_path: str, digest_file: str):
+    from arbor_worker.course_manifest import DigestRecord
+
+    return DigestRecord(
+        source_path=source_path,
+        source_hash="h",
+        page_count=1,
+        start_page=1,
+        end_page=1,
+        digest_file=digest_file,
+        model_id="m",
+        processing_path="pdf_images",
+        generate_mode="single",
+        chunk_count=None,
+        digested_at="2026-11-20T00:00:00+00:00",
+    )
+
+
 def test_update_with_plan_file_applies_ranges(tmp_path, monkeypatch):
     monkeypatch.setenv("ARBOR_FAKE_MD", _marked_fake_md(3, 4))
     root = _knowledge_repo_with_pdf(tmp_path, pages=4)
@@ -130,6 +170,39 @@ def test_update_with_plan_file_applies_ranges(tmp_path, monkeypatch):
     assert manifest["records"][0]["start_page"] == 3
     assert manifest["records"][0]["end_page"] == 4
     assert (root / "Biology" / "course.md").is_file()
+
+
+def test_update_with_an_empty_selection_plan_rebuilds_a_pending_notebook(tmp_path, monkeypatch):
+    # What the desktop's Update knowledge writes when no file is pending but a notebook is owed.
+    from arbor_worker.course_manifest import CourseManifest
+
+    monkeypatch.setenv("ARBOR_FAKE_MD", _marked_fake_md(1, 1))
+    root = _knowledge_repo_with_pdf(tmp_path, pages=1)
+    code, _, _ = run(["update", "--root", str(root), "--model", "m", "--provider", "fake"])
+    assert code == 0
+    course = root / "Biology"
+    manifest = CourseManifest.load(course)
+    manifest.set_synthesis_pending(True)
+    manifest.save()
+    (course / "course.md").write_text("# Old notebook\n")
+    plan_file = tmp_path / "plan.json"
+    plan_file.write_text(_json.dumps({"selections": []}))
+
+    code, out, _ = run(
+        [
+            "update",
+            "--root", str(root),
+            "--model", "m",
+            "--provider", "fake",
+            "--plan", str(plan_file),
+        ]
+    )
+
+    assert code == 0
+    types = [_json.loads(line)["type"] for line in out.splitlines() if line.strip()]
+    assert "course_synthesis_done" in types and "nothing_to_process" not in types
+    assert (course / "course.md").read_text() != "# Old notebook\n"
+    assert "synthesis_pending" not in _json.loads((course / "arbor-course.json").read_text())
 
 
 def test_update_without_plan_processes_everything(tmp_path, monkeypatch):

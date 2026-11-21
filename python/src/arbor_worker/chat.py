@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import re
 import unicodedata
 import sqlite3
@@ -7,9 +8,6 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from arbor_worker.course_manifest import CourseManifest
-from arbor_worker.embed import search_chunks
-from arbor_worker.embedder.base import Embedder
-from arbor_worker.embedder.hashed import HashedNgramEmbedder
 from arbor_worker.events import EventEmitter
 from arbor_worker.indexer import DIGEST_KINDS, db_path
 from arbor_worker.page_markers import parse_page_markers
@@ -44,6 +42,17 @@ _METADATA_CONTROL_RE = re.compile(
 )
 
 _TRAILER_LINES = ("supported: true", "supported: false")
+
+SUMMARY_CAP = 2_000
+CHUNK_CAP = 3_000
+
+_STOPWORDS = frozenset(
+    "a about all am an and any are as at be been being but by can could did do does "
+    "for from had has have how i if in into is it its me my of on or our so than "
+    "that the their them then there these they this those to us was we were what "
+    "when where which who whom why will with would you your".split()
+)
+_WORD_SPLIT = re.compile(r"\W+")
 
 FOCUS_TEXT_MAX_CHARS = 4_000
 FOCUS_HEADING_MAX_CHARS = 200
@@ -226,7 +235,7 @@ def _h1_section(markdown: str) -> tuple[str, str, int]:
 def _best_h2_section(
     markdown: str, terms: list[str]
 ) -> tuple[str, str, int]:
-    terms_fold = [term.casefold() for term in terms if term]
+    patterns = [_term_pattern(term) for term in terms if term]
     best: tuple[int, str, str, int] | None = None
     for match in _HEADING_LINE.finditer(markdown):
         if len(match.group(1)) != 2:
@@ -239,8 +248,7 @@ def _best_h2_section(
                 end = later.start()
                 break
         body = markdown[match.end() : end].strip()
-        hay = body.casefold()
-        hits = sum(hay.count(term) for term in terms_fold)
+        hits = sum(len(pattern.findall(body)) for pattern in patterns)
         if hits <= 0:
             continue
         if best is None or hits > best[0]:
@@ -262,11 +270,107 @@ def _source_file(course_dir: Path, digest_path: str, course: str) -> str | None:
     return found
 
 
+def _chat_terms(question: str) -> list[str]:
+    tokens = [token for token in _WORD_SPLIT.split(question.lower()) if token]
+    terms: list[str] = []
+    for token in tokens:
+        if token in _STOPWORDS or len(token) < 2 or token in terms:
+            continue
+        terms.append(token)
+    return terms or tokens
+
+
 def _fts_query(query: str) -> str | None:
-    terms = query.split()
+    terms = _chat_terms(query)
     if not terms:
         return None
-    return " ".join(f'"{term.replace(chr(34), "")}"' for term in terms)
+    return " OR ".join(f'"{term}"' for term in terms)
+
+
+def _term_idf(conn: sqlite3.Connection, course: str, terms: list[str]) -> dict[str, float]:
+    total = conn.execute(
+        "SELECT count(*) FROM search_index WHERE course = ?", (course,)
+    ).fetchone()[0]
+    idf: dict[str, float] = {}
+    for term in terms:
+        df = conn.execute(
+            "SELECT count(*) FROM search_index WHERE search_index MATCH ? AND course = ?",
+            (_fts_match_expr(f'"{term}"'), course),
+        ).fetchone()[0]
+        idf[term] = math.log((total + 1) / (df + 0.5))
+    return idf
+
+
+def _term_pattern(term: str) -> re.Pattern[str]:
+    """Whole-word matcher for a question term, with plural and possessive forms."""
+    base = term
+    if len(term) > 3 and term.endswith("s") and not term.endswith("ss"):
+        base = term[:-1]
+    return re.compile(
+        r"\b" + re.escape(base) + r"(?:['\u2019]s|s|es)?\b", re.IGNORECASE
+    )
+
+
+def _window_start(text: str, terms: list[str], idf: dict[str, float]) -> int:
+    """Start of the CHUNK_CAP window with the most rare-term weight.
+
+    Candidates are each hit's start and that start minus CHUNK_CAP // 3, clamped
+    to the section. A window scores the idf sum of the distinct terms with a
+    whole hit inside it; ties go to more hits, then the earlier start. One sweep
+    over the sorted hits, so the work is linear in the hits, not hits squared.
+    """
+    hits: list[tuple[int, int, str]] = []
+    for term in terms:
+        for match in _term_pattern(term).finditer(text):
+            hits.append((match.start(), match.end(), term))
+    if not hits:
+        return 0
+    last = max(0, len(text) - CHUNK_CAP)
+    candidates = sorted(
+        {
+            min(max(start, 0), last)
+            for pos, _, _ in hits
+            for start in (pos, pos - CHUNK_CAP // 3)
+        }
+    )
+    ordered_terms = list(dict.fromkeys(terms))
+    by_start = sorted(range(len(hits)), key=lambda i: hits[i][0])
+    by_end = sorted(range(len(hits)), key=lambda i: hits[i][1])
+    inside = [False] * len(hits)
+    per_term = dict.fromkeys(ordered_terms, 0)
+    count = 0
+    next_start = next_end = 0
+    best_key: tuple[float, int] | None = None
+    best_start = 0
+    for start in candidates:
+        # A hit enters once its end fits the window, and only if it begins in it.
+        while next_end < len(by_end) and hits[by_end[next_end]][1] <= start + CHUNK_CAP:
+            i = by_end[next_end]
+            next_end += 1
+            if hits[i][0] >= start:
+                inside[i] = True
+                per_term[hits[i][2]] += 1
+                count += 1
+        # A hit leaves once the window starts past it.
+        while next_start < len(by_start) and hits[by_start[next_start]][0] < start:
+            i = by_start[next_start]
+            next_start += 1
+            if inside[i]:
+                inside[i] = False
+                per_term[hits[i][2]] -= 1
+                count -= 1
+        key = (sum(idf.get(t, 0.0) for t in ordered_terms if per_term[t]), count)
+        if best_key is None or key > best_key:
+            best_key, best_start = key, start
+    return best_start
+
+
+def _window_text(text: str, terms: list[str], idf: dict[str, float]) -> str:
+    """Cut a long section to the CHUNK_CAP window holding the most rare-term weight."""
+    if len(text) <= CHUNK_CAP:
+        return text
+    start = _window_start(text, terms, idf)
+    return text[start : start + CHUNK_CAP]
 
 
 def _fts_match_expr(fts_query: str) -> str:
@@ -285,6 +389,7 @@ def _fts_search(
     db = db_path(root)
     if not db.is_file():
         return []
+    terms = _chat_terms(question)
     fts_query = _fts_query(question)
     if fts_query is None:
         return []
@@ -299,6 +404,7 @@ def _fts_search(
         params.extend(sorted(digest_paths))
     params.append(limit)
     with sqlite3.connect(uri, uri=True) as conn:
+        idf = _term_idf(conn, course, terms)
         rows = conn.execute(
             f"""
             SELECT path, title
@@ -312,7 +418,6 @@ def _fts_search(
         ).fetchall()
     hits = []
     course_dir = root / course
-    terms = question.split()
     for rel_path, _title in rows:
         rel = Path(rel_path).as_posix()
         if rel.endswith("/course.md") or rel.endswith("course.md"):
@@ -321,60 +426,19 @@ def _fts_search(
         if not abs_path.is_file():
             continue
         markdown = abs_path.read_text(encoding="utf-8", errors="replace")
-        text, heading, offset = _best_h2_section(markdown, terms)
+        section, heading, offset = _best_h2_section(markdown, terms)
+        text = _window_text(section, terms, idf)
         hits.append(
             {
                 "path": rel,
                 "heading": heading,
                 "text": text,
+                "truncated": len(text) < len(section),
                 "offset": offset,
                 "markdown": markdown,
             }
         )
     return hits
-
-
-def _semantic_hits(
-    root: Path,
-    course: str,
-    question: str,
-    embedder: Embedder,
-    *,
-    digest_paths: set[str] | None = None,
-) -> list[SourceChunk]:
-    raw = search_chunks(
-        root,
-        question,
-        limit=8,
-        embedder=embedder,
-        course=course,
-        digest_paths=digest_paths,
-    )
-    course_dir = root / course
-    chunks: list[SourceChunk] = []
-    for hit in raw:
-        digest_path = str(hit["path"])
-        heading = str(hit["title"])
-        abs_path = root / digest_path
-        if not abs_path.is_file():
-            continue
-        markdown = abs_path.read_text(encoding="utf-8", errors="replace")
-        section = _section_for_heading(markdown, heading)
-        if section is None:
-            continue
-        text, offset = section
-        hid = heading_id(heading)
-        chunks.append(
-            SourceChunk(
-                digest_path=digest_path,
-                heading_id=hid,
-                heading=heading,
-                page_range=_page_range_at_offset(markdown, offset),
-                source_file=_source_file(course_dir, digest_path, course),
-                text=text,
-            )
-        )
-    return chunks
 
 
 def _fts_chunks(
@@ -399,8 +463,60 @@ def _fts_chunks(
                 page_range=_page_range_at_offset(markdown, offset),
                 source_file=_source_file(course_dir, digest_path, course),
                 text=hit["text"],
+                truncated=hit["truncated"],
             )
         )
+    return chunks
+
+
+def _sections_in_order(markdown: str) -> list[tuple[str, str, int]]:
+    """Every H2 section with a body, in document order, else the top of the document."""
+    sections: list[tuple[str, str, int]] = []
+    for match in _HEADING_LINE.finditer(markdown):
+        if len(match.group(1)) != 2:
+            continue
+        end = len(markdown)
+        for later in _HEADING_LINE.finditer(markdown, match.end()):
+            if len(later.group(1)) <= 2:
+                end = later.start()
+                break
+        body = markdown[match.end() : end].strip()
+        if body:
+            sections.append((body, match.group(2).strip(), match.start()))
+    return sections or [_h1_section(markdown)]
+
+
+def _opening_chunks(
+    root: Path, course: str, digest_paths: list[str], share: int
+) -> list[SourceChunk]:
+    """A ticked lecture the question's words missed: its sections in order, each cut to
+    CHUNK_CAP, until it has placed `share` chars (its even part of the budget)."""
+    course_dir = root / course
+    chunks: list[SourceChunk] = []
+    for digest_path in digest_paths:
+        abs_path = root / digest_path
+        if not abs_path.is_file():
+            continue
+        markdown = abs_path.read_text(encoding="utf-8", errors="replace")
+        used = 0
+        for section, heading, offset in _sections_in_order(markdown):
+            if used >= share:
+                break
+            text = section[: min(CHUNK_CAP, share - used)]
+            if not text:
+                continue
+            used += len(text)
+            chunks.append(
+                SourceChunk(
+                    digest_path=digest_path,
+                    heading_id=heading_id(heading),
+                    heading=heading,
+                    page_range=_page_range_at_offset(markdown, offset),
+                    source_file=_source_file(course_dir, digest_path, course),
+                    text=text,
+                    truncated=len(text) < len(section),
+                )
+            )
     return chunks
 
 
@@ -419,23 +535,6 @@ def _course_summary_chunk(root: Path, course: str) -> SourceChunk | None:
         source_file=None,
         text=text,
     )
-
-
-def _merge_chunks(semantic: list[SourceChunk], fts: list[SourceChunk]) -> list[SourceChunk]:
-    seen: dict[tuple[str, str], SourceChunk] = {}
-    order: list[tuple[str, str]] = []
-    for chunk in semantic:
-        key = (chunk.digest_path, chunk.heading_id)
-        if key not in seen:
-            order.append(key)
-        seen[key] = chunk
-    for chunk in fts:
-        key = (chunk.digest_path, chunk.heading_id)
-        if key in seen:
-            continue
-        seen[key] = chunk
-        order.append(key)
-    return [seen[key] for key in order]
 
 
 def _lecture_count(chunks: list[SourceChunk]) -> int:
@@ -644,7 +743,6 @@ def answer(
     provider: CliProvider,
     model: str,
     *,
-    embedder: Embedder | None = None,
     budget_chars: int = 12_000,
     digests: list[str] | None = None,
     focus: ChatFocus | None = None,
@@ -655,7 +753,6 @@ def answer(
     if not course_dir.is_dir():
         raise FileNotFoundError(f"course not found: {course}")
 
-    embedder = embedder or HashedNgramEmbedder()
     if digests:
         prefix = f"{course}/digests/"
         for path in digests:
@@ -669,11 +766,9 @@ def answer(
     digest_filter = set(digests) if digests else None
 
     summary = None if scoped else _course_summary_chunk(root, course)
-    semantic = _semantic_hits(
-        root, course, question, embedder, digest_paths=digest_filter
-    )
+    if summary is not None and len(summary.text) > SUMMARY_CAP:
+        summary = replace(summary, text=summary.text[:SUMMARY_CAP], truncated=True)
     fts = _fts_chunks(root, course, question, digest_paths=digest_filter)
-    merged = _merge_chunks(semantic, fts)
 
     candidates: list[SourceChunk] = []
     pin_first = False
@@ -682,7 +777,14 @@ def answer(
         pin_first = True
     elif summary is not None:
         candidates.append(summary)
-    candidates.extend(merged)
+    candidates.extend(fts)
+    if digests:
+        # A scoped ask always places text from the ticked lectures: one the
+        # question's words never hit still contributes its opening (plan Q16).
+        covered = {chunk.digest_path for chunk in candidates}
+        uncovered = [path for path in dict.fromkeys(digests) if path not in covered]
+        share = budget_chars // max(1, len(dict.fromkeys(digests)))
+        candidates.extend(_opening_chunks(root, course, uncovered, share))
 
     placed = _apply_budget(candidates, budget_chars, pin_first=pin_first)
     placed = [

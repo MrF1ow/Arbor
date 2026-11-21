@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from arbor_worker import cli
-from arbor_worker.chat import _fts_match_expr, _fts_query, _fts_search
+from arbor_worker.chat import _fts_match_expr, _fts_search
 from arbor_worker.events import parse_lines
 from arbor_worker.indexer import index_course, open_db, reindex_root
 from tests.ui_overhaul_fixtures import FAKE_FLASHCARDS_INTRO_JSON, build_ui_overhaul_root
@@ -22,9 +22,10 @@ def _search_hits(
     kinds: tuple[str, ...] | None = None,
     limit: int = 25,
 ):
-    fts = _fts_query(query)
-    assert fts is not None
-    match_expr = _fts_match_expr(fts)
+    # The index test keeps its own AND query: every word of the query must match.
+    words = [word.replace('"', "") for word in query.split()]
+    assert words
+    match_expr = _fts_match_expr(" ".join(f'"{word}"' for word in words))
     clauses = ["search_index MATCH ?"]
     params: list[object] = [match_expr]
     if course is not None:
@@ -375,7 +376,7 @@ def test_multi_word_query_ignores_metadata_in_either_order(tmp_path: Path):
     assert len(_search_hits(root, "light reactions")) == 1
 
 
-def test_chat_fts_multi_word_query_ignores_metadata(tmp_path: Path):
+def test_chat_fts_query_of_only_metadata_words_returns_nothing(tmp_path: Path):
     root = tmp_path / "Knowledge"
     course = root / "Helix"
     (course / "digests").mkdir(parents=True)
@@ -383,11 +384,26 @@ def test_chat_fts_multi_word_query_ignores_metadata(tmp_path: Path):
         "# Lecture\n\n## Overview\nPlain words only.\n"
     )
     index_course(root, "Helix")
-    assert _fts_search(root, "Helix", "plain digest", 8) == []
-    assert _fts_search(root, "Helix", "digest plain", 8) == []
-    assert _fts_search(root, "Helix", "plain Helix", 8) == []
-    assert _fts_search(root, "Helix", "Helix plain", 8) == []
-    assert _fts_search(root, "Helix", "plain words", 8)
+    # "digest" is the kind, "Helix" the course, "digests" part of the path.
+    assert _fts_search(root, "Helix", "digest", 8) == []
+    assert _fts_search(root, "Helix", "digest Helix", 8) == []
+    assert _fts_search(root, "Helix", "Helix digests", 8) == []
+
+
+def test_chat_fts_body_word_with_metadata_words_matches_only_body_rows(tmp_path: Path):
+    root = tmp_path / "Knowledge"
+    course = root / "Helix"
+    (course / "digests").mkdir(parents=True)
+    (course / "digests" / "lecture.md").write_text(
+        "# Lecture\n\n## Overview\nPlain words only.\n"
+    )
+    (course / "digests" / "other.md").write_text(
+        "# Other\n\n## Overview\nNothing relevant here.\n"
+    )
+    index_course(root, "Helix")
+    for question in ("plain digest", "digest plain", "plain Helix", "Helix plain"):
+        hits = _fts_search(root, "Helix", question, 8)
+        assert [hit["path"] for hit in hits] == ["Helix/digests/lecture.md"], question
 
 
 def test_corrupt_manifest_does_not_abort_reindex(tmp_path: Path):

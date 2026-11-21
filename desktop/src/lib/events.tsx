@@ -271,11 +271,6 @@ export function handleWorkerProgressSideEffects(
         });
       }
       break;
-    case "embed_done":
-      if (ctx.root) {
-        void queryClient.invalidateQueries({ queryKey: ["search", ctx.root] });
-      }
-      break;
     default:
       break;
   }
@@ -305,7 +300,7 @@ export function WorkerEventsBridge() {
   const finish = useJobStore((s) => s.finish);
   const startJob = useJobStore((s) => s.start);
   const setStep = useJobStore((s) => s.setStep);
-  const jobStateRef = useRef({ pendingAutoEmbed: false, pendingAutoQuiz: false });
+  const jobStateRef = useRef({ pendingAutoQuiz: false });
   const ctxRef = useRef<WorkerEventsBridgeContext>({
     activeRoot: null,
     providerId: "codex",
@@ -432,10 +427,6 @@ export function WorkerEventsBridge() {
                 ),
               );
               ctx.startJob(jobId, { label: JOB_START_LABEL.quiz, root: ctx.activeRoot });
-            },
-            startEmbedJob: async (root) => {
-              const jobId = await invoke<string>("start_embed_job", { root, force: false });
-              ctx.startJob(jobId, { label: JOB_START_LABEL.embed, root });
             },
           },
           jobStateRef.current,

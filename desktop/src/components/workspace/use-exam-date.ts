@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
 import { invoke } from "~/lib/ipc";
 import { useCourseMeta } from "~/lib/queries/course-meta";
@@ -54,55 +54,53 @@ export function isCommittableExamDate(value: string): boolean {
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 }
 
+/** A saved `YYYY-MM-DD` as a local calendar date (no UTC conversion), or `undefined` when it is empty or not a real date. */
+export function parseExamDate(value: string): Date | undefined {
+  if (!isCommittableExamDate(value)) {
+    return undefined;
+  }
+  const [year, month, day] = value.split("-").map(Number) as [number, number, number];
+  return new Date(year, month - 1, day);
+}
+
+/** A picked local calendar day as `YYYY-MM-DD`, from the local fields (never `toISOString`, which shifts the day near midnight UTC). */
+export function toExamDate(date: Date): string {
+  const pad = (n: number, width: number) => String(n).padStart(width, "0");
+  return `${pad(date.getFullYear(), 4)}-${pad(date.getMonth() + 1, 2)}-${pad(date.getDate(), 2)}`;
+}
+
 /**
- * The exam date input: what is typed stays a draft, and only a full valid date (or an emptied
- * field) that differs from the saved one is written, on blur or Enter. A date input reports every
- * digit of the year as a full date (`0002-…`, `0020-…`), so saving on change would send each; a
- * draft that is not committable stays in the field and is shown invalid. A failed write shows an
- * error and the next blur or Enter retries it. The field follows the last value the user
- * committed until the refetch of that write has landed (`pending`), so a refetch of an earlier
- * write arriving mid-write cannot undo the latest commit. The draft is dropped when the saved
- * date changes (another device updated it).
+ * The exam date for the calendar popover: a picked day (or Clear, `""`) that differs from the saved
+ * one is written at once. A failed write shows an error and picking again retries it. The field
+ * follows the last value committed until the refetch of that write has landed (`pending`), so a
+ * refetch of an earlier write arriving mid-write cannot undo the latest commit.
  */
 export function useExamDateField(root: string | null, course: string, readOnly: boolean) {
   const saved = useExamDate(root, course) ?? "";
   const { mutateAsync: write } = useSetExamDate(root, course);
-  const [draft, setDraft] = useState<string | null>(null);
-  const [seenSaved, setSeenSaved] = useState(saved);
   // The last committed value (and its class) until its write's refetch has landed.
   const [pendingWrite, setPendingWrite] = useState<{ course: string; value: string } | null>(null);
   const pending = pendingWrite?.course === course ? pendingWrite.value : null;
   const latestWrite = useRef(0);
-  const [invalid, setInvalid] = useState(false);
   const [error, setError] = useState(false);
-  if (seenSaved !== saved) {
-    setSeenSaved(saved);
-    setDraft(null);
-  }
-  const badInput = useRef(false);
 
-  const commit = () => {
-    if (readOnly || !root || draft === null) {
+  const commit = (value: string) => {
+    if (readOnly || !root) {
       return;
     }
-    if (badInput.current) {
-      setInvalid(true);
+    if (value === (pending ?? saved)) {
       return;
     }
-    if (draft === (pending ?? saved)) {
-      return;
-    }
-    if (draft !== "" && !isCommittableExamDate(draft)) {
-      setInvalid(true);
+    if (value !== "" && !isCommittableExamDate(value)) {
       return;
     }
     latestWrite.current += 1;
     const mine = latestWrite.current;
-    setPendingWrite({ course, value: draft });
-    write(draft).then(
+    setError(false);
+    setPendingWrite({ course, value });
+    write(value).then(
       () => {
         if (latestWrite.current === mine) {
-          setError(false);
           setPendingWrite(null);
         }
       },
@@ -115,30 +113,11 @@ export function useExamDateField(root: string | null, course: string, readOnly: 
     );
   };
 
-  // A date picked and then left unblurred (navigating away) still saves.
-  const commitRef = useRef(commit);
-  useEffect(() => {
-    commitRef.current = commit;
-  });
-  useEffect(() => () => commitRef.current(), []);
-
   return {
-    value: draft ?? pending ?? saved,
-    /** `unfinished`: the picker holds a partly typed date, which reports an empty value. */
-    onChange: (value: string, unfinished = false) => {
-      badInput.current = unfinished;
-      setDraft(value);
-      setInvalid(false);
-      setError(false);
-    },
-    onBlur: commit,
-    onKeyDown: (event: { key: string }) => {
-      if (event.key === "Enter") {
-        commit();
-      }
-    },
-    /** The draft is not a date that can be saved (shown after a blur or Enter, not while typing). */
-    invalid,
+    /** The date shown: the last one committed until its refetch lands, else the saved one (`""` when none). */
+    value: pending ?? saved,
+    /** Save a `YYYY-MM-DD`, or clear with `""`. */
+    commit,
     /** The last write failed. */
     error,
     /** The saved date, for the header and the plan request. */

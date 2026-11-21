@@ -8,7 +8,15 @@ Package version for the worker, desktop, and Tauri app. See [Version numbering](
 
 ## Unreleased
 
-Nothing pending above `0.6.0`.
+- **Search finds what you typed.** A multi-word search matches the exact phrase (case-insensitive; quotes and extra spaces don't matter), so `minimal change disease` no longer lists notes that only contain the three words apart. With no exact match it says `No notes contain "…"` and points you to Ask. Result snippets are plain text, and the palette fits its window.
+- **Semantic search is removed.** The Semantic chip, the Tab toggle, the "Embed after Update" setting and the embed job are gone; opening a library deletes its old `.arbor/vectors.sqlite`. Old settings files and old embed job rows still load.
+- **Ask finds the lecture a question is about.** It ranks notes that contain any of the question's words, keeps the class overview to a short excerpt, and places the part of each lecture where the question's rarer words meet. An Ask scoped to ticked lectures always includes them.
+- **Lectures list in source-file order** within each unit (01, 02, 03 …), and Recommended picks the first unreviewed one in that order.
+- **An unfinished lecture reopens where you stopped.** Read and never-opened lectures open at the top.
+- **Cancel stops the running Claude call** within about 2 seconds. Finished lectures are committed, the lecture in progress leaves nothing behind and is redone next time, and an existing class notebook is kept and rebuilt on the next Update. A job left "Running" by a closed app now shows as Cancelled or Failed with "Arbor closed before this job finished".
+- **Arbor started from a Claude Code terminal can use Claude.** The app strips Claude Code's session variables from the worker it starts.
+- **The exam date is Arbor's own calendar** on macOS and Linux, reads "No exam date" when empty, and offers Clear.
+- **The "Files to process" dialog scrolls** and keeps its buttons visible with many files.
 
 ## 0.6.0 — 2026-11-14
 

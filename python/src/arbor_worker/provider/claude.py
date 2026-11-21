@@ -19,6 +19,7 @@ from arbor_worker.provider.base import (
     record_usage,
     usage_tokens,
 )
+from arbor_worker.provider.cancel import run_cli_cancellable
 from arbor_worker.provider.cli_stream import run_popen_stream
 from arbor_worker.provider.errors import cli_process_failure, message_failure
 from arbor_worker.provider.stream_json import iter_stream_json
@@ -148,14 +149,24 @@ class ClaudeCliProvider:
         argv = self.build_argv(request)
         env = os.environ.copy()
         env["PATH"] = gui_path()
-        proc = self._runner(
-            argv,
-            input=self._stdin_payload(request),
-            capture_output=True,
-            text=True,
-            cwd=request.cwd,
-            env=env,
-        )
+        if request.cancel_check is not None:
+            proc = run_cli_cancellable(
+                self._popen,
+                argv,
+                input=self._stdin_payload(request),
+                cwd=request.cwd,
+                env=env,
+                cancel_check=request.cancel_check,
+            )
+        else:
+            proc = self._runner(
+                argv,
+                input=self._stdin_payload(request),
+                capture_output=True,
+                text=True,
+                cwd=request.cwd,
+                env=env,
+            )
         if request.image_paths:
             return self._result_from_stream(proc)
         if proc.returncode != 0:
@@ -228,5 +239,6 @@ class ClaudeCliProvider:
             on_delta=on_delta,
             parse_stdout=parse_stdout,
             label="claude",
+            cancel_check=request.cancel_check,
         )
         return ProviderResult(markdown=markdown, **usage_tokens(usage))

@@ -251,14 +251,14 @@ export function GalleryPrimitives() {
             <DialogTrigger render={<Button variant="outline" />}>Dialog</DialogTrigger>
             <DialogContent>
               <DialogTitle>Update knowledge</DialogTitle>
-              <p className="text-sm text-muted-foreground">Rebuild embeddings for this course.</p>
+              <p className="text-sm text-muted-foreground">Rebuild the notes for this course.</p>
               <div className="flex items-center gap-2">
                 <Select
                   defaultValue="full"
                   items={[
                     { value: "full", label: "Full rebuild" },
                     { value: "incremental", label: "Incremental" },
-                    { value: "embeddings", label: "Embeddings only" },
+                    { value: "index", label: "Index only" },
                   ]}
                 >
                   <SelectTrigger className="w-40">
@@ -267,7 +267,7 @@ export function GalleryPrimitives() {
                   <SelectContent>
                     <SelectItem value="full">Full rebuild</SelectItem>
                     <SelectItem value="incremental">Incremental</SelectItem>
-                    <SelectItem value="embeddings">Embeddings only</SelectItem>
+                    <SelectItem value="index">Index only</SelectItem>
                   </SelectContent>
                 </Select>
                 <IconButton icon={InfoIcon} label="Rebuild scope help" variant="ghost" />
@@ -434,7 +434,7 @@ export function GalleryPrimitives() {
         <div className="mt-6 max-w-lg">
           <SettingsSection title="Worker" description="Local automation settings.">
             <SettingRow
-              label="Auto-embed"
+              label="Auto-update"
               description="Watch incoming PDFs."
               control={<Switch defaultChecked />}
             />

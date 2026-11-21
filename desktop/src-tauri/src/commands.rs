@@ -1,4 +1,5 @@
 use crate::auth_cache;
+use crate::db;
 use crate::usage_cache;
 use crate::jobs::{self, JobTrigger, SharedCoordinator};
 use crate::search::{self, SearchHit};
@@ -776,7 +777,10 @@ pub struct KnowledgeSettings {
     pub delete_sources_after_digest: bool,
     #[serde(default)]
     pub auto_update: bool,
-    #[serde(default)]
+    /// Retired setting. Old settings.json files still carry it, so it is read
+    /// and dropped; it is never written back.
+    #[serde(default, skip_serializing)]
+    #[allow(dead_code)]
     pub auto_embed: bool,
     #[serde(default = "default_true")]
     pub watch_enabled: bool,
@@ -2046,7 +2050,7 @@ pub async fn start_chat(
                 .iter()
                 .map(|(key, value)| (key.as_str(), value.as_str()))
                 .collect();
-            let mut command = Command::new(&argv[0]);
+            let mut command = worker::worker_command(&argv[0]);
             command
                 .args(&argv[1..])
                 .env("PATH", worker::process_path_for_spawn())
@@ -2096,6 +2100,13 @@ pub async fn start_chat(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_remote_update_with_no_files_is_refused_before_a_job_starts() {
+        assert!(super::remote_update_needs_files(true, 0).is_err());
+        assert!(super::remote_update_needs_files(true, 2).is_ok());
+        assert!(super::remote_update_needs_files(false, 0).is_ok());
+    }
+
     #[test]
     fn append_card_blocked_only_during_a_remote_job() {
         assert!(super::append_card_blocked(true, true).is_some());
@@ -2241,6 +2252,17 @@ mod tests {
         assert!(!ks.auto_generate.flashcards);
         assert!(!ks.auto_generate.quiz);
         assert!(!ks.sync_after_commit);
+    }
+
+    #[test]
+    fn old_settings_with_auto_embed_still_load_and_drop_the_key() {
+        let old: KnowledgeSettings =
+            serde_json::from_str(r#"{"auto_embed": true, "auto_update": true}"#).unwrap();
+        assert!(old.auto_embed);
+        assert!(old.auto_update);
+        let written = serde_json::to_value(&old).unwrap();
+        assert!(written.get("auto_embed").is_none());
+        assert_eq!(written["auto_update"], true);
     }
 
     #[test]
@@ -3382,42 +3404,6 @@ pub async fn search_knowledge(
 }
 
 #[tauri::command]
-pub async fn search_semantic(
-    app: tauri::AppHandle,
-    root: String,
-    query: String,
-    limit: Option<u32>,
-) -> Result<Vec<SearchHit>, String> {
-    spawn_blocking_cmd(move || {
-        let limit_value = limit.unwrap_or(25).to_string();
-        let sub_args = [
-            "embed-search",
-            "--root",
-            root.as_str(),
-            "--query",
-            query.as_str(),
-            "--limit",
-            limit_value.as_str(),
-            "--provider",
-            "hashed",
-        ];
-        let pairs = worker_env_pairs(&app, &sub_args);
-        let refs: Vec<(&str, &str)> = pairs
-            .iter()
-            .map(|(key, value)| (key.as_str(), value.as_str()))
-            .collect();
-        search::search_semantic_documents(
-            &repo_dir(&app),
-            Path::new(&root),
-            &query,
-            limit.unwrap_or(25),
-            &refs,
-        )
-    })
-    .await
-}
-
-#[tauri::command]
 pub async fn reindex_knowledge(app: tauri::AppHandle, root: String) -> Result<serde_json::Value, String> {
     spawn_blocking_cmd(move || {
         run_worker_json_app(&app, &["reindex", "--root", &root])
@@ -3438,14 +3424,33 @@ pub async fn start_folder_watch(app: tauri::AppHandle, root: String) -> Result<(
 #[tauri::command]
 pub async fn init_arbor_db(root: String) -> Result<(), String> {
     spawn_blocking_cmd_unit(move || {
-        jobs::ensure_db(Path::new(&root))
+        jobs::ensure_db(Path::new(&root))?;
+        db::remove_stale_vector_index(Path::new(&root));
+        Ok(())
     })
     .await
 }
 
 #[tauri::command]
-pub async fn list_jobs(root: String, limit: Option<u32>) -> Result<Vec<jobs::JobSummary>, String> {
+pub async fn list_jobs(
+    app: tauri::AppHandle,
+    root: String,
+    limit: Option<u32>,
+) -> Result<Vec<jobs::JobSummary>, String> {
     spawn_blocking_cmd(move || {
+        // Rows still `running` from an app that closed are ended here, under the
+        // coordinator lock so a job being started cannot be mistaken for one of them.
+        {
+            let coordinator = app.state::<SharedCoordinator>();
+            let guard = coordinator.inner().lock().map_err(|e| e.to_string())?;
+            if let Err(error) = jobs::reconcile_library(
+                Path::new(&root),
+                guard.active_job_id(),
+                guard.app_started_at(),
+            ) {
+                eprintln!("could not end stale jobs: {error}");
+            }
+        }
         jobs::list_jobs(Path::new(&root), limit.unwrap_or(20))
     })
     .await
@@ -3457,6 +3462,18 @@ pub async fn get_job_events(root: String, job_id: String) -> Result<Vec<jobs::Jo
         jobs::job_events(Path::new(&root), &job_id)
     })
     .await
+}
+
+/// An Update with no files only rebuilds class notebooks a cancel left unbuilt. A remote
+/// worker syncs the classes named by the selected files, so it has nothing to sync and
+/// could not bring a rebuilt notebook back: that case runs on this computer only.
+fn remote_update_needs_files(remote: bool, selections: usize) -> Result<(), String> {
+    if remote && selections == 0 {
+        return Err("A class notebook left unbuilt by a cancelled Update is rebuilt on this computer. \
+Set this library's worker to This computer in Settings → Workers, or add a file to process."
+            .to_string());
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -3471,6 +3488,7 @@ pub async fn start_update(
     spawn_blocking_cmd(move || {
         let settings = settings::load(&app);
         let transport = settings::transport_for_root(&settings, &root)?;
+        remote_update_needs_files(matches!(transport, WorkerTransport::Ssh { .. }), selections.len())?;
         let provider_id = default_provider_id(provider);
         let label = settings::provider_label(&provider_id);
         let auth = cached_auth(&app, &transport, &provider_id, false)?;
@@ -3802,46 +3820,6 @@ pub async fn start_study_job(
             }
         }
         post_begin.disarm();
-        Ok(job_id)
-    })
-    .await
-}
-
-#[tauri::command]
-pub async fn start_embed_job(
-    app: tauri::AppHandle,
-    root: String,
-    force: Option<bool>,
-) -> Result<String, String> {
-    spawn_blocking_cmd(move || {
-        let force = force.unwrap_or(false);
-        let plan_json = serde_json::to_string(&serde_json::json!({
-            "op": "embed",
-            "force": force,
-        }))
-        .map_err(|error| error.to_string())?;
-        let knowledge_root = Path::new(&root);
-        let job_id = jobs::create_job(knowledge_root, JobTrigger::Manual, "hashed", &plan_json)?;
-
-        {
-            let mut guard = app
-                .state::<SharedCoordinator>()
-                .inner()
-                .lock()
-                .map_err(|error| error.to_string())?;
-            if let Err(error) = guard.try_begin(&job_id, &root) {
-                let _ = jobs::finish_job(
-                    knowledge_root,
-                    &job_id,
-                    jobs::JobStatus::Failed,
-                    -1,
-                    Some(error.clone()),
-                );
-                return Err(error);
-            }
-        }
-
-        worker::spawn_embed_stream(app.clone(), repo_dir(&app), root, force, job_id.clone());
         Ok(job_id)
     })
     .await

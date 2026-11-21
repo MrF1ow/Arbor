@@ -263,7 +263,6 @@ export const fixturePendingSources = [
 export const fixtureKnowledgeSettings = {
   delete_sources_after_digest: false,
   auto_update: true,
-  auto_embed: true,
   watch_enabled: true,
   auto_generate: { flashcards: true, quiz: true },
   sync_after_commit: false,

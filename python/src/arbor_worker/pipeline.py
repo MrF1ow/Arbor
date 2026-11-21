@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 
 from arbor_worker.alignment import PageRange
 from arbor_worker.cache import CacheDir, ensure_gitignored
-from arbor_worker.chunk_generate import chunked_generate
+from arbor_worker.chunk_generate import ChunkCancelled, chunked_generate
 from arbor_worker.course_manifest import CourseManifest, DigestRecord, SourceFingerprintState
 from arbor_worker.course_synthesis import build_course_index, build_course_toc, synthesize_course
 from arbor_worker.digest import validate_digest
@@ -22,7 +23,7 @@ from arbor_worker.page_markers import PageRange as MarkerPageRange
 from arbor_worker.planning import SelectedSource, apply_selections, build_plan
 from arbor_worker.prepare import prepare_source, PrepareResult
 from arbor_worker.provider.base import CliProvider
-from arbor_worker.provider.errors import provider_failure_event_fields
+from arbor_worker.provider.errors import ProviderCancelled, provider_failure_event_fields
 from arbor_worker.settings import WorkerSettings
 from arbor_worker.windowing import clip_window
 
@@ -48,6 +49,13 @@ class RunResult:
 
 def _cancel_requested(cancel_file: Path | None) -> bool:
     return cancel_file is not None and cancel_file.exists()
+
+
+def _cancel_check(cancel_file: Path | None) -> Callable[[], bool] | None:
+    """What a provider call polls to stop early; None when the run cannot be cancelled."""
+    if cancel_file is None:
+        return None
+    return lambda: _cancel_requested(cancel_file)
 
 
 def _range_pairs(ranges: list[PageRange]) -> list[list[int]]:
@@ -98,6 +106,45 @@ def _write_markdown(path: Path, markdown: str) -> None:
     path.write_text(markdown if markdown.endswith("\n") else markdown + "\n")
 
 
+class _Cancelled(Exception):
+    pass
+
+
+class _SourceUndo:
+    """What one source wrote, so a cancel puts all of it back (plan Q21, Q30).
+
+    Files the source created are deleted, digests it rewrote in place get their
+    old bytes back, and the manifest returns to its state before the source.
+    """
+
+    def __init__(self, manifest: CourseManifest):
+        self._manifest = manifest
+        self._snapshot = manifest.snapshot()
+        self._created: list[tuple[Path, bool]] = []
+        self._rewritten: dict[Path, bytes] = {}
+
+    def write(self, path: Path, markdown: str) -> None:
+        if path in self._rewritten or any(path == created for created, _ in self._created):
+            pass
+        elif path.is_file():
+            self._rewritten[path] = path.read_bytes()
+        else:
+            self._created.append((path, path.parent.is_dir()))
+        _write_markdown(path, markdown)
+
+    def rollback(self) -> None:
+        for path, data in self._rewritten.items():
+            path.write_bytes(data)
+        for path, parent_existed in reversed(self._created):
+            path.unlink(missing_ok=True)
+            if not parent_existed:
+                try:
+                    path.parent.rmdir()
+                except OSError:
+                    pass
+        self._manifest.restore(self._snapshot)
+
+
 def _digest_one_source(
     *,
     root: Path,
@@ -110,7 +157,9 @@ def _digest_one_source(
     cancel_file: Path | None,
     manifest: CourseManifest,
     course_abs: Path,
+    undo: _SourceUndo,
 ) -> tuple[list[str], set[int], str]:
+    cancel_check = _cancel_check(cancel_file)
     abs_source = root / sel.path
     course_rel = sel.course
     successful_pages: set[int] = set()
@@ -202,9 +251,12 @@ def _digest_one_source(
                         prep=prep,
                         existing_markdown=existing,
                         cwd=course_abs,
+                        cancel_check=cancel_check,
                     )
                     generate_mode = "single"
                     chunk_count = None
+            except (ProviderCancelled, ChunkCancelled) as exc:
+                raise _Cancelled() from exc
             except Exception:
                 emitter.stage(
                     course_dir=course_rel, source=sel.path,
@@ -215,7 +267,7 @@ def _digest_one_source(
             now = datetime.now(timezone.utc)
             if action.kind == "create" or digest_abs is None:
                 digest_abs = next_digest_path(course_abs, settings.digests_dirname, now)
-            _write_markdown(digest_abs, markdown)
+            undo.write(digest_abs, markdown)
             digest_rel = str(digest_abs.relative_to(course_abs))
             manifest.record(
                 DigestRecord(
@@ -243,10 +295,6 @@ def _digest_one_source(
     return digest_rels, successful_pages, source_hash
 
 
-class _Cancelled(Exception):
-    pass
-
-
 def run_update(
     root: Path,
     model_id: str,
@@ -270,7 +318,7 @@ def run_update(
         return RunResult(0, 0, 0, None, [])
 
     selected = [sel for sel in selected if sel.ranges]
-    if not selected:
+    if not selected and not plan.synthesis_pending:
         emitter.nothing_to_process()
         emitter.run_done(processed=0, failed=0, skipped=0)
         return RunResult(0, 0, 0, None, [])
@@ -284,11 +332,15 @@ def run_update(
     cancelled = False
 
     total_sources = len(selected)
-    emitter.planned(total=total_sources)
+    if selected:
+        emitter.planned(total=total_sources)
 
     by_course: dict[str, list[SelectedSource]] = {}
     for sel in selected:
         by_course.setdefault(sel.course, []).append(sel)
+    # A course whose notebook a cancel skipped is rebuilt even with no source to digest.
+    for course_rel in plan.synthesis_pending:
+        by_course.setdefault(course_rel, [])
 
     source_index = 0
     for course_rel, course_sels in by_course.items():
@@ -306,6 +358,7 @@ def run_update(
                 emitter.cancelled(after_sources=len(outcomes))
                 break
             source_index += 1
+            undo = _SourceUndo(manifest)
             emitter.source_started(
                 course_dir=course_rel,
                 source=sel.path,
@@ -325,12 +378,18 @@ def run_update(
                     cancel_file=cancel_file,
                     manifest=manifest,
                     course_abs=course_abs,
+                    undo=undo,
                 )
             except _Cancelled:
+                undo.rollback()
                 cancelled = True
                 emitter.cancelled(after_sources=len(outcomes))
                 break
             except Exception as e:
+                # A failed source leaves nothing behind, like a cancelled one:
+                # its files, its manifest records and git all match the failure,
+                # so the next Update retries it from the start.
+                undo.rollback()
                 failed += 1
                 emitter.source_failed(
                     course_dir=course_rel,
@@ -372,35 +431,65 @@ def run_update(
                 SourceOutcome(course_rel, sel.path, True, digest_file=digest_rels[-1])
             )
 
-        if not new_digests:
+        redo_only = not new_digests
+        if redo_only and not manifest.synthesis_pending():
             emitter.course_done(course_dir=course_rel, digests=0)
             continue
 
-        emitter.course_synthesis_started(
-            course_dir=course_rel, digest_count=len(manifest.digest_files())
-        )
-        synthesis_ok = True
-        try:
-            digests = manifest.read_digests()
-            if len(digests) < 2:
-                course_markdown = build_course_index(course_rel, digests)
-            else:
-                course_markdown = synthesize_course(
-                    provider,
-                    course_name=course_rel,
-                    digests=digests,
-                    model_id=model_id,
-                    cwd=course_abs,
-                )
-        except CourseSynthesisError as e:
-            synthesis_ok = False
-            emitter.course_synthesis_failed(
-                course_dir=course_rel,
-                code=CourseSynthesisError.code,
-                message=str(e),
-                **provider_failure_event_fields(e),
+        if not cancelled and _cancel_requested(cancel_file):
+            cancelled = True
+            emitter.cancelled(after_sources=len(outcomes))
+        if redo_only and cancelled:
+            # Nothing new was digested and the notebook is still owed: no change to save.
+            emitter.course_done(course_dir=course_rel, digests=0)
+            continue
+
+        # A cancelled run never synthesises: the finished digests are saved and
+        # committed, and an existing course.md stays as it was (Q23). The manifest
+        # records that the notebook is owed, so the next Update builds it.
+        synthesis_ok = not cancelled
+        course_markdown: str | None = None
+        if not cancelled:
+            emitter.course_synthesis_started(
+                course_dir=course_rel, digest_count=len(manifest.digest_files())
             )
-            course_markdown = build_course_toc(course_rel, manifest.read_digests())
+            try:
+                digests = manifest.read_digests()
+                if len(digests) < 2:
+                    course_markdown = build_course_index(course_rel, digests)
+                else:
+                    course_markdown = synthesize_course(
+                        provider,
+                        course_name=course_rel,
+                        digests=digests,
+                        model_id=model_id,
+                        cwd=course_abs,
+                        cancel_check=_cancel_check(cancel_file),
+                    )
+            except ProviderCancelled:
+                cancelled = True
+                synthesis_ok = False
+                emitter.cancelled(after_sources=len(outcomes))
+            except CourseSynthesisError as e:
+                synthesis_ok = False
+                emitter.course_synthesis_failed(
+                    course_dir=course_rel,
+                    code=CourseSynthesisError.code,
+                    message=str(e),
+                    **provider_failure_event_fields(e),
+                )
+                course_markdown = build_course_toc(course_rel, manifest.read_digests())
+                if redo_only and (course_abs / settings.course_file_name).exists():
+                    # Nothing new to list: the old notebook beats a bare digest list.
+                    course_markdown = None
+
+        if cancelled:
+            manifest.set_synthesis_pending(True)
+        elif synthesis_ok:
+            manifest.set_synthesis_pending(False)
+        if redo_only and course_markdown is None and not synthesis_ok:
+            emitter.course_done(course_dir=course_rel, digests=0)
+            continue
 
         manifest.save()
         for digest_rel in new_digests:
@@ -409,10 +498,17 @@ def run_update(
         done_courses.append(course_rel)
 
         course_file = course_abs / settings.course_file_name
-        course_file.write_text(
-            course_markdown if course_markdown.endswith("\n") else course_markdown + "\n"
-        )
-        commit_paths.append(Path(course_rel) / settings.course_file_name)
+        if cancelled:
+            course_markdown = (
+                None
+                if course_file.exists()
+                else build_course_toc(course_rel, manifest.read_digests())
+            )
+        if course_markdown is not None:
+            course_file.write_text(
+                course_markdown if course_markdown.endswith("\n") else course_markdown + "\n"
+            )
+            commit_paths.append(Path(course_rel) / settings.course_file_name)
         if synthesis_ok:
             emitter.course_synthesis_done(course_dir=course_rel)
 

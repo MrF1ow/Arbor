@@ -165,30 +165,13 @@ const mockKnowledgeSearchHits: SearchHit[] = [
   },
 ];
 
-const mockSemanticSearchHits: SearchHit[] = [
-  mockKnowledgeSearchHits[2]!,
-  mockKnowledgeSearchHits[0]!,
-  {
-    course: "cell-biology",
-    path: "cell-biology/digests/2026-09-12-membranes.md",
-    kind: "digest",
-    title: "Membrane transport",
-    snippet: "Active transport and pumps in the bilayer.",
-    page_range: "6-7",
-    source_path: null,
-  },
-  mockKnowledgeSearchHits[3]!,
-  mockKnowledgeSearchHits[1]!,
-];
-
-function mockSearchHits(cmd: string, payload: Record<string, unknown>): SearchHit[] {
+function mockSearchHits(payload: Record<string, unknown>): SearchHit[] {
   const query = String(payload.query ?? "").trim();
   if (!query || query.toLowerCase() === "zzz") {
     return [];
   }
   const needle = query.toLowerCase();
-  const pool = cmd === "search_semantic" ? mockSemanticSearchHits : mockKnowledgeSearchHits;
-  const matched = pool.filter(
+  const matched = mockKnowledgeSearchHits.filter(
     (hit) =>
       hit.title.toLowerCase().includes(needle) ||
       hit.snippet.toLowerCase().includes(needle) ||
@@ -1217,8 +1200,7 @@ export function createMockHandler(
       case "reindex_knowledge":
         return { documents: 12 };
       case "search_knowledge":
-      case "search_semantic":
-        return mockSearchHits(cmd, payload);
+        return mockSearchHits(payload);
       case "start_study_job":
         return "mock-study-job";
       case "import_sources": {
@@ -1246,8 +1228,6 @@ export function createMockHandler(
         return { pending: isMockMode() ? mockPendingSources() : [] };
       case "start_update":
         return simulateUpdateJob(String(payload.root ?? FIXTURE_ROOT_FALL));
-      case "start_embed_job":
-        return "mock-embed-job";
       default:
         return null;
     }

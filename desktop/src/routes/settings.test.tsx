@@ -158,7 +158,7 @@ describe("settings", () => {
     await waitForKnowledgeToggles();
 
     const switches = within(settingsView()).getAllByRole("switch");
-    await user.click(switches[5]!);
+    await user.click(switches[4]!);
 
     await waitFor(() => {
       const save = getMockIpcCalls().find((c) => c.cmd === "save_knowledge_settings");
@@ -417,8 +417,8 @@ describe("settings", () => {
     await waitForKnowledgeToggles();
 
     const switches = within(settingsView()).getAllByRole("switch");
-    expect(switches.length).toBe(6);
-    for (let i = 0; i < 6; i += 1) {
+    expect(switches.length).toBe(5);
+    for (let i = 0; i < 5; i += 1) {
       clearMockIpcLog();
       await user.click(switches[i]!);
       await waitFor(() => {

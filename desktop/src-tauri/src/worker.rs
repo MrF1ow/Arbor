@@ -235,6 +235,46 @@ fn process_path() -> OsString {
     process_path_for_spawn()
 }
 
+/// Env vars a coding-agent terminal sets. The Python worker refuses to run the
+/// Claude provider when it sees them (it assumes a nested session), so a
+/// desktop app launched from a Claude Code terminal must not pass them on.
+pub(crate) const AGENT_ENV_VARS: [&str; 14] = [
+    "CLAUDECODE",
+    "CLAUDE_CODE_ENTRYPOINT",
+    "CLAUDE_CODE_SSE_PORT",
+    // Session plumbing of the Claude Code process that launched Arbor: a worker's
+    // own `claude` call must not write into that session, reach its socket, or take
+    // on its settings (such as its reasoning effort).
+    "CLAUDE_CODE_SESSION_ID",
+    "CLAUDE_CODE_CHILD_NOTES_DIR",
+    "CLAUDE_CODE_MESSAGING_SOCKET",
+    "CLAUDE_CODE_MESSAGING_TOKEN",
+    "CLAUDE_CODE_CHILD_SESSION",
+    "CLAUDE_CODE_SESSION_ATTENDED",
+    "CLAUDE_CODE_EXECPATH",
+    "CLAUDE_EFFORT",
+    "CLAUDE_PID",
+    "CLAUDE_AGENT_SDK_VERSION",
+    "AI_AGENT",
+];
+
+/// Remove the agent env vars from a Command that launches the Python worker.
+/// Every worker spawn site calls this once; the worker's own guard is
+/// unchanged, so running the worker CLI inside Claude Code still refuses.
+pub(crate) fn scrub_agent_env(command: &mut Command) {
+    for key in AGENT_ENV_VARS {
+        command.env_remove(key);
+    }
+}
+
+/// The one way to build a Command that launches the Python worker: the program
+/// with the agent env vars already scrubbed (Q9).
+pub(crate) fn worker_command(program: &str) -> Command {
+    let mut command = Command::new(program);
+    scrub_agent_env(&mut command);
+    command
+}
+
 pub fn resolve_worker_argv(
     env: &dyn Fn(&str) -> Option<String>,
     default_python_dir: &str,
@@ -463,7 +503,7 @@ pub fn run_worker_json_with_stdin(
     if let Some(err) = uv_project_missing_error(&argv) {
         return Err(err);
     }
-    let mut command = Command::new(&argv[0]);
+    let mut command = worker_command(&argv[0]);
     command
         .args(&argv[1..])
         .env("PATH", process_path())
@@ -578,7 +618,7 @@ pub fn run_worker_json_with_deadline(
     if let Some(err) = uv_project_missing_error(&argv) {
         return Err(err);
     }
-    let mut command = Command::new(&argv[0]);
+    let mut command = worker_command(&argv[0]);
     command
         .args(&argv[1..])
         .env("PATH", process_path())
@@ -915,20 +955,6 @@ pub fn generate_sub_args(
     sub_args
 }
 
-pub fn embed_sub_args(root: &str, force: bool) -> Vec<String> {
-    let mut args = vec![
-        "embed".to_string(),
-        "--root".to_string(),
-        root.to_string(),
-        "--provider".to_string(),
-        "hashed".to_string(),
-    ];
-    if force {
-        args.push("--force".to_string());
-    }
-    args
-}
-
 #[cfg(feature = "desktop-runtime")]
 pub fn spawn_update_stream(
     app: tauri::AppHandle,
@@ -1018,32 +1044,6 @@ pub fn spawn_generate_stream(
 }
 
 #[cfg(feature = "desktop-runtime")]
-pub fn spawn_embed_stream(
-    app: tauri::AppHandle,
-    app_dir: PathBuf,
-    root: String,
-    force: bool,
-    job_id: String,
-) {
-    let sub_args = embed_sub_args(&root, force);
-    let settings = crate::settings::load(&app);
-    let store = crate::secrets::OsSecretStore;
-    let env_pairs = crate::secrets::worker_env_for_provider_id("hashed", &store, &settings);
-    spawn_worker_stream(
-        app,
-        app_dir,
-        root,
-        sub_args,
-        job_id,
-        "embed",
-        "Provider".to_string(),
-        None,
-        env_pairs,
-        None,
-    );
-}
-
-#[cfg(feature = "desktop-runtime")]
 struct RemoveOnDrop(PathBuf);
 
 #[cfg(feature = "desktop-runtime")]
@@ -1109,7 +1109,7 @@ fn spawn_worker_stream(
             .iter()
             .map(|(k, v)| (k.as_str(), v.as_str()))
             .collect();
-        let mut command = Command::new(&argv[0]);
+        let mut command = worker_command(&argv[0]);
         command
             .args(&argv[1..])
             .env("PATH", process_path())
@@ -1288,7 +1288,8 @@ fn run_local_commit_written(
     if let Some(err) = uv_project_missing_error(&argv) {
         return Err(err);
     }
-    let output = Command::new(&argv[0])
+    let mut command = worker_command(&argv[0]);
+    let output = command
         .args(&argv[1..])
         .env("PATH", process_path())
         .output()
@@ -1590,6 +1591,110 @@ mod tests {
 
     fn no_env(_: &str) -> Option<String> {
         None
+    }
+
+    #[test]
+    fn scrub_agent_env_removes_each_agent_variable() {
+        let mut command = Command::new("true");
+        scrub_agent_env(&mut command);
+        let envs: Vec<_> = command.get_envs().collect();
+        for key in AGENT_ENV_VARS {
+            assert!(
+                envs.iter().any(|(k, v)| *k == std::ffi::OsStr::new(key) && v.is_none()),
+                "{key} not scrubbed"
+            );
+        }
+        assert_eq!(
+            AGENT_ENV_VARS,
+            [
+                "CLAUDECODE",
+                "CLAUDE_CODE_ENTRYPOINT",
+                "CLAUDE_CODE_SSE_PORT",
+                "CLAUDE_CODE_SESSION_ID",
+                "CLAUDE_CODE_CHILD_NOTES_DIR",
+                "CLAUDE_CODE_MESSAGING_SOCKET",
+                "CLAUDE_CODE_MESSAGING_TOKEN",
+                "CLAUDE_CODE_CHILD_SESSION",
+                "CLAUDE_CODE_SESSION_ATTENDED",
+                "CLAUDE_CODE_EXECPATH",
+                "CLAUDE_EFFORT",
+                "CLAUDE_PID",
+                "CLAUDE_AGENT_SDK_VERSION",
+                "AI_AGENT",
+            ]
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn scrub_agent_env_hides_claudecode_from_the_child() {
+        let mut command = Command::new("sh");
+        command
+            .arg("-c")
+            .arg("echo ${CLAUDECODE-unset}:${CLAUDE_CODE_ENTRYPOINT-unset}:${CLAUDE_CODE_SSE_PORT-unset}")
+            .env("CLAUDECODE", "1")
+            .env("CLAUDE_CODE_ENTRYPOINT", "cli")
+            .env("CLAUDE_CODE_SSE_PORT", "1234");
+        scrub_agent_env(&mut command);
+        let output = command.output().unwrap();
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout).trim(),
+            "unset:unset:unset"
+        );
+    }
+
+    /// Source with every `#[cfg(test)] mod … { … }` block cut out (brace-matched),
+    /// so production code after a tests module is still checked.
+    fn without_test_modules(source: &str) -> String {
+        let mut out = String::new();
+        let mut rest = source;
+        while let Some(start) = rest.find("#[cfg(test)]\nmod ") {
+            out.push_str(&rest[..start]);
+            let body = &rest[start..];
+            let open = body.find('{').expect("test module opens");
+            let mut depth = 0usize;
+            let mut end = body.len();
+            for (i, c) in body[open..].char_indices() {
+                match c {
+                    '{' => depth += 1,
+                    '}' => {
+                        depth -= 1;
+                        if depth == 0 {
+                            end = open + i + 1;
+                            break;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            rest = &body[end..];
+        }
+        out.push_str(rest);
+        out
+    }
+
+    #[test]
+    fn every_worker_spawn_goes_through_worker_command() {
+        // A Command that launches the Python worker is built from its argv; it must
+        // come from `worker_command`, which scrubs the agent env vars (Q9).
+        for (file, source, allowed) in [
+            ("worker.rs", include_str!("worker.rs"), 0),
+            ("worker_pool.rs", include_str!("worker_pool.rs"), 0),
+            ("commands.rs", include_str!("commands.rs"), 0),
+        ] {
+            let production = without_test_modules(source);
+            let raw = production.matches("Command::new(&argv[0])").count();
+            assert_eq!(raw, allowed, "{file}: worker spawn not built with worker_command");
+        }
+        let builder = without_test_modules(include_str!("worker.rs"));
+        assert!(builder.contains("let mut command = Command::new(program);\n    scrub_agent_env(&mut command);"));
+    }
+
+    #[test]
+    fn without_test_modules_keeps_code_after_the_tests_block() {
+        let src = "fn a() {}\n#[cfg(test)]\nmod tests {\n    fn t() { if x { y } }\n}\nfn b() { Command::new(&argv[0]); }\n";
+        let kept = without_test_modules(src);
+        assert!(kept.contains("fn a()") && kept.contains("fn b()") && !kept.contains("fn t()"));
     }
 
     #[test]
@@ -2032,29 +2137,6 @@ mod tests {
         assert!(!args.contains(&"codex".to_string()));
         assert!(args.contains(&"--model".to_string()));
         assert!(args.contains(&"grok-4.7".to_string()));
-    }
-
-    #[test]
-    fn embed_args_use_the_hashed_provider() {
-        assert_eq!(
-            embed_sub_args("/Knowledge", false),
-            vec!["embed", "--root", "/Knowledge", "--provider", "hashed",]
-        );
-    }
-
-    #[test]
-    fn forced_embed_args_include_force() {
-        assert_eq!(
-            embed_sub_args("/Knowledge", true),
-            vec![
-                "embed",
-                "--root",
-                "/Knowledge",
-                "--provider",
-                "hashed",
-                "--force",
-            ]
-        );
     }
 
     #[test]

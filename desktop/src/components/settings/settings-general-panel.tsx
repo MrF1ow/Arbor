@@ -173,17 +173,6 @@ export function SettingsGeneralPanel() {
               }
             />
             <SettingRow
-              label="Embed after Update"
-              description="Needed for semantic search."
-              control={
-                <Switch
-                  checked={knowledge.data?.auto_embed ?? false}
-                  disabled={saveKnowledge.isPending}
-                  onCheckedChange={(checked) => void onKnowledgeToggle({ auto_embed: checked })}
-                />
-              }
-            />
-            <SettingRow
               label="Delete sources after digest"
               description="Keeps only the digests. This can't be undone."
               control={

@@ -92,21 +92,6 @@ export function useCancelUpdateMutation() {
   });
 }
 
-export function useStartEmbedJobMutation(root: string | null) {
-  const queryClient = useQueryClient();
-  const start = useJobStore((s) => s.start);
-  return useMutation({
-    mutationFn: (input?: { force?: boolean }) =>
-      invoke<string>("start_embed_job", { root: root!, force: input?.force ?? false }),
-    onSuccess: (jobId) => {
-      start(jobId, { label: JOB_START_LABEL.embed, root });
-      if (root) {
-        void queryClient.invalidateQueries({ queryKey: qk.jobs(root) });
-      }
-    },
-  });
-}
-
 export function useStartStudyJobMutation(root: string | null) {
   const queryClient = useQueryClient();
   return useMutation({

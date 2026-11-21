@@ -10,11 +10,9 @@ export type JobFinishedDeps = {
   invalidateAfterJob: (root: string, course: string | null) => void;
   startFlashcardsJob: (force: boolean) => Promise<void>;
   startQuizJob: (force: boolean) => Promise<void>;
-  startEmbedJob: (root: string) => Promise<void>;
 };
 
 export type JobFinishedState = {
-  pendingAutoEmbed: boolean;
   pendingAutoQuiz: boolean;
 };
 
@@ -34,7 +32,6 @@ export async function onJobFinished(
   if (finished.status !== "succeeded") {
     if (finished.operation === "generate") {
       next.pendingAutoQuiz = false;
-      next.pendingAutoEmbed = false;
     }
     return next;
   }
@@ -52,7 +49,6 @@ export async function onJobFinished(
       updateJobId,
       settings.auto_generate.quiz,
     );
-    next.pendingAutoEmbed = settings.auto_embed;
   }
 
   if (
@@ -67,11 +63,6 @@ export async function onJobFinished(
     next.pendingAutoQuiz = false;
     await deps.startQuizJob(false);
     return next;
-  }
-
-  if (next.pendingAutoEmbed) {
-    next.pendingAutoEmbed = false;
-    await deps.startEmbedJob(root);
   }
 
   return next;

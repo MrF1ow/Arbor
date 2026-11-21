@@ -19,8 +19,6 @@ import { useCourseMeta } from "~/lib/queries/course-meta";
 import { qk } from "~/lib/queries/keys";
 import { useSettings } from "~/lib/queries/settings";
 import { modShortcut } from "~/lib/shortcuts";
-import { cn } from "~/lib/utils";
-import { useUiStore } from "~/stores/ui-store";
 
 const DEBOUNCE_MS = 250;
 const SEARCH_LIMIT = 20;
@@ -109,15 +107,20 @@ function SearchHitRow({ entry }: { entry: RootHit }) {
   );
 }
 
+/** The phrase the full-text search looks for: quotes dropped, whitespace collapsed (as the Rust side does). */
+function searchPhrase(query: string): string {
+  return query.replaceAll('"', "").split(/\s+/).filter(Boolean).join(" ");
+}
+
 /** One search per library, in parallel; the active library's hits come first. */
-function useSearchAll(roots: string[], query: string, semantic: boolean) {
+function useSearchAll(roots: string[], query: string) {
   const trimmed = query.trim();
   const results = useQueries({
     queries: roots.map((root) => ({
-      queryKey: qk.search(root, trimmed, semantic),
+      queryKey: qk.search(root, trimmed),
       enabled: trimmed.length > 0,
       queryFn: () =>
-        invoke<PaletteHit[]>(semantic ? "search_semantic" : "search_knowledge", {
+        invoke<PaletteHit[]>("search_knowledge", {
           root,
           query: trimmed,
           limit: SEARCH_LIMIT,
@@ -138,26 +141,6 @@ function useSearchAll(roots: string[], query: string, semantic: boolean) {
   };
 }
 
-function SemanticChip({ checked, onCheckedChange }: { checked: boolean; onCheckedChange: (checked: boolean) => void }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label="Semantic search"
-      onClick={() => onCheckedChange(!checked)}
-      className={cn(
-        "inline-flex h-6.25 shrink-0 items-center rounded-full border px-2.5 text-caption outline-none transition-colors duration-fast ease-out-soft focus-visible:ring-2 focus-visible:ring-ring",
-        checked
-          ? "border-accent bg-accent text-accent-foreground"
-          : "border-border bg-card text-muted-foreground hover:bg-muted",
-      )}
-    >
-      Semantic
-    </button>
-  );
-}
-
 function SearchPaletteBody({
   open,
   onOpenChange,
@@ -176,8 +159,6 @@ function SearchPaletteBody({
   const settings = useSettings();
   const openClass = useOpenClass();
   const activeRoot = pickActiveRoot(settings.data);
-  const searchSemantic = useUiStore((s) => s.searchSemantic);
-  const setSearchSemantic = useUiStore((s) => s.setSearchSemantic);
 
   const configured = (settings.data?.knowledge_roots ?? []).map((entry) => entry.path);
   const roots = activeRoot
@@ -194,7 +175,7 @@ function SearchPaletteBody({
     return () => window.clearTimeout(timer);
   }, [query, open, setDebouncedQuery]);
 
-  const search = useSearchAll(roots, debouncedQuery, searchSemantic);
+  const search = useSearchAll(roots, debouncedQuery);
   const { hits } = search;
   const groups = groupRootHits(hits);
 
@@ -213,11 +194,6 @@ function SearchPaletteBody({
     });
     return () => window.cancelAnimationFrame(frame);
   }, [open]);
-
-  const onSemanticChange = (checked: boolean) => {
-    setSearchSemantic(checked);
-    setDebouncedQuery(query);
-  };
 
   const openHit = ({ root, hit }: RootHit) => {
     onOpenChange(false);
@@ -273,18 +249,15 @@ function SearchPaletteBody({
   });
   const showFailedNotice = typed && hits.length > 0 && failedLibraries.length > 0;
 
+  const phrase = searchPhrase(debouncedQuery);
+  const phraseMissed = phrase.includes(" ");
+
   const ordered = groups.flatMap((group) => group.hits);
 
   return (
     <CommandPrimitive
       shouldFilter={false}
-      className="flex flex-col text-popover-foreground"
-      onKeyDown={(event) => {
-        if (event.key === "Tab" && !event.shiftKey) {
-          event.preventDefault();
-          onSemanticChange(!searchSemantic);
-        }
-      }}
+      className="flex min-w-0 flex-col text-popover-foreground"
     >
       <div className="flex items-center gap-2.5 border-b border-border px-4 py-3.25">
         <Search className="size-icon-sm shrink-0 text-faint-foreground" aria-hidden />
@@ -296,7 +269,6 @@ function SearchPaletteBody({
           aria-label="Search digests"
           className="min-w-0 flex-1 bg-transparent text-body text-foreground outline-hidden placeholder:text-muted-foreground"
         />
-        <SemanticChip checked={searchSemantic} onCheckedChange={onSemanticChange} />
         <Kbd className="border-border bg-background text-kbd">{modShortcut("K")}</Kbd>
       </div>
       <CommandPrimitive.List data-slot="command-list" className="max-h-80 overflow-x-hidden overflow-y-auto p-2 outline-none">
@@ -317,7 +289,15 @@ function SearchPaletteBody({
             {search.error instanceof Error ? search.error.message : String(search.error)}
           </p>
         ) : null}
-        {showNoResults ? <p className="py-6 text-center text-caption text-muted-foreground">No results</p> : null}
+        {showNoResults && phraseMissed ? (
+          <div className="flex flex-col gap-1 px-3 py-6 text-center text-caption text-muted-foreground">
+            <p className="break-words">{`No notes contain "${phrase}"`}</p>
+            <p>Ask your class a question instead.</p>
+          </div>
+        ) : null}
+        {showNoResults && !phraseMissed ? (
+          <p className="py-6 text-center text-caption text-muted-foreground">No results</p>
+        ) : null}
         {showFailedNotice ? (
           <p role="status" className="px-3 py-1.5 text-caption text-muted-foreground">
             Couldn&apos;t search {failedLibraries.join(", ")}
@@ -348,7 +328,7 @@ function SearchPaletteBody({
       <div className="flex items-center gap-1 border-t border-border px-4 py-2.25 text-caption text-faint-foreground">
         <ArrowUp className="size-3" aria-hidden />
         <ArrowDown className="size-3" aria-hidden />
-        <span>move · Enter opens · Tab toggles semantic</span>
+        <span>move · Enter opens</span>
         <span className="ml-auto">{hits.length > 0 ? resultCountLabel(hits) : null}</span>
       </div>
     </CommandPrimitive>

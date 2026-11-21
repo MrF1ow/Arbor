@@ -459,12 +459,9 @@ def _clear_conflict_session(root: Path) -> None:
 
 
 def _rebuild_after_sync(root: Path) -> None:
-    from arbor_worker.embed import embed_root
-    from arbor_worker.embedder.hashed import HashedNgramEmbedder
     from arbor_worker.indexer import reindex_root
 
     reindex_root(root)
-    embed_root(root, HashedNgramEmbedder())
 
 
 def _sync_user_is_viewer(root: Path, runner=subprocess.run) -> bool:

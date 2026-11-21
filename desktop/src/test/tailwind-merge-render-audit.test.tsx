@@ -92,7 +92,6 @@ describe("tailwind-merge render audit", { timeout: 120_000 }, () => {
       sidebarTouched: true,
       logOpen: false,
       logHeight: 200,
-      searchSemantic: false,
       lastCourse: null,
     });
     useUpdatePlanStore.setState({ pending: null, open: false, trigger: "manual" });

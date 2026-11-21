@@ -120,10 +120,9 @@ describe("events", () => {
     expect(spy).toHaveBeenCalledWith({ queryKey: ["courseOverview", FIXTURE_ROOT_FALL] });
   });
 
-  it("chains auto-quiz and auto-embed via onJobFinished", async () => {
+  it("chains auto-quiz via onJobFinished", async () => {
     const startFlashcards = vi.fn();
     const startQuiz = vi.fn();
-    const startEmbed = vi.fn();
     await onJobFinished(
       {
         job_id: "update-1",
@@ -139,7 +138,6 @@ describe("events", () => {
         getKnowledgeSettings: async () => ({
           delete_sources_after_digest: false,
           auto_update: true,
-          auto_embed: true,
           watch_enabled: true,
           auto_generate: { flashcards: false, quiz: true },
           sync_after_commit: false,
@@ -147,12 +145,10 @@ describe("events", () => {
         invalidateAfterJob: () => {},
         startFlashcardsJob: startFlashcards,
         startQuizJob: startQuiz,
-        startEmbedJob: startEmbed,
       },
-      { pendingAutoEmbed: false, pendingAutoQuiz: false },
+      { pendingAutoQuiz: false },
     );
     expect(startQuiz).toHaveBeenCalled();
-    expect(startEmbed).not.toHaveBeenCalled();
   });
 
   it("WorkerEventsBridge invokes start_study_job once under StrictMode after job-finished", async () => {
@@ -170,7 +166,6 @@ describe("events", () => {
           get_knowledge_settings: () => ({
             delete_sources_after_digest: false,
             auto_update: true,
-            auto_embed: false,
             watch_enabled: true,
             auto_generate: { flashcards: false, quiz: true },
             sync_after_commit: false,
@@ -299,7 +294,6 @@ describe("events", () => {
       getKnowledgeSettings: async () => ({
         ...{
           delete_sources_after_digest: false,
-          auto_embed: false,
           watch_enabled: true,
           auto_generate: { flashcards: false, quiz: false },
           sync_after_commit: false,
@@ -341,7 +335,6 @@ describe("events", () => {
       getKnowledgeSettings: async () => ({
         delete_sources_after_digest: false,
         auto_update: true,
-        auto_embed: false,
         watch_enabled: true,
         auto_generate: { flashcards: false, quiz: false },
         sync_after_commit: false,
@@ -392,7 +385,6 @@ describe("events", () => {
       getKnowledgeSettings: async () => ({
         delete_sources_after_digest: false,
         auto_update: true,
-        auto_embed: false,
         watch_enabled: true,
         auto_generate: { flashcards: false, quiz: false },
         sync_after_commit: false,

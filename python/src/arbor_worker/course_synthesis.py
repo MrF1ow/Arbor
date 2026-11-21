@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 from arbor_worker.digest import SOURCE_RULES, validate_course_markdown
 from arbor_worker.errors import CourseSynthesisError
 from arbor_worker.provider.base import CliProvider, ProviderRequest
+from arbor_worker.provider.errors import ProviderCancelled
 
 _COURSE_TEMPLATE = """You are assembling the single study notebook for one university course from
 dated digests of that course's material.
@@ -69,14 +71,19 @@ def synthesize_course(
     digests: list[tuple[str, str]],
     model_id: str,
     cwd: Path,
+    cancel_check: Callable[[], bool] | None = None,
 ) -> str:
     if not digests:
         raise CourseSynthesisError(f"{course_name}: no digests to synthesize")
     prompt = build_course_prompt(course_name, digests)
     try:
-        result = provider.run(ProviderRequest(prompt=prompt, model_id=model_id, cwd=cwd))
+        result = provider.run(
+            ProviderRequest(
+                prompt=prompt, model_id=model_id, cwd=cwd, cancel_check=cancel_check
+            )
+        )
         validate_course_markdown(result.markdown)
-    except CourseSynthesisError:
+    except (CourseSynthesisError, ProviderCancelled):
         raise
     except Exception as e:
         raise CourseSynthesisError(f"{course_name}: course synthesis failed: {e}") from e

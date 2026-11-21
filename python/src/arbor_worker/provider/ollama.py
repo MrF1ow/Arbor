@@ -5,6 +5,8 @@ import json
 import os
 from collections.abc import Iterator
 
+from arbor_worker.provider.cancel import call_cancellable
+from arbor_worker.provider.errors import ProviderCancelled
 from arbor_worker.provider.base import (
     DeltaFn,
     Model,
@@ -147,9 +149,12 @@ class OllamaProvider:
         body_bytes = json.dumps(self._build_chat_body(request)).encode("utf-8")
         headers = {"Content-Type": "application/json"}
         try:
-            status, resp_body = self._transport(
-                "POST", url, headers, body_bytes, _RUN_TIMEOUT
+            status, resp_body = call_cancellable(
+                lambda: self._transport("POST", url, headers, body_bytes, _RUN_TIMEOUT),
+                request.cancel_check,
             )
+        except ProviderCancelled:
+            raise
         except ConnectionRefusedError:
             raise ProviderError(f"Ollama is not running at {self._base}")
         except TimeoutError:

@@ -37,14 +37,20 @@ const LECTURES = [
   { title: "Cell signalling", date: "2026-10-13", unit: "Membranes", slug: "cell-signalling" },
   { title: "Cell cycle", date: "2026-10-27", unit: "Division", slug: "cell-cycle" },
   { title: "Apoptosis", date: "2026-11-03", unit: "Division", slug: "apoptosis" },
-].map((l) => ({ ...l, file: `${l.date}-${l.slug}.md` }));
+// The source file names carry an order prefix (01-, 02-), the way a real class's files do:
+// lectures list in source order, which is the order the test expects within each unit.
+].map((l, i) => ({
+  ...l,
+  file: `${l.date}-${l.slug}.md`,
+  source: `${String(i + 1).padStart(2, "0")}-${l.slug}`,
+}));
 
 const digestInfos = LECTURES.map((l) => ({
   title: l.title,
   date: l.date,
   path: `${COURSE}/digests/${l.file}`,
   unit: l.unit,
-  source_path: `${COURSE}/${l.unit}/${l.slug}.pdf`,
+  source_path: `${COURSE}/${l.unit}/${l.source}.pdf`,
 })).sort((a, b) => b.path.localeCompare(a.path));
 
 const stat = (
@@ -720,89 +726,97 @@ describe("class workspace", { timeout: 15000 }, () => {
       await waitFor(() => expect(getMockIpcLog()).toContain("study_plan_toggle"));
     });
 
-    it("editing the exam date calls set_course_meta with examDate once, on blur", async () => {
+    /** A course-meta backend that keeps what set_course_meta writes, as the real one does. */
+    const savingExamDate = (initial: string) => {
+      let meta: Record<string, Record<string, string>> = { [COURSE]: { exam_date: initial } };
+      return {
+        read_course_meta: () => structuredClone(meta),
+        set_course_meta: (args: unknown) => {
+          const a = args as { course: string; examDate?: string };
+          const entry = { ...(meta[a.course] ?? {}) };
+          if (a.examDate === "") delete entry.exam_date;
+          else if (a.examDate) entry.exam_date = a.examDate;
+          meta = { ...meta, [a.course]: entry };
+          return structuredClone(meta);
+        },
+      };
+    };
+
+    const examTrigger = () => screen.findByRole("button", { name: "Exam date" });
+    const openExamCalendar = async (user: ReturnType<typeof userEvent.setup>) => {
+      await user.click(await examTrigger());
+      return screen.findByRole("grid");
+    };
+
+    it("the exam date is a button reading the saved date, and an unset one reads No exam date", async () => {
       await renderAppAtRoute(`/course/${COURSE}/overview`, workspaceFixtures);
       await waitForOverview();
-      const input = await screen.findByLabelText("Exam date");
-      // Typing the year in a date input passes through 0002, 0020, 0202 before 2027.
-      for (const value of ["0002-12-01", "0020-12-01", "0202-12-01", "2027-12-01"]) {
-        fireEvent.change(input, { target: { value } });
-      }
-      expect(input).toHaveValue("2027-12-01");
-      expect(getMockIpcLog()).not.toContain("set_course_meta");
-      fireEvent.blur(input);
+      await waitFor(async () => expect(await examTrigger()).toHaveTextContent("Nov 4, 2026"));
+      expect(document.querySelector("input[type=date]")).toBeNull();
+      cleanup();
+      clearTauriMocks();
+      await renderAppAtRoute(`/course/${COURSE}/overview`, {
+        ...workspaceFixtures,
+        read_course_meta: () => ({}),
+      });
+      await waitForOverview();
+      await waitFor(async () => expect(await examTrigger()).toHaveTextContent("No exam date"));
+    });
+
+    it("picking a day calls set_course_meta with examDate once and closes the calendar", async () => {
+      const user = userEvent.setup();
+      await renderAppAtRoute(`/course/${COURSE}/overview`, { ...workspaceFixtures, ...savingExamDate("2026-11-04") });
+      await waitForOverview();
+      await waitFor(async () => expect(await examTrigger()).toHaveTextContent("Nov 4, 2026"));
+      const grid = await openExamCalendar(user);
+      await user.click(within(grid).getByRole("button", { name: /November 12th, 2026/ }));
       await waitFor(() => expect(getMockIpcLog()).toContain("set_course_meta"));
       const calls = getMockIpcCalls().filter((c) => c.cmd === "set_course_meta");
       expect(calls).toHaveLength(1);
-      expect(calls[0]?.args).toMatchObject({ course: COURSE, examDate: "2027-12-01" });
+      expect(calls[0]?.args).toMatchObject({ course: COURSE, examDate: "2026-11-12" });
       // Only the exam date goes out, so the class's icon and colour are left alone.
       expect(Object.keys(calls[0]?.args as object).sort()).toEqual(["course", "examDate", "root"]);
+      await waitFor(() => expect(screen.queryByRole("grid")).not.toBeInTheDocument());
+      expect(await examTrigger()).toHaveTextContent("Nov 12, 2026");
     });
 
-    it("Enter saves the exam date, and a date that did not change is not written", async () => {
+    it("picking the saved day again is not written", async () => {
+      const user = userEvent.setup();
       await renderAppAtRoute(`/course/${COURSE}/overview`, workspaceFixtures);
       await waitForOverview();
-      const input = await screen.findByLabelText("Exam date");
-      await waitFor(() => expect(input).toHaveValue("2026-11-04"));
-      fireEvent.blur(input);
-      fireEvent.change(input, { target: { value: "2026-12-02" } });
-      fireEvent.keyDown(input, { key: "Enter" });
-      await waitFor(() => expect(getMockIpcLog()).toContain("set_course_meta"));
-      fireEvent.blur(input);
-      const calls = getMockIpcCalls().filter((c) => c.cmd === "set_course_meta");
-      expect(calls).toHaveLength(1);
-      expect(calls[0]?.args).toMatchObject({ examDate: "2026-12-02" });
+      await waitFor(async () => expect(await examTrigger()).toHaveTextContent("Nov 4, 2026"));
+      const grid = await openExamCalendar(user);
+      await user.click(within(grid).getByRole("button", { name: /November 4th, 2026/ }));
+      await waitFor(() => expect(screen.queryByRole("grid")).not.toBeInTheDocument());
+      expect(getMockIpcLog()).not.toContain("set_course_meta");
     });
 
-    it("clearing the exam date clears it", async () => {
+    it("Escape closes the calendar without saving", async () => {
+      const user = userEvent.setup();
       await renderAppAtRoute(`/course/${COURSE}/overview`, workspaceFixtures);
       await waitForOverview();
-      const input = await screen.findByLabelText("Exam date");
-      await waitFor(() => expect(input).toHaveValue("2026-11-04"));
-      fireEvent.change(input, { target: { value: "" } });
-      fireEvent.blur(input);
+      await waitFor(async () => expect(await examTrigger()).toHaveTextContent("Nov 4, 2026"));
+      await openExamCalendar(user);
+      await user.keyboard("{Escape}");
+      await waitFor(() => expect(screen.queryByRole("grid")).not.toBeInTheDocument());
+      expect(getMockIpcLog()).not.toContain("set_course_meta");
+    });
+
+    it("Clear sends an empty examDate", async () => {
+      const user = userEvent.setup();
+      await renderAppAtRoute(`/course/${COURSE}/overview`, workspaceFixtures);
+      await waitForOverview();
+      await waitFor(async () => expect(await examTrigger()).toHaveTextContent("Nov 4, 2026"));
+      await openExamCalendar(user);
+      await user.click(screen.getByRole("button", { name: "Clear" }));
       await waitFor(() => expect(getMockIpcLog()).toContain("set_course_meta"));
       const call = getMockIpcCalls().find((c) => c.cmd === "set_course_meta");
       expect(call?.args).toMatchObject({ examDate: "" });
+      expect(Object.keys(call?.args as object).sort()).toEqual(["course", "examDate", "root"]);
     });
 
-    it.each([
-      ["a partial year", "0002-12-01"],
-      ["a year before 1900", "1899-12-31"],
-      ["a year after 2100", "2101-01-01"],
-    ])("does not save %s: it keeps the draft and shows it invalid (F83)", async (_name, value) => {
-      await renderAppAtRoute(`/course/${COURSE}/overview`, workspaceFixtures);
-      await waitForOverview();
-      const input = await screen.findByLabelText("Exam date");
-      await waitFor(() => expect(input).toHaveValue("2026-11-04"));
-      fireEvent.change(input, { target: { value } });
-      expect(input).not.toHaveAttribute("aria-invalid", "true");
-      fireEvent.blur(input);
-      expect(input).toHaveAttribute("aria-invalid", "true");
-      expect(screen.getByRole("alert")).toHaveTextContent(/full date/i);
-      expect(input).toHaveValue(value);
-      fireEvent.keyDown(input, { key: "Enter" });
-      expect(getMockIpcLog()).not.toContain("set_course_meta");
-      // A valid date clears the complaint and saves.
-      fireEvent.change(input, { target: { value: "2027-12-01" } });
-      expect(input).not.toHaveAttribute("aria-invalid", "true");
-      fireEvent.blur(input);
-      await waitFor(() => expect(getMockIpcLog()).toContain("set_course_meta"));
-    });
-
-    it("an unfinished date picker (empty value, badInput) is not a clear (F83)", async () => {
-      await renderAppAtRoute(`/course/${COURSE}/overview`, workspaceFixtures);
-      await waitForOverview();
-      const input = await screen.findByLabelText("Exam date");
-      await waitFor(() => expect(input).toHaveValue("2026-11-04"));
-      Object.defineProperty(input, "validity", { configurable: true, value: { badInput: true } });
-      fireEvent.change(input, { target: { value: "" } });
-      fireEvent.blur(input);
-      expect(getMockIpcLog()).not.toContain("set_course_meta");
-      expect(input).toHaveAttribute("aria-invalid", "true");
-    });
-
-    it("shows an error when the exam date write fails, and a second blur retries it (F83)", async () => {
+    it("shows an error when the exam date write fails, and picking again retries it (F83)", async () => {
+      const user = userEvent.setup();
       let attempts = 0;
       await renderAppAtRoute(`/course/${COURSE}/overview`, {
         ...workspaceFixtures,
@@ -815,17 +829,20 @@ describe("class workspace", { timeout: 15000 }, () => {
         },
       });
       await waitForOverview();
-      const input = await screen.findByLabelText("Exam date");
-      fireEvent.change(input, { target: { value: "2027-12-01" } });
-      fireEvent.blur(input);
+      await waitFor(async () => expect(await examTrigger()).toHaveTextContent("Nov 4, 2026"));
+      let grid = await openExamCalendar(user);
+      await user.click(within(grid).getByRole("button", { name: /November 12th, 2026/ }));
       expect(await screen.findByRole("alert")).toHaveTextContent(/could not save the exam date/i);
-      expect(input).toHaveValue("2027-12-01");
-      fireEvent.blur(input);
+      // The field goes back to the saved date, so the same day is picked again.
+      await waitFor(async () => expect(await examTrigger()).toHaveTextContent("Nov 4, 2026"));
+      grid = await openExamCalendar(user);
+      await user.click(within(grid).getByRole("button", { name: /November 12th, 2026/ }));
       await waitFor(() => expect(attempts).toBe(2));
       await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
     });
 
     it("C17: a cleared exam date shows nowhere, even though the plan names one, and stays empty on return", async () => {
+      const user = userEvent.setup();
       let meta: Record<string, Record<string, string>> = { [COURSE]: { exam_date: "2027-01-15" } };
       const { router } = await renderAppAtRoute(`/course/${COURSE}/overview`, {
         ...workspaceFixtures,
@@ -841,14 +858,13 @@ describe("class workspace", { timeout: 15000 }, () => {
       });
       await waitForOverview();
       await waitForColumn();
-      const input = await screen.findByLabelText("Exam date");
-      await waitFor(() => expect(input).toHaveValue("2027-01-15"));
+      await waitFor(async () => expect(await examTrigger()).toHaveTextContent("Jan 15, 2027"));
       expect(screen.getByTestId("overview-exam")).toBeInTheDocument();
-      fireEvent.change(input, { target: { value: "" } });
-      fireEvent.blur(input);
+      await openExamCalendar(user);
+      await user.click(screen.getByRole("button", { name: "Clear" }));
       await waitFor(() => expect(meta[COURSE]).toEqual({}));
       await new Promise((resolve) => setTimeout(resolve, 300));
-      expect(input).toHaveValue("");
+      expect(await examTrigger()).toHaveTextContent("No exam date");
       expect(screen.getByText("Cell Biology · 7 lectures")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /Course map · study plan/ })).toHaveTextContent(
         /^Course map · study plan\s*›$/,
@@ -861,12 +877,13 @@ describe("class workspace", { timeout: 15000 }, () => {
       });
       await waitFor(() => expect(screen.getByTestId("digest-view")).toBeInTheDocument());
       await router.navigate({ to: "/course/$course/overview", params: { course: COURSE } });
-      const again = await screen.findByLabelText("Exam date");
+      await examTrigger();
       await new Promise((resolve) => setTimeout(resolve, 300));
-      expect(again).toHaveValue("");
+      expect(await examTrigger()).toHaveTextContent("No exam date");
     });
 
     it("C11: clearing a SAVED exam date stays cleared when the plan names one and the refetch is slow", async () => {
+      const user = userEvent.setup();
       // Real backend: set_course_meta merges exam_date and read_course_meta returns it.
       let meta: Record<string, Record<string, string>> = { [COURSE]: { exam_date: "2027-01-15" } };
       await renderAppAtRoute(`/course/${COURSE}/overview`, {
@@ -883,17 +900,17 @@ describe("class workspace", { timeout: 15000 }, () => {
         },
       });
       await waitForOverview();
-      const input = await screen.findByLabelText("Exam date");
-      await waitFor(() => expect(input).toHaveValue("2027-01-15"));
-      fireEvent.change(input, { target: { value: "" } });
-      fireEvent.blur(input);
+      await waitFor(async () => expect(await examTrigger()).toHaveTextContent("Jan 15, 2027"));
+      await openExamCalendar(user);
+      await user.click(screen.getByRole("button", { name: "Clear" }));
       await waitFor(() => expect(getMockIpcLog()).toContain("set_course_meta"));
       await new Promise((resolve) => setTimeout(resolve, 500));
       expect(meta[COURSE]).toEqual({});
-      expect(input).toHaveValue("");
+      expect(await examTrigger()).toHaveTextContent("No exam date");
     });
 
     it("C16: clearing right after saving a new date stays cleared when the earlier save's refetch lands mid-write", async () => {
+      const user = userEvent.setup();
       let meta: Record<string, Record<string, string>> = { [COURSE]: { exam_date: "2027-01-15" } };
       let writes = 0;
       await renderAppAtRoute(`/course/${COURSE}/overview`, {
@@ -915,52 +932,35 @@ describe("class workspace", { timeout: 15000 }, () => {
         },
       });
       await waitForOverview();
-      const input = await screen.findByLabelText("Exam date");
-      await waitFor(() => expect(input).toHaveValue("2027-01-15"));
-      fireEvent.change(input, { target: { value: "2027-02-01" } });
-      fireEvent.keyDown(input, { key: "Enter" });
+      await waitFor(async () => expect(await examTrigger()).toHaveTextContent("Jan 15, 2027"));
+      const grid = await openExamCalendar(user);
+      await user.click(within(grid).getByRole("button", { name: /January 20th, 2027/ }));
       await waitFor(() => expect(writes).toBe(1));
       await new Promise((r) => setTimeout(r, 5));
-      fireEvent.change(input, { target: { value: "" } });
-      fireEvent.keyDown(input, { key: "Enter" });
+      await openExamCalendar(user);
+      await user.click(screen.getByRole("button", { name: "Clear" }));
       const seen: string[] = [];
       for (let t = 0; t < 30; t += 1) {
         await new Promise((r) => setTimeout(r, 20));
-        const v = (input as HTMLInputElement).value;
+        const v = (await examTrigger()).textContent ?? "";
         if (seen[seen.length - 1] !== v) seen.push(v);
       }
       expect(meta[COURSE]).toEqual({});
-      expect(seen).not.toContain("2026-11-04");
-      expect(input).toHaveValue("");
+      expect(seen).not.toContain("Nov 4, 2026");
+      expect(await examTrigger()).toHaveTextContent("No exam date");
     });
 
-    it("C10: Regenerate does not send an exam date the field rejected, and is disabled meanwhile", async () => {
+    it("C10: Regenerate sends the exam date just picked, once saved", async () => {
       const user = userEvent.setup();
-      await renderAppAtRoute(`/course/${COURSE}/overview`, workspaceFixtures);
+      await renderAppAtRoute(`/course/${COURSE}/overview`, { ...workspaceFixtures, ...savingExamDate("2026-11-04") });
       await waitForOverview();
-      const input = await screen.findByLabelText("Exam date");
-      await waitFor(() => expect(input).toHaveValue("2026-11-04"));
-      fireEvent.change(input, { target: { value: "0002-11-04" } });
-      fireEvent.blur(input);
-      expect(input).toHaveAttribute("aria-invalid", "true");
-      const regenerate = await screen.findByRole("button", { name: /Regenerate/i });
-      expect(regenerate).toBeDisabled();
-      await user.click(regenerate);
-      expect(getMockIpcLog()).not.toContain("study_plan");
-      expect(getMockIpcLog()).not.toContain("set_course_meta");
-    });
-
-    it("C10: Regenerate still sends a committable draft the field has not saved yet", async () => {
-      const user = userEvent.setup();
-      await renderAppAtRoute(`/course/${COURSE}/overview`, workspaceFixtures);
-      await waitForOverview();
-      const input = await screen.findByLabelText("Exam date");
-      await waitFor(() => expect(input).toHaveValue("2026-11-04"));
-      fireEvent.change(input, { target: { value: "2026-12-01" } });
+      await waitFor(async () => expect(await examTrigger()).toHaveTextContent("Nov 4, 2026"));
+      const grid = await openExamCalendar(user);
+      await user.click(within(grid).getByRole("button", { name: /November 12th, 2026/ }));
       await user.click(await screen.findByRole("button", { name: /Regenerate/i }));
       await waitFor(() => expect(getMockIpcLog()).toContain("study_plan"));
       const call = getMockIpcCalls().find((c) => c.cmd === "study_plan");
-      expect((call?.args as { examDate?: string }).examDate).toBe("2026-12-01");
+      expect((call?.args as { examDate?: string }).examDate).toBe("2026-11-12");
     });
 
     it("C12: a ?lectures= value with a bare % does not crash the workspace", async () => {
@@ -1414,8 +1414,8 @@ describe("class workspace", { timeout: 15000 }, () => {
       await renderAppAtRoute(READ, workspaceFixtures);
       await waitForDigestArticle();
       expect(screen.getByRole("heading", { level: 1, name: "Membrane transport" })).toBeInTheDocument();
-      expect(screen.getByText("membrane-transport.pdf")).toBeInTheDocument();
-      expect(screen.getByTestId("preview-bar-right")).toHaveTextContent("membrane-transport.pdf · cites 10 pages");
+      expect(screen.getByText("04-membrane-transport.pdf")).toBeInTheDocument();
+      expect(screen.getByTestId("preview-bar-right")).toHaveTextContent("04-membrane-transport.pdf · cites 10 pages");
     });
 
     it("scrolling a digest calls write_reading_state with how far it was read", async () => {
@@ -1617,8 +1617,8 @@ describe("class workspace", { timeout: 15000 }, () => {
       await renderAppAtRoute(READ, workspaceFixtures);
       await waitForDigestArticle();
       const bar = await screen.findByTestId("preview-bar-right");
-      expect(bar).toHaveTextContent("membrane-transport.pdf");
-      expect(bar).toHaveTextContent("membrane-transport.pdf · cites 10 pages");
+      expect(bar).toHaveTextContent("04-membrane-transport.pdf");
+      expect(bar).toHaveTextContent("04-membrane-transport.pdf · cites 10 pages");
     });
 
     it("scrolls the digest to its heading search param", async () => {

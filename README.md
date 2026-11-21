@@ -48,7 +48,7 @@ The 0.2.1 shell plus:
 | Flashcards | Generate a deck. Flip, then Again / Wrong / Mastered. Flip and Next do not grade. |
 | Quiz | Generate, Submit. Previous / Next restore the submitted choice. Each question scores once per session. |
 | Graph | Concepts and figures. Source chips open Notes. |
-| Search | Full-text by default. Semantic toggle uses local embeddings. |
+| Search | Full-text: a multi-word search lists only notes containing that exact phrase. |
 | Citations | Check citations. Unverified badges on invented claims. |
 | Source chips | Open Notes and scroll to the cited heading when that heading id exists. |
 | Library | Add a class and lecture files from the sidebar. Appearance lives in Settings. |
@@ -235,7 +235,7 @@ A host has a label, host, port, optional user, optional identity file, a worker 
 
 **Test connection** runs that command with `--version` and shows the version.
 
-Update and study jobs on a remote root copy the course sources to `remote_root/<root-id>/<course>/`, run the worker with `--no-commit`, stream the same NDJSON events, copy digests and study files back, then commit on the local Knowledge tree. Embed stays on this machine.
+Update and study jobs on a remote root copy the course sources to `remote_root/<root-id>/<course>/`, run the worker with `--no-commit`, stream the same NDJSON events, copy digests and study files back, then commit on the local Knowledge tree.
 
 **Cancel** stops the remote process.
 

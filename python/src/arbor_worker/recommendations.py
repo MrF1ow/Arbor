@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
+
+from arbor_worker.course_manifest import CourseManifest
 
 from arbor_worker.study_progress import (
     _entry_source,
@@ -36,12 +39,55 @@ def _reviewed_digest_keys(root: Path, course: str, doc: dict[str, Any]) -> set[s
     return reviewed
 
 
+def _natural_key(text: str) -> list[Any]:
+    """Case-insensitive key that reads digit runs as numbers (`09-x` < `10-x`)."""
+    # Splitting on a capturing group puts text at even indices and digit runs at odd ones.
+    return [int(part) if i % 2 else part for i, part in enumerate(re.split(r"(\d+)", text.casefold()))]
+
+
+def _stem_key(name: str) -> tuple[str, int, str]:
+    """A `-N` after a `THHMM` stamp is a number; no suffix reads as 1 (`T2228` < `T2228-2` < `T2228-10`).
+
+    The worker writes `YYYY-MM-DD`, `YYYY-MM-DDTHHMM` and `YYYY-MM-DDTHHMM-N`, so the date-only stem
+    `2026-09-13` has no suffix.
+    """
+    stem = name.rsplit("/", 1)[-1].removesuffix(".md")
+    match = re.fullmatch(r"(.*?T\d{4})(?:-(\d+))?|(.*)", stem)
+    assert match is not None
+    return (match.group(1) or match.group(3), int(match.group(2) or 1), name)
+
+
 def _first_unreviewed_digest(root: Path, course: str, reviewed: set[str]) -> str | None:
-    digests_dir = root / course / "digests"
+    """First digest not yet reviewed, in the order the lecture list shows them.
+
+    Manifest records come first in natural `source_path` order (then the stem rule for digests of
+    one source); digests the manifest does not know follow by the stem rule.
+    """
+    course_dir = root / course
+    digests_dir = course_dir / "digests"
     if not digests_dir.is_dir():
         return None
-    for digest_path in sorted(digests_dir.glob("*.md")):
-        rel = f"digests/{digest_path.name}"
+    on_disk = {f"digests/{path.name}" for path in digests_dir.glob("*.md")}
+    try:
+        manifest_records = CourseManifest.load(course_dir).records()
+    except (OSError, ValueError, AttributeError, TypeError):
+        # A corrupt manifest counts as none, like the desktop: fall back to the stem order.
+        manifest_records = []
+    # The desktop files a digest under the first manifest record that names it; do the same.
+    first_record: dict[str, dict[str, Any]] = {}
+    for rec in manifest_records:
+        if not isinstance(rec, dict):
+            continue
+        rel = rec.get("digest_file")
+        if rec.get("source_path") and rel in on_disk:
+            first_record.setdefault(str(rel), rec)
+    records = sorted(
+        first_record.values(),
+        key=lambda rec: (_natural_key(str(rec["source_path"])), _stem_key(str(rec["digest_file"]))),
+    )
+    ordered = [str(rec["digest_file"]) for rec in records]
+    ordered.extend(sorted(on_disk - set(ordered), key=_stem_key))
+    for rel in ordered:
         if digest_key(rel) not in reviewed:
             return rel
     return None

@@ -622,14 +622,11 @@ def test_study_plan_through_serve_is_logged_too(git_repo: Path, monkeypatch):
 
 
 def test_chat_logs_one_chat_line(tmp_path: Path):
-    from arbor_worker.embedder.hashed import HashedNgramEmbedder
-    from arbor_worker.embed import embed_root
     from arbor_worker.indexer import index_course
 
     fixture = build_ui_overhaul_root(tmp_path)
     root = fixture.root
     (root / "Bio" / "course.md").write_text("# Bio\n\nCourse overview.\n")
-    embed_root(root, HashedNgramEmbedder())
     index_course(root, "Bio")
     payload = {
         "root": str(root),
